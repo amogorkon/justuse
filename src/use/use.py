@@ -29,6 +29,7 @@ File-Hashing inspired by
 - https://github.com/fmoo/python-varint/blob/master/varint.py
 
 :author: github@anselm.kiefner.de (Anselm Kiefner)
+:license: MIT
 """
 
 
