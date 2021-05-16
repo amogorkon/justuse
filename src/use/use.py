@@ -42,15 +42,13 @@ from importlib import import_module
 from packaging.version import parse
 from pathlib import Path
 from types import ModuleType
-from urllib.request import urlopen
 from warnings import warn
 
 import mmh3
-
 import requests
-
 from yarl import URL
 
+__version__ = "0.0.1"
 
 class VersionWarning(Warning):
     pass
