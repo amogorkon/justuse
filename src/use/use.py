@@ -1,11 +1,13 @@
 """
 A self-documenting, improved way to import modules in Python.
 
-Benefits over simple imports:
-- covers complex usecases that require args passed into the importing context
-- version check on the spot, potential problems become obvious
-- auto-reload if content is changed, checked in specified interval
-- easy introspection of internal dependency graph
+Goals:
+- version check on the spot, potential version conflicts become obvious (done)
+- load standalone-modules from online sources with hash-check (done)
+- auto-reload if content is changed, checked in given interval or on file-change (WIP)
+- pass module-level globals into the importing context (TODO)
+- easy introspection of internal dependency graph (TODO)
+- relative imports on online-sources (TODO)
 
 Examples:
 >>> from use import use
@@ -22,6 +24,8 @@ True
 # equivalent to sys.path manipulation, then `import tools` with a reload(tools) every 2 secs if the file changed
 >>> tools = use("/media/sf_Dropbox/code/tools.py", reloading=2)
 
+# it is possible to import standalone modules (which only import stdlib or use() other online-sources)
+# with immediate sha1-hash-verificiation before execution of the code
 >>> test = use(URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
                     hash_value="77fe711647cd80e6a01668dba7f2b9feb8f435ba")
 
@@ -55,6 +59,7 @@ from warnings import warn
 
 import mmh3
 import requests
+
 from yarl import URL
 
 __version__ = "0.0.1"
