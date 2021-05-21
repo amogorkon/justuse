@@ -8,7 +8,7 @@ Benefits over simple imports:
 - easy introspection of internal dependency graph
 
 Examples:
->>> from justuse import use
+>>> from use import use
 
 # equivalent to `import numpy as np` with explicit version check
 >>> np = use("numpy", version="1.1.1")
@@ -53,10 +53,7 @@ from pathlib import Path
 from types import ModuleType
 from warnings import warn
 
-<<<<<<< HEAD
-=======
 import mmh3
->>>>>>> 6743a91485eae66e1ce92105ad38e769ea8e5e3f
 import requests
 from yarl import URL
 
