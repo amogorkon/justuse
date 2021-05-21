@@ -8,6 +8,7 @@ Goals:
 - pass module-level globals into the importing context (TODO)
 - easy introspection of internal dependency graph (TODO)
 - relative imports on online-sources (TODO)
+- aspect-oriented decorators for anything on import (TODO) 
 
 Examples:
 >>> from use import use
@@ -170,10 +171,10 @@ def use(thing, version:str=None, reloading:int=0, hash_algo="sha1", hash_value=N
         name = thing
         mod = import_module(name)
     try:
-        #source version hash reloading frame
         source = mod.__file__
     except AttributeError:
         source = thing
+    # source version hash reloading frame
     __using__[name] = Using(source, version, hash_value, reloading, inspect.getframeinfo(inspect.currentframe()))
     if version:
         try:
