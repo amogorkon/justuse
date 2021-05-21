@@ -38,16 +38,11 @@ File-Hashing inspired by
 """
 
 
-import sys, os
-
-import imp
-
-import hashlib
-
-import inspect
-
 import asyncio
-import mmh3
+import hashlib
+import imp
+import inspect
+import sys, os
 
 from collections import namedtuple
 from importlib import import_module
