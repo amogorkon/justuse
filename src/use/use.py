@@ -5,6 +5,7 @@ Benefits over simple imports:
 - covers complex usecases that require args passed into the importing context
 - version check on the spot, potential problems become obvious
 - auto-reload if content is changed, checked in specified interval
+- easy introspection of internal dependency graph
 
 Examples:
 >>> from justuse import use
@@ -38,14 +39,19 @@ import imp
 
 import hashlib
 
+import inspect
+
+import asyncio
+import mmh3
+
+from collections import namedtuple
 from importlib import import_module
+from importlib import reload
 from packaging.version import parse
 from pathlib import Path
 from types import ModuleType
 from urllib.request import urlopen
 from warnings import warn
-
-import mmh3
 
 import requests
 
@@ -66,6 +72,8 @@ class NoValidationWarning(Warning):
 
 class UnexpectedHash(RuntimeWarning):
     pass
+
+Using = namedtuple("UsedModule", "source version hash reloading frame")
 
 def varint_encode(number):
     """Pack `number` into varint bytes"""
@@ -102,15 +110,32 @@ def hashfileobject(filename, sample_threshhold=128 * 1024, sample_size=16 * 1024
         return digest
 
 
-__modules__ = {}
-
+__using__ = {}
+            
 
 class SurrogateModule(ModuleType):
-    def __init__(name):
-        self.name = name
-    async def __next__():
-        _mod = import_module(name)
-        yield _mod
+    def __init__(self, mod, interval=1):
+        self.__implementation = mod
+        
+        async def __reload():
+            while True:
+                await asyncio.sleep(interval)
+                try:
+                    mod = reload(self.__implementation.__name__)
+                    self.__implementation = mod
+                except Exception as e:
+                    print(e)
+                
+        loop = asyncio.get_event_loop()
+        loop.create_task(__reload())
+
+    def __getattr__(self, name):
+        return getattr(self.__implementation, name)
+    
+    def __setattr__(self, name, value):
+        if name == "_SurrogateModule__implementation":
+            object.__setattr__(self, name, value)
+        setattr(self.__implementation, name, value)
 
 def use(thing, version:str=None, reloading:int=0, hash_algo="sha1", hash_value=None):
     if isinstance(thing, Path):
@@ -144,9 +169,11 @@ def use(thing, version:str=None, reloading:int=0, hash_algo="sha1", hash_value=N
         name = thing
         mod = import_module(name)
     try:
-        __modules__[name] = mod.__file__
+        #source version hash reloading frame
+        source = mod.__file__
     except AttributeError:
-        pass
+        source = thing
+    __using__[name] = Using(source, version, hash_value, reloading, inspect.getframeinfo(inspect.currentframe()))
     if version:
         try:
             if parse(str(version)) != parse(str(mod.__version__)):
@@ -158,16 +185,18 @@ def use(thing, version:str=None, reloading:int=0, hash_algo="sha1", hash_value=N
             print(f"Cannot determine version for module {name}, continueing.")
 
     if reloading:
-        if not name in __modules__:
+        if not getattr(mod, "__file__", False):
             warn(
                 f"{name} does not look like a real file, reloading is not possible.",
                 NotReloadableWarning,
             )
-        if not getattr(mod.__reloadable__, False):
+        if not getattr(mod, "__reloadable__", False):
             warn(
                 f"Beware {name} is not flagged as reloadable, things may easily break!",
                 NotReloadableWarning,
             )
-        
+        mod = SurrogateModule(mod)
+        __using__[name] = mod
+
 
     return mod
