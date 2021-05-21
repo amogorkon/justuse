@@ -123,13 +123,11 @@ class SurrogateModule(ModuleType):
             while True:
                 await asyncio.sleep(interval)
                 try:
-                    mod = reload(self.__implementation.__name__)
-                    self.__implementation = mod
+                    self.__implementation = reload(self.__implementation)
                 except Exception as e:
                     print(e)
                 
-        loop = asyncio.get_event_loop()
-        loop.create_task(__reload())
+        asyncio.get_event_loop().create_task(__reload())
 
     def __getattr__(self, name):
         return getattr(self.__implementation, name)
@@ -199,6 +197,4 @@ def use(thing, version:str=None, reloading:int=0, hash_algo="sha1", hash_value=N
             )
         mod = SurrogateModule(mod)
         __using__[name] = mod
-
-
     return mod
