@@ -4,7 +4,8 @@ A self-documenting, improved way to import modules in Python.
 Goals:
 - version check on the spot, potential version conflicts become obvious (done)
 - load standalone-modules from online sources with hash-check (done)
-- auto-reload if content is changed, checked in given interval or on file-change (WIP)
+- auto-reload on a given interval (done)
+- auto-reload on file-change (TODO)
 - pass module-level globals into the importing context (TODO)
 - easy introspection of internal dependency graph (TODO)
 - relative imports on online-sources (TODO)
@@ -22,7 +23,7 @@ True
 # pprint to a global variable, thus no namespace pollution
 >>> use("pprint").pprint([1,2,3])
 [1,2,3]
-# equivalent to sys.path manipulation, then `import tools` with a reload(tools) every 2 secs if the file changed
+# equivalent to sys.path manipulation, then `import tools` with a reload(tools) every 2 secs
 >>> tools = use("/media/sf_Dropbox/code/tools.py", reloading=2)
 
 # it is possible to import standalone modules (which only import stdlib or use() other online-sources)
@@ -43,19 +44,17 @@ import asyncio
 import hashlib
 import imp
 import inspect
-import sys, os
-
+import os
+import sys
 from collections import namedtuple
-from importlib import import_module
-from importlib import reload
-from packaging.version import parse
+from importlib import import_module, reload
 from pathlib import Path
 from types import ModuleType
 from warnings import warn
 
 import mmh3
 import requests
-
+from packaging.version import parse
 from yarl import URL
 
 __version__ = "0.0.1"
@@ -126,7 +125,6 @@ class SurrogateModule(ModuleType):
                     self.__implementation = reload(self.__implementation)
                 except Exception as e:
                     print(e)
-                
         asyncio.get_event_loop().create_task(__reload())
 
     def __getattr__(self, name):
@@ -196,5 +194,4 @@ def use(thing, version:str=None, reloading:int=0, hash_algo="sha1", hash_value=N
                 NotReloadableWarning,
             )
         mod = SurrogateModule(mod)
-        __using__[name] = mod
     return mod
