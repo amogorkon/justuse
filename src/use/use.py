@@ -30,6 +30,7 @@ File-Hashing inspired by
 - https://github.com/fmoo/python-varint/blob/master/varint.py
 
 :author: github@anselm.kiefner.de (Anselm Kiefner)
+:license: MIT
 """
 
 
@@ -50,13 +51,16 @@ from importlib import reload
 from packaging.version import parse
 from pathlib import Path
 from types import ModuleType
-from urllib.request import urlopen
 from warnings import warn
 
+<<<<<<< HEAD
+=======
+import mmh3
+>>>>>>> 6743a91485eae66e1ce92105ad38e769ea8e5e3f
 import requests
-
 from yarl import URL
 
+__version__ = "0.0.1"
 
 class VersionWarning(Warning):
     pass
