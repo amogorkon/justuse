@@ -39,7 +39,6 @@ File-Hashing inspired by
 :license: MIT
 """
 
-
 import asyncio
 import hashlib
 import imp
@@ -76,6 +75,7 @@ class UnexpectedHash(RuntimeWarning):
 
 Using = namedtuple("UsedModule", "source version hash reloading frame")
 
+
 def varint_encode(number):
     """Pack `number` into varint bytes"""
     buf = b''
@@ -111,87 +111,93 @@ def hashfileobject(filename, sample_threshhold=128 * 1024, sample_size=16 * 1024
         return digest
 
 
-__using__ = {}
+
+class Use:
+    __doc__ = __doc__  # module's __doc__ above
+
+    class SurrogateModule(ModuleType):
+        def __init__(self, mod):
+            self.__implementation = mod
             
+            async def __reload():
+                while True:
+                    await asyncio.sleep(1)
+                    try:
+                        self.__implementation = reload(self.__implementation)
+                    except Exception as e:
+                        print(e)
+            asyncio.get_event_loop().create_task(__reload())
 
-class SurrogateModule(ModuleType):
-    def __init__(self, mod, interval=1):
-        self.__implementation = mod
+        def __getattr__(self, name):
+            return getattr(self.__implementation, name)
         
-        async def __reload():
-            while True:
-                await asyncio.sleep(interval)
-                try:
-                    self.__implementation = reload(self.__implementation)
-                except Exception as e:
-                    print(e)
-        asyncio.get_event_loop().create_task(__reload())
+        def __setattr__(self, name, value):
+            if name == "_SurrogateModule__implementation":
+                object.__setattr__(self, name, value)
+            setattr(self.__implementation, name, value)
 
-    def __getattr__(self, name):
-        return getattr(self.__implementation, name)
-    
-    def __setattr__(self, name, value):
-        if name == "_SurrogateModule__implementation":
-            object.__setattr__(self, name, value)
-        setattr(self.__implementation, name, value)
+    def __init__(self):
+        self.__using__ = {}
 
-def use(thing, version:str=None, reloading:int=0, hash_algo="sha1", hash_value=None):
-    if isinstance(thing, Path):
-        path_set = set(sys.path)
-        if thing.is_dir():
-            raise RuntimeWarning(f"Can't import directory {thing}")
-        elif thing.is_file():
-            path_set.add(str(thing.resolve(strict=True).parents[0]))
-            sys.path = list(path_set)
-            name = thing.stem
-            mod = import_module(name)
-        else:
-            raise ModuleNotFoundError(f"Are you sure '{thing}' exists?")
-    elif isinstance(thing, URL):
-        response = requests.get(thing)
-        if not response.status_code == 200:
-            raise ModuleNotFoundError(f"Could not load {thing} from the interwebs, got a {response.status_code} error.")
-        name = thing.name
-        if hash_value:
-            if hash_algo == "sha1":
-                if not (this_hash := hashlib.sha1(response.content).hexdigest()) == hash_value:
-                    raise UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!")
+    def __call__(self, thing, version:str=None, reloading=False, hash_algo="sha1", hash_value=None):
+        if isinstance(thing, Path):
+            path_set = set(sys.path)
+            if thing.is_dir():
+                raise RuntimeWarning(f"Can't import directory {thing}")
+            elif thing.is_file():
+                path_set.add(str(thing.resolve(strict=True).parents[0]))
+                sys.path = list(path_set)
+                name = thing.stem
+                mod = import_module(name)
             else:
-                raise NotImplementedError
+                raise ModuleNotFoundError(f"Are you sure '{thing}' exists?")
+        elif isinstance(thing, URL):
+            response = requests.get(thing)
+            if not response.status_code == 200:
+                raise ModuleNotFoundError(f"Could not load {thing} from the interwebs, got a {response.status_code} error.")
+            name = thing.name
+            if hash_value:
+                if hash_algo == "sha1":
+                    if not (this_hash := hashlib.sha1(response.content).hexdigest()) == hash_value:
+                        raise UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!")
+                else:
+                    raise NotImplementedError
+            else:
+                warn("Attempting to import {thing} from the interwebs with no validation whatsoever! This means we are flying blind and are possibly prone to man-in-the-middle attacks.")
+            mod = imp.new_module(name)
+            exec(compile(response.content, name, "exec"), mod.__dict__)
+
         else:
-            warn("Attempting to import {thing} from the interwebs with no validation whatsoever! This means we are flying blind and are possibly prone to man-in-the-middle attacks.")
-        mod = imp.new_module(name)
-        exec(compile(response.content, name, "exec"), mod.__dict__)
-
-    else:
-        name = thing
-        mod = import_module(name)
-    try:
-        source = mod.__file__
-    except AttributeError:
-        source = thing
-    # source version hash reloading frame
-    __using__[name] = Using(source, version, hash_value, reloading, inspect.getframeinfo(inspect.currentframe()))
-    if version:
+            name = thing
+            mod = import_module(name)
         try:
-            if parse(str(version)) != parse(str(mod.__version__)):
-                warn(
-                    f"{name} is expected to be version {version} ,  but got {mod.__version__} instead",
-                    VersionWarning,
-                )
+            source = mod.__file__
         except AttributeError:
-            print(f"Cannot determine version for module {name}, continueing.")
+            source = thing
+        # source version hash reloading frame
+        self.__using__[name] = Using(source, version, hash_value, reloading, inspect.getframeinfo(inspect.currentframe()))
+        if version:
+            try:
+                if parse(str(version)) != parse(str(mod.__version__)):
+                    warn(
+                        f"{name} is expected to be version {version} ,  but got {mod.__version__} instead",
+                        VersionWarning,
+                    )
+            except AttributeError:
+                print(f"Cannot determine version for module {name}, continueing.")
 
-    if reloading:
-        if not getattr(mod, "__file__", False):
-            warn(
-                f"{name} does not look like a real file, reloading is not possible.",
-                NotReloadableWarning,
-            )
-        if not getattr(mod, "__reloadable__", False):
-            warn(
-                f"Beware {name} is not flagged as reloadable, things may easily break!",
-                NotReloadableWarning,
-            )
-        mod = SurrogateModule(mod)
-    return mod
+        if reloading:
+            if not getattr(mod, "__file__", False):
+                warn(
+                    f"{name} does not look like a real file, reloading is not possible.",
+                    NotReloadableWarning,
+                )
+            if not getattr(mod, "__reloadable__", False):
+                warn(
+                    f"Beware {name} is not flagged as reloadable, things may easily break!",
+                    NotReloadableWarning,
+                )
+            mod = self.SurrogateModule(mod)
+        return mod
+
+sys.modules["use"] = Use()
