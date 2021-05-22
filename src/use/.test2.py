@@ -1,8 +1,9 @@
-import use
 from pathlib import Path
 
+import use
+
 mea = use(
-    Path("F:\Dropbox (Privat)\Bachelor\Code\Arrhythmia_detection\hamamea\mea.py"),
+    Path("F:\Dropbox (Privat)\mcs\Code\Arrhythmia_detection\hamamea\mea.py"),
     reloading=2,
 )
 
