@@ -1,10 +1,7 @@
-from pathlib import Path
+import imp, importlib
 
-import use
-
-mea = use(
-    Path("F:\Dropbox (Privat)\mcs\Code\Arrhythmia_detection\hamamea\mea.py"),
-    reloading=2,
-)
-
-mea.test()
+name = "foo"
+spec = importlib.machinery.PathFinder.find_spec(name)
+mod = imp.new_module(name)
+mod.__dict__["a"] = 34
+exec(compile(spec.loader.get_source(name), name, "exec"), mod.__dict__)
