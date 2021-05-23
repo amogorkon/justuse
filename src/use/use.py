@@ -131,25 +131,32 @@ def methdispatch(func):
 
 def build_mod(name, code, initial_globals):
     mod = imp.new_module(name)
-    mod.__dict__.update(d if (d := initial_globals) else {})
+    mod.__dict__.update(initial_globals or {})
     exec(compile(code, name, "exec"), mod.__dict__)
     return mod
 
 class SurrogateModule(ModuleType):
-    def __init__(self, mod):
+    def __init__(self, spec):
+        self.__name = name
         self.__implementation = mod
         
         async def __reload():
             while True:
                 await asyncio.sleep(1)
                 try:
+                    sys.modules[self.__name] = self.__implementation
                     self.__implementation = importlib.reload(self.__implementation)
+                    sys.modules[self.__name] = self
                 except Exception as e:
                     print(e, traceback.format_exc())
-        asyncio.get_event_loop().create_task(__reload())
+        self.__reloading = asyncio.get_event_loop().create_task(__reload())
 
-    def __getattr__(self, name):
-        return getattr(self.__implementation, name)
+    def __getattribute__(self, name):
+        print(23, name)
+        if name in ("_SurrogateModule__name", "_SurrogateModule__reloading", "_SurrogateModule__implementation"):
+            return object.__getattribute__(self, name)
+        else:
+            return getattr(self.__implementation, name)
     
     def __setattr__(self, name, value):
         if name == "_SurrogateModule__implementation":
@@ -168,14 +175,14 @@ class Use:
     @__call__.register(URL)
     def use_url(self, url, hash_algo:str="sha1", hash_value:str=None, initial_globals:dict=None):
         response = requests.get(url)
-        if not response.status_code == 200:
+        if response.status_code != 200:
             raise ModuleNotFoundError(f"Could not load {url} from the interwebs, got a {response.status_code} error.")
         if hash_value:
-            if hash_algo == "sha1":
-                if not (this_hash := hashlib.sha1(response.content).hexdigest()) == hash_value:
-                    raise UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!")
-            else:
+            if hash_algo != "sha1":
                 raise NotImplementedError("At this moment only SHA1 is available.")
+            this_hash = hashlib.sha1(response.content).hexdigest()
+            if this_hash != hash_value:
+                raise UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!")
         else:
             warn("Attempting to import {url} from the interwebs with no validation whatsoever! This means we are flying blind and are possibly prone to man-in-the-middle attacks.")
         name = url.name
@@ -192,8 +199,21 @@ class Use:
             path_set.add(str(path.resolve(strict=True).parents[0]))
             sys.path = list(path_set)
             name = path.stem
+            # calling use() again
+            if name in sys.modules:
+                sys.modules[name].__reloading.cancel()
+                del sys.modules[name]
+            spec = importlib.machinery.PathFinder.find_spec(path)
             with open(path, "rb") as file:
-                mod = build_mod(name, file.read(), initial_globals)
+                if reloading:
+                    mod = SurrogateModule(spec)
+                    if not getattr(mod, "__reloadable__", False):
+                        warn(
+                            f"Beware {name} is not flagged as reloadable, things may easily break!",
+                            NotReloadableWarning,
+                        )
+                else:
+                    mod = build_mod(name, file.read(), initial_globals)
                 self.__using[name] = mod, inspect.getframeinfo(inspect.currentframe())
                 return mod
         else:
@@ -203,32 +223,21 @@ class Use:
     def use_str(self, name, version:str=None, reloading:bool=False, initial_globals:dict=None):
         spec = importlib.machinery.PathFinder.find_spec(name)
         # builtins may have no spec, let's not mess with those
-        if not spec:
-            print(0)
+        # also, whole packages like numpy can't be reloaded
+        if not spec or spec.parent:
             mod = importlib.import_module(name)
         else:
-            try:
-                mod = build_mod(spec.loader.get_source(name), name, initial_globals)
-                if reloading:
-                    print(1)
-                    if not getattr(mod, "__file__", False):
-                        warn(
-                            f"{name} does not look like a real file, reloading is not possible.",
-                            NotReloadableWarning,
-                        )
-                    elif not getattr(mod, "__reloadable__", False):
-                        warn(
-                            f"Beware {name} is not flagged as reloadable, things may easily break!",
-                            NotReloadableWarning,
-                        )
-                    else:
-                        print(2)
-                        mod = SurrogateModule(mod)
-            except NameError:
-                print(4, name)
-                # compiled modules like numpy may need another approach
-                mod = importlib.import_module(name)
-        self.__using[name] = mod, inspect.getframeinfo(inspect.currentframe())
+            mod = build_mod(name, spec.loader.get_source(name), initial_globals)
+            if reloading:
+                if not getattr(mod, "__reloadable__", False):
+                    warn(
+                        f"Beware {name} is not flagged as reloadable, things may easily break!",
+                        NotReloadableWarning,
+                    )
+                sys.modules[name] = mod
+                mod = SurrogateModule(name, mod)
+
+        self.__using[name] = name, mod, spec, inspect.getframeinfo(inspect.currentframe())
 
         try:
             source = mod.__file__
