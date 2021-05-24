@@ -15,14 +15,15 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
 
 # Examples
 
-  import use
-  np = use("numpy", version="1.19.2")
-  
-  use("pprint").pprint(some_dict)
-  
-  tools = use("/media/sf_Dropbox/code/tools.py", reloading=True)
-  
-  test = use(URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
+ import use
+ 
+ np = use("numpy", version="1.19.2")
+ 
+ use("pprint").pprint(some_dict)  
+ 
+ tools = use("/media/sf_Dropbox/code/tools.py", reloading=True)
+ 
+ test = use(URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
                     hash_value="77fe711647cd80e6a01668dba7f2b9feb8f435ba")
 
 ## Beware Magic!
