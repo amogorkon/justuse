@@ -12,7 +12,7 @@ Goals:
 - aspect-oriented decorators for anything on import (TODO) 
 
 Examples:
->>> from use import use
+>>> import use
 
 # equivalent to `import numpy as np` with explicit version check
 >>> np = use("numpy", version="1.1.1")
@@ -60,7 +60,7 @@ import requests
 from packaging.version import parse
 from yarl import URL
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 def methdispatch(func):
     dispatcher = singledispatch(func)
@@ -100,25 +100,23 @@ def varint_encode(number):
             break
     return buf
 
-def hashfileobject(filename, sample_threshhold=128 * 1024, sample_size=16 * 1024, hexdigest=False):
-    with open(filename, 'rb') as f:
-        f.seek(0, os.SEEK_END)
-        size = f.tell()
-        f.seek(0, os.SEEK_SET)
+def hashfileobject(file, sample_threshhold=128 * 1024, sample_size=16 * 1024):
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
+    file.seek(0, os.SEEK_SET)
+    if size < sample_threshhold or sample_size < 1:
+        data = file.read()
+    else:
+        data = file.read(sample_size)
+        f.seek(size//2)
+        data += file.read(sample_size)
+        f.seek(-sample_size, os.SEEK_END)
+        data += file.read(sample_size)
 
-        if size < sample_threshhold or sample_size < 1:
-            data = f.read()
-        else:
-            data = f.read(sample_size)
-            f.seek(size//2)
-            data += f.read(sample_size)
-            f.seek(-sample_size, os.SEEK_END)
-            data += f.read(sample_size)
-
-        hash_tmp = mmh3.hash_bytes(data)
-        hash_ = hash_tmp[7::-1] + hash_tmp[16:7:-1]
-        enc_size = varint_encode(size)
-        return enc_size + hash_[len(enc_size):]
+    hash_tmp = mmh3.hash_bytes(data)
+    hash_ = hash_tmp[7::-1] + hash_tmp[16:7:-1]
+    enc_size = varint_encode(size)
+    return enc_size + hash_[len(enc_size):]
 
 
 def methdispatch(func):
@@ -136,35 +134,48 @@ def build_mod(name, code, initial_globals):
     return mod
 
 class SurrogateModule(ModuleType):
-    def __init__(self, spec):
-        self.__name = name
-        self.__implementation = mod
+    def __init__(self, spec, initial_globals):
+        self.__implementation = ModuleType("")
         
         async def __reload():
+            last_filehash = None
             while True:
+                with open(spec.origin, "rb") as file:
+                    current_filehash = hashfileobject(file)
+                    if current_filehash != last_filehash:
+                        try:
+                            file.seek(0)
+                            mod = build_mod(spec.name, file.read(), initial_globals)
+                            # TODO: check for different AST or globals
+                            self.__implementation = mod
+                        except Exception as e:
+                            print(e, traceback.format_exc())
+                    last_filehash = current_filehash
                 await asyncio.sleep(1)
-                try:
-                    sys.modules[self.__name] = self.__implementation
-                    self.__implementation = importlib.reload(self.__implementation)
-                    sys.modules[self.__name] = self
-                except Exception as e:
-                    print(e, traceback.format_exc())
         self.__reloading = asyncio.get_event_loop().create_task(__reload())
 
+    def __del__(self):
+        self.__reloading.cancel()
+
     def __getattribute__(self, name):
-        print(23, name)
-        if name in ("_SurrogateModule__name", "_SurrogateModule__reloading", "_SurrogateModule__implementation"):
+        if name in ("_SurrogateModule__reloading",
+                     "_SurrogateModule__implementation",
+                    ):
             return object.__getattribute__(self, name)
         else:
             return getattr(self.__implementation, name)
     
     def __setattr__(self, name, value):
-        if name == "_SurrogateModule__implementation":
+        if name in ("_SurrogateModule__reloading",
+                     "_SurrogateModule__implementation",
+                    ):
             object.__setattr__(self, name, value)
-        setattr(self.__implementation, name, value)
+        else:
+            setattr(self.__implementation, name, value)
 
 class Use:
     __doc__ = __doc__  # module's __doc__ above
+
     def __init__(self):
         self.__using = {}
 
@@ -173,7 +184,7 @@ class Use:
         raise NotImplementedError(f"Only pathlib.Path, yarl.URL and str are valid sources of things to import, but got {type(thing)}.")
 
     @__call__.register(URL)
-    def use_url(self, url, hash_algo:str="sha1", hash_value:str=None, initial_globals:dict=None):
+    def _use_url(self, url, hash_algo:str="sha1", hash_value:str=None, initial_globals:dict=None):
         response = requests.get(url)
         if response.status_code != 200:
             raise ModuleNotFoundError(f"Could not load {url} from the interwebs, got a {response.status_code} error.")
@@ -184,14 +195,14 @@ class Use:
             if this_hash != hash_value:
                 raise UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!")
         else:
-            warn("Attempting to import {url} from the interwebs with no validation whatsoever! This means we are flying blind and are possibly prone to man-in-the-middle attacks.")
+            warn(f"Attempting to import {url} from the interwebs with no validation whatsoever! This means we are flying blind and are possibly prone to man-in-the-middle attacks.")
         name = url.name
         mod = build_mod(name, response.content, initial_globals)
         self.__using[name] = mod, inspect.getframeinfo(inspect.currentframe())
         return mod
 
     @__call__.register(Path)
-    def use_path(self, path, reloading:bool=False, initial_globals:dict=None):
+    def _use_path(self, path, reloading:bool=False, initial_globals:dict=None):
         path_set = set(sys.path)
         if path.is_dir():
             raise RuntimeWarning(f"Can't import directory {path}")
@@ -203,46 +214,41 @@ class Use:
             if name in sys.modules:
                 sys.modules[name].__reloading.cancel()
                 del sys.modules[name]
-            spec = importlib.machinery.PathFinder.find_spec(path)
-            with open(path, "rb") as file:
-                if reloading:
-                    mod = SurrogateModule(spec)
-                    if not getattr(mod, "__reloadable__", False):
-                        warn(
-                            f"Beware {name} is not flagged as reloadable, things may easily break!",
-                            NotReloadableWarning,
-                        )
-                else:
+            spec = importlib.machinery.PathFinder.find_spec(name)
+
+            if reloading:
+                mod = SurrogateModule(spec, initial_globals)
+                if not getattr(mod, "__reloadable__", False):
+                    warn(
+                        f"Beware {name} is not flagged as reloadable, things may easily break!",
+                        NotReloadableWarning,
+                    )
+            else:
+                with open(path, "rb") as file:
                     mod = build_mod(name, file.read(), initial_globals)
-                self.__using[name] = mod, inspect.getframeinfo(inspect.currentframe())
-                return mod
+            self.__using[name] = mod, inspect.getframeinfo(inspect.currentframe())
+            return mod
         else:
             raise ModuleNotFoundError(f"Are you sure '{path}' exists?")
 
     @__call__.register(str)
-    def use_str(self, name, version:str=None, reloading:bool=False, initial_globals:dict=None):
+    def _use_str(self, name, version:str=None, reloading:bool=False, initial_globals:dict=None):
         spec = importlib.machinery.PathFinder.find_spec(name)
         # builtins may have no spec, let's not mess with those
         # also, whole packages like numpy can't be reloaded
         if not spec or spec.parent:
             mod = importlib.import_module(name)
         else:
-            mod = build_mod(name, spec.loader.get_source(name), initial_globals)
             if reloading:
+                mod = SurrogateModule(spec, initial_globals)
                 if not getattr(mod, "__reloadable__", False):
                     warn(
                         f"Beware {name} is not flagged as reloadable, things may easily break!",
-                        NotReloadableWarning,
-                    )
-                sys.modules[name] = mod
-                mod = SurrogateModule(name, mod)
+                        NotReloadableWarning)
+            else:
+                mod = build_mod(name, spec.loader.get_source(name), initial_globals)
 
         self.__using[name] = name, mod, spec, inspect.getframeinfo(inspect.currentframe())
-
-        try:
-            source = mod.__file__
-        except AttributeError:
-            source = name
 
         if version:
             try:

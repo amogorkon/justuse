@@ -1,2 +1,3 @@
-a: str
-print(a)
+
+def test():
+   print(a)

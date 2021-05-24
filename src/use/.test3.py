@@ -1,3 +1,3 @@
 import use
 
-use("foo", initial_globals={"a":34}, reloading=True)
+foo = use("foo", initial_globals={"a":34}, reloading=True)

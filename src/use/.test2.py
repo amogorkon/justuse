@@ -1,9 +1,20 @@
-import imp, importlib
+from types import ModuleType
+import asyncio
+import contextlib
 
-# name = "foo"
-# spec = importlib.machinery.PathFinder.find_spec(name)
-# mod = imp.new_module(name)
-# mod.__dict__["a"] = 34
-# exec(compile(spec.loader.get_source(name), name, "exec"), mod.__dict__)
+class SurrogateModule(ModuleType):
+    def __init__(self):
+        self.__implementation = ModuleType("")
 
-spec = importlib.machinery.PathFinder.find_spec("numpy")
+    def __getattribute__(self, name):
+        if name in ("_SurrogateModule__name", "_SurrogateModule__reloading", "_SurrogateModule__implementation"):
+            return object.__getattribute__(self, name)
+        else:
+            return getattr(self.__implementation, name)
+    
+    def __setattr__(self, name, value):
+        if name == "_SurrogateModule__implementation":
+            object.__setattr__(self, name, value)
+        setattr(self.__implementation, name, value)
+            
+mod = SurrogateModule()
