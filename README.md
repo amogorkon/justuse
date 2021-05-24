@@ -23,7 +23,9 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
  
  tools = use("/media/sf_Dropbox/code/tools.py", reloading=True)
  
- test = use(URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
+ test = use("functions", initial_globals={"foo":34, "bar":49})
+ 
+ utils = use(URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
                     hash_value="77fe711647cd80e6a01668dba7f2b9feb8f435ba")
 
 ## Beware Magic!
