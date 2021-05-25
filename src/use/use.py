@@ -39,9 +39,9 @@ File-Hashing inspired by
 :license: MIT
 """
 
+
 import asyncio
 import hashlib
-import imp
 import importlib
 import inspect
 import os
@@ -105,9 +105,9 @@ def hashfileobject(file, sample_threshhold=128 * 1024, sample_size=16 * 1024):
         data = file.read()
     else:
         data = file.read(sample_size)
-        f.seek(size//2)
+        file.seek(size//2)
         data += file.read(sample_size)
-        f.seek(-sample_size, os.SEEK_END)
+        file.seek(-sample_size, os.SEEK_END)
         data += file.read(sample_size)
 
     hash_tmp = mmh3.hash_bytes(data)
@@ -125,7 +125,7 @@ def methdispatch(func):
     return wrapper
 
 def build_mod(name, code, initial_globals):
-    mod = imp.new_module(name)
+    mod = ModuleType(name)
     mod.__dict__.update(initial_globals or {})
     exec(compile(code, name, "exec"), mod.__dict__)
     return mod
@@ -149,7 +149,7 @@ class SurrogateModule(ModuleType):
                             print(e, traceback.format_exc())
                     last_filehash = current_filehash
                 await asyncio.sleep(1)
-        self.__reloading = asyncio.get_event_loop().create_task(__reload())
+        self.__reloading = asyncio.get_event_loop().create_task(__reload())  # TODO: this isn't ideal
 
     def __del__(self):
         self.__reloading.cancel()
@@ -240,7 +240,7 @@ class Use:
                 mod = SurrogateModule(spec, initial_globals)
                 if not getattr(mod, "__reloadable__", False):
                     warn(
-                        f"Beware {name} is not flagged as reloadable, things may easily break!",
+                        f"Beware '{name}' ({spec.origin}) is not flagged as reloadable, things may easily break!",
                         NotReloadableWarning)
             else:
                 mod = build_mod(name, spec.loader.get_source(name), initial_globals)
