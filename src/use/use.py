@@ -5,8 +5,8 @@ Goals:
 - version check on the spot, potential version conflicts become obvious (done)
 - load standalone-modules from online sources with hash-check (done)
 - auto-reload on a given interval (done)
-- auto-reload on file-change (TODO)
-- pass module-level globals into the importing context (TODO)
+- auto-reload on file-change (done)
+- pass module-level globals into the importing context (done)
 - easy introspection of internal dependency graph (TODO)
 - relative imports on online-sources (TODO)
 - aspect-oriented decorators for anything on import (TODO) 
@@ -47,16 +47,13 @@ import inspect
 import os
 import sys
 import traceback
-
-from functools import singledispatch
-from functools import update_wrapper
+from functools import singledispatch, update_wrapper
 from pathlib import Path
 from types import ModuleType
 from warnings import warn
 
 import mmh3
 import requests
-
 from packaging.version import parse
 from yarl import URL
 

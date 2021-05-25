@@ -1,2 +1,4 @@
+__reloadable__ = True
+
 def test():
-    return 24
+    return 4
