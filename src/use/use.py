@@ -192,6 +192,8 @@ class SurrogateModule(ModuleType):
 
 class Use:
     __doc__ = __doc__  # module's __doc__ above
+    Path = Path
+    URL = URL
 
     def __init__(self):
         self.__using = {}
