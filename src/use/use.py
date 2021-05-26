@@ -4,7 +4,6 @@ A self-documenting, functional way to import modules in Python with advanced fea
 Goals:
 - version check on the spot, potential version conflicts become obvious (DONE)
 - load standalone-modules from online sources with hash-check (DONE)
-- auto-reload on a given interval (DONE)
 - auto-reload on file-change (preliminary DONE - works in jupyter)
 - pass module-level globals into the importing context (DONE)
 - securely auto-install packages (TODO)
