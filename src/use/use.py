@@ -1,18 +1,21 @@
 """
-A self-documenting, functional way to import modules in Python.
+A self-documenting, functional way to import modules in Python with advanced features.
 
 Goals:
 - version check on the spot, potential version conflicts become obvious (DONE)
 - load standalone-modules from online sources with hash-check (DONE)
 - auto-reload on a given interval (DONE)
-- auto-reload on file-change (DONE preliminary - works in jupyter)
+- auto-reload on file-change (preliminary DONE - works in jupyter)
 - pass module-level globals into the importing context (DONE)
-- securely auto-install packages into a virtual env and pip (TODO)
-- aspect-oriented decorators for anything on import (TODO)
+- securely auto-install packages (TODO)
+- aspect-oriented decorators for everything on import (TODO)
 - easy introspection of internal dependency graph (TODO)
 - relative imports on online-sources (TBD)
 
+Non-Goal:
+Completely replace the import statement.
 
+Note: pathlib.Path and yarl.URL can both be accessed as aliases via use.Path and use.URL
 
 Examples:
 >>> import use
@@ -27,24 +30,25 @@ True
 >>> use("pprint").pprint([1,2,3])
 [1,2,3]
 # equivalent to sys.path manipulation, then `import tools` with a reload(tools) every second
->>> tools = use("/media/sf_Dropbox/code/tools.py", reloading=True)
+>>> tools = use(use.Path("/media/sf_Dropbox/code/tools.py"), reloading=True)
 
-# it is possible to import standalone modules from online sources (which only import stdlib or use() other online-sources)
-# with immediate sha1-hash-verificiation before execution of the code
->>> test = use(URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
+# it is possible to import standalone modules from online sources
+# with immediate sha1-hash-verificiation before execution of the code like
+>>> utils = use(use.URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
                     hash_value="77fe711647cd80e6a01668dba7f2b9feb8f435ba")
 
-# to auto-install a certain version of a package you can do
+# to auto-install a certain version (within a virtual env and pip in secure hash-check mode) of a package you can do
 >>> np = use("numpy", version="1.1.1", auto_install=True, hash_value=["9879de676"])
 
 File-Hashing inspired by 
 - https://github.com/kalafut/py-imohash
 - https://github.com/fmoo/python-varint/blob/master/varint.py
 
-:author: github@anselm.kiefner.de (Anselm Kiefner)
+:author: use-github@anselm.kiefner.de (Anselm Kiefner)
 :license: MIT
 """
 
+__version__ = "0.1.0"
 
 import asyncio
 import contextlib
@@ -68,7 +72,7 @@ import requests
 from packaging.version import parse
 from yarl import URL
 
-__version__ = "0.1.0"
+
 
 def methdispatch(func):
     dispatcher = singledispatch(func)
