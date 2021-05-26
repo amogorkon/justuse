@@ -1,4 +1,5 @@
 __reloadable__ = True
 
 def test():
-    return 4
+    """interesting!"""
+    return 6

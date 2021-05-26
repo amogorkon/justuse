@@ -142,6 +142,8 @@ def build_mod(name, code, initial_globals):
     return mod
 
 class SurrogateModule(ModuleType):
+
+    # TODO make this work in general
     @classmethod
     @contextlib.asynccontextmanager
     async def create(cls):
@@ -229,8 +231,12 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
             # calling use() again
             if name in sys.modules:
                 del sys.modules[name]
-            self.__using[name][0].__reloading.cancel()
-            del self.__using[name]
+            if name in self.__using:
+                try:
+                    self.__using[name][0].__reloading.cancel()
+                except AttributeError:
+                    pass
+                del self.__using[name]
 
             spec = importlib.machinery.PathFinder.find_spec(name)
 
