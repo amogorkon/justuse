@@ -1,3 +1,9 @@
-import use
+class Use:
+    def __call__(self):
+        return 34
+    
+    def __matmul__(self, other):
+        print(other)
 
-foo = use("foo", initial_globals={"a":34}, reloading=True)
+use = Use()
+
