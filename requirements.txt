@@ -1,0 +1,4 @@
+anyio >= 3.1.0
+mmh >= 3.0.0
+requests >= 2.24.0
+yarl >= 1.6.3
