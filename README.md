@@ -30,7 +30,7 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
  test = use("functions", initial_globals={"foo":34, "bar":49})
  
  utils = use(URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
-                    hash_value="77fe711647cd80e6a01668dba7f2b9feb8f435ba")
+            hash_value="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")
 
 ## Beware Magic!
 Inspired by the q package/module, use() also is a callable class that replaces the module on import, so that only 'import use' is needed to be able to call use() on things. 
