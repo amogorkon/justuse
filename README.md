@@ -1,7 +1,7 @@
 # Just use() python modules the way you want!
 
 ## Installation
-To install, `python -m install justuse`, then you can `import use` in your code and simply use() stuff. Check for examples below!
+To install, `python -m pip install justuse`, then you can `import use` in your code and simply use() stuff. Check for examples below!
 
 ## Why?
 Over the years many times I've come across various situations where Python's import statement just didn't work the way I needed.
