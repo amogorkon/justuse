@@ -1,4 +1,8 @@
 # Just use() python modules the way you want!
+
+## Install and Use
+To install, `python -m install justuse`, then you can `import use` in your code and simply use() stuff. Check for examples below!
+
 ## Why?
 Over the years many times I've come across various situations where Python's import statement just didn't work the way I needed.
 There were projects where I felt that a central module from where to expand functionality would be the simplest, most elegant approach, but that would only work with simple modules and libs, not with functionality that required access to the main state of the application. In those situations the first thing to try would be "import B" in module A and "import A" in module B - a classical circular import, which comes with a lot of headaches and often results in overly convoluted code. All this could be simplified if it was possible to pass some module-level global variables to the about-to-be-imported module before its actual execution, but how the heck could that work with an import statement?
