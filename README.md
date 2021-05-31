@@ -1,4 +1,8 @@
 # Just use() python modules the way you want!
+
+## Installation
+To install, enter `python -m pip install justuse` in a commandline, then you can `import use` in your code and simply use() stuff. Check for examples below!
+
 ## Why?
 Over the years many times I've come across various situations where Python's import statement just didn't work the way I needed.
 There were projects where I felt that a central module from where to expand functionality would be the simplest, most elegant approach, but that would only work with simple modules and libs, not with functionality that required access to the main state of the application. In those situations the first thing to try would be "import B" in module A and "import A" in module B - a classical circular import, which comes with a lot of headaches and often results in overly convoluted code. All this could be simplified if it was possible to pass some module-level global variables to the about-to-be-imported module before its actual execution, but how the heck could that work with an import statement?
@@ -26,7 +30,7 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
  test = use("functions", initial_globals={"foo":34, "bar":49})
  
  utils = use(URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
-                    hash_value="77fe711647cd80e6a01668dba7f2b9feb8f435ba")
+            hash_value="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")
 
 ## Beware Magic!
 Inspired by the q package/module, use() also is a callable class that replaces the module on import, so that only 'import use' is needed to be able to call use() on things. 

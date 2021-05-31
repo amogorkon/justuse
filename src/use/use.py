@@ -131,6 +131,19 @@ def methdispatch(func):
 def build_mod(name, code, initial_globals):
     mod = ModuleType(name)
     mod.__dict__.update(initial_globals or {})
+    # module file "<", ">" chars are specially handled by inspect
+    mod.__file__ = mod.__path__ = "<{name}>".format(name=name)
+    import codecs, linecache
+    code_text = codecs.decode(code)
+    linecache.cache[mod.__file__] = (
+      len(code), # size of source code
+      None, # last modified time; None means there is no physical file
+      [*map( # a list of lines, including trailing newline on each
+        lambda ln: ln+"\x0a",
+        code_text.splitlines())
+      ],
+      mod.__file__, # file name, e.g. "<mymodule>"
+    )
     exec(compile(code, name, "exec"), mod.__dict__)
     return mod
 
