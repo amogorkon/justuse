@@ -266,6 +266,11 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         self.__using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
 
         if version:
+            dunder_version = getattr(mod, "__version__", None)
+            dunder_version = "" if not dunder_version else parse(str(dunder_version))
+            # the whole .version business is ugly :(
+            # and then there are LegacyVersions, too.. oh man :|
+
             try:
                 if parse(str(version)) != parse(str(mod.__version__)):
                     warn(
