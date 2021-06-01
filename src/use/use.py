@@ -50,10 +50,12 @@ File-Hashing inspired by
 __version__ = "0.1.0"
 
 import asyncio
+import codecs
 import contextlib
 import hashlib
 import importlib
 import inspect
+import linecache
 import os
 import sys
 import traceback
@@ -128,12 +130,11 @@ def methdispatch(func):
     update_wrapper(wrapper, func)
     return wrapper
 
-def build_mod(name, code, initial_globals):
+def build_mod(name:str, code:bytes, initial_globals:dict) -> ModuleType:
     mod = ModuleType(name)
     mod.__dict__.update(initial_globals or {})
     # module file "<", ">" chars are specially handled by inspect
     mod.__file__ = mod.__path__ = "<{name}>".format(name=name)
-    import codecs, linecache
     code_text = codecs.decode(code)
     linecache.cache[mod.__file__] = (
       len(code), # size of source code
@@ -144,8 +145,9 @@ def build_mod(name, code, initial_globals):
       ],
       mod.__file__, # file name, e.g. "<mymodule>"
     )
+    # BEWARE WTF: CODE AFTER THIS APPEAR NOT TO EXIST - IT DOES NOT RETURN!
     exec(compile(code, name, "exec"), mod.__dict__)
-    return mod
+    #return mod
 
 class SurrogateModule(ModuleType):
 
@@ -229,25 +231,33 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
 
     @__call__.register(Path)
     def _use_path(self, path:Path, reloading:bool=False, initial_globals:dict=None):
-        path_set = set(sys.path)
         if path.is_dir():
             raise RuntimeWarning(f"Can't import directory {path}")
-        elif path.is_file():
-            path_set.add(str(path.resolve(strict=True).parents[0]))
-            sys.path = list(path_set)
+        elif path.is_absolute() and not path.exists():
+            raise ModuleNotFoundError(f"Are you sure '{path.resolve()}' exists?")
+        else:
+            if not path.is_absolute():
+                source_dir = self.__using.get(inspect.currentframe().f_back.f_back.f_code.co_filename, Path(''))
+                # if calling from an actual file, we take that as starting point
+                if source_dir.exists():
+                    original_cwd = os.getcwd()
+                    os.chdir(source_dir.parent)
+                    path = path.resolve()
+                    # let's not confuse the user and restore the cwd to the original
+                    os.chdir(original_cwd)
+                # calling from jupyter for instance, we use the cwd set there, no guessing
+                else:
+                    pass
             name = path.stem
-            # calling use() again
-            if name in sys.modules:
-                del sys.modules[name]
+            # replacing previously loaded module
             if name in self.__using:
                 try:
                     self.__using[name][0].__reloading.cancel()
                 except AttributeError:
                     pass
                 del self.__using[name]
-
             spec = importlib.machinery.PathFinder.find_spec(name)
-
+            self.__using[name] = path.resolve()
             if reloading:
                 mod = SurrogateModule(spec, initial_globals)
                 if not getattr(mod, "__reloadable__", False):
@@ -257,11 +267,10 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     )
             else:
                 with open(path, "rb") as file:
+                    # CODE AFTER THIS APPEARS NOT TO EXIST - WTF?!
+                    self.__using[name] = path.resolve()
                     mod = build_mod(name, file.read(), initial_globals)
-            self.__using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
             return mod
-        else:
-            raise ModuleNotFoundError(f"Are you sure '{path}' exists?")
 
     @__call__.register(str)
     def _use_str(self, name:str, 
@@ -295,3 +304,6 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         return mod
 
 sys.modules["use"] = Use()
+
+#use = Use()
+#use(use.Path("../../tests/modulA.py"))
