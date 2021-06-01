@@ -1,3 +1,4 @@
+import use
 
-
-print("modul B")
+print("modB")
+use(use.Path("testsubdir/modC.py"))

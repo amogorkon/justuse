@@ -59,9 +59,7 @@ import linecache
 import os
 import sys
 import traceback
-
-from functools import singledispatch
-from functools import update_wrapper
+from functools import singledispatch, update_wrapper
 from pathlib import Path
 from types import ModuleType
 from warnings import warn
@@ -69,7 +67,6 @@ from warnings import warn
 import anyio
 import mmh3
 import requests
-
 from packaging.version import parse
 from yarl import URL
 
@@ -252,7 +249,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
             # replacing previously loaded module
             if name in self.__using:
                 try:
-                    self.__using[name][0].__reloading.cancel()
+                    self.__using[name].__reloading.cancel()
                 except AttributeError:
                     pass
                 del self.__using[name]

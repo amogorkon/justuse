@@ -1,5 +1,5 @@
 
 
 import use
-print("modul A")
+print("modA")
 use(use.Path("modB.py"))
