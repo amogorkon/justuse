@@ -1,4 +1,4 @@
 import use
 
-print("modB")
+print(__file__)
 use(use.Path("testsubdir/modC.py"))

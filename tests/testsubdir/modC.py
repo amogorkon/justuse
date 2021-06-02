@@ -1,4 +1,8 @@
+import inspect
+
+print(__file__)
+
+
 import use
 
-print("modC")
 use(use.Path("../modD.py"))

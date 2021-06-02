@@ -59,7 +59,9 @@ import linecache
 import os
 import sys
 import traceback
-from functools import singledispatch, update_wrapper
+
+from functools import singledispatch
+from functools import update_wrapper
 from pathlib import Path
 from types import ModuleType
 from warnings import warn
@@ -67,6 +69,7 @@ from warnings import warn
 import anyio
 import mmh3
 import requests
+
 from packaging.version import parse
 from yarl import URL
 
@@ -127,13 +130,15 @@ def methdispatch(func):
     update_wrapper(wrapper, func)
     return wrapper
 
-def build_mod(name:str, code:bytes, initial_globals:dict) -> ModuleType:
+def build_mod(name:str, code:bytes, initial_globals:dict, module_path=None) -> ModuleType:
     mod = ModuleType(name)
     mod.__dict__.update(initial_globals or {})
-    # module file "<", ">" chars are specially handled by inspect
-    mod.__file__ = mod.__path__ = "<{name}>".format(name=name)
+    mod.__file__ = module_path
+
+    # mod.__file__ = mod.__path__ = "<{name}>".format(name=name)
     code_text = codecs.decode(code)
-    linecache.cache[mod.__file__] = (
+    # module file "<", ">" chars are specially handled by inspect
+    linecache.cache[f"<{name}>"] = (
       len(code), # size of source code
       None, # last modified time; None means there is no physical file
       [*map( # a list of lines, including trailing newline on each
@@ -143,7 +148,7 @@ def build_mod(name:str, code:bytes, initial_globals:dict) -> ModuleType:
       mod.__file__, # file name, e.g. "<mymodule>"
     )
     # BEWARE WTF: CODE AFTER THIS APPEAR NOT TO EXIST - IT DOES NOT RETURN!
-    exec(compile(code, name, "exec"), mod.__dict__)
+    exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
     #return mod
 
 class SurrogateModule(ModuleType):
@@ -266,8 +271,12 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 with open(path, "rb") as file:
                     # CODE AFTER THIS APPEARS NOT TO EXIST - WTF?!
                     self.__using[name] = path.resolve()
-                    mod = build_mod(name, file.read(), initial_globals)
+                    # to allow relative imports from within used() modules
+                    module_path = path
+                    mod = build_mod(name, file.read(), initial_globals, module_path)
+            print(34)
             return mod
+        print(35)
 
     @__call__.register(str)
     def _use_str(self, name:str, 
