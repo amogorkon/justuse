@@ -60,9 +60,7 @@ import os
 import sys
 import threading
 import traceback
-
-from functools import singledispatch
-from functools import update_wrapper
+from functools import singledispatch, update_wrapper
 from pathlib import Path
 from types import ModuleType
 from warnings import warn
@@ -70,7 +68,6 @@ from warnings import warn
 import anyio
 import mmh3
 import requests
-
 from packaging.version import parse
 from yarl import URL
 
@@ -234,7 +231,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         mod = build_mod(name, response.content, initial_globals)
         self.__using[name] = mod, inspect.getframeinfo(inspect.currentframe())
         if as_import:
-            assert isinsinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
+            assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             sys.modules[as_import] = mod
         return mod
 
@@ -279,7 +276,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
             # let's not confuse the user and restore the cwd to the original in any case
             os.chdir(original_cwd)
             if as_import:
-                assert isinsinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
+                assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
                 sys.modules[as_import] = mod
             return mod
 
