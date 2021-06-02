@@ -57,14 +57,12 @@ import importlib
 import inspect
 import linecache
 import os
+import subprocess
 import sys
 import threading
 import traceback
-
 from enum import Enum
-
-from functools import singledispatch
-from functools import update_wrapper
+from functools import singledispatch, update_wrapper
 from pathlib import Path
 from types import ModuleType
 from warnings import warn
@@ -72,7 +70,6 @@ from warnings import warn
 import anyio
 import mmh3
 import requests
-
 from packaging.version import parse
 from yarl import URL
 
@@ -220,14 +217,20 @@ class Use:
                 hash_algo:mode=mode.sha256, 
                 hash_value:str=None, 
                 initial_globals:dict=None, 
-                as_import:str=None):
+                as_import:str=None,
+                default=None,
+                ):
         response = requests.get(url)
         if response.status_code != 200:
             raise ModuleNotFoundError(f"Could not load {url} from the interwebs, got a {response.status_code} error.")
-        this_hash = hashlib.sha256(response.content).hexdigest()
+        if hash_algo is Use.mode.sha256:
+            this_hash = hashlib.sha256(response.content).hexdigest()
         if hash_value:
             if this_hash != hash_value:
-                raise UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!")
+                if default: 
+                    return default
+                else:
+                    raise UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!")
         else:
             warn(f"""Attempting to import {url} from the interwebs with no validation whatsoever! 
 To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}" """)
@@ -244,11 +247,18 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 path:Path, 
                 reloading:bool=False,
                 initial_globals:dict=None, 
-                as_import=None):
+                as_import=None,
+                default=None):
         if path.is_dir():
-            raise RuntimeWarning(f"Can't import directory {path}")
+            if default:
+                return default
+            else:
+                raise RuntimeWarning(f"Can't import directory {path}")
         elif path.is_absolute() and not path.exists():
-            raise ModuleNotFoundError(f"Are you sure '{path.resolve()}' exists?")
+            if default:
+                return default
+            else:
+                raise ModuleNotFoundError(f"Are you sure '{path.resolve()}' exists?")
         else:
             original_cwd = os.getcwd()
             if not path.is_absolute():
@@ -290,7 +300,39 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     initial_globals:dict=None, 
                     auto_install:bool=False, 
                     hash_algo:str=mode.sha256, 
-                    hash_value:str=None) -> ModuleType:
+                    hash_value:str=None,
+                    default=None,
+                    ) -> ModuleType:
+        if auto_install:
+
+            if not (version and hash_value):
+                raise RuntimeWarning(f"Can't auto-install {name} without a specific version and corresponding hash value")
+            # first we need to figure out if we're inside a virtual env
+            def inside_conda():
+                try:
+                    os.environ["CONDA_DEFAULT_ENV"]
+                    return True
+                except KeyError:
+                    return False
+
+            def inside_venv():
+                return hasattr(sys, 'real_prefix') or sys.base_prefix != sys.prefix
+
+            if inside_conda() or inside_venv():
+                subprocess.run(["python", "-m", "pip", "download", f"{name}=={version}"])
+
+            # calculate the hash
+            BUF_SIZE = 65536
+            if hash_algo is Use.mode.sha256:
+                file_hash = hashlib.sha256()
+            with open("requests-2.6.0-py2.py3-none-any.whl", "rb") as file:
+                while True:
+                    data = file.read(BUF_SIZE)
+                    if not data:
+                        break
+                    file_hash.update(data)
+
+
         spec = importlib.machinery.PathFinder.find_spec(name)
         # builtins may have no spec, let's not mess with those
         if not spec or spec.parent:
