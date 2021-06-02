@@ -57,13 +57,12 @@ import importlib
 import inspect
 import linecache
 import os
-import subprocess
 import sys
-import threading
 import traceback
 from enum import Enum
 from functools import singledispatch, update_wrapper
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import ModuleType
 from warnings import warn
 
@@ -79,14 +78,12 @@ class VersionWarning(Warning):
 
 class NotReloadableWarning(Warning):
     pass
-
-class ModuleNotFoundError(RuntimeWarning):
-    pass
-
 class NoValidationWarning(Warning):
     pass
 
-class UnexpectedHash(RuntimeWarning):
+class ModuleNotFoundError(ImportError):
+    pass
+class UnexpectedHash(ImportError):
     pass
 
 
@@ -121,6 +118,16 @@ def hashfileobject(file, sample_threshhold=128 * 1024, sample_size=16 * 1024):
     enc_size = varint_encode(size)
     return enc_size + hash_[len(enc_size):]
 
+def securehash_file(file, hash_algo):
+    BUF_SIZE = 65536
+    if hash_algo is Use.mode.sha256:
+        file_hash = hashlib.sha256()
+    while True:
+        data = file.read(BUF_SIZE)
+        if not data:
+            break
+        file_hash.update(data)
+    return file_hash.hexdigest()
 
 def methdispatch(func):
     dispatcher = singledispatch(func)
@@ -184,7 +191,7 @@ class SurrogateModule(ModuleType):
 
     def __getattribute__(self, name):
         if name in ("_SurrogateModule__reloading",
-                     "_SurrogateModule__implementation",
+                    "_SurrogateModule__implementation",
                     ):
             return object.__getattribute__(self, name)
         else:
@@ -192,7 +199,7 @@ class SurrogateModule(ModuleType):
     
     def __setattr__(self, name, value):
         if name in ("_SurrogateModule__reloading",
-                     "_SurrogateModule__implementation",
+                    "_SurrogateModule__implementation",
                     ):
             object.__setattr__(self, name, value)
         else:
@@ -202,7 +209,7 @@ class Use:
     __doc__ = __doc__  # module's __doc__ above
     Path = Path
     URL = URL
-    mode = Enum("Mode", "sha256")
+    mode = Enum("Mode", "sha256 nodefault")
 
     def __init__(self):
         self.__using = {}
@@ -218,7 +225,7 @@ class Use:
                 hash_value:str=None, 
                 initial_globals:dict=None, 
                 as_import:str=None,
-                default=None,
+                default=mode.nodefault,
                 ):
         response = requests.get(url)
         if response.status_code != 200:
@@ -227,13 +234,14 @@ class Use:
             this_hash = hashlib.sha256(response.content).hexdigest()
         if hash_value:
             if this_hash != hash_value:
-                if default: 
+                if default is not Use.mode.nodefault: 
                     return default
                 else:
                     raise UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!")
         else:
             warn(f"""Attempting to import {url} from the interwebs with no validation whatsoever! 
-To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}" """)
+To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}" """, 
+                NoValidationWarning)
         name = url.name
         mod = build_mod(name, response.content, initial_globals)
         self.__using[name] = mod, inspect.getframeinfo(inspect.currentframe())
@@ -248,14 +256,14 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 reloading:bool=False,
                 initial_globals:dict=None, 
                 as_import=None,
-                default=None):
+                default=mode.nodefault):
         if path.is_dir():
-            if default:
+            if default is not Use.mode.nodefault:
                 return default
             else:
                 raise RuntimeWarning(f"Can't import directory {path}")
         elif path.is_absolute() and not path.exists():
-            if default:
+            if default is not Use.mode.nodefault:
                 return default
             else:
                 raise ModuleNotFoundError(f"Are you sure '{path.resolve()}' exists?")
@@ -301,36 +309,40 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     auto_install:bool=False, 
                     hash_algo:str=mode.sha256, 
                     hash_value:str=None,
-                    default=None,
+                    default=mode.nodefault,
                     ) -> ModuleType:
         if auto_install:
-
             if not (version and hash_value):
                 raise RuntimeWarning(f"Can't auto-install {name} without a specific version and corresponding hash value")
-            # first we need to figure out if we're inside a virtual env
-            def inside_conda():
-                try:
-                    os.environ["CONDA_DEFAULT_ENV"]
-                    return True
-                except KeyError:
-                    return False
+            with TemporaryDirectory() as directory:
+                filename : Path
+                with open(filename, "rb") as file:
+                    this_hash = securehash_file(file, hash_algo)
+                    if this_hash != hash_value:
+                        if default is not Use.mode.nodefault:
+                            return default
+                        else:
+                            raise UnexpectedHash(f"Package {name} in temporary {filename} had hash {this_hash}, which does not match the expected {hash_value}, aborting.")
 
-            def inside_venv():
-                return hasattr(sys, 'real_prefix') or sys.base_prefix != sys.prefix
+                
+            # Nevermind this part, let's make it work for all cases first before optimizing for different cases!
+            # # first we need to figure out if we're inside a virtual env
+            # def inside_conda():
+            #     try:
+            #         os.environ["CONDA_DEFAULT_ENV"]
+            #         return True
+            #     except KeyError:
+            #         return False
 
-            if inside_conda() or inside_venv():
-                subprocess.run(["python", "-m", "pip", "download", f"{name}=={version}"])
+            # def inside_venv():
+            #     return hasattr(sys, 'real_prefix') or sys.base_prefix != sys.prefix
 
-            # calculate the hash
-            BUF_SIZE = 65536
-            if hash_algo is Use.mode.sha256:
-                file_hash = hashlib.sha256()
-            with open("requests-2.6.0-py2.py3-none-any.whl", "rb") as file:
-                while True:
-                    data = file.read(BUF_SIZE)
-                    if not data:
-                        break
-                    file_hash.update(data)
+            # if inside_conda() or inside_venv():
+            #     subprocess.run(["python", "-m", "pip", "download", f"{name}=={version}"])
+            
+
+
+
 
 
         spec = importlib.machinery.PathFinder.find_spec(name)
