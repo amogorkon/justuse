@@ -34,7 +34,7 @@ True
 # it is possible to import standalone modules from online sources
 # with immediate sha1-hash-verificiation before execution of the code like
 >>> utils = use(use.URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
-                    hash_value="77fe711647cd80e6a01668dba7f2b9feb8f435ba")
+                    hash_value="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")
 
 # to auto-install a certain version (within a virtual env and pip in secure hash-check mode) of a package you can do
 >>> np = use("numpy", version="1.1.1", auto_install=True, hash_value=["9879de676"])
@@ -60,7 +60,11 @@ import os
 import sys
 import threading
 import traceback
-from functools import singledispatch, update_wrapper
+
+from enum import Enum
+
+from functools import singledispatch
+from functools import update_wrapper
 from pathlib import Path
 from types import ModuleType
 from warnings import warn
@@ -68,6 +72,7 @@ from warnings import warn
 import anyio
 import mmh3
 import requests
+
 from packaging.version import parse
 from yarl import URL
 
@@ -200,6 +205,7 @@ class Use:
     __doc__ = __doc__  # module's __doc__ above
     Path = Path
     URL = URL
+    mode = Enum("Mode", "sha256")
 
     def __init__(self):
         self.__using = {}
@@ -211,15 +217,13 @@ class Use:
     @__call__.register(URL)
     def _use_url(self, 
                 url:URL, 
-                hash_algo:str="sha256", 
+                hash_algo:mode=mode.sha256, 
                 hash_value:str=None, 
                 initial_globals:dict=None, 
                 as_import:str=None):
         response = requests.get(url)
         if response.status_code != 200:
             raise ModuleNotFoundError(f"Could not load {url} from the interwebs, got a {response.status_code} error.")
-        if hash_algo != "sha256":
-            raise NotImplementedError("At this moment only sha256 is available.")
         this_hash = hashlib.sha256(response.content).hexdigest()
         if hash_value:
             if this_hash != hash_value:
@@ -284,9 +288,9 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
     def _use_str(self, name:str, 
                     version:str=None, 
                     initial_globals:dict=None, 
-                    auto_install=False, 
-                    hash_algo="sha256", 
-                    hash_value:str=None):
+                    auto_install:bool=False, 
+                    hash_algo:str=mode.sha256, 
+                    hash_value:str=None) -> ModuleType:
         spec = importlib.machinery.PathFinder.find_spec(name)
         # builtins may have no spec, let's not mess with those
         if not spec or spec.parent:
@@ -312,6 +316,3 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         return mod
 
 sys.modules["use"] = Use()
-
-#use = Use()
-#use(use.Path("../../tests/modulA.py"))
