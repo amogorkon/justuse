@@ -212,7 +212,12 @@ class Use:
         raise NotImplementedError(f"Only pathlib.Path, yarl.URL and str are valid sources of things to import, but got {type(thing)}.")
 
     @__call__.register(URL)
-    def _use_url(self, url:URL, hash_algo:str="sha256", hash_value:str=None, initial_globals:dict=None):
+    def _use_url(self, 
+                url:URL, 
+                hash_algo:str="sha256", 
+                hash_value:str=None, 
+                initial_globals:dict=None, 
+                as_import:str=None):
         response = requests.get(url)
         if response.status_code != 200:
             raise ModuleNotFoundError(f"Could not load {url} from the interwebs, got a {response.status_code} error.")
@@ -228,10 +233,17 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         name = url.name
         mod = build_mod(name, response.content, initial_globals)
         self.__using[name] = mod, inspect.getframeinfo(inspect.currentframe())
+        if as_import:
+            assert isinsinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
+            sys.modules[as_import] = mod
         return mod
 
     @__call__.register(Path)
-    def _use_path(self, path:Path, reloading:bool=False, initial_globals:dict=None):
+    def _use_path(self, 
+                path:Path, 
+                reloading:bool=False,
+                initial_globals:dict=None, 
+                as_import=None):
         if path.is_dir():
             raise RuntimeWarning(f"Can't import directory {path}")
         elif path.is_absolute() and not path.exists():
@@ -266,6 +278,9 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 mod = build_mod(name, code, initial_globals, path.resolve())
             # let's not confuse the user and restore the cwd to the original in any case
             os.chdir(original_cwd)
+            if as_import:
+                assert isinsinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
+                sys.modules[as_import] = mod
             return mod
 
     @__call__.register(str)
