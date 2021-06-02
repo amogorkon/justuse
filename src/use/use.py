@@ -58,6 +58,7 @@ import inspect
 import linecache
 import os
 import sys
+import threading
 import traceback
 
 from functools import singledispatch
@@ -130,12 +131,11 @@ def methdispatch(func):
     update_wrapper(wrapper, func)
     return wrapper
 
-def build_mod(name:str, code:bytes, initial_globals:dict, module_path=None) -> ModuleType:
+def build_mod(name:str, code:bytes, initial_globals:dict=None, module_path=None) -> ModuleType:
     mod = ModuleType(name)
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = module_path
 
-    # mod.__file__ = mod.__path__ = "<{name}>".format(name=name)
     code_text = codecs.decode(code)
     # module file "<", ">" chars are specially handled by inspect
     linecache.cache[f"<{name}>"] = (
@@ -145,11 +145,10 @@ def build_mod(name:str, code:bytes, initial_globals:dict, module_path=None) -> M
         lambda ln: ln+"\x0a",
         code_text.splitlines())
       ],
-      mod.__file__, # file name, e.g. "<mymodule>"
+      mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
     )
-    # BEWARE WTF: CODE AFTER THIS APPEAR NOT TO EXIST - IT DOES NOT RETURN!
     exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
-    #return mod
+    return mod
 
 class SurrogateModule(ModuleType):
 
@@ -238,29 +237,21 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         elif path.is_absolute() and not path.exists():
             raise ModuleNotFoundError(f"Are you sure '{path.resolve()}' exists?")
         else:
+            original_cwd = os.getcwd()
             if not path.is_absolute():
-                source_dir = self.__using.get(inspect.currentframe().f_back.f_back.f_code.co_filename, Path(''))
+                source_dir = self.__using.get(inspect.currentframe().f_back.f_back.f_code.co_filename)
                 # if calling from an actual file, we take that as starting point
-                if source_dir.exists():
-                    original_cwd = os.getcwd()
+                if source_dir is not None and source_dir.exists():
                     os.chdir(source_dir.parent)
                     path = path.resolve()
-                    # let's not confuse the user and restore the cwd to the original
-                    os.chdir(original_cwd)
                 # calling from jupyter for instance, we use the cwd set there, no guessing
                 else:
                     pass
             name = path.stem
-            # replacing previously loaded module
-            if name in self.__using:
-                try:
-                    self.__using[name].__reloading.cancel()
-                except AttributeError:
-                    pass
-                del self.__using[name]
-            spec = importlib.machinery.PathFinder.find_spec(name)
-            self.__using[name] = path.resolve()
+            # TODO: replacing previously loaded module
+            pass
             if reloading:
+                spec = importlib.machinery.PathFinder.find_spec(name)
                 mod = SurrogateModule(spec, initial_globals)
                 if not getattr(mod, "__reloadable__", False):
                     warn(
@@ -268,15 +259,14 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                         NotReloadableWarning,
                     )
             else:
-                with open(path, "rb") as file:
-                    # CODE AFTER THIS APPEARS NOT TO EXIST - WTF?!
-                    self.__using[name] = path.resolve()
-                    # to allow relative imports from within used() modules
-                    module_path = path
-                    mod = build_mod(name, file.read(), initial_globals, module_path)
-            print(34)
+                # REMINDER: if build_mod is within this block all hell breaks lose!
+                with open(path.resolve(), "rb") as file:
+                    code = file.read()
+                self.__using[f"<{name}>"] = path.resolve()
+                mod = build_mod(name, code, initial_globals, path.resolve())
+            # let's not confuse the user and restore the cwd to the original in any case
+            os.chdir(original_cwd)
             return mod
-        print(35)
 
     @__call__.register(str)
     def _use_str(self, name:str, 
