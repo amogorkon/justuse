@@ -9,7 +9,7 @@ Goals:
 - securely auto-install packages (TODO)
 - aspect-oriented decorators for everything on import (TODO)
 - easy introspection of internal dependency graph (TODO)
-- relative imports on online-sources (TBD)
+- relative imports on online-sources (TODO)
 
 Non-Goal:
 Completely replace the import statement.
@@ -59,8 +59,10 @@ import linecache
 import os
 import sys
 import traceback
+
 from enum import Enum
-from functools import singledispatch, update_wrapper
+from functools import singledispatch
+from functools import update_wrapper
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType
@@ -69,6 +71,7 @@ from warnings import warn
 import anyio
 import mmh3
 import requests
+
 from packaging.version import parse
 from yarl import URL
 
@@ -155,6 +158,13 @@ def build_mod(name:str, code:bytes, initial_globals:dict=None, module_path=None)
     )
     exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
     return mod
+
+def fail_or_default(default, exception, msg):
+    if default is not Use.mode.nodefault:
+        return default
+    else:
+        raise exception(msg)
+
 
 class SurrogateModule(ModuleType):
 
@@ -284,9 +294,10 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
             if reloading:
                 spec = importlib.machinery.PathFinder.find_spec(name)
                 mod = SurrogateModule(spec, initial_globals)
-                if not getattr(mod, "__reloadable__", False):
+                if not all(inspect.isfunction(obj) for obj in mod.__dict__.values() 
+                                                        if obj not in initial_globals.values()):
                     warn(
-                        f"Beware {name} is not flagged as reloadable, things may easily break!",
+                        f"Beware {name} also contains non-function objects, it may not be safe to reload!",
                         NotReloadableWarning,
                     )
             else:
@@ -311,41 +322,77 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     hash_value:str=None,
                     default=mode.nodefault,
                     ) -> ModuleType:
-        if auto_install:
-            if not (version and hash_value):
-                raise RuntimeWarning(f"Can't auto-install {name} without a specific version and corresponding hash value")
-            with TemporaryDirectory() as directory:
-                filename : Path
-                with open(filename, "rb") as file:
+
+        # let's first check if it's installed already somehow
+        spec = importlib.machinery.PathFinder.find_spec(name)
+
+        # couldn't find any installed package
+        if not spec:
+            if auto_install:
+                # TODO: raise appropriate detailed warnings and give helpful info from the json to fix the issue
+                if not (version and hash_value):
+                    raise RuntimeWarning(f"Can't auto-install {name} without a specific version and corresponding hash value")
+
+                response = requests.get(f"https://pypi.org/pypi/{name}/{version}/json")
+                if not response == 200:
+                    if default is not Use.mode.nodefault:
+                        return default
+                    else:
+                        raise ImportError(f"Tried to auto-install {name} {version} but failed with {response} while trying to pull info from PyPI.")
+                
+                try:
+                    if not response.json()["urls"]:
+                        if default is not Use.mode.nodefault:
+                            return default
+                        else:
+                            raise ImportError(f"Tried to auto-install {name} {version} but failed because no valid URLs to download could be found.")
+                    else:
+                        for entry in response.json()["urls"]:
+                            url = entry["url"]
+                            that_hash = entry["digests"].get(hash_algo.name)
+                            filename = entry["filename"]
+                            # special treatment?
+                            yanked = entry["yanked"]
+                            if that_hash == hash_value:
+                                break
+                        else:
+                            if default is not Use.mode.nodefault:
+                                return default
+                            else:
+                                raise ImportError(f"Tried to auto-install {name} {version} but failed because none of the available hashes match the expected hash.")
+                except KeyError:
+                    if default is not Use.mode.nodefault:
+                        return default
+                    else:
+                        raise ImportError(f"Tried to auto-install {name} {version} but failed because there was a problem with the JSON from PyPI.")
+            
+                with TemporaryDirectory() as directory:
+                    # TODO: chdir etc
+                    # download the file
+                    with open(filename, "wb") as file:
+                        pass
+                    # check the hash
                     this_hash = securehash_file(file, hash_algo)
                     if this_hash != hash_value:
                         if default is not Use.mode.nodefault:
                             return default
                         else:
                             raise UnexpectedHash(f"Package {name} in temporary {filename} had hash {this_hash}, which does not match the expected {hash_value}, aborting.")
+                    # load it
 
-                
-            # Nevermind this part, let's make it work for all cases first before optimizing for different cases!
-            # # first we need to figure out if we're inside a virtual env
-            # def inside_conda():
-            #     try:
-            #         os.environ["CONDA_DEFAULT_ENV"]
-            #         return True
-            #     except KeyError:
-            #         return False
 
-            # def inside_venv():
-            #     return hasattr(sys, 'real_prefix') or sys.base_prefix != sys.prefix
-
-            # if inside_conda() or inside_venv():
-            #     subprocess.run(["python", "-m", "pip", "download", f"{name}=={version}"])
+                # now that we got something, we can load it
+                spec = importlib.machinery.PathFinder.find_spec(name)
             
+            # there's nothing installed and no auto-install
+            else:
+                if default is not Use.mode.nodefault:
+                    return default 
+                else:
+                    raise ImportError
+        
+        # now there should be a valid spec defined
 
-
-
-
-
-        spec = importlib.machinery.PathFinder.find_spec(name)
         # builtins may have no spec, let's not mess with those
         if not spec or spec.parent:
             mod = importlib.import_module(name)
