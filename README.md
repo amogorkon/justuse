@@ -32,6 +32,18 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
  utils = use(URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
             hash_value="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")
 
+Thanks to the *default* keyword argument, it is also easy to simplify the rather clumsy optional import usecase like
+
+```
+try:
+    import numpy as np
+except ImportError:
+    np = None
+```
+which would simply become
+`np = use("numpy", default=None)`
+while it is possible of course to pass anything as default, for instance some fallback that should be used instead if the preferred module/package isn't available.
+
 ## Beware Magic!
 Inspired by the q package/module, use() also is a callable class that replaces the module on import, so that only 'import use' is needed to be able to call use() on things. 
 In order to simplify the code, use() dispatches to different functions, based on the argument given. If you pass in a str, it will act mostly like the regular import statement but with additional features like version checks, automatic reloading and the ability to pass in initial module globals. If you pass an URL from the yarl package, you can directly import a module from the web like github or bpaste with the ability to check the SHA1 hash before execution of the code to ensure that the code is exactly what you expect. Finally, if you pass in a pathlib.Path, you can import a file from anywhere on your local system without headache about the sys.path.
