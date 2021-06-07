@@ -244,10 +244,7 @@ class Use:
             this_hash = hashlib.sha256(response.content).hexdigest()
         if hash_value:
             if this_hash != hash_value:
-                if default is not Use.mode.nodefault: 
-                    return default
-                else:
-                    raise UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!")
+                return fail_or_default(default, UnexpectedHash, f"{this_hash} does not match the expected hash {hash_value} - aborting!")
         else:
             warn(f"""Attempting to import {url} from the interwebs with no validation whatsoever! 
 To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}" """, 
@@ -268,15 +265,9 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 as_import=None,
                 default=mode.nodefault):
         if path.is_dir():
-            if default is not Use.mode.nodefault:
-                return default
-            else:
-                raise RuntimeWarning(f"Can't import directory {path}")
+            return fail_or_default(default, ImportError, f"Can't import directory {path}")
         elif path.is_absolute() and not path.exists():
-            if default is not Use.mode.nodefault:
-                return default
-            else:
-                raise ModuleNotFoundError(f"Are you sure '{path.resolve()}' exists?")
+            return fail_or_default(default, ModuleNotFoundError, f"Are you sure '{path.resolve()}' exists?")
         else:
             original_cwd = os.getcwd()
             if not path.is_absolute():
@@ -335,17 +326,10 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
 
                 response = requests.get(f"https://pypi.org/pypi/{name}/{version}/json")
                 if not response == 200:
-                    if default is not Use.mode.nodefault:
-                        return default
-                    else:
-                        raise ImportError(f"Tried to auto-install {name} {version} but failed with {response} while trying to pull info from PyPI.")
-                
+                    return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed with {response} while trying to pull info from PyPI.")
                 try:
                     if not response.json()["urls"]:
-                        if default is not Use.mode.nodefault:
-                            return default
-                        else:
-                            raise ImportError(f"Tried to auto-install {name} {version} but failed because no valid URLs to download could be found.")
+                        return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because no valid URLs to download could be found.")
                     else:
                         for entry in response.json()["urls"]:
                             url = entry["url"]
@@ -356,15 +340,9 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                             if that_hash == hash_value:
                                 break
                         else:
-                            if default is not Use.mode.nodefault:
-                                return default
-                            else:
-                                raise ImportError(f"Tried to auto-install {name} {version} but failed because none of the available hashes match the expected hash.")
+                            return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because none of the available hashes match the expected hash.")
                 except KeyError:
-                    if default is not Use.mode.nodefault:
-                        return default
-                    else:
-                        raise ImportError(f"Tried to auto-install {name} {version} but failed because there was a problem with the JSON from PyPI.")
+                    return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because there was a problem with the JSON from PyPI.")
             
                 with TemporaryDirectory() as directory:
                     # TODO: chdir etc
@@ -374,10 +352,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     # check the hash
                     this_hash = securehash_file(file, hash_algo)
                     if this_hash != hash_value:
-                        if default is not Use.mode.nodefault:
-                            return default
-                        else:
-                            raise UnexpectedHash(f"Package {name} in temporary {filename} had hash {this_hash}, which does not match the expected {hash_value}, aborting.")
+                        return fail_or_default(default, UnexpectedHash, f"Package {name} in temporary {filename} had hash {this_hash}, which does not match the expected {hash_value}, aborting.")
                     # load it
 
 
@@ -386,10 +361,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
             
             # there's nothing installed and no auto-install
             else:
-                if default is not Use.mode.nodefault:
-                    return default 
-                else:
-                    raise ImportError
+                return fail_or_default(default, ImportError, f"{name} is not installed and auto-install was not requested.")
         
         # now there should be a valid spec defined
 
