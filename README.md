@@ -42,7 +42,7 @@ except ImportError:
 ```
 which would simply become
 `np = use("numpy", default=None)`
-while it is possible of course to pass anything as default, for instance some fallback that should be used instead if the preferred module/package isn't available.
+while it is possible of course to pass anything as default, for instance some fallback that should be used instead if the preferred module/package isn't available. Note that you can cascade different use() this way! For instance, you can try to use() a local module with reload in a certain version, but if that fails fall back to a specific, reliably working version pulled from the web but that might not be the newest and best optimized.
 
 ## Beware Magic!
 Inspired by the q package/module, use() also is a callable class that replaces the module on import, so that only 'import use' is needed to be able to call use() on things, which might confuse users and libraries that operate on modules themselves.
