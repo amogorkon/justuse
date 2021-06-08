@@ -63,6 +63,7 @@ import traceback
 from enum import Enum
 from functools import singledispatch
 from functools import update_wrapper
+from importlib.metadata import version
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType
@@ -81,11 +82,16 @@ class VersionWarning(Warning):
 
 class NotReloadableWarning(Warning):
     pass
+
 class NoValidationWarning(Warning):
+    pass
+
+class AmbiguityWarning(Warning):
     pass
 
 class ModuleNotFoundError(ImportError):
     pass
+
 class UnexpectedHash(ImportError):
     pass
 
@@ -317,6 +323,10 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         # let's first check if it's installed already somehow
         spec = importlib.machinery.PathFinder.find_spec(name)
 
+        if any(Path(".").glob(f"{name}.py")):
+            warn(f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))", 
+                AmbiguityWarning)
+
         # couldn't find any installed package
         if not spec:
             if auto_install:
@@ -373,13 +383,9 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         self.__using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
 
         if version:
-            dunder_version = getattr(mod, "__version__", None)
-            dunder_version = "" if not dunder_version else parse(str(dunder_version))
-            # the whole .version business is ugly :(
-            # and then there are LegacyVersions, too.. oh man :|
-
             try:
-                if parse(str(version)) != parse(str(mod.__version__)):
+                # packages usually keep their metadata in seperate files, not in some __version__ variable
+                if parse(str(version)) != parse(version(name)):
                     warn(
                         f"{name} is expected to be version {version} ,  but got {mod.__version__} instead",
                         VersionWarning,
