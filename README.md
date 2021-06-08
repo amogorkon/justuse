@@ -32,10 +32,19 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
  utils = use(URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
             hash_value="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")
 
+Thanks to the *default* keyword argument, it is also easy to simplify the rather clumsy optional import usecase like
+
+```
+try:
+    import numpy as np
+except ImportError:
+    np = None
+```
+which would simply become
+`np = use("numpy", default=None)`
+while it is possible of course to pass anything as default, for instance some fallback that should be used instead if the preferred module/package isn't available. Note that you can cascade different use() this way! For instance, you can try to use() a local module with reload in a certain version, but if that fails fall back to a specific, reliably working version pulled from the web but that might not be the newest and best optimized.
+
 ## Beware Magic!
-Inspired by the q package/module, use() also is a callable class that replaces the module on import, so that only 'import use' is needed to be able to call use() on things. 
-In order to simplify the code, use() dispatches to different functions, based on the argument given. If you pass in a str, it will act mostly like the regular import statement but with additional features like version checks, automatic reloading and the ability to pass in initial module globals. If you pass an URL from the yarl package, you can directly import a module from the web like github or bpaste with the ability to check the SHA1 hash before execution of the code to ensure that the code is exactly what you expect. Finally, if you pass in a pathlib.Path, you can import a file from anywhere on your local system without headache about the sys.path.
+Inspired by the q package/module, use() also is a callable class that replaces the module on import, so that only 'import use' is needed to be able to call use() on things, which might confuse users and libraries that operate on modules themselves.
 
-Probably the most magical thing about use() is how automatic reload is realized. Whenever you `use(something, reloading=True)`, you won't get your actual module but a stand-in replacement, a so-called SurrogateModule instead. The actual module is imported whenever the file changed and the implementation is transparently replaced in the background. This way, you can keep references to the things in your module without problems, but thanks to this indirection it is possible that when you try to access something in your module, the current implementation is dynamically evaluated per call. 
-
-Using an async loop, the file you specified as module is opened and hashed. Only if the hash has changed, it is actually attempted to execute and import the code. This means that if you properly imported a module at first but then edited and left a SyntaxError in, it will report this error when it tries to import the file again, but it won't replace the previous implementation until you edited the file and it could import it without error.
+Probably the most magical thing about use() is how automatic reload is realized. Whenever you `use(something, reloading=True)`, you won't get your actual module but a stand-in replacement, a so-called SurrogateModule instead. The actual module is imported whenever the file changed and the implementation is transparently replaced in the background. This way, you can keep references to the things in your module without problems, but thanks to this indirection it is possible that when you try to access something in your module, the current implementation is dynamically evaluated per call. Using an async loop, the file you specified as module is opened and hashed. Only if the hash has changed, it is actually attempted to execute and import the code. This means that if you properly imported a module at first but then edited and left a SyntaxError in, it will report this error when it tries to import the file again, but it won't replace the previous implementation until you edited the file and it could import it without error.
