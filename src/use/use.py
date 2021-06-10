@@ -1,15 +1,19 @@
 """
-A self-documenting, functional way to import modules in Python with advanced features.
+A self-documenting, explicit, functional way to import modules in Python with advanced features.
 
-Goals:
+Goals/Features:
 - version check on the spot, potential version conflicts become obvious (DONE)
-- load standalone-modules from online sources with hash-check (DONE)
-- auto-reload on file-change (preliminary DONE - works in jupyter)
+- securely load standalone-modules from online sources (DONE)
+- safely auto-reloading of local modules on edit (preliminary DONE - works in jupyter)
 - pass module-level globals into the importing context (DONE)
+- return optional fallback-default object/module if import failed (DONE)
 - securely auto-install packages (TODO)
-- aspect-oriented decorators for everything on import (TODO)
-- easy introspection of internal dependency graph (TODO)
-- relative imports on online-sources (TODO)
+- support P2P package distribution (TODO)
+- aspect-oriented decorators for everything callable on import (TODO)
+- unwrap aspect-decorators on demand (TODO)
+- easy introspection via internal dependency graph (TODO)
+- relative imports on online-sources via URL-aliases (TODO)
+- module-level variable placeholders/guards aka "module-properties" (TODO)
 
 Non-Goal:
 Completely replace the import statement.
@@ -54,16 +58,15 @@ import codecs
 import contextlib
 import hashlib
 import importlib
+import importlib.metadata as metadata
 import inspect
 import linecache
 import os
+import re
 import sys
 import traceback
-
-from enum import Enum
-from functools import singledispatch
-from functools import update_wrapper
-from importlib.metadata import version
+from enum import Enum, Flag
+from functools import singledispatch, update_wrapper
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType
@@ -72,7 +75,6 @@ from warnings import warn
 import anyio
 import mmh3
 import requests
-
 from packaging.version import parse
 from yarl import URL
 
@@ -146,7 +148,7 @@ def methdispatch(func):
     update_wrapper(wrapper, func)
     return wrapper
 
-def build_mod(name:str, code:bytes, initial_globals:dict=None, module_path=None) -> ModuleType:
+def build_mod(name:str, code:bytes, initial_globals:dict=None, module_path=None, aspectize=None) -> ModuleType:
     mod = ModuleType(name)
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = module_path
@@ -154,13 +156,13 @@ def build_mod(name:str, code:bytes, initial_globals:dict=None, module_path=None)
     code_text = codecs.decode(code)
     # module file "<", ">" chars are specially handled by inspect
     linecache.cache[f"<{name}>"] = (
-      len(code), # size of source code
-      None, # last modified time; None means there is no physical file
-      [*map( # a list of lines, including trailing newline on each
+    len(code), # size of source code
+    None, # last modified time; None means there is no physical file
+    [*map( # a list of lines, including trailing newline on each
         lambda ln: ln+"\x0a",
         code_text.splitlines())
-      ],
-      mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
+    ],
+    mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
     )
     exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
     return mod
@@ -171,6 +173,16 @@ def fail_or_default(default, exception, msg):
     else:
         raise exception(msg)
 
+def aspectize(mod, flags, pattern, decorator):
+    mapping = {Use.aspect.FUNCTION: inspect.isfunction,
+            Use.aspect.METHOD: inspect.ismethod,
+            Use.aspect.CLASS: inspect.isclass}
+    for flag, check in mapping.items():
+        if flag in flags:
+            parent = mod
+            for obj in parent.__dict__:
+                if check(obj) and re.match(pattern, obj.__qualname__):
+                    parent.__dict__[obj.__name__] = decorator(obj)
 
 class SurrogateModule(ModuleType):
 
@@ -226,6 +238,7 @@ class Use:
     Path = Path
     URL = URL
     mode = Enum("Mode", "sha256 nodefault")
+    aspect = Flag("Aspect", "FUNCTION METHOD CLASS PROPERTY")
 
     def __init__(self):
         self.__using = {}
@@ -242,7 +255,9 @@ class Use:
                 initial_globals:dict=None, 
                 as_import:str=None,
                 default=mode.nodefault,
+                aspectize=None
                 ):
+        aspectize = aspectize or {}
         response = requests.get(url)
         if response.status_code != 200:
             raise ModuleNotFoundError(f"Could not load {url} from the interwebs, got a {response.status_code} error.")
@@ -261,6 +276,10 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             sys.modules[as_import] = mod
+        
+        for (flags, pattern), decorator in aspectize.items():
+            aspectize(mod, flags, pattern, decorator)
+
         return mod
 
     @__call__.register(Path)
@@ -318,8 +337,10 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     hash_algo:str=mode.sha256, 
                     hash_value:str=None,
                     default=mode.nodefault,
+                    aspectize=None,
                     ) -> ModuleType:
 
+        aspectize = 
         # let's first check if it's installed already somehow
         spec = importlib.machinery.PathFinder.find_spec(name)
 
@@ -364,8 +385,6 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     if this_hash != hash_value:
                         return fail_or_default(default, UnexpectedHash, f"Package {name} in temporary {filename} had hash {this_hash}, which does not match the expected {hash_value}, aborting.")
                     # load it
-
-
                 # now that we got something, we can load it
                 spec = importlib.machinery.PathFinder.find_spec(name)
             
@@ -385,7 +404,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         if version:
             try:
                 # packages usually keep their metadata in seperate files, not in some __version__ variable
-                if parse(str(version)) != parse(version(name)):
+                if parse(str(version)) != parse(metadata.version(name)):
                     warn(
                         f"{name} is expected to be version {version} ,  but got {mod.__version__} instead",
                         VersionWarning,
