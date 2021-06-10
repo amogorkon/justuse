@@ -18,7 +18,9 @@ Goals/Features:
 Non-Goal:
 Completely replace the import statement.
 
-Note: pathlib.Path and yarl.URL can both be accessed as aliases via use.Path and use.URL
+Notes: 
+pathlib.Path and yarl.URL can both be accessed as aliases via use.Path and use.URL
+inspect.isfunction, .ismethod and .isclass also can be accessed via their aliases use.isfunction, use.ismethod and use.isclass
 
 Examples:
 >>> import use
@@ -148,7 +150,7 @@ def methdispatch(func):
     update_wrapper(wrapper, func)
     return wrapper
 
-def build_mod(name:str, code:bytes, initial_globals:dict=None, module_path=None, aspectize=None) -> ModuleType:
+def build_mod(name:str, code:bytes, initial_globals:dict=None, module_path=None, aspectize:dict=None) -> ModuleType:
     mod = ModuleType(name)
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = module_path
@@ -165,6 +167,8 @@ def build_mod(name:str, code:bytes, initial_globals:dict=None, module_path=None,
     mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
     )
     exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
+    for (check, pattern), decorator in aspectize:
+        apply_aspect(mod, check, pattern, decorator)
     return mod
 
 def fail_or_default(default, exception, msg):
@@ -173,16 +177,13 @@ def fail_or_default(default, exception, msg):
     else:
         raise exception(msg)
 
-def apply_aspect(mod, flags, pattern, decorator):
-    mapping = {Use.aspect.FUNCTION: inspect.isfunction,
-            Use.aspect.METHOD: inspect.ismethod,
-            Use.aspect.CLASS: inspect.isclass}
-    for flag, check in mapping.items():
-        if flag in flags:
-            parent = mod
-            for name, obj in parent.__dict__.items():
-                if check(obj) and re.match(pattern, obj.__qualname__):
-                    parent.__dict__[obj.__name__] = decorator(obj)
+def apply_aspect(mod:ModuleType, check:callable, pattern:str, decorator:callable):
+    # TODO: recursion?
+    parent = mod
+    for name, obj in parent.__dict__.items():
+        if check(obj) and re.match(pattern, obj.__qualname__):
+            # TODO: logging?
+            parent.__dict__[obj.__name__] = decorator(obj)
 
 class SurrogateModule(ModuleType):
 
@@ -194,7 +195,7 @@ class SurrogateModule(ModuleType):
             yield cls(tg)
             tg.cancel_scope.cancel()
 
-    def __init__(self, spec, initial_globals):
+    def __init__(self, spec, initial_globals, aspectize):
         self.__implementation = ModuleType("")
         
         async def __reload():
@@ -205,7 +206,7 @@ class SurrogateModule(ModuleType):
                     if current_filehash != last_filehash:
                         try:
                             file.seek(0)
-                            mod = build_mod(spec.name, file.read(), initial_globals)
+                            mod = build_mod(spec.name, file.read(), initial_globals, aspectize=aspectize)
                             # TODO: check for different AST or globals
                             self.__implementation = mod
                         except Exception as e:
@@ -238,7 +239,10 @@ class Use:
     Path = Path
     URL = URL
     mode = Enum("Mode", "sha256 nodefault")
-    aspect = Flag("Aspect", "FUNCTION METHOD CLASS PROPERTY")
+    
+    isfunction = inspect.isfunction
+    ismethod = inspect.ismethod
+    isclass = inspect.isclass
 
     def __init__(self):
         self.__using = {}
@@ -256,7 +260,7 @@ class Use:
                 initial_globals:dict=None, 
                 as_import:str=None,
                 default=mode.nodefault,
-                aspectize=None
+                aspectize=None,
                 ):
         aspectize = aspectize or {}
         response = requests.get(url)
@@ -272,14 +276,11 @@ class Use:
 To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}" """, 
                 NoValidationWarning)
         name = url.name
-        mod = build_mod(name, response.content, initial_globals)
+        mod = build_mod(name, response.content, initial_globals, aspectize=aspectize)
         self.__using[name] = mod, inspect.getframeinfo(inspect.currentframe())
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             sys.modules[as_import] = mod
-        
-        for (flags, pattern), decorator in aspectize.items():
-            apply_aspect(mod, flags, pattern, decorator)
 
         return mod
 
@@ -312,7 +313,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
             pass
             if reloading:
                 spec = importlib.machinery.PathFinder.find_spec(name)
-                mod = SurrogateModule(spec, initial_globals)
+                mod = SurrogateModule(spec, initial_globals, aspectize)
                 if not all(inspect.isfunction(obj) for obj in mod.__dict__.values() 
                                                         if obj not in initial_globals.values()):
                     warn(
@@ -324,15 +325,12 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 with open(path.resolve(), "rb") as file:
                     code = file.read()
                 self.__using[f"<{name}>"] = path.resolve()
-                mod = build_mod(name, code, initial_globals, path.resolve())
+                mod = build_mod(name, code, initial_globals, path.resolve(), aspectize=aspectize)
             # let's not confuse the user and restore the cwd to the original in any case
             os.chdir(original_cwd)
             if as_import:
                 assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
                 sys.modules[as_import] = mod
-            
-            for (flags, pattern), decorator in aspectize.items():
-                apply_aspect(mod, flags, pattern, decorator)
             
             return mod
 
@@ -404,8 +402,11 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         # builtins may have no spec, let's not mess with those
         if not spec or spec.parent:
             mod = importlib.import_module(name)
+            # not using build_mod, so we need to do this from here
+            for (check, pattern), decorator in aspectize.items():
+                apply_aspect(mod, check, pattern, decorator)
         else:
-            mod = build_mod(name, spec.loader.get_source(name), initial_globals)
+            mod = build_mod(name, spec.loader.get_source(name), initial_globals, aspectize=aspectize)
         self.__using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
 
         if version:
@@ -418,9 +419,6 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     )
             except AttributeError:
                 print(f"Cannot determine version for module {name}, continueing.")
-        
-        for (flags, pattern), decorator in aspectize.items():
-            apply_aspect(mod, flags, pattern, decorator)
         
         return mod
 
