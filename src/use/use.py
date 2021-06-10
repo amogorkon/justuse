@@ -65,8 +65,11 @@ import os
 import re
 import sys
 import traceback
-from enum import Enum, Flag
-from functools import singledispatch, update_wrapper
+
+from enum import Enum
+from enum import Flag
+from functools import singledispatch
+from functools import update_wrapper
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType
@@ -75,6 +78,7 @@ from warnings import warn
 import anyio
 import mmh3
 import requests
+
 from packaging.version import parse
 from yarl import URL
 
@@ -173,14 +177,14 @@ def fail_or_default(default, exception, msg):
     else:
         raise exception(msg)
 
-def aspectize(mod, flags, pattern, decorator):
+def apply_aspect(mod, flags, pattern, decorator):
     mapping = {Use.aspect.FUNCTION: inspect.isfunction,
             Use.aspect.METHOD: inspect.ismethod,
             Use.aspect.CLASS: inspect.isclass}
     for flag, check in mapping.items():
         if flag in flags:
             parent = mod
-            for obj in parent.__dict__:
+            for name, obj in parent.__dict__.items():
                 if check(obj) and re.match(pattern, obj.__qualname__):
                     parent.__dict__[obj.__name__] = decorator(obj)
 
@@ -279,7 +283,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
             sys.modules[as_import] = mod
         
         for (flags, pattern), decorator in aspectize.items():
-            aspectize(mod, flags, pattern, decorator)
+            apply_aspect(mod, flags, pattern, decorator)
 
         return mod
 
@@ -332,7 +336,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 sys.modules[as_import] = mod
             
             for (flags, pattern), decorator in aspectize.items():
-                aspectize(mod, flags, pattern, decorator)
+                apply_aspect(mod, flags, pattern, decorator)
             
             return mod
 
@@ -420,7 +424,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 print(f"Cannot determine version for module {name}, continueing.")
         
         for (flags, pattern), decorator in aspectize.items():
-            aspectize(mod, flags, pattern, decorator)
+            apply_aspect(mod, flags, pattern, decorator)
         
         return mod
 
