@@ -7,9 +7,9 @@ Goals/Features:
 - safely auto-reloading of local modules on edit (preliminary DONE - works in jupyter)
 - pass module-level globals into the importing context (DONE)
 - return optional fallback-default object/module if import failed (DONE)
+- aspect-oriented decorators for everything callable on import (DONE)
 - securely auto-install packages (TODO)
 - support P2P package distribution (TODO)
-- aspect-oriented decorators for everything callable on import (TODO)
 - unwrap aspect-decorators on demand (TODO)
 - easy introspection via internal dependency graph (TODO)
 - relative imports on online-sources via URL-aliases (TODO)
@@ -65,11 +65,8 @@ import os
 import re
 import sys
 import traceback
-
-from enum import Enum
-from enum import Flag
-from functools import singledispatch
-from functools import update_wrapper
+from enum import Enum, Flag
+from functools import singledispatch, update_wrapper
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType
@@ -78,7 +75,6 @@ from warnings import warn
 import anyio
 import mmh3
 import requests
-
 from packaging.version import parse
 from yarl import URL
 
