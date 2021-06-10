@@ -242,6 +242,7 @@ class Use:
 
     def __init__(self):
         self.__using = {}
+        self.__aspectized = {}
 
     @methdispatch
     def __call__(self, thing, *args, **kwargs):
@@ -288,7 +289,9 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 reloading:bool=False,
                 initial_globals:dict=None, 
                 as_import=None,
-                default=mode.nodefault):
+                default=mode.nodefault,
+                aspectize=None):
+        aspectize = aspectize or {}
         if path.is_dir():
             return fail_or_default(default, ImportError, f"Can't import directory {path}")
         elif path.is_absolute() and not path.exists():
@@ -327,6 +330,10 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
             if as_import:
                 assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
                 sys.modules[as_import] = mod
+            
+            for (flags, pattern), decorator in aspectize.items():
+                aspectize(mod, flags, pattern, decorator)
+            
             return mod
 
     @__call__.register(str)
@@ -340,7 +347,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     aspectize=None,
                     ) -> ModuleType:
 
-        aspectize = 
+        aspectize = aspectize or {}
         # let's first check if it's installed already somehow
         spec = importlib.machinery.PathFinder.find_spec(name)
 
@@ -411,6 +418,10 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     )
             except AttributeError:
                 print(f"Cannot determine version for module {name}, continueing.")
+        
+        for (flags, pattern), decorator in aspectize.items():
+            aspectize(mod, flags, pattern, decorator)
+        
         return mod
 
 sys.modules["use"] = Use()
