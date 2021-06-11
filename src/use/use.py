@@ -53,8 +53,6 @@ File-Hashing inspired by
 :license: MIT
 """
 
-__version__ = "0.2.0"
-
 import asyncio
 import codecs
 import contextlib
@@ -83,6 +81,8 @@ import requests
 
 from packaging.version import parse
 from yarl import URL
+
+__version__ = "0.2.0"
 
 
 class VersionWarning(Warning):
@@ -240,6 +240,7 @@ class SurrogateModule(ModuleType):
 
 class Use:
     __doc__ = __doc__  # module's __doc__ above
+    __version__ = __version__  # otherwise setup.py can't find it
     Path = Path
     URL = URL
     mode = Enum("Mode", "sha256 nodefault")
