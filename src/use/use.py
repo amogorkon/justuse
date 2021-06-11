@@ -53,7 +53,7 @@ File-Hashing inspired by
 :license: MIT
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 import asyncio
 import codecs
@@ -67,8 +67,11 @@ import os
 import re
 import sys
 import traceback
-from enum import Enum, Flag
-from functools import singledispatch, update_wrapper
+
+from enum import Enum
+from enum import Flag
+from functools import singledispatch
+from functools import update_wrapper
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType
@@ -77,6 +80,7 @@ from warnings import warn
 import anyio
 import mmh3
 import requests
+
 from packaging.version import parse
 from yarl import URL
 

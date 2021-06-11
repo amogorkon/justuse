@@ -9,12 +9,14 @@ sys.path.append(src)
 from setuptools import find_packages
 from setuptools import setup
 
+from use import __version__
+
 meta={
     "name":"justuse",
     "description":"A self-documenting, functional way to import modules in Python with advanced features.",
     "license":"MIT",
     "url":"https://github.com/amogorkon/justuse",
-    "version":"0.1.0post5",
+    "version": __version_,
     "author":"Anselm Kiefner",
     "author_email":"justuse-pypi@anselm.kiefner.de",
     "python_requires":">=3.8",
