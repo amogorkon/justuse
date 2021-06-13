@@ -65,11 +65,8 @@ import os
 import re
 import sys
 import traceback
-
-from enum import Enum
-from enum import Flag
-from functools import singledispatch
-from functools import update_wrapper
+from enum import Enum, Flag
+from functools import singledispatch, update_wrapper
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType
@@ -78,7 +75,6 @@ from warnings import warn
 import anyio
 import mmh3
 import requests
-
 from packaging.version import parse
 from yarl import URL
 
@@ -243,7 +239,10 @@ class Use:
     __version__ = __version__  # otherwise setup.py can't find it
     Path = Path
     URL = URL
-    mode = Enum("Mode", "sha256 nodefault")
+    class Hash(Enum):
+        sha256 = hashlib.sha256
+
+    mode = Enum("Mode", "nodefault")
     
     isfunction = inspect.isfunction
     ismethod = inspect.ismethod
@@ -267,12 +266,13 @@ class Use:
                 default=mode.nodefault,
                 aspectize=None,
                 ):
+        assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
+        
         aspectize = aspectize or {}
         response = requests.get(url)
         if response.status_code != 200:
             raise ModuleNotFoundError(f"Could not load {url} from the interwebs, got a {response.status_code} error.")
-        if hash_algo is Use.mode.sha256:
-            this_hash = hashlib.sha256(response.content).hexdigest()
+        this_hash = hash_algo.value(response.content).hexdigest()
         if hash_value:
             if this_hash != hash_value:
                 return fail_or_default(default, UnexpectedHash, f"{this_hash} does not match the expected hash {hash_value} - aborting!")
@@ -296,7 +296,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 initial_globals:dict=None, 
                 as_import=None,
                 default=mode.nodefault,
-                aspectize=None):
+                aspectize=None):  # sourcery skip: remove-redundant-pass
         aspectize = aspectize or {}
         if path.is_dir():
             return fail_or_default(default, ImportError, f"Can't import directory {path}")
@@ -360,48 +360,45 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
 
         # couldn't find any installed package
         if not spec:
-            if auto_install:
-                # TODO: raise appropriate detailed warnings and give helpful info from the json to fix the issue
-                if not (version and hash_value):
-                    raise RuntimeWarning(f"Can't auto-install {name} without a specific version and corresponding hash value")
-
-                response = requests.get(f"https://pypi.org/pypi/{name}/{version}/json")
-                if not response == 200:
-                    return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed with {response} while trying to pull info from PyPI.")
-                try:
-                    if not response.json()["urls"]:
-                        return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because no valid URLs to download could be found.")
-                    else:
-                        for entry in response.json()["urls"]:
-                            url = entry["url"]
-                            that_hash = entry["digests"].get(hash_algo.name)
-                            filename = entry["filename"]
-                            # special treatment?
-                            yanked = entry["yanked"]
-                            if that_hash == hash_value:
-                                break
-                        else:
-                            return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because none of the available hashes match the expected hash.")
-                except KeyError:
-                    return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because there was a problem with the JSON from PyPI.")
-            
-                with TemporaryDirectory() as directory:
-                    # TODO: chdir etc
-                    # download the file
-                    with open(filename, "wb") as file:
-                        pass
-                    # check the hash
-                    this_hash = securehash_file(file, hash_algo)
-                    if this_hash != hash_value:
-                        return fail_or_default(default, UnexpectedHash, f"Package {name} in temporary {filename} had hash {this_hash}, which does not match the expected {hash_value}, aborting.")
-                    # load it
-                # now that we got something, we can load it
-                spec = importlib.machinery.PathFinder.find_spec(name)
-            
-            # there's nothing installed and no auto-install
-            else:
+            if not auto_install:
                 return fail_or_default(default, ImportError, f"{name} is not installed and auto-install was not requested.")
-        
+
+            # TODO: raise appropriate detailed warnings and give helpful info from the json to fix the issue
+            if not (version and hash_value):
+                raise RuntimeWarning(f"Can't auto-install {name} without a specific version and corresponding hash value")
+
+            response = requests.get(f"https://pypi.org/pypi/{name}/{version}/json")
+            if response != 200:
+                return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed with {response} while trying to pull info from PyPI.")
+            try:
+                if not response.json()["urls"]:
+                    return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because no valid URLs to download could be found.")
+                for entry in response.json()["urls"]:
+                    url = entry["url"]
+                    that_hash = entry["digests"].get(hash_algo.name)
+                    filename = entry["filename"]
+                    # special treatment?
+                    yanked = entry["yanked"]
+                    if that_hash == hash_value:
+                        break
+                else:
+                    return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because none of the available hashes match the expected hash.")
+            except KeyError:
+                return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because there was a problem with the JSON from PyPI.")
+
+            with TemporaryDirectory() as directory:
+                # TODO: chdir etc
+                # download the file
+                with open(filename, "wb") as file:
+                    pass
+                # check the hash
+                this_hash = securehash_file(file, hash_algo)
+                if this_hash != hash_value:
+                    return fail_or_default(default, UnexpectedHash, f"Package {name} in temporary {filename} had hash {this_hash}, which does not match the expected {hash_value}, aborting.")
+                # load it
+            # now that we got something, we can load it
+            spec = importlib.machinery.PathFinder.find_spec(name)
+
         # now there should be a valid spec defined
 
         # builtins may have no spec, let's not mess with those
@@ -424,7 +421,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     )
             except AttributeError:
                 print(f"Cannot determine version for module {name}, continueing.")
-        
+
         return mod
 
 sys.modules["use"] = Use()
