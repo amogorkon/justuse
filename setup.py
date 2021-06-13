@@ -1,15 +1,19 @@
 
+import importlib
+import importlib
 import os
 import sys
-
-here = (os.path.abspath(os.path.dirname(__file__)))
-src = os.path.join(here, "src/use")
-sys.path.append(src)
 
 from setuptools import find_packages
 from setuptools import setup
 
+here = (os.path.abspath(os.path.dirname(__file__)))
+src = os.path.join(here, "src/use")
+sys.path.insert(0, src)
+
 import use
+
+print(2323, use.__version__)
 
 meta={
     "name":"justuse",

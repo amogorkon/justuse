@@ -65,8 +65,11 @@ import os
 import re
 import sys
 import traceback
-from enum import Enum, Flag
-from functools import singledispatch, update_wrapper
+
+from enum import Enum
+from enum import Flag
+from functools import singledispatch
+from functools import update_wrapper
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType
@@ -75,10 +78,11 @@ from warnings import warn
 import anyio
 import mmh3
 import requests
+
 from packaging.version import parse
 from yarl import URL
 
-__version__ = "0.2.0"
+__version__ = "0.2.1.post1"
 
 
 class VersionWarning(Warning):
@@ -344,7 +348,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     version:str=None, 
                     initial_globals:dict=None, 
                     auto_install:bool=False, 
-                    hash_algo:str=mode.sha256, 
+                    hash_algo:str=Hash.sha256, 
                     hash_value:str=None,
                     default=mode.nodefault,
                     aspectize=None,
