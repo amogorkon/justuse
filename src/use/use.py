@@ -281,7 +281,7 @@ class Use:
                 return fail_or_default(default, UnexpectedHash, f"{this_hash} does not match the expected hash {hash_value} - aborting!")
         else:
             warn(f"""Attempting to import {url} from the interwebs with no validation whatsoever! 
-To safely reproduce please use hash_algo={hash_algo}, hash_value="{this_hash}" """, 
+To safely reproduce please use hash_algo=use.mode.{hash_algo.name}, hash_value="{this_hash}" """, 
                 NoValidationWarning)
         name = url.name
         mod = build_mod(name, response.content, initial_globals, aspectize=aspectize)
