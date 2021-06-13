@@ -274,8 +274,6 @@ class Use:
         this_hash = None
         if hash_algo is Use.mode.sha256:
             this_hash = hashlib.sha256(response.content).hexdigest()
-        elif hash_algo is None:
-            pass
         else:
             raise AssertionError(f"Unsupported hash_algo: {hash_algo}")
         if hash_value:
