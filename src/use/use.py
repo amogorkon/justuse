@@ -172,7 +172,7 @@ def build_mod(name:str, code:bytes, initial_globals:dict=None, module_path=None,
     return mod
 
 def fail_or_default(default, exception, msg):
-    if default is not Use.mode.nodefault:
+    if default is not Use.mode.fastfail:
         return default
     else:
         raise exception(msg)
@@ -242,7 +242,7 @@ class Use:
     class Hash(Enum):
         sha256 = hashlib.sha256
 
-    mode = Enum("Mode", "nodefault")
+    mode = Enum("Mode", "fastfail")
     
     isfunction = inspect.isfunction
     ismethod = inspect.ismethod
@@ -263,7 +263,7 @@ class Use:
                 hash_value:str=None, 
                 initial_globals:dict=None, 
                 as_import:str=None,
-                default=mode.nodefault,
+                default=mode.fastfail,
                 aspectize=None,
                 ):
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
@@ -295,7 +295,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 reloading:bool=False,
                 initial_globals:dict=None, 
                 as_import=None,
-                default=mode.nodefault,
+                default=mode.fastfail,
                 aspectize=None):  # sourcery skip: remove-redundant-pass
         aspectize = aspectize or {}
         if path.is_dir():
@@ -346,7 +346,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     auto_install:bool=False, 
                     hash_algo:str=mode.sha256, 
                     hash_value:str=None,
-                    default=mode.nodefault,
+                    default=mode.fastfail,
                     aspectize=None,
                     ) -> ModuleType:
 
