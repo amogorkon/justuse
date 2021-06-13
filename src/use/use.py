@@ -259,7 +259,7 @@ class Use:
     @__call__.register(URL)
     def _use_url(self, 
                 url:URL, 
-                hash_algo:mode=mode.sha256, 
+                hash_algo:Hash=Hash.sha256, 
                 hash_value:str=None, 
                 initial_globals:dict=None, 
                 as_import:str=None,
