@@ -25,11 +25,11 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
  
  use("pprint").pprint(some_dict)  
  
- tools = use("/media/sf_Dropbox/code/tools.py", reloading=True)
+ tools = use(use.Path("/media/sf_Dropbox/code/tools.py"), reloading=True)
  
  test = use("functions", initial_globals={"foo":34, "bar":49})
  
- utils = use(URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
+ utils = use(use.URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
             hash_value="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")
 
 Thanks to the *default* keyword argument, it is also easy to simplify the rather clumsy optional import usecase like
