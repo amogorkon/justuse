@@ -271,10 +271,12 @@ class Use:
         response = requests.get(url)
         if response.status_code != 200:
             raise ModuleNotFoundError(f"Could not load {url} from the interwebs, got a {response.status_code} error.")
-        this_hash = match hash_algo:
-          case Use.mode.sha256:
+        this_hash = None
+        if hash_algo is Use.mode.sha256:
             this_hash = hashlib.sha256(response.content).hexdigest()
-          case _:
+        elif hash_algo is None:
+            pass
+        else:
             raise AssertionError(f"Unsupported hash_algo: {hash_algo}")
         if hash_value:
             if this_hash != hash_value:
