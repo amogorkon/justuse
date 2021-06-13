@@ -82,7 +82,7 @@ import requests
 from packaging.version import parse
 from yarl import URL
 
-__version__ = "0.2.1.post1"
+__version__ = "0.2.2"
 
 
 class VersionWarning(Warning):
