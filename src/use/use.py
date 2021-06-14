@@ -113,20 +113,9 @@ def varint_encode(number):
             break
     return buf
 
-def hashfileobject(file, sample_threshhold=128 * 1024, sample_size=16 * 1024):
-    file.seek(0, os.SEEK_END)
-    size = file.tell()
-    file.seek(0, os.SEEK_SET)
-    if size < sample_threshhold or sample_size < 1:
-        data = file.read()
-    else:
-        data = file.read(sample_size)
-        file.seek(size//2)
-        data += file.read(sample_size)
-        file.seek(-sample_size, os.SEEK_END)
-        data += file.read(sample_size)
-
-    hash_tmp = mmh3.hash_bytes(data)
+def hashfileobject(code, sample_threshhold=128 * 1024, sample_size=16 * 1024):
+    size = len(code)
+    hash_tmp = mmh3.hash_bytes(code)
     hash_ = hash_tmp[7::-1] + hash_tmp[16:7:-1]
     enc_size = varint_encode(size)
     return enc_size + hash_[len(enc_size):]
@@ -190,25 +179,24 @@ class SurrogateModule(ModuleType):
     def __init__(self, name, path, initial_globals, aspectize):
         self.__implementation = ModuleType("")
         self.__stopped = False
-        print(aspectize, type(aspectize))
 
         def __reload():
             last_filehash = None
             while not self.__stopped:
                 with open(path, "rb") as file:
-                    current_filehash = hashfileobject(file)
-                    if current_filehash != last_filehash:
-                        try:
-                            file.seek(0)
-                            mod = build_mod(name=name, 
-                                            code=file.read(), 
-                                            initial_globals=initial_globals,
-                                            module_path=path.resolve(),
-                                            aspectize=aspectize)
-                            self.__implementation = mod
-                        except Exception as e:
-                            print(e, traceback.format_exc())
-                    last_filehash = current_filehash
+                    code = file.read()
+                current_filehash = hashfileobject(code)
+                if current_filehash != last_filehash:
+                    try:
+                        mod = build_mod(name=name, 
+                                        code=code, 
+                                        initial_globals=initial_globals,
+                                        module_path=path.resolve(),
+                                        aspectize=aspectize)
+                        self.__implementation = mod
+                    except Exception as e:
+                        print(e, traceback.format_exc())
+                last_filehash = current_filehash
                 time.sleep(1)
 
         self.__thread = threading.Thread(target=__reload())
@@ -457,3 +445,10 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         return mod
 
 sys.modules["use"] = Use()
+
+from time import sleep
+use = Use()
+foo = use(use.Path("../../tests/.test2.py"))
+for _ in range(10):
+    print(foo.test())
+    sleep(2)
