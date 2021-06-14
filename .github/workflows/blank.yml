@@ -37,7 +37,9 @@ jobs:
           pwd
           ls -lA
           ls -lAR ./src ./tests
+          dir="$( pwd )"
+          export PYTHONPATH="$dir/src:$dir/test"
           env
           python3 -m site
-          echo Skip: python3 -c 'import unittest; suite = unittest.defaultTestLoader.discover("./tests", pattern="*.py", top_level_dir="./tests"); rslt = unittest.TestResult(); suite.run(rslt); print(rslt);'
-          cd tests && python3 -m unittest discover -p "mod*.py"  -s $PWD -t $PWD
+          python3 -c 'import unittest; suite = unittest.defaultTestLoader.discover("./tests", pattern="*.py", top_level_dir="./tests"); rslt = unittest.TestResult(); suite.run(rslt); print(rslt);' || echo "Failure: $?"
+          cd tests && env "PYTHONPATH=$dir/src:$dir/test" python3 -m unittest discover -p "mod*.py" -s $dir/tests -t $dir/tests
