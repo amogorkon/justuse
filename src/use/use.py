@@ -53,7 +53,6 @@ File-Hashing inspired by
 :license: MIT
 """
 
-import asyncio
 import codecs
 import contextlib
 import hashlib
@@ -64,12 +63,11 @@ import linecache
 import os
 import re
 import sys
+import threading
+import time
 import traceback
-
-from enum import Enum
-from enum import Flag
-from functools import singledispatch
-from functools import update_wrapper
+from enum import Enum, Flag
+from functools import singledispatch, update_wrapper
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType
@@ -78,12 +76,10 @@ from warnings import warn
 import anyio
 import mmh3
 import requests
-
 from packaging.version import parse
 from yarl import URL
 
 __version__ = "0.2.4"
-
 
 class VersionWarning(Warning):
     pass
@@ -154,10 +150,11 @@ def methdispatch(func):
     update_wrapper(wrapper, func)
     return wrapper
 
-def build_mod(name:str, code:bytes, initial_globals:dict=None, module_path=None, aspectize:dict=None) -> ModuleType:
+def build_mod(*, name:str, code:bytes, initial_globals:dict, module_path:str, aspectize:dict) -> ModuleType:
     mod = ModuleType(name)
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = module_path
+
 
     code_text = codecs.decode(code)
     # module file "<", ">" chars are specially handled by inspect
@@ -171,7 +168,7 @@ def build_mod(name:str, code:bytes, initial_globals:dict=None, module_path=None,
     mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
     )
     exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
-    for (check, pattern), decorator in aspectize:
+    for (check, pattern), decorator in aspectize.items():
         apply_aspect(mod, check, pattern, decorator)
     return mod
 
@@ -190,49 +187,50 @@ def apply_aspect(mod:ModuleType, check:callable, pattern:str, decorator:callable
             parent.__dict__[obj.__name__] = decorator(obj)
 
 class SurrogateModule(ModuleType):
-
-    # TODO make this work in general
-    @classmethod
-    @contextlib.asynccontextmanager
-    async def create(cls):
-        async with anyio.create_task_group() as tg:
-            yield cls(tg)
-            tg.cancel_scope.cancel()
-
-    def __init__(self, spec, initial_globals, aspectize):
+    def __init__(self, name, path, initial_globals, aspectize):
         self.__implementation = ModuleType("")
-        
-        async def __reload():
+        self.__stopped = False
+        print(aspectize, type(aspectize))
+
+        def __reload():
             last_filehash = None
-            while True:
-                with open(spec.origin, "rb") as file:
+            while not self.__stopped:
+                with open(path, "rb") as file:
                     current_filehash = hashfileobject(file)
                     if current_filehash != last_filehash:
                         try:
                             file.seek(0)
-                            mod = build_mod(spec.name, file.read(), initial_globals, aspectize=aspectize)
-                            # TODO: check for different AST or globals
+                            mod = build_mod(name=name, 
+                                            code=file.read(), 
+                                            initial_globals=initial_globals,
+                                            module_path=path.resolve(),
+                                            aspectize=aspectize)
                             self.__implementation = mod
                         except Exception as e:
                             print(e, traceback.format_exc())
                     last_filehash = current_filehash
-                await asyncio.sleep(1)
-        self.__reloading = asyncio.get_event_loop().create_task(__reload())  # TODO: this isn't ideal
+                time.sleep(1)
+
+        self.__thread = threading.Thread(target=__reload())
 
     def __del__(self):
-        self.__reloading.cancel()
+        self.__stopped = True
 
     def __getattribute__(self, name):
-        if name in ("_SurrogateModule__reloading",
+        if name in ( 
                     "_SurrogateModule__implementation",
+                    "_SurrogateModule__stopped",
+                    "_SurrogateModule__thread",
                     ):
             return object.__getattribute__(self, name)
         else:
             return getattr(self.__implementation, name)
     
     def __setattr__(self, name, value):
-        if name in ("_SurrogateModule__reloading",
+        if name in (
                     "_SurrogateModule__implementation",
+                    "_SurrogateModule__stopped",
+                    "_SurrogateModule__thread",
                     ):
             object.__setattr__(self, name, value)
         else:
@@ -241,6 +239,8 @@ class SurrogateModule(ModuleType):
 class Use:
     __doc__ = __doc__  # module's __doc__ above
     __version__ = __version__  # otherwise setup.py can't find it
+    # attempt at fix for #23 doesn't work..
+    __path__ = str(Path(__file__).resolve().parent)
     Path = Path
     URL = URL
     class Hash(Enum):
@@ -285,7 +285,8 @@ class Use:
 To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}" """, 
                 NoValidationWarning)
         name = url.name
-        mod = build_mod(name, response.content, initial_globals, aspectize=aspectize)
+        mod = build_mod(name=name, code=response.content, module_path=url.path,
+                        initial_globals=initial_globals, aspectize=aspectize)
         self.__using[name] = mod, inspect.getframeinfo(inspect.currentframe())
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
@@ -300,7 +301,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 initial_globals:dict=None, 
                 as_import:str=None,
                 default=mode.fastfail,
-                aspectize:dict=None):  # sourcery skip: remove-redundant-pass
+                aspectize:dict=None): 
         aspectize = aspectize or {}
         initial_globals = initial_globals or {}
         if path.is_dir():
@@ -315,17 +316,16 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 if source_dir is not None and source_dir.exists():
                     os.chdir(source_dir.parent)
                     path = path.resolve()
-                # calling from jupyter for instance, we use the cwd set there, no guessing
-                else:
-                    pass
+                else:  # sourcery skip: remove-redundant-pass
+                    pass  # calling from jupyter for instance, we use the cwd set there, no guessing
             name = path.stem
             # TODO: replacing previously loaded module
             pass
             if reloading:
-                spec = importlib.machinery.PathFinder.find_spec(name)
-                mod = SurrogateModule(spec, initial_globals, aspectize)
-                if not all(inspect.isfunction(obj) for obj in mod.__dict__.values() 
-                                                        if obj not in initial_globals.values()):
+                mod = SurrogateModule(name, path, initial_globals, aspectize)
+                print(mod.__dict__.items())
+                if not all(inspect.isfunction(value) for key, value in mod.__dict__.items() 
+                            if key not in initial_globals.keys() and not key.startswith("__")):
                     warn(
                         f"Beware {name} also contains non-function objects, it may not be safe to reload!",
                         NotReloadableWarning,
@@ -334,14 +334,14 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 # REMINDER: if build_mod is within this block all hell breaks lose!
                 with open(path.resolve(), "rb") as file:
                     code = file.read()
-                self.__using[f"<{name}>"] = path.resolve()
-                mod = build_mod(name, code, initial_globals, path.resolve(), aspectize=aspectize)
+                mod = build_mod(name=name, code=code, initial_globals=initial_globals, 
+                                module_path=path.resolve(), aspectize=aspectize)
+            self.__using[f"<{name}>"] = path.resolve()
             # let's not confuse the user and restore the cwd to the original in any case
             os.chdir(original_cwd)
             if as_import:
                 assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
                 sys.modules[as_import] = mod
-            
             return mod
 
     @__call__.register(str)
@@ -370,7 +370,8 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         if not spec or spec.parent:
             mod = importlib.import_module(name)
         else:
-            mod = build_mod(name, spec.loader.get_source(name), initial_globals)
+            mod = build_mod(name=name, code=spec.loader.get_source(name), module_path=spec.origin, 
+                            initial_globals=initial_globals, aspectize=aspectize)
         self.__using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
 
 
