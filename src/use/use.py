@@ -82,7 +82,7 @@ import requests
 from packaging.version import parse
 from yarl import URL
 
-__version__ = "0.2.2"
+__version__ = "0.2.4"
 
 
 class VersionWarning(Warning):
@@ -298,10 +298,11 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                 path:Path, 
                 reloading:bool=False,
                 initial_globals:dict=None, 
-                as_import=None,
+                as_import:str=None,
                 default=mode.fastfail,
-                aspectize=None):  # sourcery skip: remove-redundant-pass
+                aspectize:dict=None):  # sourcery skip: remove-redundant-pass
         aspectize = aspectize or {}
+        initial_globals = initial_globals or {}
         if path.is_dir():
             return fail_or_default(default, ImportError, f"Can't import directory {path}")
         elif path.is_absolute() and not path.exists():
@@ -345,7 +346,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
 
     @__call__.register(str)
     def _use_str(self, name:str, 
-                    version:str=None, 
+                    version:str="", 
                     initial_globals:dict=None, 
                     auto_install:bool=False, 
                     hash_algo:str=Hash.sha256, 
@@ -353,8 +354,9 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
                     default=mode.fastfail,
                     aspectize=None,
                     ) -> ModuleType:
-
+        initial_globals = initial_globals or {}
         aspectize = aspectize or {}
+        version = parse(str(version))
         # let's first check if it's installed already somehow
         spec = importlib.machinery.PathFinder.find_spec(name)
 
@@ -362,69 +364,94 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
             warn(f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))", 
                 AmbiguityWarning)
 
-        # couldn't find any installed package
-        if not spec:
-            if not auto_install:
-                return fail_or_default(default, ImportError, f"{name} is not installed and auto-install was not requested.")
-
-            # TODO: raise appropriate detailed warnings and give helpful info from the json to fix the issue
-            if not (version and hash_value):
-                raise RuntimeWarning(f"Can't auto-install {name} without a specific version and corresponding hash value")
-
-            response = requests.get(f"https://pypi.org/pypi/{name}/{version}/json")
-            if response != 200:
-                return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed with {response} while trying to pull info from PyPI.")
-            try:
-                if not response.json()["urls"]:
-                    return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because no valid URLs to download could be found.")
-                for entry in response.json()["urls"]:
-                    url = entry["url"]
-                    that_hash = entry["digests"].get(hash_algo.name)
-                    filename = entry["filename"]
-                    # special treatment?
-                    yanked = entry["yanked"]
-                    if that_hash == hash_value:
-                        break
-                else:
-                    return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because none of the available hashes match the expected hash.")
-            except KeyError:
-                return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because there was a problem with the JSON from PyPI.")
-
-            with TemporaryDirectory() as directory:
-                # TODO: chdir etc
-                # download the file
-                with open(filename, "wb") as file:
-                    pass
-                # check the hash
-                this_hash = securehash_file(file, hash_algo)
-                if this_hash != hash_value:
-                    return fail_or_default(default, UnexpectedHash, f"Package {name} in temporary {filename} had hash {this_hash}, which does not match the expected {hash_value}, aborting.")
-                # load it
-            # now that we got something, we can load it
-            spec = importlib.machinery.PathFinder.find_spec(name)
-
-        # now there should be a valid spec defined
+        # Simple version until auto-install works :|
 
         # builtins may have no spec, let's not mess with those
         if not spec or spec.parent:
             mod = importlib.import_module(name)
-            # not using build_mod, so we need to do this from here
-            for (check, pattern), decorator in aspectize.items():
-                apply_aspect(mod, check, pattern, decorator)
         else:
-            mod = build_mod(name, spec.loader.get_source(name), initial_globals, aspectize=aspectize)
+            mod = build_mod(name, spec.loader.get_source(name), initial_globals)
         self.__using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
 
-        if version:
-            try:
-                # packages usually keep their metadata in seperate files, not in some __version__ variable
-                if parse(str(version)) != parse(metadata.version(name)):
-                    warn(
-                        f"{name} is expected to be version {version} ,  but got {mod.__version__} instead",
-                        VersionWarning,
-                    )
-            except AttributeError:
-                print(f"Cannot determine version for module {name}, continueing.")
+
+        # # couldn't find any installed package
+        # if not spec:
+        #     # builtins may have no spec, let's not mess with those
+        #     if not auto_install:
+        #         try:
+        #             mod = importlib.import_module(name)
+        #             # not using build_mod, so we need to do this from here
+        #             for (check, pattern), decorator in aspectize.items():
+        #                 apply_aspect(mod, check, pattern, decorator)
+        #         except ImportError:
+        #             return fail_or_default(default, ImportError, f"{name} is not installed and auto-install was not requested.")
+
+        #     # TODO: raise appropriate detailed warnings and give helpful info from the json to fix the issue
+        #     if not (version and hash_value):
+        #         raise RuntimeWarning(f"Can't auto-install {name} without a specific version and corresponding hash value")
+
+        #     response = requests.get(f"https://pypi.org/pypi/{name}/{version}/json")
+        #     if response != 200:
+        #         return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed with {response} while trying to pull info from PyPI.")
+        #     try:
+        #         if not response.json()["urls"]:
+        #             return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because no valid URLs to download could be found.")
+        #         for entry in response.json()["urls"]:
+        #             url = entry["url"]
+        #             that_hash = entry["digests"].get(hash_algo.name)
+        #             filename = entry["filename"]
+        #             # special treatment?
+        #             yanked = entry["yanked"]
+        #             if that_hash == hash_value:
+        #                 break
+        #         else:
+        #             return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because none of the available hashes match the expected hash.")
+        #     except KeyError:
+        #         return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because there was a problem with the JSON from PyPI.")
+
+        #     with TemporaryDirectory() as directory:
+        #         # TODO: chdir etc
+        #         # download the file
+        #         with open(filename, "wb") as file:
+        #             pass
+        #         # check the hash
+        #         this_hash = securehash_file(file, hash_algo)
+        #         if this_hash != hash_value:
+        #             return fail_or_default(default, UnexpectedHash, f"Package {name} in temporary {filename} had hash {this_hash}, which does not match the expected {hash_value}, aborting.")
+        #         # load it
+        #     # now that we got something, we can load it
+        #     spec = importlib.machinery.PathFinder.find_spec(name)
+
+        # # now there should be a valid spec defined
+        # mod = build_mod(name, spec.loader.get_source(name), initial_globals, aspectize=aspectize)
+
+        #self.__using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
+
+        # pure despair :(
+        def check_version():
+            nonlocal mod
+            for check in [
+                "metadata.distribution(name).version",
+                "mod.version",
+                "mod.version()",
+                "mod.__version__"]:
+                try:
+                    check_value = eval(check)
+                    if isinstance(check_value, str):
+                        this_version = parse(check_value)
+                        if version != this_version:
+                            warn(
+                                f"{name} is expected to be version {version} ,  but got {this_version} instead",
+                                VersionWarning,
+                            )
+                        return
+                except Exception as e:
+                    pass
+            print(f"Cannot determine version for module {name}, continueing.")
+        
+        # the empty str parses as a truey LegacyVersion - WTF
+        if version != parse(""):
+            check_version()
 
         return mod
 
