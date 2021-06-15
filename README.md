@@ -11,7 +11,7 @@ Solid:
 * decorate all specified callables (functions, modules, classes, ..) on import via pattern matching, aspect-orientation made easy
 
 In flux:
-* safely hot auto-reload of function-only local modules - a REPL-like dev experience with files
+* safely hot auto-reloading of function-only local modules - a REPL-like dev experience with files
 * safely auto-install version-tagged packages from PyPI
 * pull packages from a P2P network instead of PyPI directly
 * provide a visual representation of the internal dependency graph
