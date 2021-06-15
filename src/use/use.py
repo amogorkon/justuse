@@ -54,7 +54,6 @@ File-Hashing inspired by
 """
 
 import codecs
-import contextlib
 import hashlib
 import importlib
 import importlib.metadata as metadata
@@ -73,7 +72,6 @@ from tempfile import TemporaryDirectory
 from types import ModuleType
 from warnings import warn
 
-import anyio
 import mmh3
 import requests
 from packaging.version import parse
@@ -245,19 +243,21 @@ class Use:
         self.__aspectized = {}
 
     @methdispatch
-    def __call__(self, thing, *args, **kwargs):
+    def __call__(self, thing, /, *args, **kwargs):
         raise NotImplementedError(f"Only pathlib.Path, yarl.URL and str are valid sources of things to import, but got {type(thing)}.")
 
     @__call__.register(URL)
-    def _use_url(self, 
+    def _use_url(
+                self, 
                 url:URL, 
+                /,*,
                 hash_algo:Hash=Hash.sha256, 
                 hash_value:str=None, 
                 initial_globals:dict=None, 
                 as_import:str=None,
                 default=mode.fastfail,
                 aspectize=None,
-                ):
+                ) -> ModuleType:
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
         
         aspectize = aspectize or {}
@@ -283,13 +283,16 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         return mod
 
     @__call__.register(Path)
-    def _use_path(self, 
+    def _use_path(
+                self, 
                 path:Path, 
+                /,*,
                 reloading:bool=False,
                 initial_globals:dict=None, 
                 as_import:str=None,
                 default=mode.fastfail,
-                aspectize:dict=None): 
+                aspectize:dict=None 
+                ) -> ModuleType: 
         aspectize = aspectize or {}
         initial_globals = initial_globals or {}
         if path.is_dir():
@@ -333,15 +336,18 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
             return mod
 
     @__call__.register(str)
-    def _use_str(self, name:str, 
-                    version:str="", 
-                    initial_globals:dict=None, 
-                    auto_install:bool=False, 
-                    hash_algo:str=Hash.sha256, 
-                    hash_value:str=None,
-                    default=mode.fastfail,
-                    aspectize=None,
-                    ) -> ModuleType:
+    def _use_str(
+                self,
+                name:str,
+                /,*,
+                version:str="", 
+                initial_globals:dict=None, 
+                auto_install:bool=False, 
+                hash_algo:str=Hash.sha256, 
+                hash_value:str=None,
+                default=mode.fastfail,
+                aspectize=None,
+                ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
         version = parse(str(version))
@@ -447,6 +453,7 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
 sys.modules["use"] = Use()
 
 from time import sleep
+
 use = Use()
 foo = use(use.Path("../../tests/.test2.py"))
 for _ in range(10):
