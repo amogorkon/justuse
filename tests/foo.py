@@ -1,3 +1,4 @@
 a : int
 def test():
-   print(a)
+   print(f"foo.test() returning a: {a}")
+   return a
