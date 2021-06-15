@@ -30,3 +30,14 @@ def test_simple_url():
     print(f"loading foo module via use(URL({foo_uri}))")
     mod = use(URL(foo_uri), initial_globals={"a": 42})
     assert mod.test() == 42
+    
+def test_internet_url():
+    foo_uri = "https://raw.githubusercontent.com/greyblue9/justuse/3f783e6781d810780a4bbd2a76efdee938dde704/tests/foo.py"
+    print(f"loading foo module via use(URL({foo_uri}))")
+    mod = use(
+      URL(foo_uri), initial_globals={"a": 42},
+      hash_algo=use.Hash.sha256, hash_value="b136efa1d0dab3caaeb68bc41258525533d9058aa925d3c0c5e98ca61200674d"
+    )
+    assert mod.test() == 42
+
+
