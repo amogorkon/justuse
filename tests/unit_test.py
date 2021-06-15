@@ -7,6 +7,7 @@ from unittest import TestCase, skip
 import use
 from pathlib import Path
 from yarl import URL
+import pytest
 
 def test_simple_path():
     foo_path = os.path.join(*here, "foo.py")
@@ -28,8 +29,9 @@ def test_simple_url():
     thd = threading.Thread(target=svr.handle_request)
     thd.start()
     print(f"loading foo module via use(URL({foo_uri}))")
-    mod = use(URL(foo_uri), initial_globals={"a": 42})
-    assert mod.test() == 42
+    with pytest.warns(use.use.NoValidationWarning):
+      mod = use(URL(foo_uri), initial_globals={"a": 42})
+      assert mod.test() == 42
     
 def test_internet_url():
     foo_uri = "https://raw.githubusercontent.com/greyblue9/justuse/3f783e6781d810780a4bbd2a76efdee938dde704/tests/foo.py"
