@@ -269,8 +269,8 @@ class Use:
             if this_hash != hash_value:
                 return fail_or_default(default, UnexpectedHash, f"{this_hash} does not match the expected hash {hash_value} - aborting!")
         else:
-            warn(f"""Attempting to import {url} from the interwebs with no validation whatsoever! 
-To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}" """, 
+            warn(f"""Attempting to import from the interwebs with no validation whatsoever! 
+To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}' """, 
                 NoValidationWarning)
         name = url.name
         mod = build_mod(name=name, code=response.content, module_path=url.path,
