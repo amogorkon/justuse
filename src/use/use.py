@@ -256,7 +256,7 @@ class Use:
                 initial_globals:dict=None, 
                 as_import:str=None,
                 default=mode.fastfail,
-                aspectize=None,
+                aspectize:dict=None,
                 ) -> ModuleType:
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
         
@@ -451,11 +451,3 @@ To safely reproduce please use hash_algo="{hash_algo}", hash_value="{this_hash}"
         return mod
 
 sys.modules["use"] = Use()
-
-from time import sleep
-
-use = Use()
-foo = use(use.Path("../../tests/.test2.py"))
-for _ in range(10):
-    print(foo.test())
-    sleep(2)
