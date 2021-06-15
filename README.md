@@ -3,7 +3,22 @@
 ## Installation
 To install, enter `python -m pip install justuse` in a commandline, then you can `import use` in your code and simply use() stuff. Check for examples below!
 
-## Why?
+## Features, Claims & Goals
+Solid:
+* inline version-checking
+* safely import code from an online URL - towards an unhackable infrastructure ("Rather die than get corrupted!")
+* initial module globals - a straight forward solution to diamond/cyclic imports
+* decorate all specified callables (functions, modules, classes, ..) on import by via pattern matching, aspect-orientation made easy
+
+In flux:
+* safely hot auto-reload of function-only local modules - a REPL-like dev experience with files
+* safely auto-install version-tagged packages from PyPI
+* pull packages from a P2P network instead of PyPI directly
+* provide a visual representation of the internal dependency graph
+* test everything
+* module-level variable guards aka "module-properties"
+
+## The Story
 Over the years many times I've come across various situations where Python's import statement just didn't work the way I needed.
 There were projects where I felt that a central module from where to expand functionality would be the simplest, most elegant approach, but that would only work with simple modules and libs, not with functionality that required access to the main state of the application. In those situations the first thing to try would be "import B" in module A and "import A" in module B - a classical circular import, which comes with a lot of headaches and often results in overly convoluted code. All this could be simplified if it was possible to pass some module-level global variables to the about-to-be-imported module before its actual execution, but how the heck could that work with an import statement?
 
@@ -44,7 +59,7 @@ which would simply become
 `np = use("numpy", default=None)`
 while it is possible of course to pass anything as default, for instance some fallback that should be used instead if the preferred module/package isn't available. Note that you can cascade different use() this way! For instance, you can try to use() a local module with reload in a certain version, but if that fails fall back to a specific, reliably working version pulled from the web but that might not be the newest and best optimized.
 
-## Beware Magic!
+## Beware of Magic!
 Inspired by the q package/module, use() also is a callable class that replaces the module on import, so that only 'import use' is needed to be able to call use() on things, which might confuse users and libraries that operate on modules themselves.
 
 Probably the most magical thing about use() is how automatic reload is realized. Whenever you `use(something, reloading=True)`, you won't get your actual module but a stand-in replacement, a so-called SurrogateModule instead. The actual module is imported whenever the file changed and the implementation is transparently replaced in the background. This way, you can keep references to the things in your module without problems, but thanks to this indirection it is possible that when you try to access something in your module, the current implementation is dynamically evaluated per call. Using an async loop, the file you specified as module is opened and hashed. Only if the hash has changed, it is actually attempted to execute and import the code. This means that if you properly imported a module at first but then edited and left a SyntaxError in, it will report this error when it tries to import the file again, but it won't replace the previous implementation until you edited the file and it could import it without error.
