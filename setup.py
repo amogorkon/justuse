@@ -13,8 +13,6 @@ sys.path.insert(0, src)
 
 import use
 
-print(2323, use.__version__)
-
 meta={
     "name":"justuse",
     "description":"A self-documenting, functional way to import modules in Python with advanced features.",

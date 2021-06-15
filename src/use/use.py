@@ -65,8 +65,11 @@ import sys
 import threading
 import time
 import traceback
-from enum import Enum, Flag
-from functools import singledispatch, update_wrapper
+
+from enum import Enum
+from enum import Flag
+from functools import singledispatch
+from functools import update_wrapper
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType
@@ -74,10 +77,11 @@ from warnings import warn
 
 import mmh3
 import requests
+
 from packaging.version import parse
 from yarl import URL
 
-__version__ = "0.2.4"
+__version__ = "0.2.5"
 
 class VersionWarning(Warning):
     pass
