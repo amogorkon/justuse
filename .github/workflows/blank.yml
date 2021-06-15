@@ -34,5 +34,5 @@ jobs:
         run: |
           echo "Running all discoverable unit tests ..." Add other actions to build,
           python3 -m pip install anyio mmh3 yarl pytest
-          python3 -m pytest --trace-config --debug --collect-in-virtualenv --continue-on-collection-errors --showlocals --full-trace --color=yes --code-highlight=yes --rootdir=tests tests/bar.py
+          python3 -m pytest --rootdir . tests/unit_test.py
 
