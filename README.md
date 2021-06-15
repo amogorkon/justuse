@@ -8,7 +8,7 @@ Solid:
 * inline version-checking
 * safely import code from an online URL - towards an unhackable infrastructure ("Rather die than get corrupted!")
 * initial module globals - a straight forward solution to diamond/cyclic imports
-* decorate all specified callables (functions, modules, classes, ..) on import by via pattern matching, aspect-orientation made easy
+* decorate all specified callables (functions, modules, classes, ..) on import via pattern matching, aspect-orientation made easy
 
 In flux:
 * safely hot auto-reload of function-only local modules - a REPL-like dev experience with files
