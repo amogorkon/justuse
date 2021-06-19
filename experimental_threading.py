@@ -1,11 +1,11 @@
 
-Save New Duplicate & Edit Just Text Twitter
 import logging
 from importlib.util import module_from_spec, spec_from_file_location
 from threading import Condition, RLock, Thread
 from time import sleep
 from types import ModuleType
 from typing import Optional
+import atexit
 
 
 logger = logging.getLogger(__name__)
@@ -24,10 +24,9 @@ class ModuleProxy:
     def __getattribute__(self, name: str):
         if name in {'_ModuleProxy__module', '_ModuleProxy__condition'}:
             return object.__getattribute__(self, name)
-        else:
-            logger.debug('Accessing %s', name)
-            with self.__condition:
-                return getattr(self.__module, name)
+        logger.debug('Accessing %s', name)
+        with self.__condition:
+            return getattr(self.__module, name)
 
 
 class ModuleReloader:
@@ -80,6 +79,7 @@ class ModuleReloader:
 
     def __del__(self):
         self.stop()
+        atexit.unregister(self.stop)
 
     def __enter__(self):
         self.run_thread()
@@ -93,7 +93,7 @@ def import_reloading(modname, filename):
     return ModuleReloader.from_file_location(modname, filename)
 
 
-def terminate_thread(thread):
+def terminate_thread(thread:Thread):
     """Terminates a python thread from another thread by raising SystemExit in the thread.
 
     :param thread: a threading.Thread instance
@@ -122,3 +122,10 @@ if __name__ == '__main__':
         foo = reloader.module
         print(foo.Point2d.x_bounds)
         sleep(2.0)
+        
+
+def reload_stop_all():
+    for reloader in _reloaders:
+        reloader.stop()
+
+atexit.register(reload_stop_all)

@@ -65,11 +65,8 @@ import sys
 import threading
 import time
 import traceback
-
-from enum import Enum
-from enum import Flag
-from functools import singledispatch
-from functools import update_wrapper
+from enum import Enum, Flag
+from functools import singledispatch, update_wrapper
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import ModuleType
@@ -77,7 +74,6 @@ from warnings import warn
 
 import mmh3
 import requests
-
 from packaging.version import parse
 from yarl import URL
 
@@ -366,7 +362,10 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
 
         # builtins may have no spec, let's not mess with those
         if not spec or spec.parent:
-            mod = importlib.import_module(name)
+            try:
+                mod = importlib.import_module(name)
+            except ModuleNotFoundError as e:
+                fail_or_default(default, ModuleNotFoundError, str(e))
         else:
             mod = build_mod(name=name, code=spec.loader.get_source(name), module_path=spec.origin, 
                             initial_globals=initial_globals, aspectize=aspectize)
