@@ -1,7 +1,6 @@
-
-
 import use
-print(__file__)
+
+print("FROM", __file__)
 
 use(use.Path("modB.py"))
 

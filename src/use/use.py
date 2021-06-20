@@ -53,6 +53,7 @@ File-Hashing inspired by
 :license: MIT
 """
 
+import asyncio
 import codecs
 import hashlib
 import importlib
@@ -141,8 +142,6 @@ def build_mod(*, name:str, code:bytes, initial_globals:dict, module_path:str, as
     mod = ModuleType(name)
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = module_path
-
-
     code_text = codecs.decode(code)
     # module file "<", ">" chars are specially handled by inspect
     linecache.cache[f"<{name}>"] = (
@@ -154,7 +153,11 @@ def build_mod(*, name:str, code:bytes, initial_globals:dict, module_path:str, as
     ],
     mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
     )
-    exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
+    # not catching this causes the most irritating bugs ever!
+    try:
+        exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
+    except Exception as e:
+        print(traceback.format_exc())
     for (check, pattern), decorator in aspectize.items():
         apply_aspect(mod, check, pattern, decorator)
     return mod
@@ -173,12 +176,17 @@ def apply_aspect(mod:ModuleType, check:callable, pattern:str, decorator:callable
             # TODO: logging?
             parent.__dict__[obj.__name__] = decorator(obj)
 
+
+class ModuleProxy(ModuleType):
+    def __init__(self, module, ):
+        pass
+
 class SurrogateModule(ModuleType):
-    def __init__(self, name, path, initial_globals, aspectize):
-        self.__implementation = ModuleType("")
+    def __init__(self, *, name, path, mod, initial_globals, aspectize):
+        self.__implementation = mod
         self.__stopped = False
 
-        def __reload():
+        def __reload_threaded():
             last_filehash = None
             while not self.__stopped:
                 with open(path, "rb") as file:
@@ -197,7 +205,32 @@ class SurrogateModule(ModuleType):
                 last_filehash = current_filehash
                 time.sleep(1)
 
-        self.__thread = threading.Thread(target=__reload())
+        async def __reload_async():
+            last_filehash = None
+            while not self.__stopped:
+                with open(path, "rb") as file:
+                    code = file.read()
+                current_filehash = hashfileobject(code)
+                if current_filehash != last_filehash:
+                    try:
+                        mod = build_mod(name=name, 
+                                        code=code, 
+                                        initial_globals=initial_globals,
+                                        module_path=path.resolve(),
+                                        aspectize=aspectize)
+                        self.__implementation = mod
+                    except Exception as e:
+                        print(e, traceback.format_exc())
+                last_filehash = current_filehash
+                await asyncio.sleep(1)
+        try:
+            # this looks like a hack, but isn't one - 
+            # jupyter is running an async loop internally, which works better async than threaded!
+            loop = asyncio.get_running_loop()
+            loop.create_task(__reload_async())
+        except RuntimeError:
+            self.__thread = threading.Thread(target=__reload_threaded(), name=f"reloader__{name}")
+            self.__thread.start()
 
     def __del__(self):
         self.__stopped = True
@@ -257,7 +290,9 @@ class Use:
                 as_import:str=None,
                 default=mode.fastfail,
                 aspectize:dict=None,
+                relative_to_url:dict=None,
                 ) -> ModuleType:
+        
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
         
         aspectize = aspectize or {}
@@ -291,49 +326,70 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 initial_globals:dict=None, 
                 as_import:str=None,
                 default=mode.fastfail,
-                aspectize:dict=None 
+                aspectize:dict=None,
+                relative_to_url:dict=None,
                 ) -> ModuleType: 
         aspectize = aspectize or {}
         initial_globals = initial_globals or {}
         if path.is_dir():
             return fail_or_default(default, ImportError, f"Can't import directory {path}")
-        elif path.is_absolute() and not path.exists():
-            return fail_or_default(default, ModuleNotFoundError, f"Are you sure '{path.resolve()}' exists?")
-        else:
-            original_cwd = os.getcwd()
-            if not path.is_absolute():
-                source_dir = self.__using.get(inspect.currentframe().f_back.f_back.f_code.co_filename)
-                # if calling from an actual file, we take that as starting point
-                if source_dir is not None and source_dir.exists():
-                    os.chdir(source_dir.parent)
-                    path = path.resolve()
-                else:  # sourcery skip: remove-redundant-pass
-                    pass  # calling from jupyter for instance, we use the cwd set there, no guessing
-            name = path.stem
-            # TODO: replacing previously loaded module
-            pass
-            if reloading:
-                mod = SurrogateModule(name, path, initial_globals, aspectize)
-                print(mod.__dict__.items())
-                if not all(inspect.isfunction(value) for key, value in mod.__dict__.items() 
-                            if key not in initial_globals.keys() and not key.startswith("__")):
-                    warn(
-                        f"Beware {name} also contains non-function objects, it may not be safe to reload!",
-                        NotReloadableWarning,
-                    )
+        
+        original_cwd = Path.cwd()
+        if not path.is_absolute():
+            source_dir = self.__using.get(inspect.currentframe().f_back.f_back.f_code.co_filename)
+            # if calling from an actual file, we take that as starting point
+            if source_dir is not None and source_dir.exists():
+                os.chdir(source_dir.parent)
+                path = source_dir.parent.joinpath(path).resolve()
             else:
-                # REMINDER: if build_mod is within this block all hell breaks lose!
-                with open(path.resolve(), "rb") as file:
-                    code = file.read()
-                mod = build_mod(name=name, code=code, initial_globals=initial_globals, 
-                                module_path=path.resolve(), aspectize=aspectize)
-            self.__using[f"<{name}>"] = path.resolve()
-            # let's not confuse the user and restore the cwd to the original in any case
+                # first level - calling from jupyter for instance, we use the cwd set there, no guessing
+                path = original_cwd.joinpath(path).resolve()
+        if not path.exists():
             os.chdir(original_cwd)
-            if as_import:
-                assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
-                sys.modules[as_import] = mod
-            return mod
+            return fail_or_default(default, ModuleNotFoundError, f"Sure '{path}' exists?")
+        os.chdir(path.parent)
+        name = path.stem
+        if reloading:
+            with open(path, "rb") as file:
+                code = file.read()
+            mod = SurrogateModule(
+                                name=name, 
+                                path=path, 
+                                mod=build_mod(
+                                        name=name, 
+                                        code=code, 
+                                        initial_globals=initial_globals, 
+                                        module_path=path.resolve(), 
+                                        aspectize=aspectize
+                                        ),
+                                initial_globals=initial_globals, 
+                                aspectize=aspectize
+                                )
+            if not all(inspect.isfunction(value) for key, value in mod.__dict__.items() 
+                        if key not in initial_globals.keys() and not key.startswith("__")):
+                warn(
+                    f"Beware {name} also contains non-function objects, it may not be safe to reload!",
+                    NotReloadableWarning,
+                )
+        else:
+            with open(path, "rb") as file:
+                code = file.read()
+            # the path needs to be set before attempting to load the new module - recursion confusing ftw!
+            self.__using[f"<{name}>"] = path
+            try:
+                mod = build_mod(name=name, 
+                                code=code, 
+                                initial_globals=initial_globals, 
+                                module_path=path, 
+                                aspectize=aspectize)
+            except Exception as e:
+                del self.__using[f"<{name}>"]
+        # let's not confuse the user and restore the cwd to the original in any case
+        os.chdir(original_cwd)
+        if as_import:
+            assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
+            sys.modules[as_import] = mod
+        return mod
 
     @__call__.register(str)
     def _use_str(
@@ -347,6 +403,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 hash_value:str=None,
                 default=mode.fastfail,
                 aspectize=None,
+                relative_to_url:dict=None,
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
@@ -365,7 +422,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             try:
                 mod = importlib.import_module(name)
             except ModuleNotFoundError as e:
-                fail_or_default(default, ModuleNotFoundError, str(e))
+                return fail_or_default(default, ModuleNotFoundError, str(e))
         else:
             mod = build_mod(name=name, code=spec.loader.get_source(name), module_path=spec.origin, 
                             initial_globals=initial_globals, aspectize=aspectize)

@@ -1,7 +1,7 @@
 
 print("test_modA")
 
-foo: function
+foo: callable
 
 def test_foo():
    assert foo(2) == 4

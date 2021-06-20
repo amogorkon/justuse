@@ -1,2 +1,2 @@
-def test():
-    return 22
+def foo(x):
+    return x**5

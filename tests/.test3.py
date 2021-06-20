@@ -1,46 +1,116 @@
-import numba
-import numpy as np
-from time import monotonic
-from random import sample
-
-@numba.njit
-def index(array, item):
-    for idx, val in np.ndenumerate(array):
-        if val == item:
-            return idx
-
-ChannelIDs = np.random.randint(0,100000, 100000, int)
+import logging
+from importlib.util import module_from_spec, spec_from_file_location
+from threading import Condition, RLock, Thread
+from time import sleep
+from types import ModuleType
+from typing import Optional
 
 
-results = {}
+logger = logging.getLogger(__name__)
 
-idxs = list(sample(list(ChannelIDs), 5))
-print(idxs)
+class ModuleProxy:
+    def __init__(self, module, condition):
+        self.__module = module
+        self.__condition = condition
 
-before_all = monotonic()
-for x in idxs:
-    timings = []
-    for _ in range(100000):
-        before = monotonic()
-        res = np.where(ChannelIDs == x)[0]
-        now = monotonic()
-        timings.append(now - before)
-    results[x] = max(timings)
+    def __getattribute__(self, name: str):
+        if name in {'_ModuleProxy__module', '_ModuleProxy__condition'}:
+            return object.__getattribute__(self, name)
+        else:
+            logger.debug('Accessing %s', name)
+            with self.__condition:
+                return getattr(self.__module, name)
 
-print(monotonic() - before_all)
-print(results)
 
-results = {}
-before_all = monotonic()
+class ModuleReloader:
+    def __init__(self, spec):
+        self._spec = spec
+        self._module = None
+        self._thread = None
+        self._stopped = True
+        #self._condition = Condition()
+        self._condition = RLock()
+        self.module = None
 
-for x in idxs:
-    timings = []
-    for _ in range(100000):
-        before = monotonic()
-        res = index(ChannelIDs, x)[0]
-        now = monotonic()
-        timings.append(now - before)
-    results[x] = max(timings)
+    @classmethod
+    def from_file_location(cls, name, location):
+        spec = spec_from_file_location(name, location)
+        return cls(spec)
 
-print(monotonic() - before_all)
-print(results)
+    def reload_module(self):
+        # TODO: figure out why this doesn't work when running in the background
+        # thread, even though I'm outright replacing the module object!
+        logger.debug('Reloading %s', module)
+        module = module_from_spec(self._spec)
+        self._spec.loader.exec_module(module)
+        self._module = module
+        self.module = ModuleProxy(self._module, self._condition)
+
+    def run(self):
+        logger.info('Loop is running.')
+        while not self._stopped:
+            with self._condition:
+                self.reload_module()
+                try:
+                    logger.debug('%s', self.module.Point2d.x_bounds)
+                except AttributeError:
+                    logger.debug('MISSING!!')
+            sleep(1.0)
+        logger.info('Loop is stopped.')
+
+    def stop(self):
+        logger.info('Stopping loop.')
+        self._stopped = True
+
+    def run_thread(self):
+        logger.info('Starting thread.')
+        if self._thread is not None and self._thread.is_alive():
+            raise ValueError('Thread is already running.')
+        self._stopped = False
+        self._thread = Thread(target=self.run, name=f'reloader__{self._spec.name}')
+        self._thread.start()
+
+    def __del__(self):
+        self.stop()
+
+    def __enter__(self):
+        self.run_thread()
+        return self.module
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.stop()
+
+
+def import_reloading(modname, filename):
+    return ModuleReloader.from_file_location(modname, filename)
+
+
+def terminate_thread(thread):
+    """Terminates a python thread from another thread by raising SystemExit in the thread.
+
+    :param thread: a threading.Thread instance
+    """
+    import ctypes
+
+    if not thread.is_alive():
+        return
+
+    exc = ctypes.py_object(SystemExit)
+    res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread.ident), exc)
+    if res == 0:
+        raise ValueError("nonexistent thread id")
+    elif res > 1:
+        # """if it returns a number greater than one, you're in trouble,
+        # and you should call it again with exc=NULL to revert the effect"""
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(thread.ident, None)
+        raise SystemError("PyThreadState_SetAsyncExc failed")
+
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(threadName)s %(levelname)s:%(module)s:%(funcName)s %(message)s')
+
+    reloader = import_reloading('modA', "modA.py")
+    with reloader:
+        mod = reloader.module
+        print(mod.foo(2))
+        sleep(2.0)
