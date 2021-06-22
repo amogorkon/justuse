@@ -54,6 +54,7 @@ File-Hashing inspired by
 """
 
 import asyncio
+import atexit
 import codecs
 import hashlib
 import importlib
@@ -62,11 +63,12 @@ import inspect
 import linecache
 import os
 import re
+import signal
 import sys
 import threading
 import time
 import traceback
-from enum import Enum, Flag
+from enum import Enum
 from functools import singledispatch, update_wrapper
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -78,8 +80,14 @@ import requests
 from packaging.version import parse
 from yarl import URL
 
-__version__ = "0.2.5"
+try:
+    from icecream import ic
 
+    #print = ic
+except ImportError:
+    pass
+
+__version__ = "0.2.7"
 class VersionWarning(Warning):
     pass
 
@@ -98,6 +106,19 @@ class ModuleNotFoundError(ImportError):
 class UnexpectedHash(ImportError):
     pass
 
+_reloaders = {}  # ProxyModule:Reloader
+_aspects = {} 
+_using = {}
+
+mode = Enum("Mode", "fastfail")
+
+# sometimes all you need is a sledge hammer..
+def signal_handler(sig, frame):
+    for reloader in _reloaders.values():
+        reloader.stop()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
 
 def varint_encode(number):
     """Pack `number` into varint bytes"""
@@ -138,7 +159,12 @@ def methdispatch(func):
     update_wrapper(wrapper, func)
     return wrapper
 
-def build_mod(*, name:str, code:bytes, initial_globals:dict, module_path:str, aspectize:dict) -> ModuleType:
+def build_mod(*, name:str, 
+                code:bytes, 
+                initial_globals:dict, 
+                module_path:str, 
+                aspectize:dict, 
+                default=mode.fastfail) -> ModuleType:
     mod = ModuleType(name)
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = module_path
@@ -154,10 +180,16 @@ def build_mod(*, name:str, code:bytes, initial_globals:dict, module_path:str, as
     mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
     )
     # not catching this causes the most irritating bugs ever!
+    exc = None
     try:
         exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
     except Exception as e:
-        print(traceback.format_exc())
+        # yeah, this is more convoluted than it could be but it looks like 
+        # the only way to not get those pesky 
+        # "during handling of x another thing y happened" issues
+        exc = traceback.format_exc()
+    if exc:
+        return fail_or_default(default, ImportError, exc)
     for (check, pattern), decorator in aspectize.items():
         apply_aspect(mod, check, pattern, decorator)
     return mod
@@ -175,11 +207,6 @@ def apply_aspect(mod:ModuleType, check:callable, pattern:str, decorator:callable
         if check(obj) and re.match(pattern, obj.__qualname__):
             # TODO: logging?
             parent.__dict__[obj.__name__] = decorator(obj)
-
-
-class ModuleProxy(ModuleType):
-    def __init__(self, module, ):
-        pass
 
 class SurrogateModule(ModuleType):
     def __init__(self, *, name, path, mod, initial_globals, aspectize):
@@ -229,10 +256,14 @@ class SurrogateModule(ModuleType):
             loop = asyncio.get_running_loop()
             loop.create_task(__reload_async())
         except RuntimeError:
-            self.__thread = threading.Thread(target=__reload_threaded(), name=f"reloader__{name}")
+            atexit.register(self.__stop)
+            self.__thread = threading.Thread(target=__reload_threaded, name=f"reloader__{name}")
             self.__thread.start()
 
     def __del__(self):
+        self.__stopped = True
+
+    def __stop(self):
         self.__stopped = True
 
     def __getattribute__(self, name):
@@ -240,6 +271,7 @@ class SurrogateModule(ModuleType):
                     "_SurrogateModule__implementation",
                     "_SurrogateModule__stopped",
                     "_SurrogateModule__thread",
+                    "_SurrogateModule__stop",
                     ):
             return object.__getattribute__(self, name)
         else:
@@ -250,11 +282,86 @@ class SurrogateModule(ModuleType):
                     "_SurrogateModule__implementation",
                     "_SurrogateModule__stopped",
                     "_SurrogateModule__thread",
+                    "_SurrogateModule__stop",
                     ):
             object.__setattr__(self, name, value)
         else:
             setattr(self.__implementation, name, value)
 
+
+class ProxyModule(ModuleType):
+    def __init__(self, mod):
+        self.__implementation = mod
+        self.__condition = threading.RLock()
+
+    def __getattribute__(self, name):
+        if name in ( 
+                    "_ProxyModule__implementation",
+                    "_ProxyModule__condition",
+                    ""
+                    ):
+            return object.__getattribute__(self, name)
+        with self.__condition:
+            return getattr(self.__implementation, name)
+    
+    def __setattr__(self, name, value):
+        if name in (
+                    "_ProxyModule__implementation",
+                    "_ProxyModule__condition",
+                    ):
+            object.__setattr__(self, name, value)
+            return
+        with self.__condition:
+            setattr(self.__implementation, name, value)
+
+class ModuleReloader:
+    def __init__(self, *, proxy, name, path, initial_globals, aspectize):
+        self.proxy = proxy
+        self.name = name
+        self.path = path
+        self.initial_globals = initial_globals
+        self.aspectize = aspectize
+        self._condition = threading.RLock()
+        self._stopped = True
+        self._thread = None
+        
+        print(1, self.proxy)
+        
+    def start(self):
+        print(2, self._thread, self.proxy, self.proxy._ProxyModule__implementation)
+        assert not (self._thread is not None and not self._thread.is_alive()), "Can't start another reloader thread while one is already running."
+        self._stopped = False
+        atexit.register(self.stop)
+        self._thread = threading.Thread(target=self.run_threaded, name=f"reloader__{self.name}")
+        self._thread.start()
+    
+    def run_threaded(self):
+        last_filehash = None
+        while not self._stopped:
+            with self._condition:
+                with open(self.path, "rb") as file:
+                    code = file.read()
+                current_filehash = hashfileobject(code)
+                if current_filehash != last_filehash:
+                    try:
+                        mod = build_mod(name=self.name, 
+                                        code=code, 
+                                        initial_globals=self.initial_globals,
+                                        module_path=self.path,
+                                        aspectize=self.aspectize)
+                        self.proxy._ProxyModule__implementation = mod
+                        
+                    except Exception as e:
+                        print(e, traceback.format_exc())
+                last_filehash = current_filehash
+            time.sleep(1)
+    
+    def stop(self):
+        self._stopped = True
+    
+    def __del__(self):
+        self.stop()
+        atexit.unregister(self.stop)
 class Use:
     __doc__ = __doc__  # module's __doc__ above
     __version__ = __version__  # otherwise setup.py can't find it
@@ -265,15 +372,16 @@ class Use:
     class Hash(Enum):
         sha256 = hashlib.sha256
 
-    mode = Enum("Mode", "fastfail")
+    mode = mode
     
     isfunction = inspect.isfunction
     ismethod = inspect.ismethod
     isclass = inspect.isclass
 
     def __init__(self):
-        self.__using = {}
-        self.__aspectized = {}
+        self._using = _using
+        self._aspects = _aspects
+        self._reloaders = _reloaders 
 
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
@@ -310,7 +418,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         name = url.name
         mod = build_mod(name=name, code=response.content, module_path=url.path,
                         initial_globals=initial_globals, aspectize=aspectize)
-        self.__using[name] = mod, inspect.getframeinfo(inspect.currentframe())
+        self._using[name] = mod, inspect.getframeinfo(inspect.currentframe())
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             sys.modules[as_import] = mod
@@ -331,12 +439,20 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 ) -> ModuleType: 
         aspectize = aspectize or {}
         initial_globals = initial_globals or {}
+        
+        mod = None
         if path.is_dir():
             return fail_or_default(default, ImportError, f"Can't import directory {path}")
         
         original_cwd = Path.cwd()
         if not path.is_absolute():
-            source_dir = self.__using.get(inspect.currentframe().f_back.f_back.f_code.co_filename)
+            source_dir = self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename)
+            # we might be calling via "python foo/bar.py"
+            if not source_dir:
+                try:
+                    source_dir = Path(__import__("__main__").__file__)
+                except Exception:
+                    raise AssertionError("Well. Shit.")
             # if calling from an actual file, we take that as starting point
             if source_dir is not None and source_dir.exists():
                 os.chdir(source_dir.parent)
@@ -350,21 +466,52 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         os.chdir(path.parent)
         name = path.stem
         if reloading:
-            with open(path, "rb") as file:
-                code = file.read()
-            mod = SurrogateModule(
+            exc = None
+            try:
+                with open(path, "rb") as file:
+                    code = file.read()
+                # initial instance, if this doesn't work, just throw the towel
+                mod = build_mod(
                                 name=name, 
-                                path=path, 
-                                mod=build_mod(
-                                        name=name, 
-                                        code=code, 
-                                        initial_globals=initial_globals, 
-                                        module_path=path.resolve(), 
-                                        aspectize=aspectize
-                                        ),
+                                code=code, 
                                 initial_globals=initial_globals, 
+                                module_path=path.resolve(), 
                                 aspectize=aspectize
                                 )
+            except Exception as e:
+                exc = traceback.format_exc()
+            if exc:
+                return fail_or_default(default, ImportError, exc)
+            threaded = False
+            try:
+                # this looks like a hack, but isn't one - 
+                # jupyter is running an async loop internally, which works better async than threaded!
+                asyncio.get_running_loop()
+                
+                # Old, working implementation
+                mod = SurrogateModule(
+                    name=name, 
+                    path=path,
+                    mod=mod,
+                    initial_globals=initial_globals, 
+                    aspectize=aspectize
+                    )
+            # we're dealing with non-async code, we need threading
+            # new experimental implementation
+            except RuntimeError:
+                threaded = True
+            if threaded:
+                mod = ProxyModule(mod)
+                reloader = ModuleReloader(
+                                        proxy=mod,
+                                        name=name, 
+                                        path=path, 
+                                        initial_globals=initial_globals, 
+                                        aspectize=aspectize,
+                                        )
+                _reloaders[mod] = reloader
+                reloader.start()
+        
             if not all(inspect.isfunction(value) for key, value in mod.__dict__.items() 
                         if key not in initial_globals.keys() and not key.startswith("__")):
                 warn(
@@ -375,7 +522,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             with open(path, "rb") as file:
                 code = file.read()
             # the path needs to be set before attempting to load the new module - recursion confusing ftw!
-            self.__using[f"<{name}>"] = path
+            self._using[f"<{name}>"] = path
             try:
                 mod = build_mod(name=name, 
                                 code=code, 
@@ -383,9 +530,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                                 module_path=path, 
                                 aspectize=aspectize)
             except Exception as e:
-                del self.__using[f"<{name}>"]
+                del self._using[f"<{name}>"]
+                exc = traceback.format_exc()
         # let's not confuse the user and restore the cwd to the original in any case
         os.chdir(original_cwd)
+        # if something happened during load, we still am stuck with mod = None
+        if not mod:
+            return fail_or_default(default, ImportError, exc)
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             sys.modules[as_import] = mod
@@ -426,7 +577,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         else:
             mod = build_mod(name=name, code=spec.loader.get_source(name), module_path=spec.origin, 
                             initial_globals=initial_globals, aspectize=aspectize)
-        self.__using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
+        self._using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
 
 
         # # couldn't find any installed package
