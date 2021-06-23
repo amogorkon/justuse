@@ -18,14 +18,15 @@ Solid:
 * initial module globals - a straight forward solution to diamond/cyclic imports
 * decorate all specified callables (functions, modules, classes, ..) on import via pattern matching, aspect-orientation made easy
 * return a given default if an exception happened during an import, simplifying optional dependencies
+* safely hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
 
 In flux:
-* safely hot auto-reloading of function-only local modules - a REPL-like dev experience with files
 * safely auto-install version-tagged packages from PyPI
+* have multiple versions of the same package installed and loaded in the same program without conflicts
 * pull packages from a P2P network instead of PyPI directly
 * provide a visual representation of the internal dependency graph
-* test everything
 * module-level variable guards aka "module-properties"
+* test everything!
 
 ## The Story
 Over the years many times I've come across various situations where Python's import statement just didn't work the way I needed.
