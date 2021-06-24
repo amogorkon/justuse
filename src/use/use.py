@@ -58,7 +58,6 @@ import atexit
 import codecs
 import hashlib
 import importlib
-import importlib.metadata as metadata
 import inspect
 import linecache
 import os
@@ -68,6 +67,7 @@ import sys
 import threading
 import time
 import traceback
+from collections import defaultdict
 from enum import Enum
 from functools import singledispatch, update_wrapper
 from pathlib import Path
@@ -180,16 +180,10 @@ def build_mod(*, name:str,
     mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
     )
     # not catching this causes the most irritating bugs ever!
-    exc = None
     try:
         exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
-    except Exception as e:
-        # yeah, this is more convoluted than it could be but it looks like 
-        # the only way to not get those pesky 
-        # "during handling of x another thing y happened" issues
-        exc = traceback.format_exc()
-    if exc:
-        return fail_or_default(default, ImportError, exc)
+    except: # reraise anything without handling - clean and simple.
+        raise
     for (check, pattern), decorator in aspectize.items():
         apply_aspect(mod, check, pattern, decorator)
     return mod
@@ -201,12 +195,14 @@ def fail_or_default(default, exception, msg):
         raise exception(msg)
 
 def apply_aspect(mod:ModuleType, check:callable, pattern:str, decorator:callable):
+    """Apply the aspect as a side-effect, no copy is created."""
     # TODO: recursion?
     parent = mod
     for name, obj in parent.__dict__.items():
         if check(obj) and re.match(pattern, obj.__qualname__):
             # TODO: logging?
             parent.__dict__[obj.__name__] = decorator(obj)
+    return mod
 
 class SurrogateModule(ModuleType):
     def __init__(self, *, name, path, mod, initial_globals, aspectize):
@@ -227,8 +223,8 @@ class SurrogateModule(ModuleType):
                                         module_path=path.resolve(),
                                         aspectize=aspectize)
                         self.__implementation = mod
-                    except Exception as e:
-                        print(e, traceback.format_exc())
+                    except:
+                        print(traceback.format_exc())
                 last_filehash = current_filehash
                 time.sleep(1)
 
@@ -246,8 +242,8 @@ class SurrogateModule(ModuleType):
                                         module_path=path.resolve(),
                                         aspectize=aspectize)
                         self.__implementation = mod
-                    except Exception as e:
-                        print(e, traceback.format_exc())
+                    except:
+                        print(traceback.format_exc())
                 last_filehash = current_filehash
                 await asyncio.sleep(1)
         try:
@@ -350,9 +346,8 @@ class ModuleReloader:
                                         module_path=self.path,
                                         aspectize=self.aspectize)
                         self.proxy._ProxyModule__implementation = mod
-                        
-                    except Exception as e:
-                        print(e, traceback.format_exc())
+                    except:
+                        print(traceback.format_exc())
                 last_filehash = current_filehash
             time.sleep(1)
     
@@ -381,7 +376,12 @@ class Use:
     def __init__(self):
         self._using = _using
         self._aspects = _aspects
-        self._reloaders = _reloaders 
+        self._reloaders = _reloaders
+        self.registry = {"version":"0.0.1", 
+                        "distributions": defaultdict(lambda: list())
+                        }
+        for d in importlib.metadata.distributions():
+            self.registry["distributions"][d.metadata["Name"]].append({"version": d.version, "path": d})
 
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
@@ -400,6 +400,7 @@ class Use:
                 aspectize:dict=None,
                 relative_to_url:dict=None,
                 ) -> ModuleType:
+        exc = None
         
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
         
@@ -416,13 +417,22 @@ class Use:
 To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')""", 
                 NoValidationWarning)
         name = url.name
-        mod = build_mod(name=name, code=response.content, module_path=url.path,
-                        initial_globals=initial_globals, aspectize=aspectize)
+        
+        try:
+            mod = build_mod(name=name, 
+                            code=response.content, 
+                            module_path=url.path,
+                            initial_globals=initial_globals, 
+                            aspectize=aspectize)
+        except:
+            exc = traceback.format_exc()
+        if exc:
+            return fail_or_default(default, ImportError, exc)
+        
         self._using[name] = mod, inspect.getframeinfo(inspect.currentframe())
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             sys.modules[as_import] = mod
-
         return mod
 
     @__call__.register(Path)
@@ -439,8 +449,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 ) -> ModuleType: 
         aspectize = aspectize or {}
         initial_globals = initial_globals or {}
-        
+        exc = None
         mod = None
+        
         if path.is_dir():
             return fail_or_default(default, ImportError, f"Can't import directory {path}")
         
@@ -466,19 +477,17 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         os.chdir(path.parent)
         name = path.stem
         if reloading:
-            exc = None
             try:
                 with open(path, "rb") as file:
                     code = file.read()
                 # initial instance, if this doesn't work, just throw the towel
-                mod = build_mod(
-                                name=name, 
+                mod = build_mod(name=name, 
                                 code=code, 
                                 initial_globals=initial_globals, 
                                 module_path=path.resolve(), 
                                 aspectize=aspectize
                                 )
-            except Exception as e:
+            except:
                 exc = traceback.format_exc()
             if exc:
                 return fail_or_default(default, ImportError, exc)
@@ -500,6 +509,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             # new experimental implementation
             except RuntimeError:
                 threaded = True
+                
             if threaded:
                 mod = ProxyModule(mod)
                 reloader = ModuleReloader(
@@ -529,13 +539,12 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                                 initial_globals=initial_globals, 
                                 module_path=path, 
                                 aspectize=aspectize)
-            except Exception as e:
+            except:
                 del self._using[f"<{name}>"]
                 exc = traceback.format_exc()
         # let's not confuse the user and restore the cwd to the original in any case
         os.chdir(original_cwd)
-        # if something happened during load, we still am stuck with mod = None
-        if not mod:
+        if exc:
             return fail_or_default(default, ImportError, exc)
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
@@ -554,84 +563,97 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 hash_value:str=None,
                 default=mode.fastfail,
                 aspectize=None,
-                relative_to_url:dict=None,
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
-        version = parse(str(version))
-        # let's first check if it's installed already somehow
-        spec = importlib.machinery.PathFinder.find_spec(name)
+        target_version = parse(str(version))
+        exc = None
 
+        # The "try and guess" behaviour is due to how classical imports work, 
+        # which is inherently ambiguous, but can't really be avoided for packages.
+
+        # let's first see if the user might mean something else entirely
         if any(Path(".").glob(f"{name}.py")):
             warn(f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))", 
                 AmbiguityWarning)
 
-        # Simple version until auto-install works :|
-
-        # builtins may have no spec, let's not mess with those
-        if not spec or spec.parent:
+        # let's check if it's a builtin
+        spec = importlib.machinery.BuiltinImporter.find_spec(name)
+        if spec:
             try:
-                mod = importlib.import_module(name)
-            except ModuleNotFoundError as e:
-                return fail_or_default(default, ModuleNotFoundError, str(e))
-        else:
-            mod = build_mod(name=name, code=spec.loader.get_source(name), module_path=spec.origin, 
-                            initial_globals=initial_globals, aspectize=aspectize)
-        self._using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
+                mod = spec.loader.exec_module(spec.loader.create_module(spec))
+                for (check, pattern), decorator in aspectize.items():
+                    apply_aspect(mod, check, pattern, decorator)
+                return mod
+            except:
+                exc = traceback.format_exc()
+            if exc:
+                return fail_or_default(default, ImportError, exc)
 
+        # it might be installed in some way like via pip
+        spec = importlib.util.find_spec(name)
+        if spec:
+            try:
+                mod = build_mod(name=name, 
+                                code=spec.loader.get_source(name), 
+                                module_path=spec.origin, 
+                                initial_globals=initial_globals, 
+                                aspectize=aspectize)
+                self._using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
+            except Exception:
+                exc = traceback.format_exc()
+            if exc:
+                return fail_or_default(default, ImportError, exc)
 
-        # # couldn't find any installed package
-        # if not spec:
-        #     # builtins may have no spec, let's not mess with those
-        #     if not auto_install:
-        #         try:
-        #             mod = importlib.import_module(name)
-        #             # not using build_mod, so we need to do this from here
-        #             for (check, pattern), decorator in aspectize.items():
-        #                 apply_aspect(mod, check, pattern, decorator)
-        #         except ImportError:
-        #             return fail_or_default(default, ImportError, f"{name} is not installed and auto-install was not requested.")
+        if not auto_install:
+            if not (target_version and hash_value):
+                raise RuntimeWarning(f"Can't auto-install {name} without a specific version and corresponding hash value")
 
-        #     # TODO: raise appropriate detailed warnings and give helpful info from the json to fix the issue
-        #     if not (version and hash_value):
-        #         raise RuntimeWarning(f"Can't auto-install {name} without a specific version and corresponding hash value")
+            response = requests.get(f"https://pypi.org/pypi/{name}/{target_version}/json")
+            if response != 200:
+                return fail_or_default(default, ImportError, f"Tried to auto-install {name} {target_version} but failed with {response} while trying to pull info from PyPI.")
+            try:
+                if not response.json()["urls"]:
+                    return fail_or_default(default, ImportError, f"Tried to auto-install {name} {target_version} but failed because no valid URLs to download could be found.")
+                for entry in response.json()["urls"]:
+                    url = entry["url"]
+                    that_hash = entry["digests"].get(hash_algo.name)
+                    filename = entry["filename"]
+                    # special treatment?
+                    yanked = entry["yanked"]
+                    if that_hash == hash_value:
+                        break
+                else:
+                    return fail_or_default(default, ImportError, f"Tried to auto-install {name} {target_version} but failed because none of the available hashes match the expected hash.")
+            except KeyError:
+                return fail_or_default(default, ImportError, f"Tried to auto-install {name} {target_version} but failed because there was a problem with the JSON from PyPI.")
 
-        #     response = requests.get(f"https://pypi.org/pypi/{name}/{version}/json")
-        #     if response != 200:
-        #         return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed with {response} while trying to pull info from PyPI.")
-        #     try:
-        #         if not response.json()["urls"]:
-        #             return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because no valid URLs to download could be found.")
-        #         for entry in response.json()["urls"]:
-        #             url = entry["url"]
-        #             that_hash = entry["digests"].get(hash_algo.name)
-        #             filename = entry["filename"]
-        #             # special treatment?
-        #             yanked = entry["yanked"]
-        #             if that_hash == hash_value:
-        #                 break
-        #         else:
-        #             return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because none of the available hashes match the expected hash.")
-        #     except KeyError:
-        #         return fail_or_default(default, ImportError, f"Tried to auto-install {name} {version} but failed because there was a problem with the JSON from PyPI.")
+            with TemporaryDirectory() as directory:
+                # TODO: chdir etc
+                # download the file
+                with open(filename, "wb") as file:
+                    pass
+                # check the hash
+                this_hash = securehash_file(file, hash_algo)
+                if this_hash != hash_value:
+                    return fail_or_default(default, UnexpectedHash, f"Package {name} in temporary {filename} had hash {this_hash}, which does not match the expected {hash_value}, aborting.")
+                # load it
+            # now that we got something, we can load it
+            spec = importlib.machinery.PathFinder.find_spec(name)
 
-        #     with TemporaryDirectory() as directory:
-        #         # TODO: chdir etc
-        #         # download the file
-        #         with open(filename, "wb") as file:
-        #             pass
-        #         # check the hash
-        #         this_hash = securehash_file(file, hash_algo)
-        #         if this_hash != hash_value:
-        #             return fail_or_default(default, UnexpectedHash, f"Package {name} in temporary {filename} had hash {this_hash}, which does not match the expected {hash_value}, aborting.")
-        #         # load it
-        #     # now that we got something, we can load it
-        #     spec = importlib.machinery.PathFinder.find_spec(name)
+        # now there should be a valid spec defined
+        try:
+            mod = build_mod(name=name, 
+                            code=spec.loader.get_source(name),
+                            module_path=spec.origin,
+                            initial_globals=initial_globals, 
+                            aspectize=aspectize)
+        except:
+            exc = traceback.format_exc()
+        if exc:
+            return fail_or_default(default, ImportError, exc)
 
-        # # now there should be a valid spec defined
-        # mod = build_mod(name, spec.loader.get_source(name), initial_globals, aspectize=aspectize)
-
-        #self.__using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
+        self.__using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
 
         # pure despair :(
         def check_version():
@@ -645,20 +667,19 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     check_value = eval(check)
                     if isinstance(check_value, str):
                         this_version = parse(check_value)
-                        if version != this_version:
+                        if target_version != this_version:
                             warn(
-                                f"{name} is expected to be version {version} ,  but got {this_version} instead",
+                                f"{name} is expected to be version {target_version} ,  but got {this_version} instead",
                                 VersionWarning,
                             )
                         return
-                except Exception as e:
+                except:
                     pass
             print(f"Cannot determine version for module {name}, continueing.")
         
         # the empty str parses as a truey LegacyVersion - WTF
-        if version != parse(""):
+        if target_version != parse(""):
             check_version()
-
         return mod
 
 sys.modules["use"] = Use()
