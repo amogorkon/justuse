@@ -461,7 +461,18 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             # we might be calling via "python foo/bar.py"
             if not source_dir:
                 try:
-                    source_dir = Path(__import__("__main__").__file__)
+                    main_mod = __import__("__main__")
+                    if hasattr(main_mod, "__file__"):
+                        # will have __file__ if python is started with
+
+                        # a script file e.g. `python3 my/script.py`
+                        source_dir = Path(main_mod.__file__)
+                    elif sys.argv and os.path.exists(sys.argv[0]):
+                        # not sure when/if this would be hit
+                        source_dir = Path(os.realpath(sys.argv[0]))
+                    else:
+                        # interactive startup - use current directory
+                        source_dir = Path(os.path.join(os.getcwd(), "."))
                 except Exception:
                     raise AssertionError("Well. Shit.")
             # if calling from an actual file, we take that as starting point
