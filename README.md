@@ -16,7 +16,7 @@ Solid:
 * inline version-checking
 * safely import code from an online URL - towards an unhackable infrastructure ("Rather die than get corrupted!")
 * initial module globals - a straight forward solution to diamond/cyclic imports
-* decorate all specified callables (functions, modules, classes, ..) on import via pattern matching, aspect-orientation made easy
+* decorate all specified callables (functions, methods, classes, ..) on import via pattern matching, aspect-orientation made easy
 * return a given default if an exception happened during an import, simplifying optional dependencies
 * safely hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
 
