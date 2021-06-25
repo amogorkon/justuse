@@ -56,9 +56,11 @@ File-Hashing inspired by
 import asyncio
 import atexit
 import codecs
+import configparser
 import hashlib
 import importlib
 import inspect
+import json
 import linecache
 import os
 import re
@@ -70,8 +72,8 @@ import traceback
 from collections import defaultdict
 from enum import Enum
 from functools import singledispatch, update_wrapper
+from importlib import metadata
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from types import ModuleType
 from warnings import warn
 
@@ -104,6 +106,9 @@ class ModuleNotFoundError(ImportError):
     pass
 
 class UnexpectedHash(ImportError):
+    pass
+
+class AutoInstallationError(ImportError):
     pass
 
 _reloaders = {}  # ProxyModule:Reloader
@@ -321,10 +326,7 @@ class ModuleReloader:
         self._stopped = True
         self._thread = None
         
-        print(1, self.proxy)
-        
     def start(self):
-        print(2, self._thread, self.proxy, self.proxy._ProxyModule__implementation)
         assert not (self._thread is not None and not self._thread.is_alive()), "Can't start another reloader thread while one is already running."
         self._stopped = False
         atexit.register(self.stop)
@@ -369,19 +371,39 @@ class Use:
 
     mode = mode
     
+    # ALIASES
     isfunction = inspect.isfunction
     ismethod = inspect.ismethod
     isclass = inspect.isclass
-
+    _using = _using
+    _aspects = _aspects
+    _reloaders = _reloaders
+    
     def __init__(self):
-        self._using = _using
-        self._aspects = _aspects
-        self._reloaders = _reloaders
-        self.registry = {"version":"0.0.1", 
+        self._registry = {"version":"0.0.1", 
                         "distributions": defaultdict(lambda: list())
                         }
-        for d in importlib.metadata.distributions():
-            self.registry["distributions"][d.metadata["Name"]].append({"version": d.version, "path": d})
+        for d in metadata.distributions():
+            self._registry["distributions"][d.metadata["Name"]].append({"version": d.version, "path": d})
+
+        self.home = Path.home() / ".justuse-python"
+        self.home.mkdir(mode=0o755, exist_ok=True)
+        (self.home / "packages").mkdir(mode=0o755, exist_ok=True)
+        (self.home / "registry.json").touch(mode=0o644, exist_ok=True)
+        (self.home / "config.ini").touch(mode=0o644, exist_ok=True)
+        (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
+        
+        self.config = configparser.ConfigParser()
+        with open(self.home / "config.ini") as file:
+            self.config.read(file)
+        
+        try:
+            with open(self.home / "registry.json") as file:
+                if len(file.read()) == 0:
+                    raise ValueError  # short-circuit the pending JSONDecodeError
+                self._registry.update(json.load(file))
+        except ValueError:
+            pass
 
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
@@ -398,7 +420,8 @@ class Use:
                 as_import:str=None,
                 default=mode.fastfail,
                 aspectize:dict=None,
-                relative_to_url:dict=None,
+                path_to_url:dict=None,
+                import_to_use: dict=None,
                 ) -> ModuleType:
         exc = None
         
@@ -445,7 +468,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 as_import:str=None,
                 default=mode.fastfail,
                 aspectize:dict=None,
-                relative_to_url:dict=None,
+                path_to_url:dict=None,
+                import_to_use: dict=None,
                 ) -> ModuleType: 
         aspectize = aspectize or {}
         initial_globals = initial_globals or {}
@@ -502,6 +526,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 exc = traceback.format_exc()
             if exc:
                 return fail_or_default(default, ImportError, exc)
+            
             threaded = False
             try:
                 # this looks like a hack, but isn't one - 
@@ -519,6 +544,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             # we're dealing with non-async code, we need threading
             # new experimental implementation
             except RuntimeError:
+                # can't have the code inside the handler because of "during handling of X, another exception Y happened"
                 threaded = True
                 
             if threaded:
@@ -574,6 +600,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 hash_value:str=None,
                 default=mode.fastfail,
                 aspectize=None,
+                path_to_url:dict=None,
+                import_to_use: dict=None,
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
@@ -615,42 +643,36 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 exc = traceback.format_exc()
             if exc:
                 return fail_or_default(default, ImportError, exc)
-
-        if not auto_install:
+        # no spec
+        else:
+            if not auto_install:
+                return fail_or_default(default, ImportError, f"Could not find any installed package '{name}' and auto_install was not requested.")
             if not (target_version and hash_value):
-                raise RuntimeWarning(f"Can't auto-install {name} without a specific version and corresponding hash value")
+                raise RuntimeWarning(f"Can't auto-install missing package '{name}' without a specific version and corresponding hash value.")
 
             response = requests.get(f"https://pypi.org/pypi/{name}/{target_version}/json")
             if response != 200:
-                return fail_or_default(default, ImportError, f"Tried to auto-install {name} {target_version} but failed with {response} while trying to pull info from PyPI.")
+                return fail_or_default(default, ImportError, f"Tried to auto-install '{name}' {target_version} but failed with {response} while trying to pull info from PyPI.")
             try:
                 if not response.json()["urls"]:
-                    return fail_or_default(default, ImportError, f"Tried to auto-install {name} {target_version} but failed because no valid URLs to download could be found.")
+                    return fail_or_default(default, AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because no valid URLs to download could be found.")
                 for entry in response.json()["urls"]:
                     url = entry["url"]
                     that_hash = entry["digests"].get(hash_algo.name)
                     filename = entry["filename"]
-                    # special treatment?
-                    yanked = entry["yanked"]
+                    if entry["yanked"]:
+                        return fail_or_default(default, AutoInstallationError, f"Auto-installation of  '{name}' {target_version} failed because the release was yanked from PyPI.")
                     if that_hash == hash_value:
                         break
                 else:
-                    return fail_or_default(default, ImportError, f"Tried to auto-install {name} {target_version} but failed because none of the available hashes match the expected hash.")
-            except KeyError:
-                return fail_or_default(default, ImportError, f"Tried to auto-install {name} {target_version} but failed because there was a problem with the JSON from PyPI.")
-
-            with TemporaryDirectory() as directory:
-                # TODO: chdir etc
-                # download the file
-                with open(filename, "wb") as file:
-                    pass
-                # check the hash
-                this_hash = securehash_file(file, hash_algo)
-                if this_hash != hash_value:
-                    return fail_or_default(default, UnexpectedHash, f"Package {name} in temporary {filename} had hash {this_hash}, which does not match the expected {hash_value}, aborting.")
-                # load it
-            # now that we got something, we can load it
-            spec = importlib.machinery.PathFinder.find_spec(name)
+                    return fail_or_default(default, AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because none of the available hashes match the expected hash.")
+            except KeyError: # json issues
+                exc = traceback.format_exc()
+            if exc:
+                return fail_or_default(default, AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because there was a problem with the JSON from PyPI.")
+            # we've got a complete JSON with a matching entry, let's download
+            
+ 
 
         # now there should be a valid spec defined
         try:
@@ -663,7 +685,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             exc = traceback.format_exc()
         if exc:
             return fail_or_default(default, ImportError, exc)
-
         self.__using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
 
         # pure despair :(
