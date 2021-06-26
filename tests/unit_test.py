@@ -79,8 +79,12 @@ def test_builtin():
   assert mod.path is sys.path
 
 def test_classical_install(reuse):
-  mod = reuse("pytest")
-  assert mod is pytest
+ with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
+    mod = reuse("pytest")
+    assert mod is pytest
+    assert issubclass(w[-1].category, use.AmbiguityWarning)
+
   
 def test_autoinstall_PEBKAC(reuse):
   # auto-install requested, but no version or hash_value specified

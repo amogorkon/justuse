@@ -611,7 +611,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
-        target_version = parse(str(version)) if version else None
+        target_version = parse(str(version)) if version else None  # the empty str parses as a truey LegacyVersion - WTF
         exc: str = None
         mod: ModuleType = None
         
@@ -666,7 +666,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     return fail_or_default(default, ImportError, exc)
             
                 # we only enforce versions with auto-install
-                if target_version != parse(""):  # the empty str parses as a truey LegacyVersion - WTF
+                if target_version:
                     # pure despair :(
                     for check in [
                         "metadata.distribution(name).version",
