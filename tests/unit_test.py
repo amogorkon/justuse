@@ -53,13 +53,16 @@ def test_internet_url():
 
 class UseStr(TestCase):
   def test_module_package_ambiguity(self):
+    original_cwd = os.getcwd()
+    os.chdir(Path("tests/.tests"))
     with warnings.catch_warnings(record=True) as w:
       warnings.simplefilter("always")
-      use("math")
+      use("sys")
       assert len(w) == 1
       assert issubclass(w[-1].category, use.AmbiguityWarning)
       assert "local module" in str(w[-1].message)
+    os.chdir(original_cwd)
       
   def test_builtin(self):
-    sys_test = use("sys")
-    assert sys_test is sys
+    mod = use("sys")
+    assert mod.path is sys.path
