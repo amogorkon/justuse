@@ -86,11 +86,6 @@ import requests
 from packaging.version import parse
 from yarl import URL
 
-try:
-    from icecream import ic
-except ImportError:
-    pass
-
 __version__ = "0.2.7"
 
 _reloaders = {}  # ProxyModule:Reloader
@@ -493,7 +488,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         original_cwd = Path.cwd()
         if not path.is_absolute():
             source_dir = getattr(self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename), "path", None)
-            ic(1, source_dir)
             # we might be calling via "python foo/bar.py"
             if not source_dir:
                 try:
@@ -503,14 +497,12 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
 
                         # a script file e.g. `python3 my/script.py`
                         source_dir = Path(main_mod.__file__)
-                        ic(2, source_dir)
                     elif sys.argv and os.path.exists(sys.argv[0]):
                         # not sure when/if this would be hit
                         source_dir = Path(os.realpath(sys.argv[0]))
                     else:
                         # interactive startup - use current directory
                         source_dir = Path(os.path.join(os.getcwd(), "."))
-                        ic(3, source_dir)
                 except Exception:
                     raise AssertionError("Well. Shit.")
             # if calling from an actual file, we take that as starting point
