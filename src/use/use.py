@@ -611,7 +611,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
-        target_version = parse(str(version))
+        target_version = parse(str(version)) if version else None
         exc: str = None
         mod: ModuleType = None
         
@@ -631,7 +631,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         else:
             spec = importlib.util.find_spec(name)
         
-        print(11111111, name, spec)
         if spec:
             # let's check if it's a builtin
             builtin = False
@@ -710,17 +709,21 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         else:
             if not auto_install:
                 return fail_or_default(default, ImportError, f"Could not find any installed package '{name}' and auto_install was not requested.")
-            
             # the whole auto-install shebang
-            if not (target_version and hash_value):
+            if target_version and not hash_value:
+                raise RuntimeWarning(f"Failed to auto-install '{name}' because hash_value is missing.")
+            elif not target_version and hash_value:
+                raise RuntimeWarning(f"Failed to auto-install '{name}' because version is missing.")
+            elif not target_version and not hash_value:
                 # let's try to make an educated guess and give a useful suggestion
-                response = requests.get(f"https://pypi.org/pypi/{name}/json")
+                msg = f"https://pypi.org/pypi/{name}/json"
+                response = requests.get(msg)
                 if response.status_code == 404:
                     # possibly typo - PEBKAC
                     raise RuntimeWarning(f"Are you sure package '{name}' exists?")
                 elif response.status_code != 200:
                     # possibly server problems
-                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to look up '{name}' but got a {response} from PyPI.")
+                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to look up '{name}' but got a {response.status_code} from PyPI.")
                 else: # PEBKAC
                     try:
                         data = response.json()
