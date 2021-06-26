@@ -484,33 +484,33 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         
         original_cwd = Path.cwd()
         if not path.is_absolute():
-            print(dict(self._using))
             source_dir = getattr(self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename), "path", None)
-            print(source_dir)
-            # we might be calling via "python foo/bar.py"
-            if not source_dir:
-                try:
+            
+            # calling from another use()d module
+            if source_dir:
+                # if calling from an actual file, we take that as starting point
+                if source_dir.exists():
+                    os.chdir(source_dir.parent)
+                    source_dir = source_dir.parent
+                else:
+                    return fail_or_default(default, NotImplementedError, "Can't determine a relative path from a virtual file.")
+            # there are a number of ways to call use() from a non-use() starting point
+            else:
+                # let's first check if we are running in jupyter
+                jupyter = "ipykernel" in sys.modules
+                # we're in jupyter, we use the CWD as set in the notebook
+                if jupyter:
+                    source_dir = original_cwd
+                else:
+                    # let's see where we started
                     main_mod = __import__("__main__")
+                    # if we're calling from a script file e.g. `python3 my/script.py` like pytest unittest
                     if hasattr(main_mod, "__file__"):
-                        # will have __file__ if python is started with
-
-                        # a script file e.g. `python3 my/script.py`
-                        source_dir = Path(main_mod.__file__)
-                    elif sys.argv and os.path.exists(sys.argv[0]):
-                        # not sure when/if this would be hit
-                        source_dir = Path(os.realpath(sys.argv[0]))
+                        source_dir = Path(inspect.currentframe().f_back.f_back.f_code.co_filename).resolve().parent
                     else:
                         # interactive startup - use current directory
-                        source_dir = Path(os.path.join(os.getcwd(), "."))
-                except Exception:
-                    raise AssertionError("Well. Shit.")
-            # if calling from an actual file, we take that as starting point
-            if source_dir is not None and source_dir.exists():
-                os.chdir(source_dir.parent)
-                path = source_dir.parent.joinpath(path).resolve()
-            else:
-                # first level - calling from jupyter for instance, we use the cwd set there, no guessing
-                path = original_cwd.joinpath(path).resolve()
+                        source_dir = original_cwd
+        path = source_dir.joinpath(path).resolve()
         if not path.exists():
             os.chdir(original_cwd)
             return fail_or_default(default, ModuleNotFoundError, f"Sure '{path}' exists?")
