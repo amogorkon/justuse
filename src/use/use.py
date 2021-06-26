@@ -575,7 +575,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 code = file.read()
             # the path needs to be set before attempting to load the new module - recursion confusing ftw!
             self.set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=inspect.getframeinfo(inspect.currentframe()))
-            print(2323)
             try:
                 mod = build_mod(name=name, 
                                 code=code, 

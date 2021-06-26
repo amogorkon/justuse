@@ -18,17 +18,17 @@ def test_other_case():
   with pytest.raises(NotImplementedError):
     use(2)
 class UsePath(TestCase):
-  def test_fail_dir():
+  def test_fail_dir(self):
     with pytest.raises(ImportError):
       use(Path(""))
-  def test_simple_path():
+  def test_simple_path(self):
       foo_path = Path(".tests/foo.py")
       print(f"loading foo module via use(Path('{foo_path}'))")
       mod = use(Path(foo_path), initial_globals={"a": 42})
       assert mod.test() == 42
   
 class UseURL(TestCase):
-  def test_simple_url():
+  def test_simple_url(self):
       import http.server
       port = 8089
       svr = http.server.HTTPServer(
@@ -44,7 +44,7 @@ class UseURL(TestCase):
         mod = use(URL(foo_uri), initial_globals={"a": 42})
         assert mod.test() == 42
       
-  def test_internet_url():
+  def test_internet_url(self):
       foo_uri = "https://raw.githubusercontent.com/greyblue9/justuse/3f783e6781d810780a4bbd2a76efdee938dde704/tests/foo.py"
       print(f"loading foo module via use(URL({foo_uri}))")
       mod = use(
