@@ -58,9 +58,11 @@ class UseStr(TestCase):
     with warnings.catch_warnings(record=True) as w:
       warnings.simplefilter("always")
       use("sys")
-      assert len(w) == 1
-      assert issubclass(w[-1].category, use.AmbiguityWarning)
-      assert "local module" in str(w[-1].message)
+      w_filtered = [*filter(
+          lambda i: i.category is not DeprecationWarning, w)]
+      assert len(w_filtered) == 1
+      assert issubclass(w_filtered[-1].category, use.AmbiguityWarning)
+      assert "local module" in str(w_filtered[-1].message)
     os.chdir(original_cwd)
       
   def test_builtin(self):
