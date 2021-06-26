@@ -405,7 +405,6 @@ class Use:
 
     def set_mod(self, *, name, mod, spec, path, frame):
         """Helper to get the order right."""
-        print("ADSFADSF")
         self._using[name] = Use.ModInUse(name, mod, path, spec, frame)
 
     @methdispatch
@@ -615,6 +614,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         target_version = parse(str(version))
         exc: str = None
         mod: ModuleType = None
+        
+        if initial_globals or import_to_use or path_to_url:
+            raise NotImplementedError("If you require this functionality, please report it on https://github.com/amogorkon/justuse/issues so we can work out the specifics together.")
 
         # The "try and guess" behaviour is due to how classical imports work, 
         # which is inherently ambiguous, but can't really be avoided for packages.
@@ -629,6 +631,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         else:
             spec = importlib.util.find_spec(name)
         
+        print(11111111, name, spec)
         if spec:
             # let's check if it's a builtin
             builtin = False
@@ -639,7 +642,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             if builtin:
                 try:
                     mod = spec.loader.create_module(spec)
-                    spec.loader.exec_module(mod)
+                    spec.loader.exec_module(mod)  # ! => cache
                     for (check, pattern), decorator in aspectize.items():
                         apply_aspect(mod, check, pattern, decorator)
                     self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
@@ -652,8 +655,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             # it seems to be installed in some way, for instance via pip
             if not auto_install:
                 try:
-                    mod = importlib.import_module(name)
-                except Exception:
+                    # feels like cheating, doesn't it
+                    mod = importlib.import_module(name)  # ! => cache
+                    for (check, pattern), decorator in aspectize.items():
+                        apply_aspect(mod, check, pattern, decorator)
+                    self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
+                    warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
+                except:
                     exc = traceback.format_exc()
                 if exc:
                     return fail_or_default(default, ImportError, exc)
@@ -680,19 +688,17 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                             pass
                     else:
                         print(f"Cannot determine version for module {name}, continueing.")
-            # auto-install with version-check
+            # spec & auto-install
             else:
                 if (metadata.version(name) == target_version) or not(version):
                     if not (version):
-                        warn(Use.AutoInstallationError("No version was provided, even though auto_install was specified! Loading classically installed package instead."))
+                        warn(Use.AmbiguityWarning("No version was provided, even though auto_install was specified! Trying to load classically installed package instead."))
                     try:
-                        with open(spec.origin, "r") as file:
-                            code = file.read()
-                        mod = build_mod(name=name, 
-                                        code=code, 
-                                        module_path=spec.origin, 
-                                        initial_globals=initial_globals, 
-                                        aspectize=aspectize)
+                        mod = importlib.import_module(name)  # ! => cache
+                        for (check, pattern), decorator in aspectize.items():
+                            apply_aspect(mod, check, pattern, decorator)
+                        self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
+                        warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
                     except:
                         exc = traceback.format_exc()
                     if exc:
@@ -722,8 +728,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         hash_value = data["releases"][version][0]["digests"][hash_algo.name]
                     except KeyError:  # json issues
                         raise RuntimeWarning("Please specify version and hash for auto-installation. Sadly something went wrong with the JSON PyPI provided, otherwise we could've provided a suggestion.")
-                    raise RuntimeWarning(f"""Please specify version and hash for auto-installation of {name}. To use the latest version: 
-use("{name}", version="{version}", hash_value="{hash_value}")
+                    raise RuntimeWarning(f"""Please specify version and hash for auto-installation of '{name}'. To use the latest version: 
+use("{name}", version="{version}", hash_value="{hash_value}", auto_install=True)
 """)
 
             response = requests.get(f"https://pypi.org/pypi/{name}/{target_version}/json")
