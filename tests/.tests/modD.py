@@ -1,6 +1,9 @@
+# type: ignore  # pylance
 print("FROM", __file__)
 
-import os, sys
+import os
+import sys
+
 print(sys.version)
 
 print("modD CWD:", os.getcwd())
