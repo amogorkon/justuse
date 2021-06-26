@@ -144,6 +144,7 @@ def build_mod(*, name:str,
                 aspectize:dict, 
                 default=mode.fastfail) -> ModuleType:
     mod = ModuleType(name)
+    print(2, 5, code, type(code))
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = module_path
     code_text = codecs.decode(code)
@@ -633,7 +634,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             builtin = False
             try:
                 x = metadata.PathDistribution.from_name(name)
-                print(x)
             except metadata.PackageNotFoundError:  # indeed builtin!
                 builtin = True
             if builtin:
@@ -652,13 +652,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             # it seems to be installed in some way, for instance via pip
             if not auto_install:
                 try:
-                    with open(spec.origin, "rb") as file:
-                        code = file.read()
-                    mod = build_mod(name=name, 
-                                    code=code, 
-                                    module_path=spec.origin, 
-                                    initial_globals=initial_globals, 
-                                    aspectize=aspectize)
+                    mod = importlib.import_module(name)
                 except Exception:
                     exc = traceback.format_exc()
                 if exc:
@@ -755,7 +749,7 @@ use("{name}", version="{version}", hash_value="{hash_value}")
             # we've got a complete JSON with a matching entry, let's download
         
         assert mod, "Something went horribly wrong."
-        self.set_mod(name=name, mod=mod, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
+        self.set_mod(name=name, mod=mod, path=None, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
         return mod
 
 sys.modules["use"] = Use()
