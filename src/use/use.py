@@ -69,12 +69,9 @@ import sys
 import threading
 import time
 import traceback
-
-from collections import defaultdict
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from enum import Enum
-from functools import singledispatch
-from functools import update_wrapper
+from functools import singledispatch, update_wrapper
 from importlib import metadata
 from pathlib import Path
 from types import ModuleType
@@ -82,7 +79,6 @@ from warnings import warn
 
 import mmh3
 import requests
-
 from packaging.version import parse
 from yarl import URL
 
@@ -408,6 +404,7 @@ class Use:
 
     def set_mod(self, *, name, mod, spec, path, frame):
         """Helper to get the order right."""
+        print("ADSFADSF")
         self._using[name] = Use.ModInUse(name, mod, path, spec, frame)
 
     @methdispatch
@@ -487,7 +484,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         
         original_cwd = Path.cwd()
         if not path.is_absolute():
+            print(dict(self._using))
             source_dir = getattr(self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename), "path", None)
+            print(source_dir)
             # we might be calling via "python foo/bar.py"
             if not source_dir:
                 try:
@@ -576,6 +575,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 code = file.read()
             # the path needs to be set before attempting to load the new module - recursion confusing ftw!
             self.set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=inspect.getframeinfo(inspect.currentframe()))
+            print(2323)
             try:
                 mod = build_mod(name=name, 
                                 code=code, 
@@ -592,6 +592,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             sys.modules[as_import] = mod
+        self.set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=inspect.getframeinfo(inspect.currentframe()))
         return mod
 
     @__call__.register(str)

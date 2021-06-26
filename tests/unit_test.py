@@ -6,23 +6,24 @@ src = os.path.join(here[0], "src")
 sys.path.insert(0,src)
 
 import warnings
-
 from pathlib import Path
-from unittest import TestCase
-from unittest import skip
+from unittest import TestCase, skip
 
 import pytest
 import use
-
 from yarl import URL
+
 
 def test_other_case():
   with pytest.raises(NotImplementedError):
     use(2)
 
+def test_fail_dir():
+  with pytest.raises(ImportError):
+    use(Path(""))
 def test_simple_path():
     foo_path = Path(".tests/foo.py")
-    print(f"loading foo module via use({foo_path})")
+    print(f"loading foo module via use(Path('{foo_path}'))")
     mod = use(Path(foo_path), initial_globals={"a": 42})
     assert mod.test() == 42
     
