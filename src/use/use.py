@@ -69,7 +69,7 @@ import sys
 import threading
 import time
 import traceback
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from enum import Enum
 from functools import singledispatch, update_wrapper
 from importlib import metadata
@@ -84,32 +84,10 @@ from yarl import URL
 
 try:
     from icecream import ic
-
-    #print = ic
 except ImportError:
     pass
 
 __version__ = "0.2.7"
-class VersionWarning(Warning):
-    pass
-
-class NotReloadableWarning(Warning):
-    pass
-
-class NoValidationWarning(Warning):
-    pass
-
-class AmbiguityWarning(Warning):
-    pass
-
-class ModuleNotFoundError(ImportError):
-    pass
-
-class UnexpectedHash(ImportError):
-    pass
-
-class AutoInstallationError(ImportError):
-    pass
 
 _reloaders = {}  # ProxyModule:Reloader
 _aspects = {} 
@@ -360,29 +338,53 @@ class ModuleReloader:
         self.stop()
         atexit.unregister(self.stop)
 class Use:
-    __doc__ = __doc__  # module's __doc__ above
+    # lift module-level stuff up
+    __doc__ = __doc__
     __version__ = __version__  # otherwise setup.py can't find it
+    
     # attempt at fix for #23 doesn't work..
     __path__ = str(Path(__file__).resolve().parent)
     Path = Path
     URL = URL
     class Hash(Enum):
         sha256 = hashlib.sha256
+        
+    ModInUse = namedtuple("ModInUse", "name mod path spec frame")
 
     mode = mode
     
     # ALIASES
     isfunction = inspect.isfunction
     ismethod = inspect.ismethod
-    isclass = inspect.isclass
-    _using = _using
-    _aspects = _aspects
-    _reloaders = _reloaders
+    isclass = inspect.isclass   
+    class VersionWarning(Warning):
+        pass
+
+    class NotReloadableWarning(Warning):
+        pass
+
+    class NoValidationWarning(Warning):
+        pass
+
+    class AmbiguityWarning(Warning):
+        pass
+
+    class ModuleNotFoundError(ImportError):
+        pass
+
+    class UnexpectedHash(ImportError):
+        pass
+
+    class AutoInstallationError(ImportError):
+        pass
     
     def __init__(self):
         self._registry = {"version":"0.0.1", 
                         "distributions": defaultdict(lambda: list())
                         }
+        self._using = _using
+        self._aspects = _aspects
+        self._reloaders = _reloaders
         for d in metadata.distributions():
             self._registry["distributions"][d.metadata["Name"]].append({"version": d.version, "path": d})
 
@@ -404,6 +406,10 @@ class Use:
                 self._registry.update(json.load(file))
         except ValueError:
             pass
+
+    def set_mod(self, *, name, mod, spec, path, frame):
+        """Helper to get the order right."""
+        self._using[name] = Use.ModInUse(name, mod, path, spec, frame)
 
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
@@ -434,11 +440,11 @@ class Use:
         this_hash = hash_algo.value(response.content).hexdigest()
         if hash_value:
             if this_hash != hash_value:
-                return fail_or_default(default, UnexpectedHash, f"{this_hash} does not match the expected hash {hash_value} - aborting!")
+                return fail_or_default(default, Use.UnexpectedHash, f"{this_hash} does not match the expected hash {hash_value} - aborting!")
         else:
             warn(f"""Attempting to import from the interwebs with no validation whatsoever! 
 To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')""", 
-                NoValidationWarning)
+                Use.NoValidationWarning)
         name = url.name
         
         try:
@@ -452,9 +458,10 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if exc:
             return fail_or_default(default, ImportError, exc)
         
-        self._using[name] = mod, inspect.getframeinfo(inspect.currentframe())
+        self.set_mod(name=name, mod=mod, spec=None, path=url, frame=inspect.getframeinfo(inspect.currentframe()))
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
+            assert as_import.isidentifier(), f"as_import must be a valid identifier."
             sys.modules[as_import] = mod
         return mod
 
@@ -481,7 +488,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         
         original_cwd = Path.cwd()
         if not path.is_absolute():
-            source_dir = self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename)
+            source_dir = getattr(self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename), "path", None)
             # we might be calling via "python foo/bar.py"
             if not source_dir:
                 try:
@@ -563,13 +570,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         if key not in initial_globals.keys() and not key.startswith("__")):
                 warn(
                     f"Beware {name} also contains non-function objects, it may not be safe to reload!",
-                    NotReloadableWarning,
+                    Use.NotReloadableWarning,
                 )
         else:
             with open(path, "rb") as file:
                 code = file.read()
             # the path needs to be set before attempting to load the new module - recursion confusing ftw!
-            self._using[f"<{name}>"] = path
+            self.set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=inspect.getframeinfo(inspect.currentframe()))
             try:
                 mod = build_mod(name=name, 
                                 code=code, 
@@ -606,7 +613,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
         target_version = parse(str(version))
-        exc = None
+        exc: str = None
+        mod: ModuleType = None
 
         # The "try and guess" behaviour is due to how classical imports work, 
         # which is inherently ambiguous, but can't really be avoided for packages.
@@ -614,104 +622,141 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         # let's first see if the user might mean something else entirely
         if any(Path(".").glob(f"{name}.py")):
             warn(f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))", 
-                AmbiguityWarning)
+                Use.AmbiguityWarning)
 
-        # let's check if it's a builtin
-        spec = importlib.machinery.BuiltinImporter.find_spec(name)
+        if name in self._using:
+            spec = self._using[name].spec
+        else:
+            spec = importlib.util.find_spec(name)
+        
         if spec:
+            # let's check if it's a builtin
+            builtin = False
             try:
-                mod = spec.loader.exec_module(spec.loader.create_module(spec))
-                for (check, pattern), decorator in aspectize.items():
-                    apply_aspect(mod, check, pattern, decorator)
-                return mod
-            except:
-                exc = traceback.format_exc()
-            if exc:
-                return fail_or_default(default, ImportError, exc)
+                x = metadata.PathDistribution.from_name(name)
+                print(x)
+            except metadata.PackageNotFoundError:  # indeed builtin!
+                builtin = True
+            if builtin:
+                try:
+                    mod = spec.loader.create_module(spec)
+                    spec.loader.exec_module(mod)
+                    for (check, pattern), decorator in aspectize.items():
+                        apply_aspect(mod, check, pattern, decorator)
+                    self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
+                    return mod
+                except:
+                    exc = traceback.format_exc()
+                if exc:
+                    return fail_or_default(default, ImportError, exc)
 
-        # it might be installed in some way like via pip
-        spec = importlib.util.find_spec(name)
-        if spec:
-            try:
-                mod = build_mod(name=name, 
-                                code=spec.loader.get_source(name), 
-                                module_path=spec.origin, 
-                                initial_globals=initial_globals, 
-                                aspectize=aspectize)
-                self._using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
-            except Exception:
-                exc = traceback.format_exc()
-            if exc:
-                return fail_or_default(default, ImportError, exc)
+            # it seems to be installed in some way, for instance via pip
+            if not auto_install:
+                try:
+                    with open(spec.origin, "rb") as file:
+                        code = file.read()
+                    mod = build_mod(name=name, 
+                                    code=code, 
+                                    module_path=spec.origin, 
+                                    initial_globals=initial_globals, 
+                                    aspectize=aspectize)
+                except Exception:
+                    exc = traceback.format_exc()
+                if exc:
+                    return fail_or_default(default, ImportError, exc)
+            
+                # we only enforce versions with auto-install
+                if target_version != parse(""):  # the empty str parses as a truey LegacyVersion - WTF
+                    # pure despair :(
+                    for check in [
+                        "metadata.distribution(name).version",
+                        "mod.version",
+                        "mod.version()",
+                        "mod.__version__"]:
+                        try:
+                            check_value = eval(check)
+                            if isinstance(check_value, str):
+                                this_version = parse(check_value)
+                                if target_version != this_version:
+                                    warn(
+                                        f"{name} is expected to be version {target_version} ,  but got {this_version} instead",
+                                        Use.VersionWarning,
+                                    )
+                                    break
+                        except:
+                            pass
+                    else:
+                        print(f"Cannot determine version for module {name}, continueing.")
+            # auto-install with version-check
+            else:
+                if (metadata.version(name) == target_version) or not(version):
+                    if not (version):
+                        warn(Use.AutoInstallationError("No version was provided, even though auto_install was specified! Loading classically installed package instead."))
+                    try:
+                        with open(spec.origin, "r") as file:
+                            code = file.read()
+                        mod = build_mod(name=name, 
+                                        code=code, 
+                                        module_path=spec.origin, 
+                                        initial_globals=initial_globals, 
+                                        aspectize=aspectize)
+                    except:
+                        exc = traceback.format_exc()
+                    if exc:
+                        return fail_or_default(default, ImportError, exc)
+                # wrong version => wrong spec
+                if metadata.version(name) != target_version:
+                    spec = None
         # no spec
         else:
             if not auto_install:
                 return fail_or_default(default, ImportError, f"Could not find any installed package '{name}' and auto_install was not requested.")
+            
+            # the whole auto-install shebang
             if not (target_version and hash_value):
-                raise RuntimeWarning(f"Can't auto-install missing package '{name}' without a specific version and corresponding hash value.")
+                # let's try to make an educated guess and give a useful suggestion
+                response = requests.get(f"https://pypi.org/pypi/{name}/json")
+                if response.status_code == 404:
+                    # possibly typo - PEBKAC
+                    raise RuntimeWarning(f"Are you sure package '{name}' exists?")
+                elif response.status_code != 200:
+                    # possibly server problems
+                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to look up '{name}' but got a {response} from PyPI.")
+                else: # PEBKAC
+                    try:
+                        data = response.json()
+                        version = data["info"]["version"]
+                        hash_value = data["releases"][version][0]["digests"][hash_algo.name]
+                    except KeyError:  # json issues
+                        raise RuntimeWarning("Please specify version and hash for auto-installation. Sadly something went wrong with the JSON PyPI provided, otherwise we could've provided a suggestion.")
+                    raise RuntimeWarning(f"""Please specify version and hash for auto-installation of {name}. To use the latest version: 
+use("{name}", version="{version}", hash_value="{hash_value}")
+""")
 
             response = requests.get(f"https://pypi.org/pypi/{name}/{target_version}/json")
             if response != 200:
                 return fail_or_default(default, ImportError, f"Tried to auto-install '{name}' {target_version} but failed with {response} while trying to pull info from PyPI.")
             try:
                 if not response.json()["urls"]:
-                    return fail_or_default(default, AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because no valid URLs to download could be found.")
+                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because no valid URLs to download could be found.")
                 for entry in response.json()["urls"]:
                     url = entry["url"]
                     that_hash = entry["digests"].get(hash_algo.name)
                     filename = entry["filename"]
                     if entry["yanked"]:
-                        return fail_or_default(default, AutoInstallationError, f"Auto-installation of  '{name}' {target_version} failed because the release was yanked from PyPI.")
+                        return fail_or_default(default, Use.AutoInstallationError, f"Auto-installation of  '{name}' {target_version} failed because the release was yanked from PyPI.")
                     if that_hash == hash_value:
                         break
                 else:
-                    return fail_or_default(default, AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because none of the available hashes match the expected hash.")
+                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because none of the available hashes match the expected hash.")
             except KeyError: # json issues
                 exc = traceback.format_exc()
             if exc:
-                return fail_or_default(default, AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because there was a problem with the JSON from PyPI.")
+                return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because there was a problem with the JSON from PyPI.")
             # we've got a complete JSON with a matching entry, let's download
-            
- 
-
-        # now there should be a valid spec defined
-        try:
-            mod = build_mod(name=name, 
-                            code=spec.loader.get_source(name),
-                            module_path=spec.origin,
-                            initial_globals=initial_globals, 
-                            aspectize=aspectize)
-        except:
-            exc = traceback.format_exc()
-        if exc:
-            return fail_or_default(default, ImportError, exc)
-        self.__using[name] = mod, spec, inspect.getframeinfo(inspect.currentframe())
-
-        # pure despair :(
-        def check_version():
-            nonlocal mod
-            for check in [
-                "metadata.distribution(name).version",
-                "mod.version",
-                "mod.version()",
-                "mod.__version__"]:
-                try:
-                    check_value = eval(check)
-                    if isinstance(check_value, str):
-                        this_version = parse(check_value)
-                        if target_version != this_version:
-                            warn(
-                                f"{name} is expected to be version {target_version} ,  but got {this_version} instead",
-                                VersionWarning,
-                            )
-                        return
-                except:
-                    pass
-            print(f"Cannot determine version for module {name}, continueing.")
         
-        # the empty str parses as a truey LegacyVersion - WTF
-        if target_version != parse(""):
-            check_version()
+        assert mod, "Something went horribly wrong."
+        self.set_mod(name=name, mod=mod, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
         return mod
 
 sys.modules["use"] = Use()

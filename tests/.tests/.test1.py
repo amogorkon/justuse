@@ -1,4 +1,4 @@
-from importlib import metadata
+from importlib import metadata, util
 import configparser
 from pathlib import Path
 
@@ -10,3 +10,7 @@ with open(home/"config.ini") as file:
     config.read(file)
 
 D = list(metadata.distributions())
+
+spec = util.find_spec("math")
+
+d = D[0]
