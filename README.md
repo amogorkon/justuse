@@ -2,7 +2,7 @@
 [![stars](https://img.shields.io/github/stars/amogorkon/justuse?style=plastic)](https://github.com/amogorkon/justuse/stargazers)
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/Naereen/StrapDown.js/graphs/commit-activity)
 [![Build](https://github.com/amogorkon/justuse/actions/workflows/blank.yml/badge.svg?branch=main)](https://github.com/amogorkon/justuse/actions/workflows/blank.yml)
-
+[![Downloads](https://pepy.tech/badge/justuse)](https://pepy.tech/project/justuse)
 
 
 
