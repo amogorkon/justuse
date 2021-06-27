@@ -60,12 +60,12 @@ def test_internet_url(reuse):
     )
     assert mod.test() == 42
 
-def test_module_package_ambiguity(self):
+def test_module_package_ambiguity(reuse):
   original_cwd = os.getcwd()
   os.chdir(Path("tests/.tests"))
   with warnings.catch_warnings(record=True) as w:
     warnings.simplefilter("always")
-    use("sys")
+    reuse("sys")
     w_filtered = [*filter(
         lambda i: i.category is not DeprecationWarning, w)]
     assert len(w_filtered) == 1
@@ -73,25 +73,32 @@ def test_module_package_ambiguity(self):
     assert "local module" in str(w_filtered[-1].message)
   os.chdir(original_cwd)
     
-def test_builtin(reuse):
-  mod = reuse("sys")
+def test_builtin():
+  # must be the original use because loading builtins requires looking up _using, which mustn't be wiped for this reason 
+  mod = use("sys")
   assert mod.path is sys.path
 
 def test_classical_install(reuse):
-  mod = reuse("pytest")
-  assert mod is pytest
+ with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
+    mod = reuse("pytest")
+    assert mod is pytest
+    assert issubclass(w[-1].category, use.AmbiguityWarning)
+
   
 def test_autoinstall_PEBKAC(reuse):
   # auto-install requested, but no version or hash_value specified
-  with pytest.raises(ImportError):
+  with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
     reuse("pytest", auto_install=True)
+    assert issubclass(w[-1].category, use.AmbiguityWarning)
   
   # forgot hash_value
-  with pytest.raises(ImportError):
+  with pytest.raises(RuntimeWarning):
     reuse("pytest", auto_install=True, version=-1)
   
   # forgot version
-  with pytest.raises(ImportError):
+  with pytest.raises(RuntimeWarning):
     reuse("pytest", auto_install=True, hash_value="asdf")
     
   # impossible version
