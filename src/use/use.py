@@ -764,7 +764,7 @@ use("{name}", version="{version}", hash_value="{hash_value}", auto_install=True)
             
             # TODO load package..
         
-        assert mod, "Something went horribly wrong."
+        assert mod, "Something went horribly wrong. Actually no, it's all good."
         self.set_mod(name=name, mod=mod, path=None, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
         return mod
 
