@@ -69,6 +69,7 @@ import sys
 import threading
 import time
 import traceback
+import zipfile
 from collections import defaultdict, namedtuple
 from enum import Enum
 from functools import singledispatch, update_wrapper
@@ -381,8 +382,6 @@ class Use:
         self._using = _using
         self._aspects = _aspects
         self._reloaders = _reloaders
-        for d in metadata.distributions():
-            self._registry["distributions"][d.metadata["Name"]].append({"version": d.version, "path": d})
 
         self.home = Path.home() / ".justuse-python"
         self.home.mkdir(mode=0o755, exist_ok=True)
@@ -626,10 +625,12 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             warn(f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))", 
                 Use.AmbiguityWarning)
 
+        spec = None
         if name in self._using:
             spec = self._using[name].spec
         else:
-            spec = importlib.util.find_spec(name)
+            if not auto_install:
+                spec = importlib.util.find_spec(name)
         
         if spec:
             # let's check if it's a builtin
@@ -711,19 +712,23 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 return fail_or_default(default, ImportError, f"Could not find any installed package '{name}' and auto_install was not requested.")
             
             # the whole auto-install shebang
+            package_name, _, module_name = name.partition(".")
+            if not module_name:
+                module_name = package_name
+            
             if target_version and not hash_value:
-                raise RuntimeWarning(f"Failed to auto-install '{name}' because hash_value is missing.")
+                raise RuntimeWarning(f"Failed to auto-install '{package_name}' because hash_value is missing.")
             elif not target_version and hash_value:
-                raise RuntimeWarning(f"Failed to auto-install '{name}' because version is missing.")
+                raise RuntimeWarning(f"Failed to auto-install '{package_name}' because version is missing.")
             elif not target_version and not hash_value:
                 # let's try to make an educated guess and give a useful suggestion
-                response = requests.get(f"https://pypi.org/pypi/{name}/json")
+                response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
                 if response.status_code == 404:
                     # possibly typo - PEBKAC
-                    raise RuntimeWarning(f"Are you sure package '{name}' exists?")
+                    raise RuntimeWarning(f"Are you sure package '{package_name}' exists?")
                 elif response.status_code != 200:
                     # possibly server problems
-                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to look up '{name}' but got a {response.status_code} from PyPI.")
+                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to look up '{package_name}' but got a {response.status_code} from PyPI.")
                 else: # PEBKAC
                     try:
                         data = response.json()
@@ -731,42 +736,58 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         hash_value = data["releases"][version][0]["digests"][hash_algo.name]
                     except KeyError:  # json issues
                         raise RuntimeWarning("Please specify version and hash for auto-installation. Sadly something went wrong with the JSON PyPI provided, otherwise we could've provided a suggestion.")
-                    raise RuntimeWarning(f"""Please specify version and hash for auto-installation of '{name}'. 
-To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{name}
+                    raise RuntimeWarning(f"""Please specify version and hash for auto-installation of '{package_name}'. 
+To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
 If you want to auto-install the latest version: use("{name}", version="{version}", hash_value="{hash_value}", auto_install=True)
 """)
 
-            response = requests.get(f"https://pypi.org/pypi/{name}/{target_version}/json")
+            response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
             if response.status_code != 200:
-                return fail_or_default(default, ImportError, f"Tried to auto-install '{name}' {target_version} but failed with {response} while trying to pull info from PyPI.")
+                return fail_or_default(default, ImportError, f"Tried to auto-install '{package_name}' {target_version} but failed with {response} while trying to pull info from PyPI.")
             try:
                 if not response.json()["urls"]:
-                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because no valid URLs to download could be found.")
+                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because no valid URLs to download could be found.")
                 for entry in response.json()["urls"]:
                     url = entry["url"]
                     that_hash = entry["digests"].get(hash_algo.name)
                     filename = entry["filename"]
                     if entry["yanked"]:
-                        return fail_or_default(default, Use.AutoInstallationError, f"Auto-installation of  '{name}' {target_version} failed because the release was yanked from PyPI.")
+                        return fail_or_default(default, Use.AutoInstallationError, f"Auto-installation of  '{package_name}' {target_version} failed because the release was yanked from PyPI.")
                     if that_hash == hash_value:
                         break
                 else:
-                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because none of the available hashes match the expected hash.")
+                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because none of the available hashes match the expected hash.")
             except KeyError: # json issues
                 exc = traceback.format_exc()
             if exc:
-                return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because there was a problem with the JSON from PyPI.")
+                return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.")
             # we've got a complete JSON with a matching entry, let's download
+            print("Downloading", package_name, "...")
             download_response = requests.get(url, allow_redirects=True)
-            with open(self.home/"packages"/filename, "wb") as file:
-                file.write(download_response.content)
-            return filename
-        
-            # TODO install..
+            path = self.home / "packages" / filename
+            try:
+                with open(path, "wb") as file:
+                    file.write(download_response.content)
+                print("Downloaded", path)
+            except:
+                exc = traceback.format_exc()
+            if exc:
+                return fail_or_default(default, Use.AutoInstallationError, exc)
             
-            # TODO load package..
-        
-        assert mod, "Something went horribly wrong. Actually no, it's all good."
+            print("Extracting...")
+            folder = (path.parent/path.stem)
+            folder.mkdir(mode=0o755, exist_ok=True)
+            with zipfile.ZipFile(path, 'r') as file:
+                file.extractall(folder
+                                )
+            original_cwd = Path.cwd()
+            os.chdir(folder)
+            mod = importlib.import_module(module_name)
+            os.chdir(original_cwd)
+
+            for (check, pattern), decorator in aspectize.items():
+                apply_aspect(mod, check, pattern, decorator)
+
         self.set_mod(name=name, mod=mod, path=None, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
         return mod
 

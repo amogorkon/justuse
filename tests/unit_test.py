@@ -127,6 +127,7 @@ def test_version_warning(reuse):
 
 def test_download_package(reuse):
   # https://pypi.org/project/example-pypi-package/
-  filename = reuse("example-pypi-package", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", auto_install=True)
-  file = use.Path.home()/ f".justuse-python/packages/{filename}"
+  test = reuse("example-pypi-package.examplepy", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", auto_install=True)
+  assert str(test.Number(2)) == "2"
+  file = use.Path.home() / f".justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl"
   file.unlink()
