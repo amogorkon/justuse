@@ -717,8 +717,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 raise RuntimeWarning(f"Failed to auto-install '{name}' because version is missing.")
             elif not target_version and not hash_value:
                 # let's try to make an educated guess and give a useful suggestion
-                msg = f"https://pypi.org/pypi/{name}/json"
-                response = requests.get(msg)
+                response = requests.get(f"https://pypi.org/pypi/{name}/json")
                 if response.status_code == 404:
                     # possibly typo - PEBKAC
                     raise RuntimeWarning(f"Are you sure package '{name}' exists?")
@@ -758,8 +757,9 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             if exc:
                 return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because there was a problem with the JSON from PyPI.")
             # we've got a complete JSON with a matching entry, let's download
-
-            # TODO download..
+            download_response = requests.get(url, allow_redirects=True)
+            with open(self.home/"packages"/filename, "wb") as file:
+                file.write(download_response.content)
             
             # TODO install..
             
