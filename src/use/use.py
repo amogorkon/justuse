@@ -760,7 +760,8 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             download_response = requests.get(url, allow_redirects=True)
             with open(self.home/"packages"/filename, "wb") as file:
                 file.write(download_response.content)
-            
+            return filename
+        
             # TODO install..
             
             # TODO load package..
