@@ -732,8 +732,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         hash_value = data["releases"][version][0]["digests"][hash_algo.name]
                     except KeyError:  # json issues
                         raise RuntimeWarning("Please specify version and hash for auto-installation. Sadly something went wrong with the JSON PyPI provided, otherwise we could've provided a suggestion.")
-                    raise RuntimeWarning(f"""Please specify version and hash for auto-installation of '{name}'. To use the latest version: 
-use("{name}", version="{version}", hash_value="{hash_value}", auto_install=True)
+                    raise RuntimeWarning(f"""Please specify version and hash for auto-installation of '{name}'. 
+To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{name}
+If you want to auto-install the latest version: use("{name}", version="{version}", hash_value="{hash_value}", auto_install=True)
 """)
 
             response = requests.get(f"https://pypi.org/pypi/{name}/{target_version}/json")

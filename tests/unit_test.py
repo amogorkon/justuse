@@ -22,6 +22,15 @@ def reuse():
   use._reloaders = {}
   return use 
 
+def test_access_to_home():
+  test = use.Path.home() / ".justuse-python/packages/test"
+  test.touch(mode=0o644, exist_ok=True)
+  with open(test, "w") as file:
+    file.write("test")
+  assert test.exists()
+  test.unlink()
+  assert not test.exists()
+
 def test_other_case(reuse):
   with pytest.raises(NotImplementedError):
     reuse(2)
