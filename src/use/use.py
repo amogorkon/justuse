@@ -709,6 +709,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         else:
             if not auto_install:
                 return fail_or_default(default, ImportError, f"Could not find any installed package '{name}' and auto_install was not requested.")
+            
             # the whole auto-install shebang
             if target_version and not hash_value:
                 raise RuntimeWarning(f"Failed to auto-install '{name}' because hash_value is missing.")
@@ -736,7 +737,7 @@ use("{name}", version="{version}", hash_value="{hash_value}", auto_install=True)
 """)
 
             response = requests.get(f"https://pypi.org/pypi/{name}/{target_version}/json")
-            if response != 200:
+            if response.status_code != 200:
                 return fail_or_default(default, ImportError, f"Tried to auto-install '{name}' {target_version} but failed with {response} while trying to pull info from PyPI.")
             try:
                 if not response.json()["urls"]:
@@ -756,6 +757,12 @@ use("{name}", version="{version}", hash_value="{hash_value}", auto_install=True)
             if exc:
                 return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {name} {target_version} but failed because there was a problem with the JSON from PyPI.")
             # we've got a complete JSON with a matching entry, let's download
+
+            # TODO download..
+            
+            # TODO install..
+            
+            # TODO load package..
         
         assert mod, "Something went horribly wrong."
         self.set_mod(name=name, mod=mod, path=None, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
