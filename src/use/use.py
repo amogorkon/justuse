@@ -379,11 +379,8 @@ class Use:
 
     class AutoInstallationError(ImportError):
         pass
-    
+
     def __init__(self):
-        self._registry = {"version":"0.0.1", 
-                        "distributions": defaultdict(lambda: list())
-                        }
         self._using = _using
         self._aspects = _aspects
         self._reloaders = _reloaders
@@ -394,18 +391,23 @@ class Use:
         (self.home / "registry.json").touch(mode=0o644, exist_ok=True)
         (self.home / "config.ini").touch(mode=0o644, exist_ok=True)
         (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
-        
+        # load_registry expects 'self.home' to be set
+        self._registry = self.load_registry()
+
         self.config = configparser.ConfigParser()
         with open(self.home / "config.ini") as file:
             self.config.read(file)
 
+    def load_registry(self, registry=None):
+        registry = registry or {}
+
         try:
             with open(self.home / "registry.json") as file:
-                if len(file.read()) == 0:
-                    raise ValueError  # short-circuit the pending JSONDecodeError
-                self._registry.update(json.load(file))
-        except ValueError:
-            pass
+                registry.update(json.load(file))
+        except json.JSONDecodeError as jde:
+            if jde.pos != 0:
+              raise
+        return registry
 
     def persist_registry(self):
         with open(self.home / "registry.json", "w") as file:
@@ -601,6 +603,24 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             sys.modules[as_import] = mod
         self.set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=inspect.getframeinfo(inspect.currentframe()))
         return mod
+
+    def create_solib_links(self, zip: zipfile.ZipFile, folder: str):
+        from importlib.machinery import EXTENSION_SUFFIXES as SO_EXTS
+        from os.path import join, split, exists, islink
+        from operator import attrgetter
+        entries = [*map(attrgetter("filename"), zip.filelist)]
+        solibs = [*filter(
+          lambda f: any(map(f.endswith, SO_EXTS)), entries)]
+        if not solibs: return
+        # Set up links from 'xyz.cpython-3#-<...>.so' to 'xyz.so'
+        print(f"Creating {len(solibs)} symlinks for extensions...")
+        for solib in solibs:
+          sofile = join(folder, solib)
+          dir, fn = split(sofile)
+          name, so_ext = (fn.split(".cpython-")[0], SO_EXTS[-1])
+          link, target = (join(dir, f"{name}{so_ext}"), fn)
+          if exists(link): os.unlink(link)
+          os.symlink(target, link)          
 
     @__call__.register(str)
     def _use_str(

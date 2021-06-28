@@ -19,10 +19,11 @@ Solid:
 * decorate all specified callables (functions, methods, classes, ..) on import via pattern matching, aspect-orientation made easy
 * return a given default if an exception happened during an import, simplifying optional dependencies
 * safely hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
+* safely auto-install version-tagged pure python packages from PyPI (packages with C-extensions like numpy don't work yet)
+* have multiple versions of the same package installed and loaded in the same program without conflicts
 
 In flux:
-* safely auto-install version-tagged packages from PyPI
-* have multiple versions of the same package installed and loaded in the same program without conflicts
+* auto-install packages with C-extensions and other precompiled stuff
 * pull packages from a P2P network instead of PyPI directly
 * provide a visual representation of the internal dependency graph
 * module-level variable guards aka "module-properties"
@@ -68,6 +69,22 @@ except ImportError:
 which would simply become
 `np = use("numpy", default=None)`
 while it is possible of course to pass anything as default, for instance some fallback that should be used instead if the preferred module/package isn't available. Note that you can cascade different use() this way! For instance, you can try to use() a local module with reload in a certain version, but if that fails fall back to a specific, reliably working version pulled from the web but that might not be the newest and best optimized.
+
+To auto-install packages, the simplest way is to try to import the package simply with auto-install active, check the link whether you picked the right package and not some typo-squatting one and then simply copy&paste the last line of the exception to get the latest version, here is an example:
+
+```
+>>> test = use("example-pypi-package.examplepy", auto_install=True)
+
+RuntimeWarning: Please specify version and hash for auto-installation of 'example-pypi-package'. 
+To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/example-pypi-package
+If you want to auto-install the latest version: 
+use("example-pypi-package.examplepy", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", auto_install=True)
+
+>>> test = use("example-pypi-package.examplepy", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", auto_install=True)
+=> download and import the requested package, version-pinned and hash-checked inline!
+```
+Version-pinning and hash-checking is the most secure way to install a package. It will ensure that your code will always run as you expect it, but there's a drawback: there is no immediate and automatic way to update code without involving the user (yet). On one side, you won't ever accidentally break your stuff by updating something else, but you also won't benefit from automatic security patches. To fix this shortcoming, it might be feasible to build IDE-plugins that check and update these pins in the code or check some database for security patches every time an auto-installed package is imported - please contact us if you have ideas or better yet, code ;-)
+
 
 ## Beware of Magic!
 Inspired by the q package/module, use() also is a callable class that replaces the module on import, so that only 'import use' is needed to be able to call use() on things, which might confuse users and libraries that operate on modules themselves.
