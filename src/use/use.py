@@ -394,7 +394,7 @@ class Use:
         self.config = configparser.ConfigParser()
         with open(self.home / "config.ini") as file:
             self.config.read(file)
-        
+
         try:
             with open(self.home / "registry.json") as file:
                 if len(file.read()) == 0:
@@ -402,6 +402,10 @@ class Use:
                 self._registry.update(json.load(file))
         except ValueError:
             pass
+
+    def persist_registry(self):
+        with open(self.home / "registry.json", "w") as file:
+            json.dump(self._registry, file, indent=2)
 
     def set_mod(self, *, name, mod, spec, path, frame):
         """Helper to get the order right."""
@@ -733,8 +737,15 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 else: # PEBKAC
                     try:
                         data = response.json()
-                        version = data["info"]["version"]
-                        hash_value = data["releases"][version][0]["digests"][hash_algo.name]
+                        import sysconfig
+                        march = sysconfig.get_config_var("MULTIARCH")
+                        arch = march.split("-")[0]
+                        version, dists = list(data["releases"].items())[-1]
+                        f_dists = list(filter(
+                          lambda i: arch in i["filename"], dists))
+                        f_dists += dists
+                        release = f_dists[0]
+                        hash_value = release["digests"][hash_algo.name]
                     except KeyError:  # json issues
                         raise RuntimeWarning("Please specify version and hash for auto-installation. Sadly something went wrong with the JSON PyPI provided, otherwise we could've provided a suggestion.")
                     raise RuntimeWarning(f"""Please specify version and hash for auto-installation of '{package_name}'. 
@@ -764,6 +775,19 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.")
             # we've got a complete JSON with a matching entry, let's download
             print("Downloading", url, "...")
+            if package_name not in self._registry:
+                self._registry[package_name] = {}
+            if version not in self._registry:
+                self._registry[package_name][version] = {}
+            # Update package version metadata
+            self._registry[package_name][version].update({
+              "package": package_name,
+              "version": version,
+              "url": url,
+              "filename": filename,
+              "hash": that_hash
+            })
+            self.persist_registry()
             download_response = requests.get(url, allow_redirects=True)
             path = self.home / "packages" / filename
             this_hash = hash_algo.value(download_response.content).hexdigest()
