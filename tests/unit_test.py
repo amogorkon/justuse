@@ -98,9 +98,8 @@ def test_classical_install(reuse):
 def test_autoinstall_PEBKAC(reuse):
   # auto-install requested, but no version or hash_value specified
   with warnings.catch_warnings(record=True) as w:
-    warnings.simplefilter("always")
-    reuse("pytest", auto_install=True)
-    assert issubclass(w[-1].category, use.AmbiguityWarning)
+    with pytest.raises(RuntimeWarning):
+      reuse("pytest", auto_install=True)
   
   # forgot hash_value
   with pytest.raises(RuntimeWarning):

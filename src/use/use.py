@@ -70,6 +70,7 @@ import threading
 import time
 import traceback
 import zipfile
+import zipimport
 from collections import defaultdict, namedtuple
 from enum import Enum
 from functools import singledispatch, update_wrapper
@@ -762,9 +763,12 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             if exc:
                 return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.")
             # we've got a complete JSON with a matching entry, let's download
-            print("Downloading", package_name, "...")
+            print("Downloading", url, "...")
             download_response = requests.get(url, allow_redirects=True)
             path = self.home / "packages" / filename
+            this_hash = hash_algo.value(download_response.content).hexdigest()
+            if this_hash != hash_value:
+                return fail_or_default(default, Use.UnexpectedHash, f"The downloaded content of package {package_name} has a different hash than expected, aborting.")
             try:
                 with open(path, "wb") as file:
                     file.write(download_response.content)
@@ -774,17 +778,27 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             if exc:
                 return fail_or_default(default, Use.AutoInstallationError, exc)
             
-            print("Extracting...")
-            folder = (path.parent/path.stem)
-            folder.mkdir(mode=0o755, exist_ok=True)
-            with zipfile.ZipFile(path, 'r') as file:
-                file.extractall(folder
-                                )
-            original_cwd = Path.cwd()
-            os.chdir(folder)
-            mod = importlib.import_module(module_name)
-            os.chdir(original_cwd)
+            
+            # trying to import directly from zip
 
+            importer = zipimport.zipimporter(path)
+            try:
+                mod = importer.load_module(module_name)
+            except:
+                exc = traceback.format()
+            if exc:    
+                return fail_or_default(default, Use.AutoInstallationError, exc)
+                folder = (path.parent/path.stem)
+                folder.mkdir(mode=0o755, exist_ok=True)
+                print("Extracting to", folder, "...")
+                with zipfile.ZipFile(path, 'r') as file:
+                    file.extractall(folder)
+                print("Extracted.")
+                original_cwd = Path.cwd()
+                os.chdir(folder)
+                print(Path.cwd())
+                mod = importlib.import_module(module_name)
+                os.chdir(original_cwd)
             for (check, pattern), decorator in aspectize.items():
                 apply_aspect(mod, check, pattern, decorator)
 
