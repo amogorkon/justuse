@@ -19,10 +19,11 @@ Solid:
 * decorate all specified callables (functions, methods, classes, ..) on import via pattern matching, aspect-orientation made easy
 * return a given default if an exception happened during an import, simplifying optional dependencies
 * safely hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
+* safely auto-install version-tagged pure python packages from PyPI (packages with C-extensions like numpy don't work yet)
+* have multiple versions of the same package installed and loaded in the same program without conflicts
 
 In flux:
-* safely auto-install version-tagged packages from PyPI
-* have multiple versions of the same package installed and loaded in the same program without conflicts
+* auto-install packages with C-extensions and other precompiled stuff
 * pull packages from a P2P network instead of PyPI directly
 * provide a visual representation of the internal dependency graph
 * module-level variable guards aka "module-properties"
