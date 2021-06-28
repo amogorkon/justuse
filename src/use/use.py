@@ -71,9 +71,12 @@ import time
 import traceback
 import zipfile
 import zipimport
-from collections import defaultdict, namedtuple
+
+from collections import defaultdict
+from collections import namedtuple
 from enum import Enum
-from functools import singledispatch, update_wrapper
+from functools import singledispatch
+from functools import update_wrapper
 from importlib import metadata
 from pathlib import Path
 from types import ModuleType
@@ -81,10 +84,11 @@ from warnings import warn
 
 import mmh3
 import requests
+
 from packaging.version import parse
 from yarl import URL
 
-__version__ = "0.2.7"
+__version__ = "0.3.0"
 
 _reloaders = {}  # ProxyModule:Reloader
 _aspects = {} 
