@@ -649,7 +649,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         from importlib.machinery import EXTENSION_SUFFIXES as SO_EXTS
         from os.path import join, split, exists, islink
         from operator import attrgetter
-        entries = [*map(attrgetter("filename"), zip.filelist)]
+        entries = zip.getnames()
         solibs = [*filter(
           lambda f: any(map(f.endswith, SO_EXTS)), entries)]
         if not solibs: return
@@ -858,14 +858,10 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             try:
                 importer = zipimport.zipimporter(path)
                 mod = importer.load_module(module_name)
-            except zipimport.ZipImportError as zie:
-                if zie.args != (f"not a Zip file: '{path}'",):
-                    raise
-            except BaseException as e:
-                if hasattr(traceback, "format"):
-                    exc = traceback.format()
-                else:
-                    exc = e
+            except zipimport.ZipImportError:
+                pass
+            except:
+                exc = traceback.format_exc()
             folder = (path.parent/path.stem)
             rdists = self._registry["distributions"]
             if package_name not in rdists:
@@ -901,7 +897,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             with archive as file:
               with fileobj as _:
                 file.extractall(folder)
-            self.create_solib_links(file, folder)
+                self.create_solib_links(file, folder)
             print("Extracted.")
             original_cwd = Path.cwd()
             os.chdir(folder)
