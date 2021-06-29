@@ -399,14 +399,35 @@ class Use:
             self.config.read(file)
 
     def load_registry(self, registry=None):
+        if registry is None:
+            registry = getattr(self, "_registry", None)
+        registry_version = "0.0.2"
         registry = registry or {}
-
         try:
             with open(self.home / "registry.json") as file:
                 registry.update(json.load(file))
         except json.JSONDecodeError as jde:
             if jde.pos != 0:
               raise
+        if "version" in registry \
+            and registry["version"] < registry_version:
+            print(f"Registry is being upgraded from version "
+                  f"{registry.get('version',0)} to version"
+                  f"{registry_version}")
+            registry["version"] = registry_version
+        elif registry and "version" not in registry:
+            print(f"Registry is being upgraded from version 0")
+            new_registry = {
+              "version": registry_version,
+              "distributions": (dists := defaultdict(lambda: list()))
+            }
+            dists.update(registry)
+            registry = new_registry
+        if not registry:
+          registry.update({
+            "version": registry_version,
+            "distributions": defaultdict(lambda: list())
+          })
         return registry
 
     def persist_registry(self):
@@ -799,12 +820,13 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.")
             # we've got a complete JSON with a matching entry, let's download
             print("Downloading", url, "...")
-            if package_name not in self._registry:
-                self._registry[package_name] = {}
-            if version not in self._registry:
-                self._registry[package_name][version] = {}
+            rdists = self._registry["distributions"]
+            if package_name not in rdists:
+                rdists[package_name] = {}
+            if version not in rdists[package_name]:
+                rdists[package_name][version] = {}
             # Update package version metadata
-            self._registry[package_name][version].update({
+            rdists[package_name][version].update({
               "package": package_name,
               "version": version,
               "url": url,
@@ -832,8 +854,11 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             importer = zipimport.zipimporter(path)
             try:
                 mod = importer.load_module(module_name)
-            except:
-                exc = traceback.format()
+            except BaseException as e:
+                if hasattr(traceback, "format"):
+                    exc = traceback.format()
+                else:
+                    exc = e
             if exc:    
                 return fail_or_default(default, Use.AutoInstallationError, exc)
                 folder = (path.parent/path.stem)
