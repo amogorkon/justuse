@@ -57,6 +57,7 @@ import asyncio
 import atexit
 import codecs
 import configparser
+import gzip
 import hashlib
 import importlib
 import inspect
@@ -66,6 +67,7 @@ import os
 import re
 import signal
 import sys
+import tarfile
 import threading
 import time
 import traceback
@@ -838,20 +840,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.")
             # we've got a complete JSON with a matching entry, let's download
             print("Downloading", url, "...")
-            rdists = self._registry["distributions"]
-            if package_name not in rdists:
-                rdists[package_name] = {}
-            if version not in rdists[package_name]:
-                rdists[package_name][version] = {}
-            # Update package version metadata
-            rdists[package_name][version].update({
-              "package": package_name,
-              "version": version,
-              "url": url,
-              "filename": filename,
-              "hash": that_hash
-            })
-            self.persist_registry()
             download_response = requests.get(url, allow_redirects=True)
             path = self.home / "packages" / filename
             this_hash = hash_algo.value(download_response.content).hexdigest()
@@ -866,30 +854,66 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             if exc:
                 return fail_or_default(default, Use.AutoInstallationError, exc)
             
-            
             # trying to import directly from zip
-
-            importer = zipimport.zipimporter(path)
             try:
+                importer = zipimport.zipimporter(path)
                 mod = importer.load_module(module_name)
+            except zipimport.ZipImportError as zie:
+                if zie.args != (f"not a Zip file: '{path}'",):
+                    raise
             except BaseException as e:
                 if hasattr(traceback, "format"):
                     exc = traceback.format()
                 else:
                     exc = e
+            folder = (path.parent/path.stem)
+            rdists = self._registry["distributions"]
+            if package_name not in rdists:
+                rdists[package_name] = {}
+            if version not in rdists[package_name]:
+                rdists[package_name][version] = {}
+            # Update package version metadata
+            rdist_info = rdists[package_name][version]
+            rdist_info.update({
+              "package": package_name,
+              "version": version,
+              "url": url,
+              "folder": folder.absolute().as_uri(),
+              "filename": filename,
+              "hash": that_hash
+            })
+            self.persist_registry()
             if exc:    
                 return fail_or_default(default, Use.AutoInstallationError, exc)
-                folder = (path.parent/path.stem)
-                folder.mkdir(mode=0o755, exist_ok=True)
-                print("Extracting to", folder, "...")
-                with zipfile.ZipFile(path, 'r') as file:
-                    file.extractall(folder)
-                print("Extracted.")
-                original_cwd = Path.cwd()
-                os.chdir(folder)
-                print(Path.cwd())
-                mod = importlib.import_module(module_name)
-                os.chdir(original_cwd)
+            folder.mkdir(mode=0o755, exist_ok=True)
+            print("Extracting to", folder, "...")
+
+            fileobj = archive = None
+            if filename.endswith(".whl") or \
+               filename.endswith(".zip"):
+                fileobj = open("/dev/null", "r")
+                archive = zipfile.ZipFile(path, "r")
+            else:
+                fileobj = (gzip.open \
+                   if filename.endswith(".gz") else open)(path, "r")
+                archive = tarfile.TarFile(fileobj=fileobj, mode="r")
+            
+            with archive as file:
+              with fileobj as _:
+                file.extractall(folder)
+            self.create_solib_links(file, folder)
+            print("Extracted.")
+            original_cwd = Path.cwd()
+            os.chdir(folder)
+            print(Path.cwd())
+            mod = importlib.import_module(module_name)
+            for key in (
+                "__name__", "__package__", "__path__",
+                "__file__", "__version__", "__author__"):
+              if not hasattr(mod, key): continue
+              rdist_info[key] = getattr(mod, key)
+            self.persist_registry()
+            os.chdir(original_cwd)
             for (check, pattern), decorator in aspectize.items():
                 apply_aspect(mod, check, pattern, decorator)
 
