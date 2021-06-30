@@ -67,6 +67,7 @@ import os
 import re
 import signal
 import sys
+import sysconfig
 import tarfile
 import threading
 import time
@@ -410,25 +411,25 @@ class Use:
                 registry.update(json.load(file))
         except json.JSONDecodeError as jde:
             if jde.pos != 0:
-              raise
+                raise
         if "version" in registry \
             and registry["version"] < registry_version:
             print(f"Registry is being upgraded from version "
-                  f"{registry.get('version',0)} to version"
-                  f"{registry_version}")
+                    f"{registry.get('version',0)} to version"
+                    f"{registry_version}")
             registry["version"] = registry_version
         elif registry and "version" not in registry:
             print(f"Registry is being upgraded from version 0")
             new_registry = {
-              "version": registry_version,
-              "distributions": (dists := defaultdict(lambda: list()))
+                "version": registry_version,
+                "distributions": (dists := defaultdict(lambda: dict()))
             }
             dists.update(registry)
             registry = new_registry
         if not registry:
           registry.update({
             "version": registry_version,
-            "distributions": defaultdict(lambda: list())
+            "distributions": defaultdict(lambda: dict())
           })
         return registry
 
@@ -627,25 +628,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         self.set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=inspect.getframeinfo(inspect.currentframe()))
         return mod
 
-    def create_solib_links(self, zip: zipfile.ZipFile, folder: str):
-        from importlib.machinery import EXTENSION_SUFFIXES as SO_EXTS
-        from os.path import join, split, exists, islink
-        from operator import attrgetter
-        entries = zip.getnames() if hasattr(zip, "getnames") \
-             else zip.namelist()
-        solibs = [*filter(
-          lambda f: any(map(f.endswith, SO_EXTS)), entries)]
-        if not solibs: return
-        # Set up links from 'xyz.cpython-3#-<...>.so' to 'xyz.so'
-        print(f"Creating {len(solibs)} symlinks for extensions...")
-        for solib in solibs:
-          sofile = join(folder, solib)
-          dir, fn = split(sofile)
-          name, so_ext = (fn.split(".cpython-")[0], SO_EXTS[-1])
-          link, target = (join(dir, f"{name}{so_ext}"), fn)
-          if exists(link): os.unlink(link)
-          os.symlink(target, link)          
-
     @__call__.register(str)
     def _use_str(
                 self,
@@ -769,6 +751,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             if not module_name:
                 module_name = package_name
             
+            # PEBKAC
             if target_version and not hash_value:
                 raise RuntimeWarning(f"Failed to auto-install '{package_name}' because hash_value is missing.")
             elif not target_version and hash_value:
@@ -782,15 +765,14 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 elif response.status_code != 200:
                     # possibly server problems
                     return fail_or_default(default, Use.AutoInstallationError, f"Tried to look up '{package_name}' but got a {response.status_code} from PyPI.")
-                else: # PEBKAC
+                else:
                     try:
                         data = response.json()
-                        import sysconfig
                         march = sysconfig.get_config_var("MULTIARCH")
                         arch = march.split("-")[0]
                         version, dists = list(data["releases"].items())[-1]
                         f_dists = list(filter(
-                          lambda i: arch in i["filename"], dists))
+                            lambda i: arch in i["filename"], dists))
                         f_dists += dists
                         release = f_dists[0]
                         hash_value = release["digests"][hash_algo.name]
@@ -801,101 +783,135 @@ To get some valuable insight on the health of this package, please check out htt
 If you want to auto-install the latest version: use("{name}", version="{version}", hash_value="{hash_value}", auto_install=True)
 """)
 
-            response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
-            if response.status_code != 200:
-                return fail_or_default(default, ImportError, f"Tried to auto-install '{package_name}' {target_version} but failed with {response} while trying to pull info from PyPI.")
-            try:
-                if not response.json()["urls"]:
-                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because no valid URLs to download could be found.")
-                for entry in response.json()["urls"]:
-                    url = entry["url"]
-                    that_hash = entry["digests"].get(hash_algo.name)
-                    filename = entry["filename"]
-                    if entry["yanked"]:
-                        return fail_or_default(default, Use.AutoInstallationError, f"Auto-installation of  '{package_name}' {target_version} failed because the release was yanked from PyPI.")
-                    if that_hash == hash_value:
-                        break
-                else:
-                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because none of the available hashes match the expected hash.")
-            except KeyError: # json issues
-                exc = traceback.format_exc()
-            if exc:
-                return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.")
-            # we've got a complete JSON with a matching entry, let's download
-            print("Downloading", url, "...")
-            download_response = requests.get(url, allow_redirects=True)
-            path = self.home / "packages" / filename
-            this_hash = hash_algo.value(download_response.content).hexdigest()
-            if this_hash != hash_value:
-                return fail_or_default(default, Use.UnexpectedHash, f"The downloaded content of package {package_name} has a different hash than expected, aborting.")
-            try:
-                with open(path, "wb") as file:
-                    file.write(download_response.content)
-                print("Downloaded", path)
-            except:
-                exc = traceback.format_exc()
-            if exc:
-                return fail_or_default(default, Use.AutoInstallationError, exc)
+            # all clear, let's check if we pulled it before
+            entry = self._registry["distributions"].get(package_name).get(version)
+            if entry:
+                # someone messed with the packages without updating the registry
+                if not (self.home/ "packages" / entry["filename"]).exists():
+                    del self._registry["distributions"][package_name][version]
+                    entry = None
+            if entry:
+                path = self.home / "distributions" / entry["filename"]
+            
+            else:
+                response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
+                if response.status_code != 200:
+                    return fail_or_default(default, ImportError, f"Tried to auto-install '{package_name}' {target_version} but failed with {response} while trying to pull info from PyPI.")
+                try:
+                    if not response.json()["urls"]:
+                        return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because no valid URLs to download could be found.")
+                    for entry in response.json()["urls"]:
+                        url = entry["url"]
+                        that_hash = entry["digests"].get(hash_algo.name)
+                        filename:str = entry["filename"]
+                        if entry["yanked"]:
+                            return fail_or_default(default, Use.AutoInstallationError, f"Auto-installation of  '{package_name}' {target_version} failed because the release was yanked from PyPI.")
+                        if that_hash == hash_value:
+                            break
+                    else:
+                        return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because none of the available hashes match the expected hash.")
+                except KeyError: # json issues
+                    exc = traceback.format_exc()
+                if exc:
+                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.")
+                # we've got a complete JSON with a matching entry, let's download
+                print("Downloading", url, "...")
+                download_response = requests.get(url, allow_redirects=True)
+                path = self.home / "packages" / filename
+                this_hash:str = hash_algo.value(download_response.content).hexdigest()
+                if this_hash != hash_value:
+                    return fail_or_default(default, Use.UnexpectedHash, f"The downloaded content of package {package_name} has a different hash than expected, aborting.")
+                try:
+                    with open(path, "wb") as file:
+                        file.write(download_response.content)
+                    print("Downloaded", path)
+                except:
+                    exc = traceback.format_exc()
+                if exc:
+                    return fail_or_default(default, Use.AutoInstallationError, exc)
             
             # trying to import directly from zip
             try:
                 importer = zipimport.zipimporter(path)
                 mod = importer.load_module(module_name)
-            except zipimport.ZipImportError:
-                pass
+                print("Direct zipimport of", name, "successful.")
             except:
-                exc = traceback.format_exc()
-            folder = (path.parent/path.stem)
-            rdists = self._registry["distributions"]
-            if package_name not in rdists:
-                rdists[package_name] = {}
-            if version not in rdists[package_name]:
-                rdists[package_name][version] = {}
-            # Update package version metadata
-            rdist_info = rdists[package_name][version]
-            rdist_info.update({
-              "package": package_name,
-              "version": version,
-              "url": url,
-              "folder": folder.absolute().as_uri(),
-              "filename": filename,
-              "hash": that_hash
-            })
-            self.persist_registry()
-            if exc:    
-                return fail_or_default(default, Use.AutoInstallationError, exc)
-            folder.mkdir(mode=0o755, exist_ok=True)
-            print("Extracting to", folder, "...")
-
-            fileobj = archive = None
-            if filename.endswith(".whl") or \
-               filename.endswith(".zip"):
-                fileobj = open("/dev/null", "r")
-                archive = zipfile.ZipFile(path, "r")
-            else:
-                fileobj = (gzip.open \
-                   if filename.endswith(".gz") else open)(path, "r")
-                archive = tarfile.TarFile(fileobj=fileobj, mode="r")
+                print("Direct zipimport failed with", traceback.format_exc(), "attempting to extract and load manually...")
             
-            with archive as file:
-              with fileobj as _:
-                file.extractall(folder)
-                self.create_solib_links(file, folder)
-            print("Extracted.")
-            original_cwd = Path.cwd()
-            os.chdir(folder)
-            print(Path.cwd())
-            mod = importlib.import_module(module_name)
-            for key in (
-                "__name__", "__package__", "__path__",
-                "__file__", "__version__", "__author__"):
-              if not hasattr(mod, key): continue
-              rdist_info[key] = getattr(mod, key)
-            self.persist_registry()
-            os.chdir(original_cwd)
-            for (check, pattern), decorator in aspectize.items():
-                apply_aspect(mod, check, pattern, decorator)
+            def create_solib_links(zip: zipfile.ZipFile, folder: Path):
+                SO_EXTS = importlib.machinery.EXTENSION_SUFFIXES
+                from os.path import exists, join, split
+                entries = zip.getnames() if hasattr(zip, "getnames") \
+                    else zip.namelist()
+                solibs = [*filter(
+                lambda f: any(map(f.endswith, SO_EXTS)), entries)]
+                if not solibs: return
+                # Set up links from 'xyz.cpython-3#-<...>.so' to 'xyz.so'
+                print(f"Creating {len(solibs)} symlinks for extensions...")
+                for solib in solibs:
+                    sofile = join(folder, solib)
+                    dir, fn = split(sofile)
+                    name, so_ext = (fn.split(".cpython-")[0], SO_EXTS[-1])
+                    link, target = (join(dir, f"{name}{so_ext}"), fn)
+                    if exists(link): os.unlink(link)
+                    os.symlink(target, link)
+            
+            if not mod:
+                folder = (path.parent/path.stem)
+                rdists = self._registry["distributions"]
+                if package_name not in rdists:
+                    rdists[package_name] = {}
+                if version not in rdists[package_name]:
+                    rdists[package_name][version] = {}
+                # Update package version metadata
+                rdist_info = rdists[package_name][version]
+                rdist_info.update({
+                    "package": package_name,
+                    "version": version,
+                    "url": url,
+                    "folder": folder.absolute().as_uri(),
+                    "filename": filename,
+                    "hash": that_hash
+                })
+                self.persist_registry()
+                if exc:    
+                    return fail_or_default(default, Use.AutoInstallationError, exc)
+                folder.mkdir(mode=0o755, exist_ok=True)
+                print("Extracting to", folder, "...")
 
+                fileobj = archive = None
+                if filename.endswith(".whl") or \
+                filename.endswith(".zip"):
+                    fileobj = open("/dev/null", "r")
+                    archive = zipfile.ZipFile(path, "r")
+                else:
+                    fileobj = (gzip.open \
+                    if filename.endswith(".gz") else open)(path, "r")
+                    archive = tarfile.TarFile(fileobj=fileobj, mode="r")
+                
+                with archive as file:
+                    with fileobj as _:
+                        file.extractall(folder)
+                        create_solib_links(file, folder)
+                print("Extracted.")
+                original_cwd = Path.cwd()
+                os.chdir(folder)
+                mod = importlib.import_module(module_name)
+                for key in (
+                            "__name__", 
+                            "__package__", 
+                            "__path__",
+                            "__file__", 
+                            "__version__", 
+                            "__author__"
+                            ):
+                    if not hasattr(mod, key): continue
+                    rdist_info[key] = getattr(mod, key)
+                os.chdir(original_cwd)
+            
+        self.persist_registry()
+        for (check, pattern), decorator in aspectize.items():
+            apply_aspect(mod, check, pattern, decorator)
         self.set_mod(name=name, mod=mod, path=None, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
         return mod
 

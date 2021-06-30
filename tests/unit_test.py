@@ -97,13 +97,12 @@ def test_classical_install(reuse):
   
 def test_autoinstall_PEBKAC(reuse):
   # auto-install requested, but no version or hash_value specified
-  with warnings.catch_warnings(record=True) as w:
-    with pytest.raises(RuntimeWarning):
-      reuse("pytest", auto_install=True)
+  with pytest.raises(RuntimeWarning):
+    reuse("pytest", auto_install=True)
   
   # forgot hash_value
   with pytest.raises(RuntimeWarning):
-    reuse("pytest", auto_install=True, version=-1)
+    reuse("pytest", auto_install=True, version="-1")
   
   # forgot version
   with pytest.raises(RuntimeWarning):
@@ -124,9 +123,10 @@ def test_version_warning(reuse):
     reuse("pytest", version=-1)
     assert issubclass(w[-1].category, use.VersionWarning)
 
-def test_download_package(reuse):
+def test_pure_python_package(reuse):
   # https://pypi.org/project/example-pypi-package/
+  file = use.Path.home() / f".justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl"
+  file.unlink(missing_ok=True)
   test = reuse("example-pypi-package.examplepy", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", auto_install=True)
   assert str(test.Number(2)) == "2"
-  file = use.Path.home() / f".justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl"
   file.unlink()
