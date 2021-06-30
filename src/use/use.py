@@ -81,6 +81,7 @@ from enum import Enum
 from functools import singledispatch
 from functools import update_wrapper
 from importlib import metadata
+from importlib.machinery import EXTENSION_SUFFIXES
 from pathlib import Path
 from types import ModuleType
 from warnings import warn
@@ -768,8 +769,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 else:
                     try:
                         data = response.json()
-                        march = sysconfig.get_config_var("MULTIARCH")
-                        arch = march.split("-")[0]
+                        arch = EXTENSION_SUFFIXES[0].split("-")[0]
                         version, dists = list(data["releases"].items())[-1]
                         f_dists = list(filter(
                             lambda i: arch in i["filename"], dists))
@@ -784,15 +784,18 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 """)
 
             # all clear, let's check if we pulled it before
-            entry = self._registry["distributions"].get(package_name).get(version)
+            entry = self._registry["distributions"].get(package_name, {}).get(version, {})
             if entry:
                 # someone messed with the packages without updating the registry
                 if not (self.home/ "packages" / entry["filename"]).exists():
                     del self._registry["distributions"][package_name][version]
                     entry = None
+            url:str = None
+            path:str = None
+            filename:str = None
+            that_hash:str = None
             if entry:
                 path = self.home / "distributions" / entry["filename"]
-            
             else:
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
                 if response.status_code != 200:
@@ -869,6 +872,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     "package": package_name,
                     "version": version,
                     "url": url,
+                    "path": str(path) if path else None,
                     "folder": folder.absolute().as_uri(),
                     "filename": filename,
                     "hash": that_hash
@@ -888,7 +892,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     fileobj = (gzip.open \
                     if filename.endswith(".gz") else open)(path, "r")
                     archive = tarfile.TarFile(fileobj=fileobj, mode="r")
-                
+
                 with archive as file:
                     with fileobj as _:
                         file.extractall(folder)
