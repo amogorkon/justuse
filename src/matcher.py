@@ -21,6 +21,8 @@ class ArtifactMatcher(object):
         if not py_ver_num:
           return (0, 0)
         py_major = int(py_ver_num[0],10)
+        if len(py_ver_num) == 1:
+          return (py_major, sys.version_info[1])
         py_minor = int(py_ver_num[1],10)
         return (py_major, py_minor)
     
