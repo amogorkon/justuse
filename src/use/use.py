@@ -57,6 +57,7 @@ import asyncio
 import atexit
 import codecs
 import configparser
+import contextlib
 import gzip
 import hashlib
 import importlib
@@ -769,12 +770,10 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 else:
                     try:
                         data = response.json()
-                        arch = EXTENSION_SUFFIXES[0].split("-")[0]
-                        version, dists = list(data["releases"].items())[-1]
-                        f_dists = list(filter(
-                            lambda i: arch in i["filename"], dists))
-                        f_dists += dists
-                        release = f_dists[0]
+                        import matcher
+                        ma = matcher.ArtifactMatcher(data["releases"])
+                        release = ma.best()
+                        version = release["version"]
                         hash_value = release["digests"][hash_algo.name]
                     except KeyError:  # json issues
                         raise RuntimeWarning("Please specify version and hash for auto-installation. Sadly something went wrong with the JSON PyPI provided, otherwise we could've provided a suggestion.")
@@ -785,18 +784,18 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 
             # all clear, let's check if we pulled it before
             entry = self._registry["distributions"].get(package_name, {}).get(version, {})
-            if entry:
+            path = None
+            if entry and entry["path"]:
+                path = Path(entry["path"])
+            if entry and path:
                 # someone messed with the packages without updating the registry
-                if not (self.home/ "packages" / entry["filename"]).exists():
+                if not path.exists():
                     del self._registry["distributions"][package_name][version]
+                    path = None
                     entry = None
             url:str = None
-            path:str = None
-            filename:str = None
             that_hash:str = None
-            if entry:
-                path = self.home / "distributions" / entry["filename"]
-            else:
+            if not path:
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
                 if response.status_code != 200:
                     return fail_or_default(default, ImportError, f"Tried to auto-install '{package_name}' {target_version} but failed with {response} while trying to pull info from PyPI.")
@@ -806,7 +805,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     for entry in response.json()["urls"]:
                         url = entry["url"]
                         that_hash = entry["digests"].get(hash_algo.name)
-                        filename:str = entry["filename"]
                         if entry["yanked"]:
                             return fail_or_default(default, Use.AutoInstallationError, f"Auto-installation of  '{package_name}' {target_version} failed because the release was yanked from PyPI.")
                         if that_hash == hash_value:
@@ -820,7 +818,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 # we've got a complete JSON with a matching entry, let's download
                 print("Downloading", url, "...")
                 download_response = requests.get(url, allow_redirects=True)
-                path = self.home / "packages" / filename
+                path = self.home / "packages" / URL(url).name
                 this_hash:str = hash_algo.value(download_response.content).hexdigest()
                 if this_hash != hash_value:
                     return fail_or_default(default, Use.UnexpectedHash, f"The downloaded content of package {package_name} has a different hash than expected, aborting.")
@@ -859,40 +857,40 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     if exists(link): os.unlink(link)
                     os.symlink(target, link)
             
+            folder = (path.parent/path.stem)
+            rdists = self._registry["distributions"]
+            if package_name not in rdists:
+                rdists[package_name] = {}
+            if version not in rdists[package_name]:
+                rdists[package_name][version] = {}
+            # Update package version metadata
+            rdist_info = rdists[package_name][version]
+            rdist_info.update({
+                "package": package_name,
+                "version": version,
+                "url": url,
+                "path": str(path) if path else None,
+                "folder": folder.absolute().as_uri(),
+                "filename": path.name,
+                "hash": that_hash
+            })
+            self.persist_registry()
+            
             if not mod:
-                folder = (path.parent/path.stem)
-                rdists = self._registry["distributions"]
-                if package_name not in rdists:
-                    rdists[package_name] = {}
-                if version not in rdists[package_name]:
-                    rdists[package_name][version] = {}
-                # Update package version metadata
-                rdist_info = rdists[package_name][version]
-                rdist_info.update({
-                    "package": package_name,
-                    "version": version,
-                    "url": url,
-                    "path": str(path) if path else None,
-                    "folder": folder.absolute().as_uri(),
-                    "filename": filename,
-                    "hash": that_hash
-                })
-                self.persist_registry()
                 if exc:    
                     return fail_or_default(default, Use.AutoInstallationError, exc)
                 folder.mkdir(mode=0o755, exist_ok=True)
                 print("Extracting to", folder, "...")
 
                 fileobj = archive = None
-                if filename.endswith(".whl") or \
-                filename.endswith(".zip"):
-                    fileobj = open("/dev/null", "r")
+                if path.name.endswith(".whl") or \
+                path.name.endswith(".zip"):
+                    import tempfile
+                    fileobj = open(tempfile.mktemp(), "w")
                     archive = zipfile.ZipFile(path, "r")
                 else:
-                    fileobj = (gzip.open \
-                    if filename.endswith(".gz") else open)(path, "r")
+                    fileobj = (gzip.open if path.name.endswith(".gz") else open)(path, "r")
                     archive = tarfile.TarFile(fileobj=fileobj, mode="r")
-
                 with archive as file:
                     with fileobj as _:
                         file.extractall(folder)
