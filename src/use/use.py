@@ -92,7 +92,7 @@ import requests
 from packaging.version import parse
 from yarl import URL
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 _reloaders = {}  # ProxyModule:Reloader
 _aspects = {} 
