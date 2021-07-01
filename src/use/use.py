@@ -769,12 +769,10 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 else:
                     try:
                         data = response.json()
-                        arch = EXTENSION_SUFFIXES[0].split("-")[0]
-                        version, dists = list(data["releases"].items())[-1]
-                        f_dists = list(filter(
-                            lambda i: arch in i["filename"], dists))
-                        f_dists += dists
-                        release = f_dists[0]
+                        import matcher
+                        ma = matcher.ArtifactMatcher(data["releases"])
+                        release = ma.best()
+                        version = release["version"]
                         hash_value = release["digests"][hash_algo.name]
                     except KeyError:  # json issues
                         raise RuntimeWarning("Please specify version and hash for auto-installation. Sadly something went wrong with the JSON PyPI provided, otherwise we could've provided a suggestion.")
