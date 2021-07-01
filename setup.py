@@ -15,14 +15,14 @@ import use
 
 meta={
     "name":"justuse",
-    "description":"A self-documenting, functional way to import modules in Python with advanced features.",
+    "description":"A beautiful, simple and explicit way to import modules in Python with advanced features.",
     "license":"MIT",
     "url":"https://github.com/amogorkon/justuse",
     "version": use.__version__,
     "author":"Anselm Kiefner",
     "author_email":"justuse-pypi@anselm.kiefner.de",
     "python_requires":">=3.8",
-    "keywords":["import","reload"],
+    "keywords":["installing", "packages", "hot reload", "auto install", "aspect oriented", "version checking", "functional"],
     "classifiers":[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
