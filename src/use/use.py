@@ -69,6 +69,7 @@ import re
 import signal
 import sys
 import tarfile
+import tempfile
 import threading
 import time
 import traceback
@@ -853,7 +854,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 
             # all clear, let's check if we pulled it before
             entry = self._registry["distributions"].get(package_name, {}).get(version, {})
-            path = None
+            path:Path = None
             if entry and entry["path"]:
                 path = Path(entry["path"])
             if entry and path:
@@ -908,25 +909,22 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             except:
                 print("Direct zipimport failed with", traceback.format_exc(), "attempting to extract and load manually...")
             
-            def create_solib_links(zip: zipfile.ZipFile, folder: Path):
-                SO_EXTS = importlib.machinery.EXTENSION_SUFFIXES
-                from os.path import exists, join, split
-                entries = zip.getnames() if hasattr(zip, "getnames") \
-                    else zip.namelist()
-                solibs = [*filter(
-                lambda f: any(map(f.endswith, SO_EXTS)), entries)]
+            def create_solib_links(archive: zipfile.ZipFile, folder: Path):
+                # EXTENSION_SUFFIXES  == ['.cpython-38-x86_64-linux-gnu.so', '.abi3.so', '.so'] or ['.cp39-win_amd64.pyd', '.pyd']
+                from os.path import split  # TODO replace it with pathlib
+                entries = archive.getnames() if hasattr(archive, "getnames") \
+                    else archive.namelist()
+                solibs = [*filter(lambda f: any(map(f.endswith, EXTENSION_SUFFIXES)), entries)]
                 if not solibs: return
                 # Set up links from 'xyz.cpython-3#-<...>.so' to 'xyz.so'
                 print(f"Creating {len(solibs)} symlinks for extensions...")
                 for solib in solibs:
-                    sofile = join(folder, solib)
-                    dir, fn = split(sofile)
-                    name, so_ext = (fn.split(".cpython-")[0], SO_EXTS[-1])
-                    link, target = (join(dir, f"{name}{so_ext}"), fn)
-                    if exists(link): os.unlink(link)
-                    os.symlink(target, link)
+                    sofile = folder / solib
+                    link, target = sofile.parent / f"{sofile.name.split('.python-')[0]}{EXTENSION_SUFFIXES[-1]}", sofile.name
+                    link.unlink(missing_ok=True)
+                    target.symlink_to(link)
             
-            folder = (path.parent/path.stem)
+            folder = path.parent / path.stem
             rdists = self._registry["distributions"]
             if package_name not in rdists:
                 rdists[package_name] = {}
@@ -952,13 +950,11 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 print("Extracting to", folder, "...")
 
                 fileobj = archive = None
-                if path.name.endswith(".whl") or \
-                path.name.endswith(".zip"):
-                    import tempfile
-                    fileobj = open(tempfile.mktemp(), "w")
+                if path.suffix in (".whl", ".zip"):
+                    fileobj = open(tempfile.mktemp(), "w")  # TODO mktemp is deprecated, use NamedTemporaryFile instead, for instance 
                     archive = zipfile.ZipFile(path, "r")
                 else:
-                    fileobj = (gzip.open if path.name.endswith(".gz") else open)(path, "r")
+                    fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
                     archive = tarfile.TarFile(fileobj=fileobj, mode="r")
                 with archive as file:
                     with fileobj as _:
