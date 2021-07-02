@@ -57,7 +57,7 @@ import asyncio
 import atexit
 import codecs
 import configparser
-import contextlib
+import functools
 import gzip
 import hashlib
 import importlib
@@ -68,19 +68,15 @@ import os
 import re
 import signal
 import sys
-import sysconfig
 import tarfile
 import threading
 import time
 import traceback
 import zipfile
 import zipimport
-
-from collections import defaultdict
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from enum import Enum
-from functools import singledispatch
-from functools import update_wrapper
+from functools import singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from pathlib import Path
@@ -89,7 +85,6 @@ from warnings import warn
 
 import mmh3
 import requests
-
 from packaging.version import parse
 from yarl import URL
 
@@ -128,17 +123,6 @@ def hashfileobject(code, sample_threshhold=128 * 1024, sample_size=16 * 1024):
     hash_ = hash_tmp[7::-1] + hash_tmp[16:7:-1]
     enc_size = varint_encode(size)
     return enc_size + hash_[len(enc_size):]
-
-def securehash_file(file, hash_algo):
-    BUF_SIZE = 65536
-    if hash_algo is Use.mode.sha256:
-        file_hash = hashlib.sha256()
-    while True:
-        data = file.read(BUF_SIZE)
-        if not data:
-            break
-        file_hash.update(data)
-    return file_hash.hexdigest()
 
 def methdispatch(func):
     dispatcher = singledispatch(func)
@@ -345,13 +329,14 @@ class ModuleReloader:
         self.stop()
         atexit.unregister(self.stop)
         
-
-from importlib.machinery import EXTENSION_SUFFIXES
-
-
-import importlib, itertools, functools, re, requests, sys
-from importlib.machinery import EXTENSION_SUFFIXES
-class ArtifactMatcher(object):
+class ArtifactMatcher:
+    """A class to handle all matching needs.
+    
+    Classic imports only care about .py files, but installing any advanced high-performance package like numpy 
+    also requires handling of non-python files compiled for a specific architecture. 
+    In those cases files may need to be relinked for them to work properly. 
+    We need to find those specific files that match our architecture.
+    """
     def __init__(self, releases):
         self.rels = releases
     
@@ -361,8 +346,13 @@ class ArtifactMatcher(object):
           r"((?:py|cpy|pypy|cpython)-?[23]\.?(?:1?[0-9])|linux|\.dll|dylib|pyd|so|gnu|freebsd|manylinux1|win)(?=$|[^0-9])-?",
           suffixes)
         
-        match_pts = [*filter(None, map(lambda i: i.strip("-") if not re.search(r"^(c|py|^)py(thon|)|^[23]\.?1?[0-9]",i) else None , functools.reduce(list.__add__, [*filter(lambda i: len(i) and i[0]!="." and i[0] and i[0] not in ("so","pyd","dll","dylib","gnu"), (re.split(r"(?<=[^0-9])(?=[23]\.?(?:1?[0-9]))",p) for p in  pts))],[])))]
-        return match_pts
+        # TODO let me be your rubberduck.. ;p
+        return [*filter(None, 
+                        map(lambda i: i.strip("-") if not re.search(r"^(c|py|^)py(thon|)|^[23]\.?1?[0-9]",i) else None , 
+                        functools.reduce(
+                            list.__add__, 
+                            [*filter(lambda i: len(i) and i[0]!="." and i[0] and i[0] not in ("so","pyd","dll","dylib","gnu"), 
+                                (re.split(r"(?<=[^0-9])(?=[23]\.?(?:1?[0-9]))",p) for p in  pts))],[])))]
     
     def parse_version(self, info):
         py_ver = info["python_version"]
@@ -389,10 +379,7 @@ class ArtifactMatcher(object):
           "[1-9][0-9]*(?:\.[0-9]+)?", "-", info["filename"])[0]
         fnpts = re.split("[^a-zA-Z0-9]+", fn + fn2)
         fnpts += re.split("[^a-zA-Z0-9_]+", fn + fn2)
-        score = 0
-        for arch_pt in arch_pts:
-          if arch_pt in fnpts:
-            score += 1
+        score = sum(arch_pt in fnpts for arch_pt in arch_pts)
         parsed_ver = self.parse_version(info)
         if self.matches_sys_version(parsed_ver):
           score += 1
@@ -402,7 +389,7 @@ class ArtifactMatcher(object):
         for ver, infos in self.rels.items():
             for info in infos:
                 info["version"] = ver
-                yield info;
+                yield info
     
     def get_sample_data(*args):
         return  requests.get(
@@ -741,13 +728,15 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             # let's check if it's a builtin
             builtin = False
             try:
-                x = metadata.PathDistribution.from_name(name)
+                metadata.PathDistribution.from_name(name)
             except metadata.PackageNotFoundError:  # indeed builtin!
                 builtin = True
             if builtin:
                 try:
                     mod = spec.loader.create_module(spec)
                     spec.loader.exec_module(mod)  # ! => cache
+                    if aspectize:
+                        warn("Applying aspects to builtins may lead to unexpected behaviour, but there you go..", RuntimeWarning)
                     for (check, pattern), decorator in aspectize.items():
                         apply_aspect(mod, check, pattern, decorator)
                     self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
@@ -822,8 +811,21 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 module_name = package_name
             
             # PEBKAC
-            if target_version and not hash_value:
-                raise RuntimeWarning(f"Failed to auto-install '{package_name}' because hash_value is missing.")
+            if target_version and not hash_value:  # let's try to be helpful
+                response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
+                that_hash = None
+                try:
+                    for entry in response.json()["urls"]:
+                        that_hash = entry["digests"].get(hash_algo.name)
+                        if that_hash: break
+                except:
+                    pass
+                if that_hash:
+                    raise RuntimeWarning(f"""Failed to auto-install '{package_name}' because hash_value is missing. You may
+use("{name}", version="{version}", hash_value="{that_hash}")
+""")
+                else:
+                    raise RuntimeWarning(f"Failed to auto-install '{package_name}' because hash_value is missing.")
             elif not target_version and hash_value:
                 raise RuntimeWarning(f"Failed to auto-install '{package_name}' because version is missing.")
             elif not target_version and not hash_value:
