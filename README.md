@@ -45,18 +45,20 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
 
 # Examples
 
- import use
+ `import use`
  
- np = use("numpy", version="1.19.2")
+ `np = use("numpy", version="1.19.2")`  # corresponds to `import numpy as np; if np.version != "1.19.2": warn()`
  
- use("pprint").pprint(some_dict)  
+ `use("pprint").pprint(some_dict)`  # corresponds to a one-off `from pprint import pprint; pprint(some_dict)` without importing it into the global namespace
  
- tools = use(use.Path("/media/sf_Dropbox/code/tools.py"), reloading=True)
+ `tools = use(use.Path("/media/sf_Dropbox/code/tools.py"), reloading=True)`  # impossible to realize with classical imports
  
- test = use("functions", initial_globals={"foo":34, "bar":49})
+ `test = use("functions", initial_globals={"foo":34, "bar":49})`  # also impossible with the classical import statement, although importlib can help
  
- utils = use(use.URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
-            hash_value="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")
+ `utils = use(use.URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
+            hash_value="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")`  # no chance with classical imports
+            
+ `np = use("numpy", version="1.21.0rc2", hash_value="3c90b0bb77615bda5e007cfa4c53eb6097ecc82e247726e0eb138fcda769b45d", auto_install=True)` # inline installation of packages and importing the same package with different versions in parallel in the same code - most people wouldn't even dream of that!
 
 Thanks to the *default* keyword argument, it is also easy to simplify the rather clumsy optional import usecase like
 
