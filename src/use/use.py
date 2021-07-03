@@ -1,14 +1,14 @@
 """
-A self-documenting, explicit, functional way to import modules in Python with advanced features.
+Just use() python code from anywhere - a functional import alternative with advanced features.
 
 Goals/Features:
-- version check on the spot, potential version conflicts become obvious (DONE)
+- inline version checks, user notification on potential version conflicts (DONE)
 - securely load standalone-modules from online sources (DONE)
-- safely auto-reloading of local modules on edit (preliminary DONE - works in jupyter)
+- safely hot auto-reloading of local modules on file changes (DONE)
 - pass module-level globals into the importing context (DONE)
 - return optional fallback-default object/module if import failed (DONE)
 - aspect-oriented decorators for everything callable on import (DONE)
-- securely auto-install packages (TODO)
+- securely auto-install packages (preliminary DONE, still some kinks with C-extensions)
 - support P2P package distribution (TODO)
 - unwrap aspect-decorators on demand (TODO)
 - easy introspection via internal dependency graph (TODO)
@@ -911,7 +911,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             
             def create_solib_links(archive: zipfile.ZipFile, folder: Path):
                 # EXTENSION_SUFFIXES  == ['.cpython-38-x86_64-linux-gnu.so', '.abi3.so', '.so'] or ['.cp39-win_amd64.pyd', '.pyd']
-                from os.path import split  # TODO replace it with pathlib
                 entries = archive.getnames() if hasattr(archive, "getnames") \
                     else archive.namelist()
                 solibs = [*filter(lambda f: any(map(f.endswith, EXTENSION_SUFFIXES)), entries)]
@@ -964,14 +963,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 original_cwd = Path.cwd()
                 os.chdir(folder)
                 mod = importlib.import_module(module_name)
-                for key in (
-                            "__name__", 
-                            "__package__", 
-                            "__path__",
-                            "__file__", 
-                            "__version__", 
-                            "__author__"
-                            ):
+                for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
                     if not hasattr(mod, key): continue
                     rdist_info[key] = getattr(mod, key)
                 os.chdir(original_cwd)
@@ -982,4 +974,5 @@ If you want to auto-install the latest version: use("{name}", version="{version}
         self.set_mod(name=name, mod=mod, path=None, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
         return mod
 
+# 
 sys.modules["use"] = Use()
