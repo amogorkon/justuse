@@ -80,12 +80,16 @@ from enum import Enum
 from functools import singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
+from itertools import starmap
 from pathlib import Path
 from types import ModuleType
+from typing import Optional, Union
 from warnings import warn
 
 import mmh3
 import requests
+from packaging import tags, version
+from packaging.requirements import VERSION_MANY
 from packaging.version import parse
 from yarl import URL
 
@@ -340,66 +344,93 @@ class ArtifactMatcher:
     """
     def __init__(self, releases):
         self.rels = releases
+
+    def parse_filename(self, info:Union[dict,str]) -> Optional[dict]:
+        filename = info if isinstance(info,str) else info["filename"]
+        match:Optional[re.Match] = re.match(
+          "(?P<distribution>.*)-"
+          "(?P<version>.*)"
+          "(?:-(?P<build_tag>.*))?-"
+          "(?P<python_tag>.*)-"
+          "(?P<abi_tag>.*)-"
+          "(?P<platform_tag>.*)\\."
+          "(?P<ext>whl|zip|tar|tar\.gz)",
+          filename
+        )
+        return match.groupdict() if match else None
     
-    def arch(*args):
-        suffixes = EXTENSION_SUFFIXES[0]
-        pts = re.split(
-          r"((?:py|cpy|pypy|cpython)-?[23]\.?(?:1?[0-9])|linux|\.dll|dylib|pyd|so|gnu|freebsd|manylinux1|win)(?=$|[^0-9])-?",
-          suffixes)
-        
-        # TODO let me be your rubberduck.. ;p
-        return [*filter(None, 
-                        map(lambda i: i.strip("-") if not re.search(r"^(c|py|^)py(thon|)|^[23]\.?1?[0-9]",i) else None , 
-                        functools.reduce(
-                            list.__add__, 
-                            [*filter(lambda i: len(i) and i[0]!="." and i[0] and i[0] not in ("so","pyd","dll","dylib","gnu"), 
-                                (re.split(r"(?<=[^0-9])(?=[23]\.?(?:1?[0-9]))",p) for p in  pts))],[])))]
-    
-    def parse_version(self, info):
-        py_ver = info["python_version"]
-        py_ver_num = re.subn("[^0-9]+", "", py_ver)[0]
-        if not py_ver_num:
-          return (0, 0)
-        py_major = int(py_ver_num[0],10)
-        if len(py_ver_num) == 1:
-          return (py_major, sys.version_info[1])
-        py_minor = int(py_ver_num[1],10)
-        return (py_major, py_minor)
-    
-    def matches_sys_version(self, parsed_ver):
-        sys_ver = tuple(sys.version_info[0:2])
-        if sys_ver[0] == 3 and sys_ver[1] > 9 and \
-           parsed_ver[0] == 3 and parsed_ver[1] == 9:
-            return True
-        return sys_ver == parsed_ver
-    
-    def score(self, info):
-        arch_pts = self.arch()
-        fn = info["filename"]
-        fn2 = re.subn(
-          "[1-9][0-9]*(?:\.[0-9]+)?", "-", info["filename"])[0]
-        fnpts = re.split("[^a-zA-Z0-9]+", fn + fn2)
-        fnpts += re.split("[^a-zA-Z0-9_]+", fn + fn2)
-        score = sum(arch_pt in fnpts for arch_pt in arch_pts)
-        parsed_ver = self.parse_version(info)
-        if self.matches_sys_version(parsed_ver):
-          score += 1
-        return score
-    
-    def __iter__(self):
-        for ver, infos in self.rels.items():
-            for info in infos:
-                info["version"] = ver
+    def filtered(self, reverse=False):
+        count = 0
+        seq = list(reversed(list(self))) if reverse else list(self)
+        for info in seq:
+            if self.is_version_satisfied(info) and \
+               self.is_platform_satisfied(info):
+                count += 1
                 yield info
+        if count == 0:
+            yield next(iter(seq))
+
+    def is_version_satisfied(self, info:Union[dict,str]):
+        sv = version.parse(".".join(map(str, sys.version_info[0:3])))
+        rstr = info if isinstance(info,str) \
+                  else info["requires_python"]
+        result = True
+        if not rstr: return False
+        for req in VERSION_MANY.parseString(rstr):
+            satisfied = False
+            v = version.parse(req.version)
+            if req.operator == '>=': satisfied = sv >= v
+            if req.operator == '>':  satisfied = sv >  v
+            if req.operator == '<=': satisfied = sv <= v
+            if req.operator == '<':  satisfied = sv <  v
+            if req.operator == '==': satisfied = sv == v
+            if req.operator == '!=': satisfied = sv != v
+            result = result and satisfied
+        return satisfied
     
-    def get_sample_data(*args):
-        return  requests.get(
-        "https://raw.githubusercontent.com/greyblue9/junk/master/rels.json"
-        ).json()
+    def is_platform_satisfied(self, info:Union[dict,str]):
+        stags = list(tags._platform_tags())
+        rtag = info if isinstance(info,str) \
+                  else info["platform_tag"]
+        return rtag in stags
+    
+    def counts(self):
+        versions = filter(None, starmap(
+          # only return versions with one or more artifacts
+          lambda k, v: k if v else None,
+          self.rels.items()
+        ))
+        return sorted((len(self.rels[k]),k) for k in versions)
     
     def best(self):
-        return [*sorted(self, key=self.score)][-1]
-
+        return next(iter(self.filtered(reverse=True)))
+    
+    def __iter__(self, version=None):
+        """
+        Yields a `dict` for each available artifact in increasing-version order.
+        Each dict is updated to include
+        ['version']
+        ['abi_tag']
+        ['build_tag']
+        ['distribution']
+        ['ext']
+        ['platform_tag']
+        ['python_tag']
+        ['version']
+        """
+        for ver, dists in self.rels.items():
+            for d in dists:
+                d["version"] = ver # Add version info
+                if parsed := self.parse_filename(d["filename"]):
+                    d.update(parsed)
+                    yield d
+    
+    @classmethod
+    def get_sample_data(cls):
+        return requests.get(
+        "https://raw.githubusercontent.com/greyblue9"
+        "/junk/master/rels.json"
+        ).json()
 class Use:
     # lift module-level stuff up
     __doc__ = __doc__
