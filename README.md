@@ -3,6 +3,7 @@
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/amogorkon/justuse/graphs/commit-activity)
 [![Build](https://github.com/amogorkon/justuse/actions/workflows/blank.yml/badge.svg?branch=main)](https://github.com/amogorkon/justuse/actions/workflows/blank.yml)
 [![Downloads](https://pepy.tech/badge/justuse)](https://pepy.tech/project/justuse)
+[![justuse](https://snyk.io/advisor/python/justuse/badge.svg)](https://snyk.io/advisor/python/justuse)
 
 
 
