@@ -24,10 +24,11 @@ Solid:
 
 In flux:
 * auto-install packages with C-extensions and other precompiled stuff
-* pull packages from a P2P network instead of PyPI directly
+* try to pull packages from a P2P network before pulling from PyPI or conda directly
 * provide a visual representation of the internal dependency graph
 * module-level variable guards aka "module-properties"
-* test everything!
+* documentation
+* testing everything!
 
 ## The Story
 Over the years many times I've come across various situations where Python's import statement just didn't work the way I needed.
