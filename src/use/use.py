@@ -83,6 +83,7 @@ from functools import singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from itertools import starmap
+from logging import getLogger, root
 from pathlib import Path
 from types import ModuleType
 from typing import Optional, Union
@@ -90,9 +91,9 @@ from warnings import warn
 
 import mmh3
 import requests
-from packaging import tags, version
-from packaging.requirements import VERSION_MANY
-from packaging.version import parse
+from packaging import tags
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version, parse
 from yarl import URL
 
 __version__ = "0.3.2"
@@ -102,6 +103,7 @@ _aspects = {}
 _using = {}
 
 mode = Enum("Mode", "fastfail")
+log = getLogger(__name__)
 
 # sometimes all you need is a sledge hammer..
 def signal_handler(sig, frame):
@@ -356,7 +358,7 @@ class ArtifactMatcher:
           "(?P<python_tag>.*)-"
           "(?P<abi_tag>.*)-"
           "(?P<platform_tag>.*)\\."
-          "(?P<ext>whl|zip|tar|tar\.gz)",
+          "(?P<ext>whl|zip|tar|tar\\.gz)",
           filename
         )
         return match.groupdict() if match else None
@@ -373,23 +375,19 @@ class ArtifactMatcher:
             yield next(iter(seq))
 
     def is_version_satisfied(self, info:Union[dict,str]):
-        sv = version.parse(".".join(map(str, sys.version_info[0:3])))
-        rstr = info if isinstance(info,str) \
-                  else info["requires_python"]
-        result = True
-        if not rstr: return False
-        for req in VERSION_MANY.parseString(rstr):
-            satisfied = False
-            v = version.parse(req.version)
-            if req.operator == '>=': satisfied = sv >= v
-            if req.operator == '>':  satisfied = sv >  v
-            if req.operator == '<=': satisfied = sv <= v
-            if req.operator == '<':  satisfied = sv <  v
-            if req.operator == '==': satisfied = sv == v
-            if req.operator == '!=': satisfied = sv != v
-            result = result and satisfied
-        return satisfied
-    
+        sv = Version(".".join(map(str, sys.version_info[0:3])))
+        vstr = info if isinstance(info,str) \
+                  else info["requires_python"] \
+                    or "==%s" % info["python_version"]
+        if not vstr.startswith("3."): return False
+        vreq = None
+        try:
+            vreq = SpecifierSet(vstr)
+            return sv in vreq
+        except AttributeError as ae:
+            e = Exception(sv, vstr, vreq, info)
+            e.__cause__ = ae
+            raise e
     def is_platform_satisfied(self, info:Union[dict,str]):
         stags = list(tags._platform_tags())
         rtag = info if isinstance(info,str) \
@@ -736,6 +734,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
+        
+        print(f"{version!r}, {type(version)}")
+        if version in ("", "-1", 0, -1, False): version = None
         target_version = parse(str(version)) if version else None  # the empty str parses as a truey LegacyVersion - WTF
         exc: str = None
         mod: ModuleType = None
@@ -952,7 +953,9 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 print(f"Creating {len(solibs)} symlinks for extensions...")
                 for solib in solibs:
                     sofile = folder / solib
+                    log.debug(f"{sofile=}, {folder=}, {solib=}")
                     link, target = Path(sofile.parent / f"{sofile.name.split('.python-')[0]}{EXTENSION_SUFFIXES[-1]}"), sofile.name
+                    log.debug(f"{link=}, {target=}")
                     link.unlink(missing_ok=True)
                     link.symlink_to(target)
             

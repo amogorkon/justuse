@@ -1,9 +1,10 @@
 import os
 import sys
+from pathlib import Path
 
-here = os.path.split(os.path.abspath(os.path.dirname(__file__)))
-src = os.path.join(here[0], "src")
-sys.path.insert(0,src)
+if Path("use").is_dir(): os.chdir("..")
+import_base = Path(__file__).parent.parent / "src"
+sys.path.insert(0, str(import_base))
 
 import warnings
 from pathlib import Path
@@ -47,19 +48,19 @@ def test_simple_path(reuse):
 def test_simple_url(reuse):
     import http.server
     port = 8089
-    svr = http.server.HTTPServer(
+    with http.server.HTTPServer(
       ("", port), http.server.SimpleHTTPRequestHandler
-    )
-    foo_uri = f"http://localhost:{port}/tests/.tests/foo.py"
-    print(f"starting thread to handle HTTP request on port {port}")
-    import threading
-    thd = threading.Thread(target=svr.handle_request)
-    thd.start()
-    print(f"loading foo module via use(URL({foo_uri}))")
-    with pytest.warns(use.NoValidationWarning):
-      mod = reuse(URL(foo_uri), initial_globals={"a": 42})
-      assert mod.test() == 42
-    
+    ) as svr:
+	    foo_uri = f"http://localhost:{port}/tests/.tests/foo.py"
+	    print(f"starting thread to handle HTTP request on port {port}")
+	    import threading
+	    thd = threading.Thread(target=svr.handle_request)
+	    thd.start()
+	    print(f"loading foo module via use(URL({foo_uri}))")
+	    with pytest.warns(use.NoValidationWarning):
+	      mod = reuse(URL(foo_uri), initial_globals={"a": 42})
+	      assert mod.test() == 42
+	    
 def test_internet_url(reuse):
     foo_uri = "https://raw.githubusercontent.com/greyblue9/justuse/3f783e6781d810780a4bbd2a76efdee938dde704/tests/foo.py"
     print(f"loading foo module via use(URL({foo_uri}))")
@@ -109,7 +110,7 @@ def test_autoinstall_PEBKAC(reuse):
     reuse("pytest", auto_install=True, hash_value="asdf")
     
   # impossible version
-  with pytest.raises(ImportError):
+  with pytest.raises(RuntimeWarning):
     reuse("pytest", auto_install=True, version=-1, hash_value="asdf")
   
   # non-existing package
@@ -121,7 +122,7 @@ def test_version_warning(reuse):
   with warnings.catch_warnings(record=True) as w:
     warnings.simplefilter("always")
     reuse("pytest", version=-1)
-    assert issubclass(w[-1].category, use.VersionWarning)
+    assert issubclass(w[-1].category, (use.AmbiguityWarning, use.VersionWarning))
 
 def test_pure_python_package(reuse):
   # https://pypi.org/project/example-pypi-package/
