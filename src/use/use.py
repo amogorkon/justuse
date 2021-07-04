@@ -53,6 +53,8 @@ File-Hashing inspired by
 :license: MIT
 """
 
+from __future__ import annotations
+
 import asyncio
 import atexit
 import codecs
@@ -950,9 +952,9 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 print(f"Creating {len(solibs)} symlinks for extensions...")
                 for solib in solibs:
                     sofile = folder / solib
-                    link, target = sofile.parent / f"{sofile.name.split('.python-')[0]}{EXTENSION_SUFFIXES[-1]}", sofile.name
+                    link, target = Path(sofile.parent / f"{sofile.name.split('.python-')[0]}{EXTENSION_SUFFIXES[-1]}"), sofile.name
                     link.unlink(missing_ok=True)
-                    target.symlink_to(link)
+                    link.symlink_to(target)
             
             folder = path.parent / path.stem
             rdists = self._registry["distributions"]
