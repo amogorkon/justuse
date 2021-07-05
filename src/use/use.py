@@ -378,7 +378,9 @@ class ArtifactMatcher:
         sv = Version(".".join(map(str, sys.version_info[0:3])))
         vstr = info if isinstance(info,str) \
                   else info["requires_python"] \
-                    or "==%s" % info["python_version"]
+                    or info["python_version"]
+        if not vstr: return False
+        if vstr[0].isnumeric(): vstr = "==" + vstr
         if not vstr.startswith("3."): return False
         vreq = None
         try:
@@ -388,11 +390,20 @@ class ArtifactMatcher:
             e = Exception(sv, vstr, vreq, info)
             e.__cause__ = ae
             raise e
+    
     def is_platform_satisfied(self, info:Union[dict,str]):
         stags = list(tags._platform_tags())
         rtag = info if isinstance(info,str) \
                   else info["platform_tag"]
-        return rtag in stags
+        platform_match = any(filter(
+          lambda it: it.platform in stags,
+          packaging.tags.parse_tag(
+            "-".join(
+              (i["python_tag"], i["abi_tag"], i["platform_tag"])
+            )
+          )
+        ))
+        return platform_match
     
     def counts(self):
         versions = filter(None, starmap(
@@ -954,7 +965,14 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 for solib in solibs:
                     sofile = folder / solib
                     log.debug(f"{sofile=}, {folder=}, {solib=}")
-                    link, target = Path(sofile.parent / f"{sofile.name.split('.python-')[0]}{EXTENSION_SUFFIXES[-1]}"), sofile.name
+                    split_on = ".cpython" \
+                        if ".cpython" in sofile.name \
+                        else ".python" if ".python" in sofile.name \
+                        else ".cp" if ".cp" in sofile.name \
+                        else "."
+                    link, target = Path(sofile.parent / (
+                       f"{sofile.name.split(split_on)[0]}" + \
+                       f"{EXTENSION_SUFFIXES[-1]}")), sofile.name
                     log.debug(f"{link=}, {target=}")
                     link.unlink(missing_ok=True)
                     link.symlink_to(target)
