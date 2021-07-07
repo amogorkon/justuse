@@ -78,7 +78,7 @@ import zipfile
 import zipimport
 from collections import defaultdict, namedtuple
 from enum import Enum
-from functools import singledispatch, update_wrapper
+from functools import singledispatch, update_wrapper, wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from itertools import starmap
