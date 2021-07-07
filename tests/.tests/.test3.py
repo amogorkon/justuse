@@ -1,4 +1,9 @@
-from enum import Enum
+import json
 
-X = Enum("X", "a b c")
 
+config = {}
+with open("config.json") as file:
+    try:
+        config.update(json.load(file))
+    except json.decoder.JSONDecodeError:
+        pass

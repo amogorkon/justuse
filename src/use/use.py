@@ -494,14 +494,25 @@ class Use:
         self.home.mkdir(mode=0o755, exist_ok=True)
         (self.home / "packages").mkdir(mode=0o755, exist_ok=True)
         (self.home / "registry.json").touch(mode=0o644, exist_ok=True)
-        (self.home / "config.ini").touch(mode=0o644, exist_ok=True)
+        (self.home / "config.json").touch(mode=0o644, exist_ok=True)
         (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
         # load_registry expects 'self.home' to be set
         self._registry = self.load_registry()
 
-        self.config = configparser.ConfigParser()
-        with open(self.home / "config.ini") as file:
-            self.config.read(file)
+        self.config = {}
+        path = self.home / "config.json"
+        if path.stat().st_size > 0:
+            with open(path) as file:
+                self.config.update(json.load(file))
+
+        if self.config.get("version_warning", True):
+            try:
+                response = requests.get(f"https://pypi.org/pypi/justuse/json")
+                data = response.json()
+                if parse(__version__) < max(parse(version) for version in data["releases"].keys()):
+                    warn("Found a newer version of justuse, you may consider upgrading. You can do so with 'python -m pip install -U justuse'", Use.VersionWarning)
+            except:
+                warn("Couldn't look up the current version of justuse, you can safely ignore this warning. \n", traceback.format_exc(), "\n \n")
 
     def load_registry(self, registry=None):
         if registry is None:
@@ -924,7 +935,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     if not response.json()["urls"]:
                         return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because no valid URLs to download could be found.")
                     for entry in response.json()["urls"]:
-                        url = entry["url"]
+                        url = URL(entry["url"])
                         that_hash = entry["digests"].get(hash_algo.name)
                         if entry["yanked"]:
                             return fail_or_default(default, Use.AutoInstallationError, f"Auto-installation of  '{package_name}' {target_version} failed because the release was yanked from PyPI.")
@@ -939,7 +950,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 # we've got a complete JSON with a matching entry, let's download
                 print("Downloading", url, "...")
                 download_response = requests.get(url, allow_redirects=True)
-                path = self.home / "packages" / URL(url).name
+                path = self.home / "packages" / Path(url.name).name
                 this_hash:str = hash_algo.value(download_response.content).hexdigest()
                 if this_hash != hash_value:
                     return fail_or_default(default, Use.UnexpectedHash, f"The downloaded content of package {package_name} has a different hash than expected, aborting.")
