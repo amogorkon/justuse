@@ -14,6 +14,7 @@ Goals/Features:
 - easy introspection via internal dependency graph (TODO)
 - relative imports on online-sources via URL-aliases (TODO)
 - module-level variable placeholders/guards aka "module-properties" (TODO)
+- load packages faster while using less memory than classical pip/import - ideal for embedded systems with limited resources (TODO)
 
 Non-Goal:
 Completely replace the import statement.
@@ -371,6 +372,7 @@ class ArtifactMatcher:
             yield next(iter(seq))
 
     def is_version_satisfied(self, info:Union[dict,str]):
+        # sourcery skip: switch
         sv = version.parse(".".join(map(str, sys.version_info[0:3])))
         rstr = info if isinstance(info,str) \
                   else info["requires_python"]

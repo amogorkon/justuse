@@ -1,8 +1,7 @@
-version = 13
+from pathlib import Path
+import numpy as np
 
-def foo(x):
-    return x**1
+path = Path(r"F:\Dropbox (Privat)\mcs\Code\Arrhythmia_detection\annotator\results.npy")
 
-def bar():
-    return version
-#assert False
+results = np.load(path, allow_pickle=True).item()
+print(results)
