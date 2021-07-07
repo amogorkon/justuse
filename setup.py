@@ -9,6 +9,17 @@ here = (os.path.abspath(os.path.dirname(__file__)))
 src = os.path.join(here, "src/use")
 sys.path.insert(0, src)
 
+# Instead of doing the obvious thing (importng 'use' dierctly and just reading '__version__'),
+# we are parsing the version out of the source AST here, because if the user is missing any
+# dependencies at setup time, an import error would prevent the installation.
+# Two simple ways to verify the installation using this setup.py file:
+#
+#     python3 setup.py develop
+#
+#  or:
+#
+#    python3 setup.py install
+#
 import ast
 with open(os.path.join(src, "use.py")) as f:
     mod = ast.parse(f.read())
