@@ -54,11 +54,12 @@ File-Hashing inspired by
 :license: MIT
 """
 
+from __future__ import annotations
+
 import asyncio
 import atexit
 import codecs
 import configparser
-import functools
 import gzip
 import hashlib
 import importlib
@@ -78,20 +79,22 @@ import zipfile
 import zipimport
 from collections import defaultdict, namedtuple
 from enum import Enum
-from functools import singledispatch, update_wrapper
+from functools import singledispatch, update_wrapper, wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from itertools import starmap
+from logging import getLogger
 from pathlib import Path
 from types import ModuleType
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 from warnings import warn
 
 import mmh3
+import packaging
 import requests
-from packaging import tags, version
-from packaging.requirements import VERSION_MANY
-from packaging.version import parse
+from packaging import tags
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version, parse
 from yarl import URL
 
 __version__ = "0.3.2"
@@ -101,11 +104,13 @@ _aspects = {}
 _using = {}
 
 mode = Enum("Mode", "fastfail")
+log = getLogger(__name__)
 
 # sometimes all you need is a sledge hammer..
 def signal_handler(sig, frame):
     for reloader in _reloaders.values():
         reloader.stop()
+    sig, frame
     sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
@@ -124,6 +129,7 @@ def varint_encode(number):
     return buf
 
 def hashfileobject(code, sample_threshhold=128 * 1024, sample_size=16 * 1024):
+    sample_threshhold, sample_size
     size = len(code)
     hash_tmp = mmh3.hash_bytes(code)
     hash_ = hash_tmp[7::-1] + hash_tmp[16:7:-1]
@@ -144,6 +150,7 @@ def build_mod(*, name:str,
                 module_path:str, 
                 aspectize:dict, 
                 default=mode.fastfail) -> ModuleType:
+    default
     mod = ModuleType(name)
     print(2, 5, code, type(code))
     mod.__dict__.update(initial_globals or {})
@@ -174,13 +181,13 @@ def fail_or_default(default, exception, msg):
     else:
         raise exception(msg)
 
-def apply_aspect(mod:ModuleType, check:callable, pattern:str, decorator:callable):
+def apply_aspect(mod:ModuleType, check:callable, pattern:str, decorator:Callable[...]):
     """Apply the aspect as a side-effect, no copy is created."""
     # TODO: recursion?
     parent = mod
-    for name, obj in parent.__dict__.items():
+    for obj in parent.__dict__.values():
         if check(obj) and re.match(pattern, obj.__qualname__):
-            # TODO: logging?
+            log.debug("Applying aspect to {parent}.{obj.__name__}")
             parent.__dict__[obj.__name__] = decorator(obj)
     return mod
 
@@ -355,7 +362,7 @@ class ArtifactMatcher:
           "(?P<python_tag>.*)-"
           "(?P<abi_tag>.*)-"
           "(?P<platform_tag>.*)\\."
-          "(?P<ext>whl|zip|tar|tar\.gz)",
+          "(?P<ext>whl|zip|tar|tar\\.gz)",
           filename
         )
         return match.groupdict() if match else None
@@ -365,36 +372,38 @@ class ArtifactMatcher:
         seq = list(reversed(list(self))) if reverse else list(self)
         for info in seq:
             if self.is_version_satisfied(info) and \
-               self.is_platform_satisfied(info):
+               self.is_platform_satisfied(info) and \
+               self.is_interpreter_satisfied(info):
                 count += 1
                 yield info
         if count == 0:
             yield next(iter(seq))
 
     def is_version_satisfied(self, info:Union[dict,str]):
-        # sourcery skip: switch
-        sv = version.parse(".".join(map(str, sys.version_info[0:3])))
-        rstr = info if isinstance(info,str) \
-                  else info["requires_python"]
-        result = True
-        if not rstr: return False
-        for req in VERSION_MANY.parseString(rstr):
-            satisfied = False
-            v = version.parse(req.version)
-            if req.operator == '>=': satisfied = sv >= v
-            if req.operator == '>':  satisfied = sv >  v
-            if req.operator == '<=': satisfied = sv <= v
-            if req.operator == '<':  satisfied = sv <  v
-            if req.operator == '==': satisfied = sv == v
-            if req.operator == '!=': satisfied = sv != v
-            result = result and satisfied
-        return satisfied
-    
+        sv = Version(".".join(map(str, sys.version_info[0:3])))
+        vstr = info if isinstance(info,str) \
+                  else info["requires_python"] \
+                    or f'=={info["python_version"]}'
+        if not vstr: return False
+        vreq = SpecifierSet(vstr)
+        return sv in vreq
+        
     def is_platform_satisfied(self, info:Union[dict,str]):
-        stags = list(tags._platform_tags())
-        rtag = info if isinstance(info,str) \
-                  else info["platform_tag"]
-        return rtag in stags
+        platform_tags = list(tags._platform_tags())
+        return any(
+            filter(
+                lambda it: it.platform in platform_tags,
+                packaging.tags.parse_tag(
+                    "-".join(
+                        (info["python_tag"], info["abi_tag"], info["platform_tag"])
+                    )
+                ),
+            )
+        )
+        
+    def is_interpreter_satisfied(self, info:Union[dict,str]):
+        interpreter_tag = packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
+        return interpreter_tag in (info["python_tag"], info["abi_tag"])
     
     def counts(self):
         versions = filter(None, starmap(
@@ -423,6 +432,8 @@ class ArtifactMatcher:
         for ver, dists in self.rels.items():
             for d in dists:
                 d["version"] = ver # Add version info
+                if version is not None and version != ver:
+                    continue
                 if parsed := self.parse_filename(d["filename"]):
                     d.update(parsed)
                     yield d
@@ -518,10 +529,10 @@ class Use:
             dists.update(registry)
             registry = new_registry
         if not registry:
-          registry.update({
+            registry.update({
             "version": registry_version,
             "distributions": defaultdict(lambda: dict())
-          })
+            })
         return registry
 
     def persist_registry(self):
@@ -551,7 +562,8 @@ class Use:
                 import_to_use: dict=None,
                 ) -> ModuleType:
         exc = None
-        
+        path_to_url
+        import_to_use
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
         
         aspectize = aspectize or {}
@@ -603,7 +615,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         initial_globals = initial_globals or {}
         exc = None
         mod = None
-        
+        path_to_url
+        import_to_use
+
         if path.is_dir():
             return fail_or_default(default, ImportError, f"Can't import directory {path}")
         
@@ -736,6 +750,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
+        
+        print(f"{version!r}, {type(version)}")
+        if version in ("", "-1", 0, -1, False): version = None
         target_version = parse(str(version)) if version else None  # the empty str parses as a truey LegacyVersion - WTF
         exc: str = None
         mod: ModuleType = None
@@ -894,6 +911,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 # someone messed with the packages without updating the registry
                 if not path.exists():
                     del self._registry["distributions"][package_name][version]
+                    self.persist_registry()
                     path = None
                     entry = None
             url:str = None
@@ -952,9 +970,18 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 print(f"Creating {len(solibs)} symlinks for extensions...")
                 for solib in solibs:
                     sofile = folder / solib
-                    link, target = sofile.parent / f"{sofile.name.split('.python-')[0]}{EXTENSION_SUFFIXES[-1]}", sofile.name
+                    log.debug(f"{sofile=}, {folder=}, {solib=}")
+                    split_on = [".python", ".cpython", ".cp"]
+                    simple_name, os_ext = None, EXTENSION_SUFFIXES[-1]
+                    for s in split_on:
+                        if not s in sofile.name: continue
+                        simple_name = sofile.name.split(s)[0]
+                    if simple_name is None: continue
+                    link = Path(sofile.parent / f"{simple_name}{os_ext}")
+                    if link == sofile: continue
+                    log.debug(f"{link=}, {sofile=}")
                     link.unlink(missing_ok=True)
-                    target.symlink_to(link)
+                    link.symlink_to(sofile)
             
             folder = path.parent / path.stem
             rdists = self._registry["distributions"]

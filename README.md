@@ -13,23 +13,21 @@
 To install, enter `python -m pip install justuse` in a commandline, then you can `import use` in your code and simply use() stuff. Check for examples below!
 
 ## Features, Claims & Goals
-Solid:
-* inline version-checking
-* safely import code from an online URL - towards an unhackable infrastructure ("Rather die than get corrupted!")
-* initial module globals - a straight forward solution to diamond/cyclic imports
-* decorate all specified callables (functions, methods, classes, ..) on import via pattern matching, aspect-orientation made easy
-* return a given default if an exception happened during an import, simplifying optional dependencies
-* safely hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
-* safely auto-install version-tagged pure python packages from PyPI (packages with C-extensions like numpy don't work yet)
-* have multiple versions of the same package installed and loaded in the same program without conflicts
 
-In flux:
-* auto-install packages with C-extensions and other precompiled stuff
-* try to pull packages from a P2P network before pulling from PyPI or conda directly
-* provide a visual representation of the internal dependency graph
-* module-level variable guards aka "module-properties"
-* documentation
-* testing everything!
+- [x] inline version-checking
+- [x] safely import code from an online URL - towards an unhackable infrastructure ("Rather die than get corrupted!")
+- [x] initial module globals - a straight forward solution to diamond/cyclic imports
+- [x] decorate all specified callables (functions, methods, classes, ..) on import via pattern matching, aspect-orientation made easy
+- [x] return a given default if an exception happened during an import, simplifying optional dependencies
+- [x] safely hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
+- [x] safely auto-install version-tagged pure python packages from PyPI (packages with C-extensions like numpy don't work yet)
+- [x] have multiple versions of the same package installed and loaded in the same program without conflicts
+- [ ] auto-install packages with C-extensions and other precompiled stuff
+- [ ] try to pull packages from a P2P network before pulling from PyPI or conda directly
+- [ ] provide a visual representation of the internal dependency graph
+- [ ] module-level variable guards aka "module-properties"
+- [ ] documentation
+- [ ] testing everything!
 
 ## The Story
 Over the years many times I've come across various situations where Python's import statement just didn't work the way I needed.
