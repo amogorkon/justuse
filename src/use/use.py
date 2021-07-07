@@ -184,9 +184,9 @@ def apply_aspect(mod:ModuleType, check:callable, pattern:str, decorator:Callable
     """Apply the aspect as a side-effect, no copy is created."""
     # TODO: recursion?
     parent = mod
-    for _, obj in parent.__dict__.items():
+    for obj in parent.__dict__.values():
         if check(obj) and re.match(pattern, obj.__qualname__):
-            # TODO: logging?
+            log.debug("Applying aspect to {parent}.{obj.__name__}")
             parent.__dict__[obj.__name__] = decorator(obj)
     return mod
 
