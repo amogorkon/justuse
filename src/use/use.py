@@ -59,7 +59,6 @@ import asyncio
 import atexit
 import codecs
 import configparser
-import functools
 import gzip
 import hashlib
 import importlib
@@ -79,14 +78,14 @@ import zipfile
 import zipimport
 from collections import defaultdict, namedtuple
 from enum import Enum
-from functools import singledispatch, update_wrapper
+from functools import singledispatch, update_wrapper, wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from itertools import starmap
-from logging import getLogger, root
+from logging import getLogger
 from pathlib import Path
 from types import ModuleType
-from typing import Optional, Union
+from typing import Optional, Union, Callable
 from warnings import warn
 
 import mmh3
@@ -95,6 +94,7 @@ from packaging import tags
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version, parse
 from yarl import URL
+import packaging
 
 __version__ = "0.3.2"
 
@@ -109,6 +109,7 @@ log = getLogger(__name__)
 def signal_handler(sig, frame):
     for reloader in _reloaders.values():
         reloader.stop()
+    sig, frame
     sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
@@ -127,6 +128,7 @@ def varint_encode(number):
     return buf
 
 def hashfileobject(code, sample_threshhold=128 * 1024, sample_size=16 * 1024):
+    sample_threshhold, sample_size
     size = len(code)
     hash_tmp = mmh3.hash_bytes(code)
     hash_ = hash_tmp[7::-1] + hash_tmp[16:7:-1]
@@ -147,6 +149,7 @@ def build_mod(*, name:str,
                 module_path:str, 
                 aspectize:dict, 
                 default=mode.fastfail) -> ModuleType:
+    default
     mod = ModuleType(name)
     print(2, 5, code, type(code))
     mod.__dict__.update(initial_globals or {})
@@ -177,13 +180,13 @@ def fail_or_default(default, exception, msg):
     else:
         raise exception(msg)
 
-def apply_aspect(mod:ModuleType, check:callable, pattern:str, decorator:callable):
+def apply_aspect(mod:ModuleType, check:callable, pattern:str, decorator:Callable[...]):
     """Apply the aspect as a side-effect, no copy is created."""
     # TODO: recursion?
     parent = mod
-    for name, obj in parent.__dict__.items():
+    for obj in parent.__dict__.values():
         if check(obj) and re.match(pattern, obj.__qualname__):
-            # TODO: logging?
+            log.debug("Applying aspect to {parent}.{obj.__name__}")
             parent.__dict__[obj.__name__] = decorator(obj)
     return mod
 
@@ -368,7 +371,8 @@ class ArtifactMatcher:
         seq = list(reversed(list(self))) if reverse else list(self)
         for info in seq:
             if self.is_version_satisfied(info) and \
-               self.is_platform_satisfied(info):
+               self.is_platform_satisfied(info) and \
+               self.is_interpreter_satisfied(info):
                 count += 1
                 yield info
         if count == 0:
@@ -378,32 +382,27 @@ class ArtifactMatcher:
         sv = Version(".".join(map(str, sys.version_info[0:3])))
         vstr = info if isinstance(info,str) \
                   else info["requires_python"] \
-                    or info["python_version"]
+                    or f'=={info["python_version"]}'
         if not vstr: return False
-        if vstr[0].isnumeric(): vstr = "==" + vstr
-        if not vstr.startswith("3."): return False
-        vreq = None
-        try:
-            vreq = SpecifierSet(vstr)
-            return sv in vreq
-        except AttributeError as ae:
-            e = Exception(sv, vstr, vreq, info)
-            e.__cause__ = ae
-            raise e
-    
+        vreq = SpecifierSet(vstr)
+        return sv in vreq
+        
     def is_platform_satisfied(self, info:Union[dict,str]):
-        stags = list(tags._platform_tags())
-        rtag = info if isinstance(info,str) \
-                  else info["platform_tag"]
-        platform_match = any(filter(
-          lambda it: it.platform in stags,
-          packaging.tags.parse_tag(
-            "-".join(
-              (i["python_tag"], i["abi_tag"], i["platform_tag"])
+        platform_tags = list(tags._platform_tags())
+        return any(
+            filter(
+                lambda it: it.platform in platform_tags,
+                packaging.tags.parse_tag(
+                    "-".join(
+                        (info["python_tag"], info["abi_tag"], info["platform_tag"])
+                    )
+                ),
             )
-          )
-        ))
-        return platform_match
+        )
+        
+    def is_interpreter_satisfied(self, info:Union[dict,str]):
+        interpreter_tag = packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
+        return interpreter_tag in (info["python_tag"], info["abi_tag"])
     
     def counts(self):
         versions = filter(None, starmap(
@@ -432,6 +431,8 @@ class ArtifactMatcher:
         for ver, dists in self.rels.items():
             for d in dists:
                 d["version"] = ver # Add version info
+                if version is not None and version != ver:
+                    continue
                 if parsed := self.parse_filename(d["filename"]):
                     d.update(parsed)
                     yield d
@@ -527,10 +528,10 @@ class Use:
             dists.update(registry)
             registry = new_registry
         if not registry:
-          registry.update({
+            registry.update({
             "version": registry_version,
             "distributions": defaultdict(lambda: dict())
-          })
+            })
         return registry
 
     def persist_registry(self):
@@ -560,7 +561,8 @@ class Use:
                 import_to_use: dict=None,
                 ) -> ModuleType:
         exc = None
-        
+        path_to_url
+        import_to_use
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
         
         aspectize = aspectize or {}
@@ -612,7 +614,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         initial_globals = initial_globals or {}
         exc = None
         mod = None
-        
+        path_to_url
+        import_to_use
+
         if path.is_dir():
             return fail_or_default(default, ImportError, f"Can't import directory {path}")
         
@@ -906,6 +910,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 # someone messed with the packages without updating the registry
                 if not path.exists():
                     del self._registry["distributions"][package_name][version]
+                    self.persist_registry()
                     path = None
                     entry = None
             url:str = None
@@ -965,17 +970,17 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 for solib in solibs:
                     sofile = folder / solib
                     log.debug(f"{sofile=}, {folder=}, {solib=}")
-                    split_on = ".cpython" \
-                        if ".cpython" in sofile.name \
-                        else ".python" if ".python" in sofile.name \
-                        else ".cp" if ".cp" in sofile.name \
-                        else "."
-                    link, target = Path(sofile.parent / (
-                       f"{sofile.name.split(split_on)[0]}" + \
-                       f"{EXTENSION_SUFFIXES[-1]}")), sofile.name
-                    log.debug(f"{link=}, {target=}")
+                    split_on = [".python", ".cpython", ".cp"]
+                    simple_name, os_ext = None, EXTENSION_SUFFIXES[-1]
+                    for s in split_on:
+                        if not s in sofile.name: continue
+                        simple_name = sofile.name.split(s)[0]
+                    if simple_name is None: continue
+                    link = Path(sofile.parent / f"{simple_name}{os_ext}")
+                    if link == sofile: continue
+                    log.debug(f"{link=}, {sofile=}")
                     link.unlink(missing_ok=True)
-                    link.symlink_to(target)
+                    link.symlink_to(sofile)
             
             folder = path.parent / path.stem
             rdists = self._registry["distributions"]
