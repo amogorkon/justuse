@@ -382,7 +382,7 @@ class ArtifactMatcher:
         sv = Version(".".join(map(str, sys.version_info[0:3])))
         vstr = info if isinstance(info,str) \
                   else info["requires_python"] \
-                    or "==%s" % info["python_version"]
+                    or f'=={info["python_version"]}'
         if not vstr: return False
         vreq = SpecifierSet(vstr)
         return sv in vreq
