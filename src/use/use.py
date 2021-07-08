@@ -77,24 +77,32 @@ import time
 import traceback
 import zipfile
 import zipimport
-from collections import defaultdict, namedtuple
+
+from collections import defaultdict
+from collections import namedtuple
 from enum import Enum
-from functools import singledispatch, update_wrapper, wraps
+from functools import singledispatch
+from functools import update_wrapper
+from functools import wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from itertools import starmap
 from logging import getLogger
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Optional, Union
+from typing import Callable
+from typing import Optional
+from typing import Union
 from warnings import warn
 
 import mmh3
 import packaging
 import requests
+
 from packaging import tags
 from packaging.specifiers import SpecifierSet
-from packaging.version import Version, parse
+from packaging.version import Version
+from packaging.version import parse
 from yarl import URL
 
 __version__ = "0.3.2"
@@ -152,7 +160,6 @@ def build_mod(*, name:str,
                 default=mode.fastfail) -> ModuleType:
     default
     mod = ModuleType(name)
-    print(2, 5, code, type(code))
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = module_path
     code_text = codecs.decode(code)
@@ -762,7 +769,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
         
-        print(f"{version!r}, {type(version)}")
         if version in ("", "-1", 0, -1, False): version = None
         target_version = parse(str(version)) if version else None  # the empty str parses as a truey LegacyVersion - WTF
         exc: str = None
