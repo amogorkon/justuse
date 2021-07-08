@@ -877,11 +877,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
                 that_hash = None
                 try:
-                    for entry in response.json()["urls"]:
-                        that_hash = entry["digests"].get(hash_algo.name)
-                        if that_hash: break
-                except:
-                    pass
+                    data = response.json()
+                    ma = ArtifactMatcher(data["urls"])
+                    release = ma.best()
+                    version = release["version"]
+                    that_hash = release["digests"].get(hash_algo.name)
+                except Exception as _ex:
+                    raise
                 if that_hash:
                     raise RuntimeWarning(f"""Failed to auto-install '{package_name}' because hash_value is missing. You may
 use("{name}", version="{version}", hash_value="{that_hash}")
@@ -950,7 +952,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 # we've got a complete JSON with a matching entry, let's download
                 print("Downloading", url, "...")
                 download_response = requests.get(url, allow_redirects=True)
-                path = self.home / "packages" / Path(url.name).name
+                path = self.home / "packages" / url.name
                 this_hash:str = hash_algo.value(download_response.content).hexdigest()
                 if this_hash != hash_value:
                     return fail_or_default(default, Use.UnexpectedHash, f"The downloaded content of package {package_name} has a different hash than expected, aborting.")
@@ -964,12 +966,13 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     return fail_or_default(default, Use.AutoInstallationError, exc)
             
             # trying to import directly from zip
+            zip_exc = None
             try:
                 importer = zipimport.zipimporter(path)
                 mod = importer.load_module(module_name)
                 print("Direct zipimport of", name, "successful.")
-            except:
-                print("Direct zipimport failed with", traceback.format_exc(), "attempting to extract and load manually...")
+            except Exception as zex:
+                zip_exc = zex
             
             def create_solib_links(archive: zipfile.ZipFile, folder: Path):
                 # EXTENSION_SUFFIXES  == ['.cpython-38-x86_64-linux-gnu.so', '.abi3.so', '.so'] or ['.cp39-win_amd64.pyd', '.pyd']
@@ -1005,7 +1008,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             rdist_info.update({
                 "package": package_name,
                 "version": version,
-                "url": url,
+                "url": url.human_repr(),
                 "path": str(path) if path else None,
                 "folder": folder.absolute().as_uri(),
                 "filename": path.name,
@@ -1014,7 +1017,13 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             self.persist_registry()
             
             if not mod:
-                if exc:    
+                if zip_exc:
+                    print(
+                      "Direct zipimport failed with",
+                      traceback.format_exc(),
+                      "attempted to extract and load manually..."
+                    )
+                if exc:
                     return fail_or_default(default, Use.AutoInstallationError, exc)
                 folder.mkdir(mode=0o755, exist_ok=True)
                 print("Extracting to", folder, "...")
