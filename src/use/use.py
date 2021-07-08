@@ -1005,7 +1005,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             rdist_info.update({
                 "package": package_name,
                 "version": version,
-                "url": url,
+                "url": url.human_repr(),
                 "path": str(path) if path else None,
                 "folder": folder.absolute().as_uri(),
                 "filename": path.name,
