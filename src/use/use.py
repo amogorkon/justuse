@@ -87,7 +87,10 @@ from functools import wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from itertools import starmap
-from logging import getLogger, root, DEBUG, StreamHandler
+from logging import DEBUG
+from logging import StreamHandler
+from logging import getLogger
+from logging import root
 from pathlib import Path
 from types import ModuleType
 from typing import Callable
