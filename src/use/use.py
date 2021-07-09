@@ -516,8 +516,10 @@ class Use:
             try:
                 response = requests.get(f"https://pypi.org/pypi/justuse/json")
                 data = response.json()
-                if parse(__version__) < max(parse(version) for version in data["releases"].keys()):
-                    warn("Found a newer version of justuse, you may consider upgrading. You can do so with 'python -m pip install -U justuse'", Use.VersionWarning)
+                max_version = max(parse(version) for version in data["releases"].keys())
+                if parse(__version__) < max_version:
+                    warn(f"""Justuse is version {parse(__version__)}, but there is a newer version ({max_version}) on PyPI. 
+Please consider upgrading via 'python -m pip install -U justuse'""", Use.VersionWarning)
             except:
                 warn("Couldn't look up the current version of justuse, you can safely ignore this warning. \n", traceback.format_exc(), "\n \n")
 
