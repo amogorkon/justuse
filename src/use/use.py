@@ -780,7 +780,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if version in ("", "-1", 0, -1, False): version = None
         target_version = parse(str(version)) if version else None  # the empty str parses as a truey LegacyVersion - WTF
         exc: str = None
-        exc_obj: BaseException = None
         mod: ModuleType = None
         
         if initial_globals or import_to_use or path_to_url:
@@ -818,9 +817,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         apply_aspect(mod, check, pattern, decorator)
                     self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                     return mod
-                except e as BaseException:
-                    exc_obj = e
-                    exc = traceback.format_exc(exc_obj)
+                except:
+                    exc = traceback.format_exc()
                 if exc:
                     return fail_or_default(default, ImportError, exc)
 
@@ -833,12 +831,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         apply_aspect(mod, check, pattern, decorator)
                     self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                     warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
-                except e as BaseException:
-                    exc_obj = e
-                    exc = traceback.format_exc(exc_obj)
+                except:
+                    exc = traceback.format_exc()
                 if exc:
-                    log.error(exc_obj)
-                    log.error(traceback.format_exc(exc_obj))
                     return fail_or_default(default, ImportError, exc)
                 
                 # we only enforce versions with auto-install
@@ -874,9 +869,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                             apply_aspect(mod, check, pattern, decorator)
                         self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                         warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
-                    except e as BaseException:
-                        exc_obj = e
-                        exc = traceback.format_exc(exc_obj)
+                    except:
+                        exc = traceback.format_exc()
                     if exc:
                         return fail_or_default(default, ImportError, exc)
                 # wrong version => wrong spec
