@@ -59,7 +59,6 @@ from __future__ import annotations
 import asyncio
 import atexit
 import codecs
-import configparser
 import gzip
 import hashlib
 import importlib
@@ -77,35 +76,25 @@ import time
 import traceback
 import zipfile
 import zipimport
-
-from collections import defaultdict
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from enum import Enum
-from functools import singledispatch
-from functools import update_wrapper
-from functools import wraps
+from functools import singledispatch, update_wrapper, wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from itertools import starmap
-from logging import DEBUG
-from logging import StreamHandler
-from logging import getLogger
-from logging import root
+from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
 from types import ModuleType
-from typing import Callable
-from typing import Optional
-from typing import Union
+from typing import Callable, Optional, Union
 from warnings import warn
 
 import mmh3
 import packaging
 import requests
-
+import toml
 from packaging import tags
 from packaging.specifiers import SpecifierSet
-from packaging.version import Version
-from packaging.version import parse
+from packaging.version import Version, parse
 from yarl import URL
 
 __version__ = "0.3.2"
@@ -506,18 +495,23 @@ class Use:
         self.home.mkdir(mode=0o755, exist_ok=True)
         (self.home / "packages").mkdir(mode=0o755, exist_ok=True)
         (self.home / "registry.json").touch(mode=0o644, exist_ok=True)
-        (self.home / "config.json").touch(mode=0o644, exist_ok=True)
+        (self.home / "config.toml").touch(mode=0o644, exist_ok=True)
+        (self.home / "default_config.toml").touch(mode=0o644, exist_ok=True)
         (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
         # load_registry expects 'self.home' to be set
         self._registry = self.load_registry()
 
-        self.config = {}
-        path = self.home / "config.json"
-        if path.stat().st_size > 0:
-            with open(path) as file:
-                self.config.update(json.load(file))
+        # defaults
+        self.config = {"version_warning": True}
+        
+        # for the user to copy&paste
+        with open(self.home / "default_config.toml", "w") as file:
+            toml.dump(self.config, file)
 
-        if self.config.get("version_warning", True):
+        with open(self.home / "config.toml") as file:
+            self.config.update(toml.load(file))
+
+        if self.config["version_warning"]:
             try:
                 response = requests.get(f"https://pypi.org/pypi/justuse/json")
                 data = response.json()

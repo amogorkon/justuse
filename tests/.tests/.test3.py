@@ -1,9 +1,6 @@
-import json
+import toml
 
+config = {"1":2, "2":3}
 
-config = {}
-with open("config.json") as file:
-    try:
-        config.update(json.load(file))
-    except json.decoder.JSONDecodeError:
-        pass
+with open("config.json", "w") as file:
+    toml.dump(config, file)
