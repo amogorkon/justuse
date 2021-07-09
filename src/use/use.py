@@ -1073,8 +1073,8 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 try:
                   mod = importlib.import_module(module_name)
                 except ImportError:
-                  mod = __import__(module_name)
-                print(f"mod = {mod}")
+                  exc = traceback.format_exc()
+                log.debug(f"mod = {mod}")
                 for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
                     if not hasattr(mod, key): continue
                     rdist_info[key] = getattr(mod, key)
