@@ -87,7 +87,7 @@ from functools import wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from itertools import starmap
-from logging import getLogger
+from logging import getLogger, root, DEBUG, StreamHandler
 from pathlib import Path
 from types import ModuleType
 from typing import Callable
@@ -112,6 +112,8 @@ _aspects = {}
 _using = {}
 
 mode = Enum("Mode", "fastfail")
+root.addHandler(StreamHandler(sys.stderr))
+if "DEBUG" in os.environ: root.setLevel(DEBUG)
 log = getLogger(__name__)
 
 # sometimes all you need is a sledge hammer..
@@ -769,9 +771,11 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
         
+        log.debug(f"use({name!r}, version={version!r}, hash_value={hash_value!r})")
         if version in ("", "-1", 0, -1, False): version = None
         target_version = parse(str(version)) if version else None  # the empty str parses as a truey LegacyVersion - WTF
         exc: str = None
+        exc_obj: BaseException = None
         mod: ModuleType = None
         
         if initial_globals or import_to_use or path_to_url:
@@ -809,8 +813,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         apply_aspect(mod, check, pattern, decorator)
                     self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                     return mod
-                except:
-                    exc = traceback.format_exc()
+                except e as BaseException:
+                    exc_obj = e
+                    exc = traceback.format_exc(exc_obj)
                 if exc:
                     return fail_or_default(default, ImportError, exc)
 
@@ -823,11 +828,14 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         apply_aspect(mod, check, pattern, decorator)
                     self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                     warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
-                except:
-                    exc = traceback.format_exc()
+                except e as BaseException:
+                    exc_obj = e
+                    exc = traceback.format_exc(exc_obj)
                 if exc:
+                    log.error(exc_obj)
+                    log.error(traceback.format_exc(exc_obj))
                     return fail_or_default(default, ImportError, exc)
-            
+                
                 # we only enforce versions with auto-install
                 if target_version:
                     # pure despair :(
@@ -849,7 +857,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         except:
                             pass
                     else:
-                        print(f"Cannot determine version for module {name}, continueing.")
+                        log.warning(f"Cannot determine version for module {name}, continueing.")
             # spec & auto-install
             else:
                 if (metadata.version(name) == target_version) or not(version):
@@ -861,12 +869,17 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                             apply_aspect(mod, check, pattern, decorator)
                         self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                         warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
-                    except:
-                        exc = traceback.format_exc()
+                    except e as BaseException:
+                        exc_obj = e
+                        exc = traceback.format_exc(exc_obj)
                     if exc:
                         return fail_or_default(default, ImportError, exc)
                 # wrong version => wrong spec
-                if metadata.version(name) != target_version:
+                existing_mod_meta_version = metadata.version(name)
+                if existing_mod_meta_version != target_version:
+                    log.warning(f"Setting {spec=} to None, because "
+                      "the {target_version=} does not match "
+                      "the {existing_mod_meta_version=}.")
                     spec = None
         # no spec
         else:
@@ -883,11 +896,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
                 that_hash = None
                 try:
-                    for entry in response.json()["urls"]:
-                        that_hash = entry["digests"].get(hash_algo.name)
-                        if that_hash: break
-                except:
-                    pass
+                    data = response.json()
+                    ma = ArtifactMatcher(data["urls"])
+                    release = ma.best()
+                    version = release["version"]
+                    that_hash = release["digests"].get(hash_algo.name)
+                except Exception as _ex:
+                    raise
                 if that_hash:
                     raise RuntimeWarning(f"""Failed to auto-install '{package_name}' because hash_value is missing. You may
 use("{name}", version="{version}", hash_value="{that_hash}")
@@ -954,20 +969,22 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 if exc:
                     return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.")
                 # we've got a complete JSON with a matching entry, let's download
-                print("Downloading", url, "...")
-                download_response = requests.get(url, allow_redirects=True)
-                path = self.home / "packages" / Path(url.name).name
-                this_hash:str = hash_algo.value(download_response.content).hexdigest()
-                if this_hash != hash_value:
-                    return fail_or_default(default, Use.UnexpectedHash, f"The downloaded content of package {package_name} has a different hash than expected, aborting.")
-                try:
-                    with open(path, "wb") as file:
-                        file.write(download_response.content)
-                    print("Downloaded", path)
-                except:
-                    exc = traceback.format_exc()
-                if exc:
-                    return fail_or_default(default, Use.AutoInstallationError, exc)
+                path = self.home / "packages" / url.name
+                if not path.exists():
+                    print("Downloading", url, "...")
+                    download_response = requests.get(url, allow_redirects=True)
+                    path = self.home / "packages" / url.name
+                    this_hash:str = hash_algo.value(download_response.content).hexdigest()
+                    if this_hash != hash_value:
+                        return fail_or_default(default, Use.UnexpectedHash, f"The downloaded content of package {package_name} has a different hash than expected, aborting.")
+                    try:
+                        with open(path, "wb") as file:
+                            file.write(download_response.content)
+                        print("Downloaded", path)
+                    except:
+                        exc = traceback.format_exc()
+                    if exc:
+                        return fail_or_default(default, Use.AutoInstallationError, exc)
             
             # trying to import directly from zip
             try:
@@ -977,14 +994,24 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             except:
                 print("Direct zipimport failed with", traceback.format_exc(), "attempting to extract and load manually...")
             
+            folder = path.parent / path.stem
+            rdists = self._registry["distributions"]
+            if not url:
+                url = URL(f"file://{path}")
+            
             def create_solib_links(archive: zipfile.ZipFile, folder: Path):
+                log.debug(f"create_solib_links({archive=}, {folder=})")
                 # EXTENSION_SUFFIXES  == ['.cpython-38-x86_64-linux-gnu.so', '.abi3.so', '.so'] or ['.cp39-win_amd64.pyd', '.pyd']
                 entries = archive.getnames() if hasattr(archive, "getnames") \
                     else archive.namelist()
+                log.debug(f"archive {entries=}")
                 solibs = [*filter(lambda f: any(map(f.endswith, EXTENSION_SUFFIXES)), entries)]
-                if not solibs: return
+                if not solibs:
+                    log.debug(f"No solibs found in archive")
+                    return
                 # Set up links from 'xyz.cpython-3#-<...>.so' to 'xyz.so'
-                print(f"Creating {len(solibs)} symlinks for extensions...")
+                log.debug(f"Creating {len(solibs)} symlinks for extensions...")
+                log.debug(f"solibs = {solibs}")
                 for solib in solibs:
                     sofile = folder / solib
                     log.debug(f"{sofile=}, {folder=}, {solib=}")
@@ -1000,13 +1027,13 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     link.unlink(missing_ok=True)
                     link.symlink_to(sofile)
             
-            folder = path.parent / path.stem
-            rdists = self._registry["distributions"]
+            log.debug(f"outside of create_solib_links(...)")
             if package_name not in rdists:
                 rdists[package_name] = {}
             if version not in rdists[package_name]:
                 rdists[package_name][version] = {}
             # Update package version metadata
+            assert url is not None
             rdist_info = rdists[package_name][version]
             rdist_info.update({
                 "package": package_name,
@@ -1020,26 +1047,35 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             self.persist_registry()
             
             if not mod:
-                if exc:    
-                    return fail_or_default(default, Use.AutoInstallationError, exc)
-                folder.mkdir(mode=0o755, exist_ok=True)
-                print("Extracting to", folder, "...")
-
-                fileobj = archive = None
-                if path.suffix in (".whl", ".zip"):
-                    fileobj = open(tempfile.mktemp(), "w")  # TODO mktemp is deprecated, use NamedTemporaryFile instead, for instance 
-                    archive = zipfile.ZipFile(path, "r")
-                else:
-                    fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
-                    archive = tarfile.TarFile(fileobj=fileobj, mode="r")
-                with archive as file:
-                    with fileobj as _:
-                        file.extractall(folder)
-                        create_solib_links(file, folder)
-                print("Extracted.")
+                if not folder.exists():
+                    folder.mkdir(mode=0o755, exist_ok=True)
+                    print("Extracting to", folder, "...")
+    
+                    fileobj = archive = None
+                    if path.suffix in (".whl", ".zip"):
+                        fileobj = open(tempfile.mktemp(), "w")  # TODO mktemp is deprecated, use NamedTemporaryFile instead, for instance 
+                        archive = zipfile.ZipFile(path, "r")
+                    else:
+                        fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
+                        archive = tarfile.TarFile(fileobj=fileobj, mode="r")
+                    with archive as file:
+                        with fileobj as _:
+                            file.extractall(folder)
+                            create_solib_links(file, folder)
+                    print("Extracted.")
                 original_cwd = Path.cwd()
+                
+                
                 os.chdir(folder)
-                mod = importlib.import_module(module_name)
+                if not sys.path[0] == "":
+                    sys.path.insert(0, "")
+                print(f"cwd = {os.getcwd()}")
+                importlib.invalidate_caches()
+                try:
+                  mod = importlib.import_module(module_name)
+                except ImportError:
+                  mod = __import__(module_name)
+                print(f"mod = {mod}")
                 for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
                     if not hasattr(mod, key): continue
                     rdist_info[key] = getattr(mod, key)
