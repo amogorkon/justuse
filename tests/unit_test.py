@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest import TestCase, skip
 
 import pytest
+import re
 import use
 from yarl import URL
 
@@ -131,3 +132,32 @@ def test_pure_python_package(reuse):
   test = reuse("example-pypi-package.examplepy", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", auto_install=True)
   assert str(test.Number(2)) == "2"
   file.unlink()
+
+def test_auto_install_native():
+  use._registry = None
+  use._registry = use.load_registry()
+  rw = None
+  try:
+    use("numpy", auto_install=True)
+  except RuntimeWarning as w:
+    rw = w
+  assert rw, "Expected a RuntimeWarning from unversioned auto-install"
+  params = re.search(
+    "use\\("
+      "\"(?P<name>.*)\", "
+      "version=\"(?P<version>.*)\", "
+      "hash_value=\"(?P<hash_value>.*)\", "
+      "auto_install=True"
+    "\\)",
+    rw.args[0]
+  ).groupdict()
+  name = params["name"]
+  del params["name"]
+  print(f"calling use({name!r}, {params}, auto_install=True) ...")
+  mod = use(name, **params, auto_install=True)
+  print(f"mod={mod}")
+  assert mod, "No module was returned"
+  assert mod.ndarray, "Wrong module was returned (expected 'nparray')"
+  assert mod.__version__ == params["version"], "Wrong numpy version"
+
+
