@@ -76,25 +76,36 @@ import time
 import traceback
 import zipfile
 import zipimport
-from collections import defaultdict, namedtuple
+
+from collections import defaultdict
+from collections import namedtuple
 from enum import Enum
-from functools import singledispatch, update_wrapper, wraps
+from functools import singledispatch
+from functools import update_wrapper
+from functools import wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from itertools import starmap
-from logging import DEBUG, StreamHandler, getLogger, root
+from logging import DEBUG
+from logging import StreamHandler
+from logging import getLogger
+from logging import root
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Optional, Union
+from typing import Callable
+from typing import Optional
+from typing import Union
 from warnings import warn
 
 import mmh3
 import packaging
 import requests
 import toml
+
 from packaging import tags
 from packaging.specifiers import SpecifierSet
-from packaging.version import Version, parse
+from packaging.version import Version
+from packaging.version import parse
 from yarl import URL
 
 __version__ = "0.3.2"
@@ -440,15 +451,16 @@ class ArtifactMatcher:
                     yield d
     
     @classmethod
-    def get_sample_data(cls):
+    def get_sample_data(cls):  # TODO: do we still need that?
         return requests.get(
         "https://raw.githubusercontent.com/greyblue9"
         "/junk/master/rels.json"
         ).json()
+
+
 class Use:
     # lift module-level stuff up
     __doc__ = __doc__
-    __version__ = __version__  # otherwise setup.py can't find it
     
     # attempt at fix for #23 doesn't work..
     __path__ = str(Path(__file__).resolve().parent)
@@ -769,6 +781,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
+        assert version is None or isinstance(version, str) or isinstance(version, tuple), "Version must be a string or tuple."
         
         log.debug(f"use({name!r}, version={version!r}, hash_value={hash_value!r})")
         if version in ("", "-1", 0, -1, False): version = None
@@ -1080,5 +1093,4 @@ If you want to auto-install the latest version: use("{name}", version="{version}
         self.set_mod(name=name, mod=mod, path=None, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
         return mod
 
-# 
 sys.modules["use"] = Use()

@@ -1,6 +1,6 @@
-import toml
+try:
+    1/0
+except ZeroDivisionError as z:
+    rz = z
 
-config = {"1":2, "2":3}
-
-with open("config.json", "w") as file:
-    toml.dump(config, file)
+print(rz)

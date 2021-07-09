@@ -6,12 +6,12 @@ if Path("use").is_dir(): os.chdir("..")
 import_base = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(import_base))
 
+import re
 import warnings
 from pathlib import Path
 from unittest import TestCase, skip
 
 import pytest
-import re
 import use
 from yarl import URL
 
@@ -111,18 +111,18 @@ def test_autoinstall_PEBKAC(reuse):
     reuse("pytest", auto_install=True, hash_value="asdf")
     
   # impossible version
-  with pytest.raises(RuntimeWarning):
+  with pytest.raises(AssertionError):  # version must be either str or tuple
     reuse("pytest", auto_install=True, version=-1, hash_value="asdf")
   
   # non-existing package
   with pytest.raises(ImportError):
-    reuse("-^df", auto_install=True, version="0.0.1", hash_value="asdf")
+    reuse("4-^df", auto_install=True, version="0.0.1", hash_value="asdf")
     
 def test_version_warning(reuse):
   # no auto-install requested, wrong version only gives a warning
   with warnings.catch_warnings(record=True) as w:
     warnings.simplefilter("always")
-    reuse("pytest", version=-1)
+    reuse("pytest", version="-1")
     assert issubclass(w[-1].category, (use.AmbiguityWarning, use.VersionWarning))
 
 def test_pure_python_package(reuse):
