@@ -13,8 +13,6 @@ from unittest import skip
 
 import pytest
 import use
-from hypothesis import HealthCheck, assume, given, settings
-from hypothesis import strategies as st
 from yarl import URL
 
 
