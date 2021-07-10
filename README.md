@@ -31,7 +31,7 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [ ] testing everything!
 
 ## The Story
-Over the years many times I've come across various situations where Python's import statement just didn't work the way I needed.
+Over the years, many times I've come across various situations where Python's import statement just didn't work the way I needed.
 There were projects where I felt that a central module from where to expand functionality would be the simplest, most elegant approach, but that would only work with simple modules and libs, not with functionality that required access to the main state of the application. In those situations the first thing to try would be "import B" in module A and "import A" in module B - a classical circular import, which comes with a lot of headaches and often results in overly convoluted code. All this could be simplified if it was possible to pass some module-level global variables to the about-to-be-imported module before its actual execution, but how the heck could that work with an import statement?
 
 Later, I worked and experimented a lot in jupyter notebooks. Usually I would have some regular python module only with pure functions open in an editor, import that module in jupyter and have all the state there. Most of the time I'd spend in jupyter, but from time to time I'd edit the file and have to manually reload the module in jupyter - why couldn't it just automatically reload the module when my file is saved? Also, in the past reload() was a builtin function, now I have to import it extra from importlib, another hoop to jump through..
