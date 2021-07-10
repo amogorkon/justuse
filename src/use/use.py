@@ -1,3 +1,4 @@
+
 """
 Just use() python code from anywhere - a functional import alternative with advanced features.
 
@@ -65,6 +66,7 @@ import importlib
 import inspect
 import json
 import linecache
+import logging
 import os
 import re
 import signal
@@ -76,37 +78,25 @@ import time
 import traceback
 import zipfile
 import zipimport
-
-from collections import defaultdict
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from enum import Enum
-from functools import singledispatch
-from functools import update_wrapper
-from functools import wraps
+from functools import singledispatch, update_wrapper, wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from itertools import starmap
-from logging import DEBUG
-from logging import StreamHandler
-from logging import getLogger
-from logging import root
+from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
 from types import ModuleType
-from typing import Callable
-from typing import Optional
-from typing import Union
+from typing import Callable, Optional, Union
 from warnings import warn
 
 import mmh3
 import packaging
 import requests
 import toml
-
 from packaging import tags
 from packaging.specifiers import SpecifierSet
-from packaging.version import LegacyVersion
-from packaging.version import Version
-from packaging.version import parse
+from packaging.version import LegacyVersion, Version, parse
 from yarl import URL
 
 __version__ = "0.3.2"
@@ -465,6 +455,7 @@ class Use:
     
     # attempt at fix for #23 doesn't work..
     __path__ = str(Path(__file__).resolve().parent)
+    
     Path = Path
     URL = URL
     class Hash(Enum):
@@ -516,7 +507,10 @@ class Use:
         self._registry = self.load_registry()
 
         # defaults
-        self.config = {"version_warning": True}
+        self.config = {
+                        "version_warning": True,
+                        "debugging": False,
+                       }
         
         # for the user to copy&paste
         with open(self.home / "default_config.toml", "w") as file:
@@ -535,6 +529,9 @@ class Use:
 Please consider upgrading via 'python -m pip install -U justuse'""", Use.VersionWarning)
             except:
                 warn("Couldn't look up the current version of justuse, you can safely ignore this warning. \n", traceback.format_exc(), "\n \n")
+
+        if self.config["debugging"]:
+            logging.root.setLevel(logging.DEBUG)
 
     def load_registry(self, registry=None):
         if registry is None:
@@ -1005,7 +1002,9 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             folder = path.parent / path.stem
             rdists = self._registry["distributions"]
             if not url:
-                url = URL(f"file://{path}")
+                print(234234, path, type(path))
+                url = URL(f"file:/{path}")
+                print(343434, url)
             
             def create_solib_links(archive: zipfile.ZipFile, folder: Path):
                 log.debug(f"create_solib_links({archive=}, {folder=})")
@@ -1072,7 +1071,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             create_solib_links(file, folder)
                     print("Extracted.")
                 original_cwd = Path.cwd()
-                
                 
                 os.chdir(folder)
                 if not sys.path[0] == "":
