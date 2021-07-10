@@ -1,6 +1,2 @@
-try:
-    1/0
-except ZeroDivisionError as z:
-    rz = z
+from packaging.version import parse, Version
 
-print(rz)

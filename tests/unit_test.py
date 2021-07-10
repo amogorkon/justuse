@@ -9,10 +9,12 @@ sys.path.insert(0, str(import_base))
 import re
 import warnings
 from pathlib import Path
-from unittest import TestCase, skip
+from unittest import skip
 
 import pytest
 import use
+from hypothesis import HealthCheck, assume, given, settings
+from hypothesis import strategies as st
 from yarl import URL
 
 
@@ -103,7 +105,7 @@ def test_autoinstall_PEBKAC(reuse):
     reuse("pytest", auto_install=True)
   
   # forgot hash_value
-  with pytest.raises(RuntimeWarning):
+  with pytest.raises(AssertionError):
     reuse("pytest", auto_install=True, version="-1")
   
   # forgot version
@@ -122,7 +124,7 @@ def test_version_warning(reuse):
   # no auto-install requested, wrong version only gives a warning
   with warnings.catch_warnings(record=True) as w:
     warnings.simplefilter("always")
-    reuse("pytest", version="-1")
+    reuse("pytest", version="0.0")
     assert issubclass(w[-1].category, (use.AmbiguityWarning, use.VersionWarning))
 
 def test_pure_python_package(reuse):

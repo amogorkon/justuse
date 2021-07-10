@@ -104,6 +104,7 @@ import toml
 
 from packaging import tags
 from packaging.specifiers import SpecifierSet
+from packaging.version import LegacyVersion
 from packaging.version import Version
 from packaging.version import parse
 from yarl import URL
@@ -507,6 +508,7 @@ class Use:
         self.home.mkdir(mode=0o755, exist_ok=True)
         (self.home / "packages").mkdir(mode=0o755, exist_ok=True)
         (self.home / "registry.json").touch(mode=0o644, exist_ok=True)
+        (self.home / "user_registry.json").touch(mode=0o644, exist_ok=True)
         (self.home / "config.toml").touch(mode=0o644, exist_ok=True)
         (self.home / "default_config.toml").touch(mode=0o644, exist_ok=True)
         (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
@@ -769,7 +771,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 self,
                 name:str,
                 /,*,
-                version:str="", 
+                version:str=None, 
                 initial_globals:dict=None, 
                 auto_install:bool=False, 
                 hash_algo:str=Hash.sha256, 
@@ -781,11 +783,11 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
-        assert version is None or isinstance(version, str) or isinstance(version, tuple), "Version must be a string or tuple."
         
-        log.debug(f"use({name!r}, version={version!r}, hash_value={hash_value!r})")
-        if version in ("", "-1", 0, -1, False): version = None
-        target_version = parse(str(version)) if version else None  # the empty str parses as a truey LegacyVersion - WTF
+        assert version is None or isinstance(version, str), "Version must be given as string."
+        target_version = parse(version) if version is not None else None
+        assert not isinstance(target_version, LegacyVersion), "Version must be in a format compatible to https://www.python.org/dev/peps/pep-0440"
+        
         exc: str = None
         mod: ModuleType = None
         
