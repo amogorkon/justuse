@@ -1,1 +1,1 @@
-print(__file__)
+print("FROM", __file__)

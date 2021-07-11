@@ -77,23 +77,38 @@ import time
 import traceback
 import zipfile
 import zipimport
-from collections import defaultdict, namedtuple
+
+from collections import defaultdict
+from collections import namedtuple
 from enum import Enum
-from functools import singledispatch, update_wrapper, wraps
+from functools import singledispatch
+from functools import update_wrapper
+from functools import wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
-from logging import DEBUG, StreamHandler, getLogger, root
+from logging import DEBUG
+from logging import StreamHandler
+from logging import getLogger
+from logging import root
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Union
 from warnings import warn
 
 import mmh3
 import requests
 import toml
+
 from packaging import tags
 from packaging.specifiers import SpecifierSet
-from packaging.version import LegacyVersion, Version, parse
+from packaging.version import LegacyVersion
+from packaging.version import Version
+from packaging.version import parse
 from yarl import URL
 
 __version__ = "0.3.2"
@@ -445,6 +460,7 @@ def find_latest_working_version(releases: Dict[str, List[Dict[str, str]]], # {ve
 class Use:
     # lift module-level stuff up
     __doc__ = __doc__
+    __version__ = __version__
     
     # attempt at fix for #23 doesn't work..
     __path__ = str(Path(__file__).resolve().parent)

@@ -1,4 +1,4 @@
 import use
 
 print("FROM", __file__)
-use(use.Path("testsubdir/modC.py"))
+use(use.Path("tests_subdir/modC.py"))
