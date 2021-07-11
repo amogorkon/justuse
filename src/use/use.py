@@ -974,7 +974,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 if exc:
                     return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.")
                 # we've got a complete JSON with a matching entry, let's download
-                path = self.home / "packages" / url.name
+                path = self.home / "packages" / Path(url.name).name
                 if not path.exists():
                     print("Downloading", url, "...")
                     download_response = requests.get(url, allow_redirects=True)
