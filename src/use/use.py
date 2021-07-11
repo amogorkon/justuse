@@ -466,22 +466,14 @@ class Use:
     isclass = inspect.isclass   
     class VersionWarning(Warning):
         pass
-
     class NotReloadableWarning(Warning):
         pass
-
     class NoValidationWarning(Warning):
         pass
-
     class AmbiguityWarning(Warning):
         pass
-
-    class ModuleNotFoundError(ImportError):
-        pass
-
     class UnexpectedHash(ImportError):
         pass
-
     class AutoInstallationError(ImportError):
         pass
 
@@ -588,7 +580,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         aspectize = aspectize or {}
         response = requests.get(url)
         if response.status_code != 200:
-            raise ModuleNotFoundError(f"Could not load {url} from the interwebs, got a {response.status_code} error.")
+            raise ImportError(f"Could not load {url} from the interwebs, got a {response.status_code} error.")
         this_hash = hash_algo.value(response.content).hexdigest()
         if hash_value:
             if this_hash != hash_value:
@@ -671,7 +663,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         path = source_dir.joinpath(path).resolve()
         if not path.exists():
             os.chdir(original_cwd)
-            return fail_or_default(default, ModuleNotFoundError, f"Sure '{path}' exists?")
+            return fail_or_default(default, ImportError, f"Sure '{path}' exists?")
         os.chdir(path.parent)
         name = path.stem
         if reloading:
