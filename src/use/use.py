@@ -434,6 +434,8 @@ def find_latest_working_version(releases: Dict[str, List[Dict[str, str]]], # {ve
                                 platform_tags:List[str]=None,
                                 interpreter_tag:str=None,                                
                                 ):
+    assert isinstance(releases, dict)
+    assert isinstance(hash_algo, str)
     if not sys_version:
         sys_version = Version(".".join(map(str, sys.version_info[0:3])))
     assert isinstance(sys_version, Version)
@@ -456,14 +458,13 @@ def find_latest_working_version(releases: Dict[str, List[Dict[str, str]]], # {ve
             if is_version_satisfied(info, sys_version) and \
                 is_platform_satisfied(info, platform_tags) and \
                 is_interpreter_satisfied(info, interpreter_tag):
-                hash_value = info["digests"].get(hash_algo.name)
+                hash_value = info["digests"].get(hash_algo)
                 return info["version"], hash_value
             
 class Use:
     # lift module-level stuff up
     __doc__ = __doc__
     __version__ = __version__
-    
     # attempt at fix for #23 doesn't work..
     __path__ = str(Path(__file__).resolve().parent)
     
@@ -930,7 +931,10 @@ use("{name}", version="{version}", hash_value="{that_hash}")
                 else:
                     try:
                         data = response.json()
-                        hit = find_latest_working_version(data["releases"], hash_algo=hash_algo)
+                        hit = find_latest_working_version(
+                            data["releases"],
+                            hash_algo=hash_algo.name,
+                        )
                         if hit:
                           version, hash_value = hit
                     except KeyError:  # json issues
