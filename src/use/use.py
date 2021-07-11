@@ -66,7 +66,6 @@ import importlib
 import inspect
 import json
 import linecache
-import logging
 import os
 import re
 import signal
@@ -512,7 +511,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                 warn("Couldn't look up the current version of justuse, you can safely ignore this warning. \n", traceback.format_exc(), "\n \n")
 
         if config["debugging"]:
-            logging.root.setLevel(logging.DEBUG)
+            root.setLevel(DEBUG)
 
     def load_registry(self, registry=None):
         if registry is None:
@@ -989,7 +988,9 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 mod = importer.load_module(module_name)
                 print("Direct zipimport of", name, "successful.")
             except:
-                print("Direct zipimport failed with", traceback.format_exc(), "attempting to extract and load manually...")
+                if config["debugging"]:
+                    log.debug(traceback.format_exc())
+                print("Direct zipimport failed, attempting to extract and load manually...")
             
             folder = path.parent / path.stem
             rdists = self._registry["distributions"]
@@ -1065,10 +1066,10 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 os.chdir(folder)
                 if not sys.path[0] == "":
                     sys.path.insert(0, "")
-                print(f"cwd = {os.getcwd()}")
                 importlib.invalidate_caches()
                 try:
                   mod = importlib.import_module(module_name)
+                  assert parse(mod.__version__) == target_version
                 except ImportError:
                   exc = traceback.format_exc()
                 log.debug(f"mod = {mod}")
@@ -1081,6 +1082,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
         for (check, pattern), decorator in aspectize.items():
             apply_aspect(mod, check, pattern, decorator)
         self.set_mod(name=name, mod=mod, path=None, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
+        assert mod, "Well shit."
         return mod
 
 sys.modules["use"] = Use()
