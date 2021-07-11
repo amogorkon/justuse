@@ -83,11 +83,10 @@ from enum import Enum
 from functools import singledispatch, update_wrapper, wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
-from itertools import starmap
 from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Optional, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 from warnings import warn
 
 import mmh3
@@ -344,7 +343,73 @@ class ModuleReloader:
     def __del__(self):
         self.stop()
         atexit.unregister(self.stop)
-        
+
+
+def parse_filename(info:Union[dict,str]) -> Optional[dict]:
+    """Match the filename and return a dict of parts.
+    >>> parse_filename(...)  # TODO add a proper doctest
+    {"distribution": .., "version": .., ...} 
+    """
+    match:Optional[re.Match] = re.match(
+        "(?P<distribution>.*)-"
+        "(?P<version>.*)"
+        "(?:-(?P<build_tag>.*))?-"
+        "(?P<python_tag>.*)-"
+        "(?P<abi_tag>.*)-"
+        "(?P<platform_tag>.*)\\."
+        "(?P<ext>whl|zip|tar|tar\\.gz)",
+        info if isinstance(info,str) else info["filename"]
+    )
+    return match.groupdict() if match else None
+
+def is_version_satisfied(info:Union[dict,str], sys_version: Version):
+    vstr = info if isinstance(info,str) \
+                else info["requires_python"] \
+                or f'=={info["python_version"]}'
+    if not vstr: return False
+    vreq = SpecifierSet(vstr)
+    return sys_version in vreq
+
+def is_platform_satisfied(info:Union[dict,str], platform_tags:List[str]):
+    return any(filter(lambda it: it.platform in platform_tags,
+            tags.parse_tag("-".join((info["python_tag"], info["abi_tag"], info["platform_tag"])))
+                ))
+
+def is_interpreter_satisfied(info:Union[dict,str], interpreter_tag: str):
+    return interpreter_tag in (info["python_tag"], info["abi_tag"])
+
+def find_matching_artifact(
+                    urls:List[Dict[str, str]], *, 
+                    # for testability
+                    sys_version:Version=None,  
+                    platform_tags:List[str]=None,
+                    interpreter_tag:str=None,
+                    ) -> Tuple[str, str]:
+    """Pick the best match for our architecture from a list of possible urls and return version and hash."""
+    if not sys_version:
+        sys_version = Version(".".join(map(str, sys.version_info[0:3])))
+    assert isinstance(sys_version, Version)
+    if not platform_tags: 
+        platform_tags = list(tags._platform_tags())
+    assert isinstance(platform_tags, list)
+    if not interpreter_tag:
+        interpreter_tag = tags.interpreter_name() + tags.interpreter_version()
+    assert isinstance(interpreter_tag, str)
+    
+    return [(info["version"], info["hash"]) for info in urls 
+                                    if is_version_satisfied(info, sys_version) and 
+                                        is_platform_satisfied(info, platform_tags) and 
+                                        is_interpreter_satisfied(info, interpreter_tag)][0]
+    
+def find_latest_working_version(releases):
+    for ver, dists in releases.items():
+        for d in dists:
+            d["version"] = ver # Add version info
+            if parsed := parse_filename(d["filename"]):
+                d.update(parsed)
+                yield d
+    
+    
 class ArtifactMatcher:
     """A class to handle all matching needs.
     
@@ -408,14 +473,6 @@ class ArtifactMatcher:
         interpreter_tag = packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
         return interpreter_tag in (info["python_tag"], info["abi_tag"])
     
-    def counts(self):
-        versions = filter(None, starmap(
-          # only return versions with one or more artifacts
-          lambda k, v: k if v else None,
-          self.rels.items()
-        ))
-        return sorted((len(self.rels[k]),k) for k in versions)
-    
     def best(self):
         return next(iter(self.filtered(reverse=True)))
     
@@ -442,7 +499,7 @@ class ArtifactMatcher:
                     yield d
     
     @classmethod
-    def get_sample_data(cls):  # TODO: do we still need that?
+    def get_sample_data(cls):  # TODO: put that in a test
         return requests.get(
         "https://raw.githubusercontent.com/greyblue9"
         "/junk/master/rels.json"
@@ -1002,9 +1059,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             folder = path.parent / path.stem
             rdists = self._registry["distributions"]
             if not url:
-                print(234234, path, type(path))
                 url = URL(f"file:/{path}")
-                print(343434, url)
             
             def create_solib_links(archive: zipfile.ZipFile, folder: Path):
                 log.debug(f"create_solib_links({archive=}, {folder=})")
