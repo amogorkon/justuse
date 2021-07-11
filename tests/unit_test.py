@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 if Path("use").is_dir(): os.chdir("..")
 import_base = Path(__file__).parent.parent / "src"
