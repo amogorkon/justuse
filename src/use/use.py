@@ -352,9 +352,10 @@ class ModuleReloader:
 Fetch a list of the platform_tags supported by the running system.
 """
 def get_platform_tags():
-  pip_tags = ()
+  pip_tags:list = []
   try:
     from pip._internal.utils.compatibility_tags import get_supported
+    pip_tags = list(get_supported())
   except ModuleNotFoundError:
     pass
   pkg_tags = packaging.tags._platform_tags()
