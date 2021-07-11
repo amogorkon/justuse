@@ -10,8 +10,10 @@ import re
 import warnings
 from pathlib import Path
 from unittest import skip
+from unittest.mock import patch
 
 import pytest
+import requests
 import use
 from yarl import URL
 
@@ -23,6 +25,12 @@ def reuse():
   use._aspects = {}
   use._reloaders = {}
   return use 
+
+def get_sample_data():
+    return requests.get(
+    "https://raw.githubusercontent.com/greyblue9"
+    "/junk/master/rels.json"
+    ).json()
 
 def test_access_to_home():
   test = use.Path.home() / ".justuse-python/packages/test"
@@ -136,29 +144,29 @@ def test_pure_python_package(reuse):
 def test_auto_install_native():
   use._registry = None
   use._registry = use.load_registry()
-  rw = None
-  try:
-    use("numpy", auto_install=True)
-  except RuntimeWarning as w:
-    rw = w
-  assert rw, "Expected a RuntimeWarning from unversioned auto-install"
-  params = re.search(
-    "use\\("
-      "\"(?P<name>.*)\", "
-      "version=\"(?P<version>.*)\", "
-      "hash_value=\"(?P<hash_value>.*)\", "
-      "auto_install=True"
-    "\\)",
-    rw.args[0]
-  ).groupdict()
-  name = "numpy"
-  version = params["version"]
-  hash_value = params["hash_value"]
-  print(f"calling use({name!r}, {params}, auto_install=True) ...")
-  mod = use(name, hash_value=hash_value, version=version, auto_install=True)
-  print(f"mod={mod}")
-  assert mod, "No module was returned"
-  assert mod.ndarray, "Wrong module was returned (expected 'nparray')"
-  assert mod.__version__ == params["version"], "Wrong numpy version"
-
+  with patch('use.config', {"debugging": True}, spec=True):  # ? not sure about that
+    rw = None
+    try:
+      use("numpy", auto_install=True)
+    except RuntimeWarning as w:
+      rw = w
+    assert rw, "Expected a RuntimeWarning from unversioned auto-install"
+    params = re.search(
+      "use\\("
+        "\"(?P<name>.*)\", "
+        "version=\"(?P<version>.*)\", "
+        "hash_value=\"(?P<hash_value>.*)\", "
+        "auto_install=True"
+      "\\)",
+      rw.args[0]
+    ).groupdict()
+    name = "numpy"
+    version = params["version"]
+    hash_value = params["hash_value"]
+    print(f"calling use({name!r}, {params}, auto_install=True) ...")
+    mod = use(name, hash_value=hash_value, version=version, auto_install=True)
+    print(f"mod={mod}")
+    assert mod, "No module was returned"
+    assert mod.ndarray, "Wrong module was returned (expected 'nparray')"
+    assert mod.__version__ == params["version"], "Wrong numpy version"
 

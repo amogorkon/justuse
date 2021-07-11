@@ -90,7 +90,6 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 from warnings import warn
 
 import mmh3
-import packaging
 import requests
 import toml
 from packaging import tags
@@ -108,6 +107,12 @@ mode = Enum("Mode", "fastfail")
 root.addHandler(StreamHandler(sys.stderr))
 if "DEBUG" in os.environ: root.setLevel(DEBUG)
 log = getLogger(__name__)
+
+# defaults
+config = {
+        "version_warning": True,
+        "debugging": False,
+        }
 
 # sometimes all you need is a sledge hammer..
 def signal_handler(sig, frame):
@@ -345,11 +350,12 @@ class ModuleReloader:
         atexit.unregister(self.stop)
 
 
-def parse_filename(info:Union[dict,str]) -> Optional[dict]:
+def parse_filename(info:str) -> Optional[dict]:
     """Match the filename and return a dict of parts.
     >>> parse_filename(...)  # TODO add a proper doctest
     {"distribution": .., "version": .., ...} 
     """
+    assert isinstance(info, str)
     match:Optional[re.Match] = re.match(
         "(?P<distribution>.*)-"
         "(?P<version>.*)"
@@ -358,11 +364,11 @@ def parse_filename(info:Union[dict,str]) -> Optional[dict]:
         "(?P<abi_tag>.*)-"
         "(?P<platform_tag>.*)\\."
         "(?P<ext>whl|zip|tar|tar\\.gz)",
-        info if isinstance(info,str) else info["filename"]
+        info
     )
     return match.groupdict() if match else None
 
-def is_version_satisfied(info:Union[dict,str], sys_version: Version):
+def is_version_satisfied(info:Dict[str,str], sys_version: Version):
     vstr = info if isinstance(info,str) \
                 else info["requires_python"] \
                 or f'=={info["python_version"]}'
@@ -370,12 +376,17 @@ def is_version_satisfied(info:Union[dict,str], sys_version: Version):
     vreq = SpecifierSet(vstr)
     return sys_version in vreq
 
-def is_platform_satisfied(info:Union[dict,str], platform_tags:List[str]):
-    return any(filter(lambda it: it.platform in platform_tags,
-            tags.parse_tag("-".join((info["python_tag"], info["abi_tag"], info["platform_tag"])))
-                ))
+def is_platform_satisfied(info:Dict[str, str], platform_tags:List[str]):
+    assert isinstance(info, dict)
+    try:
+        for it in tags.parse_tag("-".join((info["python_tag"], info["abi_tag"], info["platform_tag"]))):
+            if it.platform in platform_tags:
+                return True
+    except:
+        if config["debugging"]: print(traceback.format_exc())
+    return False
 
-def is_interpreter_satisfied(info:Union[dict,str], interpreter_tag: str):
+def is_interpreter_satisfied(info:Dict[str, str], interpreter_tag: str):
     return interpreter_tag in (info["python_tag"], info["abi_tag"])
 
 def find_matching_artifact(
@@ -396,116 +407,42 @@ def find_matching_artifact(
         interpreter_tag = tags.interpreter_name() + tags.interpreter_version()
     assert isinstance(interpreter_tag, str)
     
-    return [(info["version"], info["hash"]) for info in urls 
+    return [(info["version"], info["hash"]) for info in urls   # TODO info["hash"] doesn't respect our default hashing algorithm 
                                     if is_version_satisfied(info, sys_version) and 
                                         is_platform_satisfied(info, platform_tags) and 
                                         is_interpreter_satisfied(info, interpreter_tag)][0]
     
-def find_latest_working_version(releases):
+def find_latest_working_version(releases: Dict[str, List[Dict[str, str]]], # {version: [{comment_text: str, filename: str, url: str, version: str, hash: str, build_tag: str, python_tag: str, abi_tag: str, platform_tag: str}]}
+                                *,
+                                #testing
+                                sys_version:Version=None,
+                                platform_tags:List[str]=None,
+                                interpreter_tag:str=None,                                
+                                ):
+    if not sys_version:
+        sys_version = Version(".".join(map(str, sys.version_info[0:3])))
+    assert isinstance(sys_version, Version)
+    if not platform_tags: 
+        platform_tags = list(tags._platform_tags())
+    assert isinstance(platform_tags, list)
+    if not interpreter_tag:
+        interpreter_tag = tags.interpreter_name() + tags.interpreter_version()
+    assert isinstance(interpreter_tag, str)
+    
+    # update the release dicts to hold all info canonically
     for ver, dists in releases.items():
         for d in dists:
             d["version"] = ver # Add version info
             if parsed := parse_filename(d["filename"]):
                 d.update(parsed)
-                yield d
     
-    
-class ArtifactMatcher:
-    """A class to handle all matching needs.
-    
-    Classic imports only care about .py files, but installing any advanced high-performance package like numpy 
-    also requires handling of non-python files compiled for a specific architecture. 
-    In those cases files may need to be relinked for them to work properly. 
-    We need to find those specific files that match our architecture.
-    """
-    def __init__(self, releases):
-        self.rels = releases
-
-    def parse_filename(self, info:Union[dict,str]) -> Optional[dict]:
-        filename = info if isinstance(info,str) else info["filename"]
-        match:Optional[re.Match] = re.match(
-          "(?P<distribution>.*)-"
-          "(?P<version>.*)"
-          "(?:-(?P<build_tag>.*))?-"
-          "(?P<python_tag>.*)-"
-          "(?P<abi_tag>.*)-"
-          "(?P<platform_tag>.*)\\."
-          "(?P<ext>whl|zip|tar|tar\\.gz)",
-          filename
-        )
-        return match.groupdict() if match else None
-    
-    def filtered(self, reverse=False):
-        count = 0
-        seq = list(reversed(list(self))) if reverse else list(self)
-        for info in seq:
-            if self.is_version_satisfied(info) and \
-               self.is_platform_satisfied(info) and \
-               self.is_interpreter_satisfied(info):
-                count += 1
-                yield info
-        if count == 0:
-            yield next(iter(seq))
-
-    def is_version_satisfied(self, info:Union[dict,str]):
-        sv = Version(".".join(map(str, sys.version_info[0:3])))
-        vstr = info if isinstance(info,str) \
-                  else info["requires_python"] \
-                    or f'=={info["python_version"]}'
-        if not vstr: return False
-        vreq = SpecifierSet(vstr)
-        return sv in vreq
-        
-    def is_platform_satisfied(self, info:Union[dict,str]):
-        platform_tags = list(tags._platform_tags())
-        return any(
-            filter(
-                lambda it: it.platform in platform_tags,
-                packaging.tags.parse_tag(
-                    "-".join(
-                        (info["python_tag"], info["abi_tag"], info["platform_tag"])
-                    )
-                ),
-            )
-        )
-        
-    def is_interpreter_satisfied(self, info:Union[dict,str]):
-        interpreter_tag = packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
-        return interpreter_tag in (info["python_tag"], info["abi_tag"])
-    
-    def best(self):
-        return next(iter(self.filtered(reverse=True)))
-    
-    def __iter__(self, version=None):
-        """
-        Yields a `dict` for each available artifact in increasing-version order.
-        Each dict is updated to include
-        ['version']
-        ['abi_tag']
-        ['build_tag']
-        ['distribution']
-        ['ext']
-        ['platform_tag']
-        ['python_tag']
-        ['version']
-        """
-        for ver, dists in self.rels.items():
-            for d in dists:
-                d["version"] = ver # Add version info
-                if version is not None and version != ver:
-                    continue
-                if parsed := self.parse_filename(d["filename"]):
-                    d.update(parsed)
-                    yield d
-    
-    @classmethod
-    def get_sample_data(cls):  # TODO: put that in a test
-        return requests.get(
-        "https://raw.githubusercontent.com/greyblue9"
-        "/junk/master/rels.json"
-        ).json()
-
-
+    for ver, dists in sorted(releases.items(), key=lambda item: item[0]):
+        for info in dists:
+            if is_version_satisfied(info, sys_version) and \
+                is_platform_satisfied(info, platform_tags) and \
+                is_interpreter_satisfied(info, interpreter_tag):
+                return info["version"], info["hash"]
+            
 class Use:
     # lift module-level stuff up
     __doc__ = __doc__
@@ -521,6 +458,7 @@ class Use:
     ModInUse = namedtuple("ModInUse", "name mod path spec frame")
 
     mode = mode
+    config = config
     
     # ALIASES
     isfunction = inspect.isfunction
@@ -562,21 +500,15 @@ class Use:
         (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
         # load_registry expects 'self.home' to be set
         self._registry = self.load_registry()
-
-        # defaults
-        self.config = {
-                        "version_warning": True,
-                        "debugging": False,
-                       }
         
         # for the user to copy&paste
         with open(self.home / "default_config.toml", "w") as file:
-            toml.dump(self.config, file)
+            toml.dump(config, file)
 
         with open(self.home / "config.toml") as file:
-            self.config.update(toml.load(file))
+            config.update(toml.load(file))
 
-        if self.config["version_warning"]:
+        if config["version_warning"]:
             try:
                 response = requests.get(f"https://pypi.org/pypi/justuse/json")
                 data = response.json()
@@ -587,7 +519,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             except:
                 warn("Couldn't look up the current version of justuse, you can safely ignore this warning. \n", traceback.format_exc(), "\n \n")
 
-        if self.config["debugging"]:
+        if config["debugging"]:
             logging.root.setLevel(logging.DEBUG)
 
     def load_registry(self, registry=None):
@@ -840,6 +772,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         
         assert version is None or isinstance(version, str), "Version must be given as string."
         target_version = parse(version) if version is not None else None
+        version = str(target_version) and None  # just validating user input and canonicalizing it
+        
         assert not isinstance(target_version, LegacyVersion), "Version must be in a format compatible to https://www.python.org/dev/peps/pep-0440"
         
         exc: str = None
@@ -940,8 +874,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 existing_mod_meta_version = metadata.version(name)
                 if existing_mod_meta_version != target_version:
                     log.warning(f"Setting {spec=} to None, because "
-                      "the {target_version=} does not match "
-                      "the {existing_mod_meta_version=}.")
+                        "the {target_version=} does not match "
+                        "the {existing_mod_meta_version=}.")
                     spec = None
         # no spec
         else:
@@ -956,21 +890,21 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             # PEBKAC
             if target_version and not hash_value:  # let's try to be helpful
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
+                if response.status_code != 200:
+                    raise RuntimeWarning(f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because you forgot to provide a matching hash_value for the auto-installation.")
                 that_hash = None
                 try:
                     data = response.json()
-                    ma = ArtifactMatcher(data["urls"])
-                    release = ma.best()
-                    version = release["version"]
-                    that_hash = release["digests"].get(hash_algo.name)
-                except Exception as _ex:
+                    hit = find_matching_artifact(data["urls"])
+                except Exception as _ex:  # ? well.. :)
                     raise
-                if that_hash:
+                if hit:
+                    version, that_hash = hit
                     raise RuntimeWarning(f"""Failed to auto-install '{package_name}' because hash_value is missing. You may
 use("{name}", version="{version}", hash_value="{that_hash}")
 """)
                 else:
-                    raise RuntimeWarning(f"Failed to auto-install '{package_name}' because hash_value is missing.")
+                    raise RuntimeWarning(f"Failed to find any distribution for {package_name} with version {version} that can be run our platform!")
             elif not target_version and hash_value:
                 raise RuntimeWarning(f"Failed to auto-install '{package_name}' because version is missing.")
             elif not target_version and not hash_value:
@@ -985,12 +919,19 @@ use("{name}", version="{version}", hash_value="{that_hash}")
                 else:
                     try:
                         data = response.json()
-                        ma = ArtifactMatcher(data["releases"])
-                        release = ma.best()
-                        version = release["version"]
-                        hash_value = release["digests"][hash_algo.name]
+                        hit = find_latest_working_version(data["releases"])
                     except KeyError:  # json issues
+                        if config["debugging"]:
+                            log.error(traceback.format_exc())
+                    except:
+                        exc = traceback.format_exc()
+                    if exc:
                         raise RuntimeWarning("Please specify version and hash for auto-installation. Sadly something went wrong with the JSON PyPI provided, otherwise we could've provided a suggestion.")
+                    if hit:
+                        version, that_hash = hit
+                    else:
+                        raise RuntimeWarning(f"We could not find any version or release for {package_name} that could satisfy our requirements!")
+                    
                     raise RuntimeWarning(f"""Please specify version and hash for auto-installation of '{package_name}'. 
 To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
 If you want to auto-install the latest version: use("{name}", version="{version}", hash_value="{hash_value}", auto_install=True)
