@@ -142,7 +142,8 @@ def test_pure_python_package(reuse):
   assert str(test.Number(2)) == "2"
   file.unlink()
 
-@skip
+@pytest.mark.skipif(sys.platform.startswith("win"),
+  reason="windows Auto-installing native modules is not supported")
 def test_auto_install_native():
   use._registry = None
   use._registry = use.load_registry()

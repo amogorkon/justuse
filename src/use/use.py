@@ -84,7 +84,6 @@ from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
-from pip._internal.utils.compatibility_tags import get_supported
 from types import ModuleType
 from typing import Callable, Dict, List, Optional, Tuple, Union
 from warnings import warn
@@ -351,15 +350,15 @@ class ModuleReloader:
 
 """
 Fetch a list of the platform_tags supported by the running system.
-
-Additional possibilities:
-    def get_version_tags():
-      return list(set(([t.version     for t in get_supported()])))
-    def get_interpreter_tags():
-      return list(set(([t.interpreter for t in get_supported()])))
 """
 def get_platform_tags():
-  return list(set(([t.platform    for t in get_supported()])))
+  pip_tags = ()
+  try:
+    from pip._internal.utils.compatibility_tags import get_supported
+  except ModuleNotFoundError:
+    pass
+  pkg_tags = packaging.tags._platform_tags()
+  return list(set(itertools.chain(pip_tags, pkg_tags)))
 
 def parse_filename(info:str) -> Optional[dict]:
     """Match the filename and return a dict of parts.
