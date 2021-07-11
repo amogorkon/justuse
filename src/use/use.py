@@ -428,6 +428,7 @@ def find_matching_artifact(
     
 def find_latest_working_version(releases: Dict[str, List[Dict[str, str]]], # {version: [{comment_text: str, filename: str, url: str, version: str, hash: str, build_tag: str, python_tag: str, abi_tag: str, platform_tag: str}]}
                                 *,
+                                hash_algo:str,
                                 #testing
                                 sys_version:Version=None,
                                 platform_tags:List[str]=None,
@@ -455,7 +456,8 @@ def find_latest_working_version(releases: Dict[str, List[Dict[str, str]]], # {ve
             if is_version_satisfied(info, sys_version) and \
                 is_platform_satisfied(info, platform_tags) and \
                 is_interpreter_satisfied(info, interpreter_tag):
-                return info["version"], info["hash"]
+                hash_value = info["digests"].get(hash_algo.name)
+                return info["version"], hash_value
             
 class Use:
     # lift module-level stuff up
@@ -928,7 +930,9 @@ use("{name}", version="{version}", hash_value="{that_hash}")
                 else:
                     try:
                         data = response.json()
-                        hit = find_latest_working_version(data["releases"])
+                        hit = find_latest_working_version(data["releases"], hash_algo=hash_algo)
+                        if hit:
+                          version, hash_value = hit
                     except KeyError:  # json issues
                         if config["debugging"]:
                             log.error(traceback.format_exc())
