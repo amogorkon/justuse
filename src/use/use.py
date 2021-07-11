@@ -411,6 +411,9 @@ def find_matching_artifact(
                                         is_platform_satisfied(info, platform_tags) and 
                                         is_interpreter_satisfied(info, interpreter_tag)][0]
     
+class MissingHash(ValueError):
+    pass
+
 def find_latest_working_version(releases: Dict[str, List[Dict[str, str]]], # {version: [{comment_text: str, filename: str, url: str, version: str, hash: str, build_tag: str, python_tag: str, abi_tag: str, platform_tag: str}]}
                                 *,
                                 hash_algo:str,
@@ -444,6 +447,9 @@ def find_latest_working_version(releases: Dict[str, List[Dict[str, str]]], # {ve
                 is_platform_satisfied(info, platform_tags) and \
                 is_interpreter_satisfied(info, interpreter_tag):
                 hash_value = info["digests"].get(hash_algo)
+                if not hash_value:
+                    raise MissingHash(f"No hash digest found in "
+                        "release distribution for {hash_algo=}")
                 return info["version"], hash_value
             
 class Use:
