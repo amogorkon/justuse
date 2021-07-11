@@ -496,7 +496,7 @@ class Use:
         (self.home / "registry.json").touch(mode=0o644, exist_ok=True)
         (self.home / "user_registry.json").touch(mode=0o644, exist_ok=True)
         (self.home / "config.toml").touch(mode=0o644, exist_ok=True)
-        (self.home / "default_config.toml").touch(mode=0o644, exist_ok=True)
+        (self.home / "config_defaults.toml").touch(mode=0o644, exist_ok=True)
         (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
         # load_registry expects 'self.home' to be set
         self._registry = self.load_registry()
