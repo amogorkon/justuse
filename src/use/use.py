@@ -1058,7 +1058,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
     
                     fileobj = archive = None
                     if path.suffix in (".whl", ".zip"):
-                        fileobj = open(tempfile.mktemp(), "w")  # TODO mktemp is deprecated, use NamedTemporaryFile instead, for instance 
+                        fileobj = open(tempfile.mkstemp(), "w")
                         archive = zipfile.ZipFile(path, "r")
                     else:
                         fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
