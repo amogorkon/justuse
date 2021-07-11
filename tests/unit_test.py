@@ -152,7 +152,7 @@ def test_auto_install_native():
     except RuntimeWarning as w:
       rw = w
     assert rw, "Expected a RuntimeWarning from unversioned auto-install"
-    params = re.search(
+    match:Optional[re.Match] = re.search(
       "use\\("
         "\"(?P<name>.*)\", "
         "version=\"(?P<version>.*)\", "
@@ -160,7 +160,9 @@ def test_auto_install_native():
         "auto_install=True"
       "\\)",
       rw.args[0]
-    ).groupdict()
+    )
+    assert match, f"Format did not match regex: {rw.args[0]!r}"
+    params:dict = match.groupdict()
     name = "numpy"
     version = params["version"]
     hash_value = params["hash_value"]
@@ -170,4 +172,3 @@ def test_auto_install_native():
     assert mod, "No module was returned"
     assert mod.ndarray, "Wrong module was returned (expected 'nparray')"
     assert mod.__version__ == params["version"], "Wrong numpy version"
-
