@@ -978,7 +978,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 if not path.exists():
                     print("Downloading", url, "...")
                     download_response = requests.get(url, allow_redirects=True)
-                    path = self.home / "packages" / url.name
+                    path = self.home / "packages" / Path(url.name).name
                     this_hash:str = hash_algo.value(download_response.content).hexdigest()
                     if this_hash != hash_value:
                         return fail_or_default(default, Use.UnexpectedHash, f"The downloaded content of package {package_name} has a different hash than expected, aborting.")
