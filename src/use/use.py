@@ -888,6 +888,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 module_name = package_name
             
             # PEBKAC
+            hit:tuple = None
+            
             if target_version and not hash_value:  # let's try to be helpful
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
                 if response.status_code != 200:
