@@ -102,6 +102,10 @@ _reloaders = {}  # ProxyModule:Reloader
 _aspects = {} 
 _using = {}
 
+class Version(Version):  # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
+    def __iter__(self):
+        yield from self.release
+
 mode = Enum("Mode", "fastfail")
 root.addHandler(StreamHandler(sys.stderr))
 if "DEBUG" in os.environ: root.setLevel(DEBUG)
