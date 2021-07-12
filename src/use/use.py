@@ -352,6 +352,18 @@ class ModuleReloader:
         self.stop()
         atexit.unregister(self.stop)
 
+"""
+Fetch a list of the platform_tags supported by the running system.
+"""
+def get_platform_tags():
+  pip_tags:list = []
+  try:
+    from pip._internal.utils.compatibility_tags import get_supported
+    pip_tags = list(get_supported())
+  except ModuleNotFoundError:
+    pass
+  pkg_tags = packaging.tags._platform_tags()
+  return list(set(itertools.chain(pip_tags, pkg_tags)))
 
 def parse_filename(info:str) -> Optional[dict]:
     """Match the filename and return a dict of parts.
@@ -404,7 +416,7 @@ def find_matching_artifact(
         sys_version = Version(".".join(map(str, sys.version_info[0:3])))
     assert isinstance(sys_version, Version)
     if not platform_tags: 
-        platform_tags = list(tags._platform_tags())
+        platform_tags = get_platform_tags()
     assert isinstance(platform_tags, list)
     if not interpreter_tag:
         interpreter_tag = tags.interpreter_name() + tags.interpreter_version()
@@ -1070,7 +1082,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
     
                     fileobj = archive = None
                     if path.suffix in (".whl", ".zip"):
-                        fileobj = open(tempfile.mkstemp(), "w")
+                        fileobj = open(tempfile.mkstemp()[0], "w")
                         archive = zipfile.ZipFile(path, "r")
                     else:
                         fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
