@@ -547,6 +547,7 @@ class Use:
         (self.home / "config_defaults.toml").touch(mode=0o644, exist_ok=True)
         (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
         self._registry:dict = load_registry(self.home / "registry.json")
+        self._registry.update(load_registry(self.home / "user_registry.json"))
         
         # for the user to copy&paste
         with open(self.home / "default_config.toml", "w") as file:
