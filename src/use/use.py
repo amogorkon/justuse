@@ -82,6 +82,7 @@ from enum import Enum
 from functools import singledispatch, update_wrapper, wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
+from itertools import chain
 from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
 from types import ModuleType
@@ -362,8 +363,8 @@ def get_platform_tags():
     pip_tags = list(get_supported())
   except ModuleNotFoundError:
     pass
-  pkg_tags = packaging.tags._platform_tags()
-  return list(set(itertools.chain(pip_tags, pkg_tags)))
+  pkg_tags = tags._platform_tags()
+  return list(set(chain(pip_tags, pkg_tags)))
 
 def parse_filename(info:str) -> Optional[dict]:
     """Match the filename and return a dict of parts.
