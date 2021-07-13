@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import warnings
+
 from pathlib import Path
 from typing import Optional
 from unittest import skip
@@ -14,6 +15,7 @@ sys.path.insert(0, str(import_base))
 import pytest
 import requests
 import use
+
 from yarl import URL
 
 
@@ -142,6 +144,7 @@ def test_pure_python_package(reuse):
 
 import os
 import sys
+
 from pathlib import Path
 from typing import Optional
 
@@ -151,6 +154,7 @@ sys.path.insert(0, str(import_base))
 
 import re
 import warnings
+
 from pathlib import Path
 from unittest import skip
 from unittest.mock import patch
@@ -158,6 +162,7 @@ from unittest.mock import patch
 import pytest
 import requests
 import use
+
 from yarl import URL
 
 
@@ -316,3 +321,7 @@ def test_auto_install_native():
     assert mod, "No module was returned"
     assert mod.ndarray, "Wrong module was returned (expected 'nparray')"
     assert mod.__version__ == params["version"], "Wrong numpy version"
+
+def test_registry_first_line_warning(reuse):
+  with open(reuse.home / "registry.json") as file:
+    assert file.readlines()[0].startswith("### WARNING")
