@@ -435,6 +435,10 @@ def load_registry(path:Path) -> dict:
         # json doesn't have comments, so we need to manually skip the first line warning for the user
         lines = file.readlines()
         if not lines:  # might be an empty file
+            registry.update({
+            "version": registry_version,
+            "distributions": defaultdict(lambda: dict())
+            })
             return registry
         registry.update(json.loads("\n".join(filter(lambda s: not s.startswith("#"), lines))))  # Now comments in user_registry.json are ignored, too
 
@@ -452,11 +456,6 @@ def load_registry(path:Path) -> dict:
         }
         dists.update(registry)
         registry = new_registry
-    if not registry:
-        registry.update({
-        "version": registry_version,
-        "distributions": defaultdict(lambda: dict())
-        })
     return registry
 
 class MissingHash(ValueError):
