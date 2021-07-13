@@ -59,7 +59,7 @@ jobs:
           echo "Linux-Tests: Preloading package dependencies ..."
           python3 -m pip install anyio mmh3 packaging pip pytest requests yarl
           echo "Linux-Tests: Running tests ..."
-          python3 -m pytest --trace-config --debug --collect-in-virtualenv --continue-on-collection-errors --showlocals --full-trace --color=yes --code-highlight=yes --rootdir . tests/unit_test.py
+          python3 -m pytest
   
   test-windows:
     runs-on: windows-latest
@@ -88,7 +88,7 @@ jobs:
           pip install --force-reinstall anyio mmh3 packaging pip pytest requests yarl
           python.exe -m pip install --force-reinstall anyio mmh3 packaging pip pytest requests yarl
           echo "Windows-Tests: Running tests ..."
-          python.exe -m pytest --trace-config --debug --collect-in-virtualenv --continue-on-collection-errors --showlocals --full-trace --color=yes --code-highlight=yes --rootdir . tests/unit_test.py
+          python.exe -m pytest
 
 
   test-macos:
@@ -101,5 +101,5 @@ jobs:
           echo "MacOS-Tests: Preloading package dependencies ..."
           python3 -m pip install anyio mmh3 packaging pip pytest requests yarl
           echo "MacOS-Tests: Running tests ..."
-          python3 -m pytest --trace-config --debug --collect-in-virtualenv --continue-on-collection-errors --showlocals --full-trace --color=yes --code-highlight=yes --rootdir . tests/unit_test.py
+          python3 -m pytest
   
