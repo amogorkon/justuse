@@ -103,7 +103,7 @@ _reloaders = {}  # ProxyModule:Reloader
 _aspects = {} 
 _using = {}
 
-class Version(Version):  # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
+class Version(Version):  # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves. This is necessary to compare sys.version_info with Version.
     def __iter__(self):
         yield from self.release
 
@@ -148,7 +148,7 @@ def hashfileobject(code, sample_threshhold=128 * 1024, sample_size=16 * 1024):
     enc_size = varint_encode(size)
     return enc_size + hash_[len(enc_size):]
 
-def methdispatch(func):
+def methdispatch(func): # singledispatch for methods
     dispatcher = singledispatch(func)
     def wrapper(*args, **kw):
         return dispatcher.dispatch(args[1].__class__)(*args, **kw)
@@ -428,7 +428,6 @@ def find_matching_artifact(
                                         is_platform_satisfied(info, platform_tags) and 
                                         is_interpreter_satisfied(info, interpreter_tag)][0]
 
-
 def load_registry(path) -> dict:
     registry_version = "0.0.2"
     registry = {}
@@ -437,7 +436,7 @@ def load_registry(path) -> dict:
         lines = file.readlines()
         if not lines:  # might be an empty file
             return registry
-        if lines[0].startswith("#"):
+        if lines[0].startswith("#"):  # we could generalize that for all lines and give users the ability to comment in user_registry
             lines = lines[1:]
         registry.update(json.loads("\n".join(lines)))
 
@@ -582,6 +581,10 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
     def set_mod(self, *, name, mod, spec, path, frame):
         """Helper to get the order right."""
         self._using[name] = Use.ModInUse(name, mod, path, spec, frame)
+        
+    @staticmethod
+    def load_registry(path):
+        return load_registry(path)
 
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
