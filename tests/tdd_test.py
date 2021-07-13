@@ -17,7 +17,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 not_local = not Path("local_switch").exists()
 
-@pytest.mark.xfail(not_local, reason="in development")
+@pytest.mark.xfail(not_local, reason="in development") 
 def test_failing_test():
   assert False, "This test is expected to fail"
 
