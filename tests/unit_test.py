@@ -1,23 +1,19 @@
 import os
+import pytest
+import re
+import requests
 import sys
+import warnings
 from pathlib import Path
 from typing import Optional
+from unittest import skip
+from unittest.mock import patch
+from yarl import URL
 
 if Path("use").is_dir(): os.chdir("..")
 import_base = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(import_base))
-
-import re
-import warnings
-from pathlib import Path
-from unittest import skip
-from unittest.mock import patch
-
-import pytest
-import requests
 import use
-from yarl import URL
-
 
 @pytest.fixture()
 def reuse():
