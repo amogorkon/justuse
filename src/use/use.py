@@ -428,7 +428,7 @@ def find_matching_artifact(
                                         is_platform_satisfied(info, platform_tags) and 
                                         is_interpreter_satisfied(info, interpreter_tag)][0]
 
-def load_registry(path) -> dict:
+def load_registry(path:Path) -> dict:
     registry_version = "0.0.2"
     registry = {}
     with open(path) as file:
@@ -436,9 +436,7 @@ def load_registry(path) -> dict:
         lines = file.readlines()
         if not lines:  # might be an empty file
             return registry
-        if lines[0].startswith("#"):  # we could generalize that for all lines and give users the ability to comment in user_registry
-            lines = lines[1:]
-        registry.update(json.loads("\n".join(lines)))
+        registry.update(json.loads("\n".join(filter(lambda s: not s.startswith("#"), lines))))  # Now comments in user_registry.json are ignored, too
 
     if "version" in registry \
         and registry["version"] < registry_version:
@@ -549,7 +547,6 @@ class Use:
         (self.home / "config.toml").touch(mode=0o644, exist_ok=True)
         (self.home / "config_defaults.toml").touch(mode=0o644, exist_ok=True)
         (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
-        # load_registry expects 'self.home' to be set
         self._registry:dict = load_registry(self.home / "registry.json")
         
         # for the user to copy&paste
