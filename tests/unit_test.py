@@ -320,3 +320,13 @@ def test_auto_install_native():
 def test_registry_first_line_warning(reuse):
   with open(reuse.home / "registry.json") as file:
     assert file.readlines()[0].startswith("### WARNING")
+
+def test_use_global_install(reuse):
+    import foo
+    with pytest.raises(NameError):
+        foo.bar()
+        
+    reuse.install()
+    assert foo.bar()
+    reuse.uninstall()
+    del foo
