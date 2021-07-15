@@ -1,2 +1,4 @@
-### WARNING ###
-{"foo": 23, "bar": 93}
+import tempfile
+from pathlib import Path
+
+path = Path(tempfile.mkdtemp(prefix="justuse_"))

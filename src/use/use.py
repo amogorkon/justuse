@@ -428,36 +428,6 @@ def find_matching_artifact(
                                         is_platform_satisfied(info, platform_tags) and 
                                         is_interpreter_satisfied(info, interpreter_tag)][0]
 
-def load_registry(path:Path) -> dict:
-    registry_version = "0.0.2"
-    registry = {}
-    with open(path) as file:
-        # json doesn't have comments, so we need to manually skip the first line warning for the user
-        lines = file.readlines()
-        if not lines:  # might be an empty file
-            registry.update({
-            "version": registry_version,
-            "distributions": defaultdict(lambda: dict())
-            })
-            return registry
-        registry.update(json.loads("\n".join(filter(lambda s: not s.startswith("#"), lines))))  # Now comments in user_registry.json are ignored, too
-
-    if "version" in registry \
-        and registry["version"] < registry_version:
-        print(f"Registry is being upgraded from version "
-                f"{registry.get('version',0)} to version"
-                f"{registry_version}")
-        registry["version"] = registry_version
-    elif registry and "version" not in registry:
-        print(f"Registry is being upgraded from version 0")
-        new_registry = {
-            "version": registry_version,
-            "distributions": (dists := defaultdict(lambda: dict()))
-        }
-        dists.update(registry)
-        registry = new_registry
-    return registry
-
 class MissingHash(ValueError):
     pass
 
@@ -539,15 +509,19 @@ class Use:
         self._reloaders = _reloaders
 
         self.home = Path.home() / ".justuse-python"
-        self.home.mkdir(mode=0o755, exist_ok=True)
+        try:
+            self.home.mkdir(mode=0o755, exist_ok=True)
+        except PermissionError:
+            # this should fix the permission issues on android #80
+            self.home = Path(tempfile.mkdtemp(prefix="justuse_"))
         (self.home / "packages").mkdir(mode=0o755, exist_ok=True)
         (self.home / "registry.json").touch(mode=0o644, exist_ok=True)
         (self.home / "user_registry.json").touch(mode=0o644, exist_ok=True)
         (self.home / "config.toml").touch(mode=0o644, exist_ok=True)
         (self.home / "config_defaults.toml").touch(mode=0o644, exist_ok=True)
         (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
-        self._registry:dict = load_registry(self.home / "registry.json")
-        self._user_registry:dict = load_registry(self.home / "user_registry.json")
+        self._registry:dict = Use.load_registry(self.home / "registry.json")
+        self._user_registry:dict = Use.load_registry(self.home / "user_registry.json")
         Use.merge_registry(self._registry, self._user_registry)
         
         # for the user to copy&paste
@@ -598,9 +572,37 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         """Helper to get the order right."""
         self._using[name] = Use.ModInUse(name, mod, path, spec, frame)
         
+    # static method because otherwise it's not reachable in the tests and there should be no temptation for side effects
     @staticmethod
     def load_registry(path):
-        return load_registry(path)
+        registry_version = "0.0.2"
+        registry = {}
+        with open(path) as file:
+            # json doesn't have comments, so we need to manually skip the first line warning for the user
+            lines = file.readlines()
+            if not lines:  # might be an empty file
+                registry.update({
+                "version": registry_version,
+                "distributions": defaultdict(lambda: dict())
+                })
+                return registry
+            registry.update(json.loads("\n".join(filter(lambda s: not s.startswith("#"), lines))))  # Now comments in user_registry.json are ignored, too
+
+        if "version" in registry \
+            and registry["version"] < registry_version:
+            print(f"Registry is being upgraded from version "
+                    f"{registry.get('version',0)} to version"
+                    f"{registry_version}")
+            registry["version"] = registry_version
+        elif registry and "version" not in registry:
+            print(f"Registry is being upgraded from version 0")
+            new_registry = {
+                "version": registry_version,
+                "distributions": (dists := defaultdict(lambda: dict()))
+            }
+            dists.update(registry)
+            registry = new_registry
+        return registry
     
     @staticmethod
     def merge_registry(target, source):
