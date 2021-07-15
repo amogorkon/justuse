@@ -140,80 +140,7 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-def varint_encode(number):
-    """Pack `number` into varint bytes"""
-    buf = b''
-    while True:
-        towrite = number & 0x7f
-        number >>= 7
-        if number:
-            buf += bytes((towrite | 0x80,))
-        else:
-            buf += bytes((towrite,))
-            break
-    return buf
 
-def hashfileobject(code, sample_threshhold=128 * 1024, sample_size=16 * 1024):
-    sample_threshhold, sample_size
-    size = len(code)
-    hash_tmp = mmh3.hash_bytes(code)
-    hash_ = hash_tmp[7::-1] + hash_tmp[16:7:-1]
-    enc_size = varint_encode(size)
-    return enc_size + hash_[len(enc_size):]
-
-def methdispatch(func): # singledispatch for methods
-    dispatcher = singledispatch(func)
-    def wrapper(*args, **kw):
-        return dispatcher.dispatch(args[1].__class__)(*args, **kw)
-    wrapper.register = dispatcher.register
-    update_wrapper(wrapper, func)
-    return wrapper
-
-def build_mod(*, name:str, 
-                code:bytes, 
-                initial_globals:dict, 
-                module_path:str, 
-                aspectize:dict, 
-                default=mode.fastfail) -> ModuleType:
-    default
-    mod = ModuleType(name)
-    mod.__dict__.update(initial_globals or {})
-    mod.__file__ = module_path
-    code_text = codecs.decode(code)
-    # module file "<", ">" chars are specially handled by inspect
-    linecache.cache[f"<{name}>"] = (
-    len(code), # size of source code
-    None, # last modified time; None means there is no physical file
-    [*map( # a list of lines, including trailing newline on each
-        lambda ln: ln+"\x0a",
-        code_text.splitlines())
-    ],
-    mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
-    )
-    # not catching this causes the most irritating bugs ever!
-    try:
-        exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
-    except: # reraise anything without handling - clean and simple.
-        raise
-    for (check, pattern), decorator in aspectize.items():
-        apply_aspect(mod, check, pattern, decorator)
-    return mod
-
-def fail_or_default(default, exception, msg):
-    if default is not Use.mode.fastfail:
-        return default
-    else:
-        raise exception(msg)
-
-def apply_aspect(mod:ModuleType, check:callable, pattern:str, decorator:Callable[...]):
-    """Apply the aspect as a side-effect, no copy is created."""
-    # TODO: recursion?
-    parent = mod
-    for obj in parent.__dict__.values():
-        if check(obj) and re.match(pattern, obj.__qualname__):
-            log.debug("Applying aspect to {parent}.{obj.__name__}")
-            parent.__dict__[obj.__name__] = decorator(obj)
-    return mod
 
 class SurrogateModule(ModuleType):
     def __init__(self, *, name, path, mod, initial_globals, aspectize):
@@ -225,10 +152,10 @@ class SurrogateModule(ModuleType):
             while not self.__stopped:
                 with open(path, "rb") as file:
                     code = file.read()
-                current_filehash = hashfileobject(code)
+                current_filehash = Use.hashfileobject(code)
                 if current_filehash != last_filehash:
                     try:
-                        mod = build_mod(name=name, 
+                        mod = Use.build_mod(name=name, 
                                         code=code, 
                                         initial_globals=initial_globals,
                                         module_path=path.resolve(),
@@ -244,10 +171,10 @@ class SurrogateModule(ModuleType):
             while not self.__stopped:
                 with open(path, "rb") as file:
                     code = file.read()
-                current_filehash = hashfileobject(code)
+                current_filehash = Use.hashfileobject(code)
                 if current_filehash != last_filehash:
                     try:
-                        mod = build_mod(name=name, 
+                        mod = Use.build_mod(name=name, 
                                         code=code, 
                                         initial_globals=initial_globals,
                                         module_path=path.resolve(),
@@ -345,10 +272,10 @@ class ModuleReloader:
             with self._condition:
                 with open(self.path, "rb") as file:
                     code = file.read()
-                current_filehash = hashfileobject(code)
+                current_filehash = Use.hashfileobject(code)
                 if current_filehash != last_filehash:
                     try:
-                        mod = build_mod(name=self.name, 
+                        mod = Use.build_mod(name=self.name, 
                                         code=code, 
                                         initial_globals=self.initial_globals,
                                         module_path=self.path,
@@ -629,6 +556,87 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                 else:
                     target[k] = v
 
+    @staticmethod
+    def varint_encode(number):
+        """Pack `number` into varint bytes"""
+        buf = b''
+        while True:
+            towrite = number & 0x7f
+            number >>= 7
+            if number:
+                buf += bytes((towrite | 0x80,))
+            else:
+                buf += bytes((towrite,))
+                break
+        return buf
+
+    @staticmethod
+    def hashfileobject(code, sample_threshhold=128 * 1024, sample_size=16 * 1024):
+        sample_threshhold, sample_size
+        size = len(code)
+        hash_tmp = mmh3.hash_bytes(code)
+        hash_ = hash_tmp[7::-1] + hash_tmp[16:7:-1]
+        enc_size = Use.varint_encode(size)
+        return enc_size + hash_[len(enc_size):]
+
+    @staticmethod
+    def methdispatch(func): # singledispatch for methods
+        dispatcher = singledispatch(func)
+        def wrapper(*args, **kw):
+            return dispatcher.dispatch(args[1].__class__)(*args, **kw)
+        wrapper.register = dispatcher.register
+        update_wrapper(wrapper, func)
+        return wrapper
+
+    @staticmethod
+    def build_mod(*, name:str, 
+                    code:bytes, 
+                    initial_globals:dict, 
+                    module_path:str, 
+                    aspectize:dict, 
+                    default=mode.fastfail) -> ModuleType:
+        default
+        mod = ModuleType(name)
+        mod.__dict__.update(initial_globals or {})
+        mod.__file__ = module_path
+        code_text = codecs.decode(code)
+        # module file "<", ">" chars are specially handled by inspect
+        linecache.cache[f"<{name}>"] = (
+        len(code), # size of source code
+        None, # last modified time; None means there is no physical file
+        [*map( # a list of lines, including trailing newline on each
+            lambda ln: ln+"\x0a",
+            code_text.splitlines())
+        ],
+        mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
+        )
+        # not catching this causes the most irritating bugs ever!
+        try:
+            exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
+        except: # reraise anything without handling - clean and simple.
+            raise
+        for (check, pattern), decorator in aspectize.items():
+            Use.apply_aspect(mod, check, pattern, decorator)
+        return mod
+
+    @staticmethod
+    def fail_or_default(default, exception, msg):
+        if default is not Use.mode.fastfail:
+            return default
+        else:
+            raise exception(msg)
+
+    @staticmethod
+    def apply_aspect(mod:ModuleType, check:callable, pattern:str, decorator:Callable[...]):
+        """Apply the aspect as a side-effect, no copy is created."""
+        # TODO: recursion?
+        parent = mod
+        for obj in parent.__dict__.values():
+            if check(obj) and re.match(pattern, obj.__qualname__):
+                log.debug("Applying aspect to {parent}.{obj.__name__}")
+                parent.__dict__[obj.__name__] = decorator(obj)
+        return mod
+
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
         raise NotImplementedError(f"Only pathlib.Path, yarl.URL and str are valid sources of things to import, but got {type(thing)}.")
@@ -659,7 +667,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         this_hash = hash_algo.value(response.content).hexdigest()
         if hash_value:
             if this_hash != hash_value:
-                return fail_or_default(default, Use.UnexpectedHash, f"{this_hash} does not match the expected hash {hash_value} - aborting!")
+                return Use.fail_or_default(default, Use.UnexpectedHash, f"{this_hash} does not match the expected hash {hash_value} - aborting!")
         else:
             warn(f"""Attempting to import from the interwebs with no validation whatsoever! 
 To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')""", 
@@ -667,7 +675,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         name = url.name
         
         try:
-            mod = build_mod(name=name, 
+            mod = Use.build_mod(name=name, 
                             code=response.content, 
                             module_path=url.path,
                             initial_globals=initial_globals, 
@@ -675,7 +683,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         except:
             exc = traceback.format_exc()
         if exc:
-            return fail_or_default(default, ImportError, exc)
+            return Use.fail_or_default(default, ImportError, exc)
         
         self.set_mod(name=name, mod=mod, spec=None, path=url, frame=inspect.getframeinfo(inspect.currentframe()))
         if as_import:
@@ -705,7 +713,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         import_to_use
 
         if path.is_dir():
-            return fail_or_default(default, ImportError, f"Can't import directory {path}")
+            return Use.fail_or_default(default, ImportError, f"Can't import directory {path}")
         
         original_cwd = Path.cwd()
         if not path.is_absolute():
@@ -718,7 +726,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     os.chdir(source_dir.parent)
                     source_dir = source_dir.parent
                 else:
-                    return fail_or_default(default, NotImplementedError, "Can't determine a relative path from a virtual file.")
+                    return Use.fail_or_default(default, NotImplementedError, "Can't determine a relative path from a virtual file.")
             # there are a number of ways to call use() from a non-use() starting point
             else:
                 # let's first check if we are running in jupyter
@@ -738,7 +746,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         path = source_dir.joinpath(path).resolve()
         if not path.exists():
             os.chdir(original_cwd)
-            return fail_or_default(default, ImportError, f"Sure '{path}' exists?")
+            return Use.fail_or_default(default, ImportError, f"Sure '{path}' exists?")
         os.chdir(path.parent)
         name = path.stem
         if reloading:
@@ -746,7 +754,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 with open(path, "rb") as file:
                     code = file.read()
                 # initial instance, if this doesn't work, just throw the towel
-                mod = build_mod(name=name, 
+                mod = Use.build_mod(name=name, 
                                 code=code, 
                                 initial_globals=initial_globals, 
                                 module_path=path.resolve(), 
@@ -755,7 +763,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             except:
                 exc = traceback.format_exc()
             if exc:
-                return fail_or_default(default, ImportError, exc)
+                return Use.fail_or_default(default, ImportError, exc)
             
             threaded = False
             try:
@@ -801,7 +809,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             # the path needs to be set before attempting to load the new module - recursion confusing ftw!
             self.set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=inspect.getframeinfo(inspect.currentframe()))
             try:
-                mod = build_mod(name=name, 
+                mod = Use.build_mod(name=name, 
                                 code=code, 
                                 initial_globals=initial_globals, 
                                 module_path=path, 
@@ -812,7 +820,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         # let's not confuse the user and restore the cwd to the original in any case
         os.chdir(original_cwd)
         if exc:
-            return fail_or_default(default, ImportError, exc)
+            return Use.fail_or_default(default, ImportError, exc)
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             sys.modules[as_import] = mod
@@ -878,13 +886,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     if aspectize:
                         warn("Applying aspects to builtins may lead to unexpected behaviour, but there you go..", RuntimeWarning)
                     for (check, pattern), decorator in aspectize.items():
-                        apply_aspect(mod, check, pattern, decorator)
+                        Use.apply_aspect(mod, check, pattern, decorator)
                     self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                     return mod
                 except:
                     exc = traceback.format_exc()
                 if exc:
-                    return fail_or_default(default, ImportError, exc)
+                    return Use.fail_or_default(default, ImportError, exc)
 
             # it seems to be installed in some way, for instance via pip
             if not auto_install:
@@ -892,13 +900,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     # feels like cheating, doesn't it
                     mod = importlib.import_module(name)  # ! => cache
                     for (check, pattern), decorator in aspectize.items():
-                        apply_aspect(mod, check, pattern, decorator)
+                        Use.apply_aspect(mod, check, pattern, decorator)
                     self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                     warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
                 except:
                     exc = traceback.format_exc()
                 if exc:
-                    return fail_or_default(default, ImportError, exc)
+                    return Use.fail_or_default(default, ImportError, exc)
                 
                 # we only enforce versions with auto-install
                 if target_version:
@@ -930,13 +938,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     try:
                         mod = importlib.import_module(name)  # ! => cache
                         for (check, pattern), decorator in aspectize.items():
-                            apply_aspect(mod, check, pattern, decorator)
+                            Use.apply_aspect(mod, check, pattern, decorator)
                         self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                         warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
                     except:
                         exc = traceback.format_exc()
                     if exc:
-                        return fail_or_default(default, ImportError, exc)
+                        return Use.fail_or_default(default, ImportError, exc)
                 # wrong version => wrong spec
                 existing_mod_meta_version = metadata.version(name)
                 if existing_mod_meta_version != target_version:
@@ -947,7 +955,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         # no spec
         else:
             if not auto_install:
-                return fail_or_default(default, ImportError, f"Could not find any installed package '{name}' and auto_install was not requested.")
+                return Use.fail_or_default(default, ImportError, f"Could not find any installed package '{name}' and auto_install was not requested.")
             
             # the whole auto-install shebang
             package_name, _, module_name = name.partition(".")
@@ -984,7 +992,7 @@ use("{name}", version="{version}", hash_value="{that_hash}")
                     raise RuntimeWarning(f"Are you sure package '{package_name}' exists? Could not find any package with that name on PyPI.")
                 elif response.status_code != 200:
                     # possibly server problems
-                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to look up '{package_name}' but got a {response.status_code} from PyPI.")
+                    return Use.fail_or_default(default, Use.AutoInstallationError, f"Tried to look up '{package_name}' but got a {response.status_code} from PyPI.")
                 else:
                     try:
                         data = response.json()
@@ -1026,23 +1034,23 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
                 version = str(target_version)
                 if response.status_code != 200:
-                    return fail_or_default(default, ImportError, f"Tried to auto-install '{package_name}' {target_version} but failed with {response} while trying to pull info from PyPI.")
+                    return Use.fail_or_default(default, ImportError, f"Tried to auto-install '{package_name}' {target_version} but failed with {response} while trying to pull info from PyPI.")
                 try:
                     if not response.json()["urls"]:
-                        return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because no valid URLs to download could be found.")
+                        return Use.fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because no valid URLs to download could be found.")
                     for entry in response.json()["urls"]:
                         url = URL(entry["url"])
                         that_hash = entry["digests"].get(hash_algo.name)
                         if entry["yanked"]:
-                            return fail_or_default(default, Use.AutoInstallationError, f"Auto-installation of  '{package_name}' {target_version} failed because the release was yanked from PyPI.")
+                            return Use.fail_or_default(default, Use.AutoInstallationError, f"Auto-installation of  '{package_name}' {target_version} failed because the release was yanked from PyPI.")
                         if that_hash == hash_value:
                             break
                     else:
-                        return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because none of the available hashes match the expected hash.")
+                        return Use.fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because none of the available hashes match the expected hash.")
                 except KeyError: # json issues
                     exc = traceback.format_exc()
                 if exc:
-                    return fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.")
+                    return Use.fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.")
                 # we've got a complete JSON with a matching entry, let's download
                 path = self.home / "packages" / Path(url.name).name
                 if not path.exists():
@@ -1051,7 +1059,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     path = self.home / "packages" / Path(url.name).name
                     this_hash:str = hash_algo.value(download_response.content).hexdigest()
                     if this_hash != hash_value:
-                        return fail_or_default(default, Use.UnexpectedHash, f"The downloaded content of package {package_name} has a different hash than expected, aborting.")
+                        return Use.fail_or_default(default, Use.UnexpectedHash, f"The downloaded content of package {package_name} has a different hash than expected, aborting.")
                     try:
                         with open(path, "wb") as file:
                             file.write(download_response.content)
@@ -1059,7 +1067,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     except:
                         exc = traceback.format_exc()
                     if exc:
-                        return fail_or_default(default, Use.AutoInstallationError, exc)
+                        return Use.fail_or_default(default, Use.AutoInstallationError, exc)
             
             # trying to import directly from zip
             try:
@@ -1161,7 +1169,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             
         self.persist_registry()
         for (check, pattern), decorator in aspectize.items():
-            apply_aspect(mod, check, pattern, decorator)
+            Use.apply_aspect(mod, check, pattern, decorator)
         self.set_mod(name=name, mod=mod, path=None, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
 
         assert mod, "Well shit."
