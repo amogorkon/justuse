@@ -89,6 +89,11 @@ from types import ModuleType
 from typing import Callable, Dict, List, Optional, Tuple, Union
 from warnings import warn
 
+try:
+    from pip._internal.utils.compatibility_tags import get_supported
+except ImportError:
+    get_supported = lambda: []
+
 import mmh3
 import requests
 import toml
@@ -392,19 +397,12 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         """Helper to get the order right."""
         self._using[name] = Use.ModInUse(name, mod, path, spec, frame)
         
-    # hoisted functions
-    # static method because otherwise it's not reachable in the tests and there should be no temptation for side effects
-    
+    # hoisted functions - formerly module globals
+    # staticmethods because module globals aren't reachable in tests while there should be no temptation for side effects via self
+
     @staticmethod
-    def get_platform_tags():
-        pip_tags:list = []
-        try:
-            from pip._internal.utils.compatibility_tags import get_supported
-            pip_tags = list(get_supported())
-        except ModuleNotFoundError:
-            pass
-        pkg_tags = tags._platform_tags()
-        return list(set(chain(pip_tags, pkg_tags)))
+    def get_platform_tags() -> set:
+        return set(get_supported()) | set(tags._platform_tags())
 
     @staticmethod
     def parse_filename(info:str) -> Optional[dict]:
@@ -426,32 +424,31 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         return match.groupdict() if match else None
 
     @staticmethod
-    def is_version_satisfied(info:Dict[str,str], sys_version: Version):
-        vstr = info if isinstance(info,str) \
-                    else info["requires_python"] \
-                    or f'=={info["python_version"]}'
-        if not vstr: return False
-        vreq = SpecifierSet(vstr)
-        return sys_version in vreq
+    def is_version_satisfied(info:Dict[str,str], sys_version: Version):        
+        # https://warehouse.readthedocs.io/api-reference/json.html
+        # https://packaging.pypa.io/en/latest/specifiers.html
+        return sys_version in SpecifierSet(info.get("requires_python", ""))
 
     @staticmethod
-    def is_platform_satisfied(info:Dict[str, str], platform_tags:List[str]):
-        assert isinstance(info, dict)
-        try:
-            for it in tags.parse_tag("-".join((info["python_tag"], info["abi_tag"], info["platform_tag"]))):
-                if it.platform in platform_tags:
-                    return True
-        except:
-            if config["debugging"]: print(traceback.format_exc())
-        return False
-
-    @staticmethod
-    def is_interpreter_satisfied(info:Dict[str, str], interpreter_tag: str):
-        return interpreter_tag in (info["python_tag"], info["abi_tag"])
+    def is_platform_compatible(info:Dict[str, str], platform_tags:set):
+        assert isinstance(info, dict) and isinstance(platform_tags, set)
+        # source is always compatible
+        if info["python_version"] == "source":
+            return True
+        
+        # filename as API, seriously WTF...
+        parts = Use.parse_filename(info["filename"])
+        if not parts:
+            log.debug(info["filename"], "parsed to None")
+            return False
+        tag = tags.Tag(parts["python_tag"], parts["abi_tag"], parts["platform_tag"])
+        return tag in platform_tags
 
     @staticmethod
     def find_matching_artifact(
-                        urls:List[Dict[str, str]], *, 
+                        urls:List[Dict[str, str]], 
+                        hash_algo:str=Hash.sha256.name,
+                        *, 
                         # for testability
                         sys_version:Version=None,  
                         platform_tags:List[str]=None,
@@ -463,15 +460,19 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         assert isinstance(sys_version, Version)
         if not platform_tags: 
             platform_tags = Use.get_platform_tags()
-        assert isinstance(platform_tags, list)
+        assert isinstance(platform_tags, set)
         if not interpreter_tag:
             interpreter_tag = tags.interpreter_name() + tags.interpreter_version()
         assert isinstance(interpreter_tag, str)
         
-        return [(info["version"], info["hash"]) for info in urls   # TODO info["hash"] doesn't respect our default hashing algorithm 
-                                        if Use.is_version_satisfied(info, sys_version) and 
-                                            Use.is_platform_satisfied(info, platform_tags) and 
-                                            Use.is_interpreter_satisfied(info, interpreter_tag)][0]
+        results = [info["digests"][hash_algo] for info in urls 
+                                                if Use.is_version_satisfied(info, sys_version) and 
+                                                    Use.is_platform_compatible(info, platform_tags)
+                                                    ]
+        if results:
+            return results[0]
+        else: 
+            return None
 
     @staticmethod
     def find_latest_working_version(releases: Dict[str, List[Dict[str, str]]], # {version: [{comment_text: str, filename: str, url: str, version: str, hash: str, build_tag: str, python_tag: str, abi_tag: str, platform_tag: str}]}
@@ -958,18 +959,16 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             
             if target_version and not hash_value:  # let's try to be helpful
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
-                if response.status_code != 200:
+                if response.status_code == 404:
+                    raise RuntimeWarning(f"Are you sure {package_name} with version {version} exists?")
+                elif response.status_code != 200:
                     raise RuntimeWarning(f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because you forgot to provide a matching hash_value for the auto-installation.")
                 that_hash = None
-                try:
-                    data = response.json()
-                    hit = Use.find_matching_artifact(data["urls"])
-                except Exception as _ex:  # ? well.. :)
-                    raise
-                if hit:
-                    version, that_hash = hit
+                data = response.json()
+                that_hash = Use.find_matching_artifact(data["urls"])
+                if that_hash:
                     raise RuntimeWarning(f"""Failed to auto-install '{package_name}' because hash_value is missing. This may work:
-use("{name}", version="{version}", hash_value="{that_hash}")
+use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
 """)
                 else:
                     raise RuntimeWarning(f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!")
@@ -1163,7 +1162,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             Use.apply_aspect(mod, check, pattern, decorator)
         self.set_mod(name=name, mod=mod, path=None, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
 
-        assert mod, "Well shit."
+        assert mod, f"Well shit. ( {path} )"
         return mod
 
 sys.modules["use"] = Use()
