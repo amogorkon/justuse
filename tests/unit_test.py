@@ -1,20 +1,22 @@
+import json
 import os
+import pytest
 import re
+import requests
 import sys
 import warnings
+from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 from unittest import skip
 from unittest.mock import patch
+from yarl import URL
 
 if Path("use").is_dir(): os.chdir("..")
 import_base = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(import_base))
 
-import pytest
-import requests
 import use
-from yarl import URL
 
 
 @pytest.fixture()
@@ -287,8 +289,6 @@ def test_pure_python_package(reuse):
 @pytest.mark.skipif(sys.platform.startswith("win"),
   reason="windows Auto-installing native modules is not supported")
 def test_auto_install_native():
-  use._registry = None
-  use._registry = use.load_registry(use.home / "registry.json")
   with patch('use.config', {"debugging": True}, spec=True):  # ? not sure about that
     rw = None
     try:
@@ -330,3 +330,42 @@ def test_use_global_install(reuse):
     assert foo.bar()
     reuse.uninstall()
     del foo
+
+def test_registry():
+  name, vers, hash = (
+    "example-pypi-package.examplepy", "0.1.0",
+    "ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77"
+  )
+  package_name, module_name = name.split(".")
+  file = use.Path.home() / f".justuse-python" / "packages" \
+      / f"{package_name.replace('-','_')}-0.1.0-py3-none-any.whl"
+  file.unlink(missing_ok=True)
+  test = use(name, version=vers, hash_value=hash, auto_install=True)
+  with open(Path.home() / ".justuse-python" / "registry.json", "rb") \
+          as jsonfile:
+      jsonbytes = jsonfile.read()
+      jsondata = json.loads(b"\x0a".join(
+        [*filter(None,
+          filter(lambda i: not i.startswith(b"#"),
+          jsonbytes.splitlines()))]
+      ))
+      assert jsondata, "An empty registry was written to disk."
+      dists = jsondata["distributions"]
+      assert dists, "No distribution metadata saved to registry."
+      package_dists = dists[package_name]
+      assert package_dists, \
+          f"No distribution metadata saved for package {package_name}"
+      dist = package_dists[vers]
+      assert dist, "No distribution saved for the expected version."
+      assert "path" in dist, "Registry metadata contains no 'path'."
+      path = Path(dist["path"])
+      assert path.exists(), f"The package {path} did not get written."
+      assert path.absolute() == file.absolute(), \
+          f"The package did not get written to the expected location."
+      for k, v in use._registry.items():
+          jsonv = jsondata.get(k, ...)
+          if isinstance(jsonv, dict) and isinstance(v, defaultdict):
+              v = dict(v)
+          assert jsonv == v, \
+              f"The registry does not match the persisted json" \
+              f" for key '{k}': expected: {jsonv}, found: {v}"

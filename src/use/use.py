@@ -547,7 +547,8 @@ class Use:
         (self.home / "config_defaults.toml").touch(mode=0o644, exist_ok=True)
         (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
         self._registry:dict = load_registry(self.home / "registry.json")
-        self._registry.update(load_registry(self.home / "user_registry.json"))
+        self._user_registry:dict = load_registry(self.home / "user_registry.json")
+        Use.merge_registry(self._registry, self._user_registry)
         
         # for the user to copy&paste
         with open(self.home / "default_config.toml", "w") as file:
@@ -565,7 +566,7 @@ class Use:
                     warn(f"""Justuse is version {parse(__version__)}, but there is a newer version ({max_version}) on PyPI. 
 Please consider upgrading via 'python -m pip install -U justuse'""", Use.VersionWarning)
             except:
-                warn("Couldn't look up the current version of justuse, you can safely ignore this warning. \n", traceback.format_exc(), "\n \n")
+                warn("Couldn't look up the current version of justuse, you can safely ignore this warning.")
 
         if config["debugging"]:
             root.setLevel(DEBUG)
@@ -600,6 +601,18 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
     @staticmethod
     def load_registry(path):
         return load_registry(path)
+    
+    @staticmethod
+    def merge_registry(target, source):
+        for k, v in source.items():
+            if k in target:
+                if isinstance(target[k], list):
+                    target[k] += v
+                elif isinstance(target[k], dict):
+                    for k2, v2 in v.items():
+                        target[k][k2] = v2
+                else:
+                    target[k] = v
 
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
@@ -811,10 +824,12 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         
         assert version is None or isinstance(version, str), "Version must be given as string."
         target_version = parse(version) if version is not None else None
-        version = str(target_version) and None  # just validating user input and canonicalizing it
+        # just validating user input and canonicalizing it
+        version = str(target_version) if target_version else None
         
         assert not isinstance(target_version, LegacyVersion), "Version must be in a format compatible to https://www.python.org/dev/peps/pep-0440"
-        
+        assert version if target_version else version is target_version, \
+          "Version must be None if target_version is None; otherwise, they must both have a value."
         exc: str = None
         mod: ModuleType = None
         
@@ -996,6 +1011,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             that_hash:str = None
             if not path:
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
+                version = str(target_version)
                 if response.status_code != 200:
                     return fail_or_default(default, ImportError, f"Tried to auto-install '{package_name}' {target_version} but failed with {response} while trying to pull info from PyPI.")
                 try:
