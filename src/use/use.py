@@ -77,24 +77,37 @@ import time
 import traceback
 import zipfile
 import zipimport
-from collections import defaultdict, namedtuple
+
+from collections import defaultdict
+from collections import namedtuple
 from enum import Enum
-from functools import singledispatch, update_wrapper, wraps
+from functools import singledispatch
+from functools import update_wrapper
+from functools import wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from itertools import chain
-from logging import DEBUG, StreamHandler, getLogger, root
+from logging import DEBUG
+from logging import StreamHandler
+from logging import getLogger
+from logging import root
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Union
 from warnings import warn
 
 import mmh3
 import requests
 import toml
+
 from packaging import tags
 from packaging.specifiers import SpecifierSet
-from packaging.version import LegacyVersion, Version, parse
+from packaging.version import Version
 from yarl import URL
 
 __version__ = "0.3.2"
@@ -535,9 +548,9 @@ class Use:
             try:
                 response = requests.get(f"https://pypi.org/pypi/justuse/json")
                 data = response.json()
-                max_version = max(parse(version) for version in data["releases"].keys())
-                if parse(__version__) < max_version:
-                    warn(f"""Justuse is version {parse(__version__)}, but there is a newer version ({max_version}) on PyPI. 
+                max_version = max(Version(version) for version in data["releases"].keys())
+                if Version(__version__) < max_version:
+                    warn(f"""Justuse is version {Version(__version__)}, but there is a newer version ({max_version}) on PyPI. 
 Please consider upgrading via 'python -m pip install -U justuse'""", Use.VersionWarning)
             except:
                 warn("Couldn't look up the current version of justuse, you can safely ignore this warning.")
@@ -825,11 +838,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         aspectize = aspectize or {}
         
         assert version is None or isinstance(version, str), "Version must be given as string."
-        target_version = parse(version) if version is not None else None
+        target_version:Version = Version(version) if version else None
         # just validating user input and canonicalizing it
-        version = str(target_version) if target_version else None
-        
-        assert not isinstance(target_version, LegacyVersion), "Version must be in a format compatible to https://www.python.org/dev/peps/pep-0440"
+        version:str = str(target_version) if target_version else None
         assert version if target_version else version is target_version, \
           "Version must be None if target_version is None; otherwise, they must both have a value."
         exc: str = None
@@ -900,7 +911,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         try:
                             check_value = eval(check)
                             if isinstance(check_value, str):
-                                this_version = parse(check_value)
+                                this_version = Version(check_value)
                                 if target_version != this_version:
                                     warn(
                                         f"{name} is expected to be version {target_version} ,  but got {this_version} instead",
@@ -1137,7 +1148,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 importlib.invalidate_caches()
                 try:
                   mod = importlib.import_module(module_name)
-                  assert parse(mod.__version__) == target_version
+                  assert Version(mod.__version__) == target_version
                 except ImportError:
                   exc = traceback.format_exc()
                 log.debug(f"mod = {mod}")

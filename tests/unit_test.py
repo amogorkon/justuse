@@ -1,8 +1,6 @@
 import json
 import os
-import pytest
 import re
-import requests
 import sys
 import warnings
 from collections import defaultdict
@@ -10,6 +8,10 @@ from pathlib import Path
 from typing import Optional
 from unittest import skip
 from unittest.mock import patch
+
+import packaging
+import pytest
+import requests
 from yarl import URL
 
 if Path("use").is_dir(): os.chdir("..")
@@ -256,7 +258,7 @@ def test_autoinstall_PEBKAC(reuse):
     reuse("pytest", auto_install=True)
   
   # forgot hash_value
-  with pytest.raises(AssertionError):
+  with pytest.raises(packaging.version.InvalidVersion):
     reuse("pytest", auto_install=True, version="-1")
   
   # forgot version
