@@ -110,7 +110,7 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from yarl import URL
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 
 _reloaders = {}  # ProxyModule:Reloader
 _aspects = {} 
@@ -829,7 +829,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 auto_install:bool=False, 
                 hash_algo:Hash=Hash.sha256, 
                 hash_value:str=None,
-                default=mode.fastfail,
+                default=mode.fastfail, 
                 aspectize=None,
                 path_to_url:dict=None,
                 import_to_use: dict=None,
@@ -1147,7 +1147,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     sys.path.insert(0, "")
                 importlib.invalidate_caches()
                 try:
-                  mod = importlib.import_module(module_name)
+                  mod = importlib.import_module(module_name)  # ! not a good feeling about this one => cache
                   assert Version(mod.__version__) == target_version
                 except ImportError:
                   exc = traceback.format_exc()
@@ -1155,6 +1155,8 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
                     if not hasattr(mod, key): continue
                     rdist_info[key] = getattr(mod, key)
+                if not exc:
+                    print(f"Successfully loaded {package_name}, version {version}.")
                 os.chdir(original_cwd)
             
         self.persist_registry()
