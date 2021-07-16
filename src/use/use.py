@@ -364,12 +364,13 @@ class Use:
                     warn(f"""Justuse is version {Version(__version__)}, but there is a newer version ({max_version}) on PyPI. 
 Please consider upgrading via 'python -m pip install -U justuse'""", Use.VersionWarning)
             except:
-                warn("Couldn't look up the current version of justuse, you can safely ignore this warning.")
-
+                log.debug(traceback.format_exc())  # we really don't need to bug the user about this (either pypi is down or internet is broken)
+                
         if config["debugging"]:
             root.setLevel(DEBUG)
 
     def install(self):
+        # yeah, really.. __builtins__ sometimes appears as a dict and other times as a module, don't ask me why
         if isinstance(__builtins__, dict):
             __builtins__["use"] = self
         elif isinstance(__builtins__, ModuleType):
