@@ -95,9 +95,9 @@ except ImportError:
     get_supported = lambda: []
 
 import mmh3
+import packaging
 import requests
 import toml
-from packaging import tags
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from yarl import URL
@@ -291,156 +291,6 @@ class ModuleReloader:
         self.stop()
         atexit.unregister(self.stop)
 
-"""
-Fetch a list of the platform_tags supported by the running system.
-"""
-def get_platform_tags():
-  pip_tags:list = []
-  try:
-    from pip._internal.utils.compatibility_tags import get_supported
-    pip_tags = list(get_supported())
-  except ModuleNotFoundError:
-    pass
-  pkg_tags = tags._platform_tags()
-  return list(set(chain(pip_tags, pkg_tags)))
-
-def parse_filename(info:str) -> Optional[dict]:
-    """Match the filename and return a dict of parts.
-    >>> parse_filename(...)  # TODO add a proper doctest
-    {"distribution": .., "version": .., ...} 
-    """
-    assert isinstance(info, str)
-    match:Optional[re.Match] = re.match(
-        "(?P<distribution>.*)-"
-        "(?P<version>.*)"
-        "(?:-(?P<build_tag>.*))?-"
-        "(?P<python_tag>.*)-"
-        "(?P<abi_tag>.*)-"
-        "(?P<platform_tag>.*)\\."
-        "(?P<ext>whl|zip|tar|tar\\.gz)",
-        info
-    )
-    return match.groupdict() if match else None
-
-def is_version_satisfied(info:Dict[str,str], sys_version: Version):
-    vstr = info if isinstance(info,str) \
-                else info["requires_python"] \
-                or f'=={info["python_version"]}'
-    if not vstr: return False
-    vreq = SpecifierSet(vstr)
-    return sys_version in vreq
-
-def is_platform_satisfied(info:Dict[str, str], platform_tags:List[str]):
-    assert isinstance(info, dict)
-    try:
-        for it in tags.parse_tag("-".join((info["python_tag"], info["abi_tag"], info["platform_tag"]))):
-            if it.platform in platform_tags:
-                return True
-    except:
-        if config["debugging"]: print(traceback.format_exc())
-    return False
-
-def find_matching_artifact(
-                    urls:List[Dict[str, str]], *, 
-                    # for testability
-                    sys_version:Version=None,  
-                    platform_tags:List[str]=None,
-                    interpreter_tag:str=None,
-                    ) -> Tuple[str, str]:
-    """Pick the best match for our architecture from a list of possible urls and return version and hash."""
-    print(f"find_matching_artifact({sys_version=!r}, {platform_tags=!r}, {interpreter_tag=!r})")
-    if not sys_version:
-        sys_version = Version(".".join(map(str, sys.version_info[0:3])))
-    assert isinstance(sys_version, Version)
-    if not platform_tags: 
-        platform_tags = get_platform_tags()
-    assert isinstance(platform_tags, list)
-    if not interpreter_tag:
-        interpreter_tag = tags.interpreter_name() + tags.interpreter_version()
-    assert isinstance(interpreter_tag, str)
-    found = []
-    for info in urls:
-        parsed = parse_filename(info["filename"])
-        if not parsed: continue
-        info.update(parsed)
-        info["hash"] = info["digests"]["sha256"]
-        found.append(info)
-    return [(info["version"], info["hash"]) for info in found if is_version_satisfied(info, sys_version)][0]
-
-def load_registry(path:Path) -> dict:
-    registry_version = "0.0.2"
-    registry = {}
-    with open(path) as file:
-        # json doesn't have comments, so we need to manually skip the first line warning for the user
-        lines = file.readlines()
-        if not lines:  # might be an empty file
-            registry.update({
-            "version": registry_version,
-            "distributions": defaultdict(lambda: dict())
-            })
-            return registry
-        registry.update(json.loads("\n".join(filter(lambda s: not s.startswith("#"), lines))))  # Now comments in user_registry.json are ignored, too
-
-    if "version" in registry \
-        and registry["version"] < registry_version:
-        print(f"Registry is being upgraded from version "
-                f"{registry.get('version',0)} to version"
-                f"{registry_version}")
-        registry["version"] = registry_version
-    elif registry and "version" not in registry:
-        print(f"Registry is being upgraded from version 0")
-        new_registry = {
-            "version": registry_version,
-            "distributions": (dists := defaultdict(lambda: dict()))
-        }
-        dists.update(registry)
-        registry = new_registry
-    return registry
-
-class MissingHash(ValueError):
-    pass
-
-def find_latest_working_version(releases: Dict[str, List[Dict[str, str]]], # {version: [{comment_text: str, filename: str, url: str, version: str, hash: str, build_tag: str, python_tag: str, abi_tag: str, platform_tag: str}]}
-                                *,
-                                hash_algo:str,
-                                #testing
-                                sys_version:Version=None,
-                                platform_tags:List[str]=None,
-                                interpreter_tag:str=None,                                
-                                ):
-    assert isinstance(releases, dict)
-    assert isinstance(hash_algo, str)
-    if not sys_version:
-        sys_version = Version(".".join(map(str, sys.version_info[0:3])))
-    assert isinstance(sys_version, Version)
-    if not platform_tags: 
-        platform_tags = list(tags._platform_tags())
-    assert isinstance(platform_tags, list)
-    if not interpreter_tag:
-        interpreter_tag = tags.interpreter_name() + tags.interpreter_version()
-    assert isinstance(interpreter_tag, str)
-    
-    # update the release dicts to hold all info canonically
-    for ver, dists in releases.items():
-        for d in dists:
-            d["version"] = ver # Add version info
-            if parsed := parse_filename(d["filename"]):
-                d.update(parsed)
-    
-    for ver, dists in sorted(releases.items(), key=lambda item: item[0]):
-        for info in dists:
-            parsed = parse_filename(info["filename"])
-            if not parsed: continue
-            info.update(parsed)
-            info["hash"] = info["digests"]["sha256"]
-            if is_version_satisfied(info, sys_version) and \
-                is_platform_satisfied(info, platform_tags):
-                hash_value = info["digests"].get(hash_algo)
-                if not hash_value:
-                    raise MissingHash(f"No hash digest found in "
-                        "release distribution for {hash_algo=}")
-                return info["version"], hash_value
-            
 class Use:
     # lift module-level stuff up
     __doc__ = __doc__
@@ -474,6 +324,9 @@ class Use:
         pass
     class AutoInstallationError(ImportError):
         pass
+    class MissingHash(ValueError):
+        pass
+
     class MissingHash(ValueError):
         pass
 
@@ -551,15 +404,15 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
 
     @staticmethod
     def get_platform_tags() -> set:
-        return set(get_supported()) | set(tags._platform_tags())
+        return set(get_supported()) | set(packaging.tags._platform_tags())
 
     @staticmethod
-    def parse_filename(info:str) -> Optional[dict]:
+    def parse_filename(filename:str) -> Optional[dict]:
         """Match the filename and return a dict of parts.
         >>> parse_filename(...)  # TODO add a proper doctest
         {"distribution": .., "version": .., ...} 
         """
-        assert isinstance(info, str)
+        assert isinstance(filename, str)
         match:Optional[re.Match] = re.match(
             "(?P<distribution>.*)-"
             "(?P<version>.*)"
@@ -568,40 +421,44 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             "(?P<abi_tag>.*)-"
             "(?P<platform_tag>.*)\\."
             "(?P<ext>whl|zip|tar|tar\\.gz)",
-            info
+            filename
         )
+        if not match:
+            log.debug(f"filename {filename} could not be matched")
         return match.groupdict() if match else None
 
     @staticmethod
     def is_version_satisfied(info:Dict[str,str], sys_version: Version):        
         # https://warehouse.readthedocs.io/api-reference/json.html
         # https://packaging.pypa.io/en/latest/specifiers.html
-        specifier = info.get("requires_python", "") or "==3"
+        specifier = info.get("requires_python", "")  # SpecifierSet("") matches anything, no need to artificially lock down versions at this point
         return sys_version in SpecifierSet(specifier)
 
     @staticmethod
     def is_platform_compatible(info:Dict[str, str], platform_tags:set):
         assert isinstance(info, dict) and isinstance(platform_tags, set)
-        # filename as API, seriously WTF...
+
+        # python_tag only is required if the package is compiled
         if not "python_tag" in info:
-            if parsed := Use.parse_filename(info["filename"]):
+            # if the package is not compiled, we don't care about the platform
+            if parsed := Use.parse_filename(info["filename"]):  # filename as API, seriously WTF...
                 info.update(parsed)
             else: return False
-        
-        import packaging.tags
-        our_python_tag = "".join((
-          packaging.tags.interpreter_name(),
-          packaging.tags.interpreter_version()))
-        python_tag = info["python_tag"]
-        platform_tag = info["platform_tag"]
-        is_match = platform_tag in platform_tags and \
-                   our_python_tag == python_tag
-        log.debug(
-          "%s: \"%s\" in platform_tags and %s == %s",
-          is_match,
-          platform_tag,
-          python_tag, our_python_tag
-        )
+        # we are dealing with a compiled package
+        else:
+            our_python_tag = "".join((
+            packaging.tags.interpreter_name(),
+            packaging.tags.interpreter_version()))
+            python_tag = info["python_tag"]
+            platform_tag = info["platform_tag"]
+            is_match = platform_tag in platform_tags and \
+                    our_python_tag == python_tag
+            log.debug(
+            "%s: \"%s\" in platform_tags and %s == %s",
+            is_match,
+            platform_tag,
+            python_tag, our_python_tag
+            )
         return is_match
 
     @staticmethod
@@ -614,7 +471,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                         platform_tags:List[str]=None,
                         interpreter_tag:str=None,
                         ) -> Tuple[str, str]:
-        """Pick the best match for our architecture from a list of possible urls and return version and hash."""
+        """Pick from a list of possible urls and return the hash of the best fitting artifact."""
         if not sys_version:
             sys_version = Version(".".join(map(str, sys.version_info[0:3])))
         assert isinstance(sys_version, Version)
@@ -622,13 +479,15 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             platform_tags = Use.get_platform_tags()
         assert isinstance(platform_tags, set)
         if not interpreter_tag:
-            interpreter_tag = tags.interpreter_name() + tags.interpreter_version()
+            interpreter_tag = packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
         assert isinstance(interpreter_tag, str)
         
-        results = [info["digests"][hash_algo] for info in urls 
-                                                if Use.is_version_satisfied(info, sys_version) and 
-                                                    Use.is_platform_compatible(info, platform_tags)
-                                                    ]
+        results = [info["digests"][hash_algo] for info in 
+                    sorted(urls, 
+                            key=lambda info: info.get("packagetype", ""))  # pre-sorting by type should ensure that we prefer binary packages over raw source
+                        if Use.is_version_satisfied(info, sys_version) and
+                            Use.is_platform_compatible(info, platform_tags)
+                    ]
         if results:
             return results[0]
         else: 
@@ -649,11 +508,11 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             sys_version = Version(".".join(map(str, sys.version_info[0:3])))
         assert isinstance(sys_version, Version)
         if not platform_tags: 
-            platform_tags = list(tags._platform_tags())
+            platform_tags = list(packaging.tags._platform_tags())
         assert isinstance(platform_tags, list)
         platform_tags = set(platform_tags)
         if not interpreter_tag:
-            interpreter_tag = tags.interpreter_name() + tags.interpreter_version()
+            interpreter_tag = packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
         assert isinstance(interpreter_tag, str)
         
         # update the release dicts to hold all info canonically
@@ -672,7 +531,6 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                         raise Use.MissingHash(f"No hash digest found in "
                             "release distribution for {hash_algo=}")
                     return info["version"], hash_value
-    
     
     @staticmethod
     def load_registry(path):
