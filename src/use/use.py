@@ -441,7 +441,6 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         # source is compatible with any platform by default, just need to check the version
         if info["python_version"] == "source":
             return True
-        is_match = False
         our_python_tag = "".join((
                                 packaging.tags.interpreter_name(),
                                 packaging.tags.interpreter_version()))
