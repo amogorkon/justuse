@@ -407,10 +407,10 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         return set(get_supported()) | set(packaging.tags._platform_tags())
 
     @staticmethod
-    def parse_filename(filename:str) -> Optional[dict]:
+    def parse_filename(filename:str) -> dict:
         """Match the filename and return a dict of parts.
-        >>> parse_filename(...)  # TODO add a proper doctest
-        {"distribution": .., "version": .., ...} 
+        >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
+        {'distribution': 'numpy', 'version': '1.19.5', 'build_tag': None, 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
         """
         assert isinstance(filename, str)
         match:Optional[re.Match] = re.match(
@@ -425,7 +425,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         )
         if not match:
             log.debug(f"filename {filename} could not be matched")
-        return match.groupdict() if match else None
+        return match.groupdict() if match else {}
 
     @staticmethod
     def is_version_satisfied(info:Dict[str,str], sys_version: Version):        
@@ -437,28 +437,19 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
     @staticmethod
     def is_platform_compatible(info:Dict[str, str], platform_tags:set):
         assert isinstance(info, dict) and isinstance(platform_tags, set)
-
-        # python_tag only is required if the package is compiled
-        if not "python_tag" in info:
-            # if the package is not compiled, we don't care about the platform
-            if parsed := Use.parse_filename(info["filename"]):  # filename as API, seriously WTF...
-                info.update(parsed)
-            else: return False
-        # we are dealing with a compiled package
-        else:
-            our_python_tag = "".join((
-            packaging.tags.interpreter_name(),
-            packaging.tags.interpreter_version()))
-            python_tag = info["python_tag"]
-            platform_tag = info["platform_tag"]
-            is_match = platform_tag in platform_tags and \
-                    our_python_tag == python_tag
-            log.debug(
-            "%s: \"%s\" in platform_tags and %s == %s",
-            is_match,
-            platform_tag,
-            python_tag, our_python_tag
-            )
+        info.update(Use.parse_filename(info["filename"]))  # filename as API, seriously WTF...
+        # source is compatible with any platform by default, just need to check the version
+        if info["python_version"] == "source":
+            return True
+        is_match = False
+        our_python_tag = "".join((
+                                packaging.tags.interpreter_name(),
+                                packaging.tags.interpreter_version()))
+        python_tag = info["python_tag"]
+        platform_tag = info["platform_tag"]
+        is_match = platform_tag in platform_tags and \
+                our_python_tag == python_tag
+        log.debug("%s: \"%s\" in platform_tags and %s == %s", is_match, platform_tag, python_tag, our_python_tag)
         return is_match
 
     @staticmethod
@@ -519,8 +510,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         for ver, dists in releases.items():
             for d in dists:
                 d["version"] = ver # Add version info
-                if parsed := Use.parse_filename(d["filename"]):
-                    d.update(parsed)
+                d.update(Use.parse_filename(d["filename"]))
         
         for ver, dists in sorted(releases.items(), key=lambda item: item[0]):
             for info in dists:

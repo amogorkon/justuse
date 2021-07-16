@@ -25,8 +25,6 @@ def test_template(reuse):
 
 
 @pytest.mark.xfail(not_local, reason="in development") 
-def test_parse_filename(reuse):
-    assert reuse.parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl") == ("numpy", "1.19.5", "cp36", "cp36m", "macosx_10_9_x86_64")
 
 @pytest.mark.xfail(not_local, reason="in development") 
 def test_is_platform_compatible(reuse):

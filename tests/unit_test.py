@@ -391,3 +391,6 @@ def test_find_windows_artifact(reuse):
     target_version = "1.19.5"
     response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json").json()
     assert reuse.find_matching_artifact(response["urls"])
+
+def test_parse_filename(reuse):
+    assert reuse.parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl") == {'distribution': 'numpy', 'version': '1.19.5', 'build_tag': None, 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
