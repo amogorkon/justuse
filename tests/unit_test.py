@@ -294,7 +294,7 @@ def test_auto_install_native():
   with patch('use.config', {"debugging": True}, spec=True):  # ? not sure about that
     rw = None
     try:
-      use("numpy", auto_install=True)
+      use("numpy", auto_install=True, fatal_exceptions=True)
     except RuntimeWarning as w:
       rw = w
     assert rw, "Expected a RuntimeWarning from unversioned auto-install"

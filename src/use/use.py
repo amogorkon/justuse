@@ -340,9 +340,6 @@ def is_platform_satisfied(info:Dict[str, str], platform_tags:List[str]):
         if config["debugging"]: print(traceback.format_exc())
     return False
 
-def is_interpreter_satisfied(info:Dict[str, str], interpreter_tag: str):
-    return interpreter_tag in (info["python_tag"], info["abi_tag"])
-
 def find_matching_artifact(
                     urls:List[Dict[str, str]], *, 
                     # for testability
@@ -368,7 +365,7 @@ def find_matching_artifact(
         info.update(parsed)
         info["hash"] = info["digests"]["sha256"]
         found.append(info)
-    return [(info["version"], info["hash"]) for info in found if is_version_satisfied(info, sys_version) and is_interpreter_satisfied(info, interpreter_tag)][0]
+    return [(info["version"], info["hash"]) for info in found if is_version_satisfied(info, sys_version)][0]
 
 def load_registry(path:Path) -> dict:
     registry_version = "0.0.2"
@@ -432,9 +429,12 @@ def find_latest_working_version(releases: Dict[str, List[Dict[str, str]]], # {ve
     
     for ver, dists in sorted(releases.items(), key=lambda item: item[0]):
         for info in dists:
+            parsed = parse_filename(info["filename"])
+            if not parsed: continue
+            info.update(parsed)
+            info["hash"] = info["digests"]["sha256"]
             if is_version_satisfied(info, sys_version) and \
-                is_platform_satisfied(info, platform_tags) and \
-                is_interpreter_satisfied(info, interpreter_tag):
+                is_platform_satisfied(info, platform_tags):
                 hash_value = info["digests"].get(hash_algo)
                 if not hash_value:
                     raise MissingHash(f"No hash digest found in "
@@ -576,22 +576,33 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
     def is_version_satisfied(info:Dict[str,str], sys_version: Version):        
         # https://warehouse.readthedocs.io/api-reference/json.html
         # https://packaging.pypa.io/en/latest/specifiers.html
-        return sys_version in SpecifierSet(info.get("requires_python", ""))
+        specifier = info.get("requires_python", "") or "==3"
+        return sys_version in SpecifierSet(specifier)
 
     @staticmethod
     def is_platform_compatible(info:Dict[str, str], platform_tags:set):
         assert isinstance(info, dict) and isinstance(platform_tags, set)
-        # source is always compatible
-        if info["python_version"] == "source":
-            return True
-        
         # filename as API, seriously WTF...
-        parts = Use.parse_filename(info["filename"])
-        if not parts:
-            log.debug(info["filename"], "parsed to None")
-            return False
-        tag = tags.Tag(parts["python_tag"], parts["abi_tag"], parts["platform_tag"])
-        return tag in platform_tags
+        if not "python_tag" in info:
+            if parsed := Use.parse_filename(info["filename"]):
+                info.update(parsed)
+            else: return False
+        
+        import packaging.tags
+        our_python_tag = "".join((
+          packaging.tags.interpreter_name(),
+          packaging.tags.interpreter_version()))
+        python_tag = info["python_tag"]
+        platform_tag = info["platform_tag"]
+        is_match = platform_tag in platform_tags and \
+                   our_python_tag == python_tag
+        log.debug(
+          "%s: \"%s\" in platform_tags and %s == %s",
+          is_match,
+          platform_tag,
+          python_tag, our_python_tag
+        )
+        return is_match
 
     @staticmethod
     def find_matching_artifact(
@@ -640,6 +651,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         if not platform_tags: 
             platform_tags = list(tags._platform_tags())
         assert isinstance(platform_tags, list)
+        platform_tags = set(platform_tags)
         if not interpreter_tag:
             interpreter_tag = tags.interpreter_name() + tags.interpreter_version()
         assert isinstance(interpreter_tag, str)
@@ -654,8 +666,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         for ver, dists in sorted(releases.items(), key=lambda item: item[0]):
             for info in dists:
                 if Use.is_version_satisfied(info, sys_version) and \
-                    Use.is_platform_satisfied(info, platform_tags) and \
-                    Use.is_interpreter_satisfied(info, interpreter_tag):
+                    Use.is_platform_compatible(info, platform_tags):
                     hash_value = info["digests"].get(hash_algo)
                     if not hash_value:
                         raise Use.MissingHash(f"No hash digest found in "
@@ -982,6 +993,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 aspectize=None,
                 path_to_url:dict=None,
                 import_to_use: dict=None,
+                fatal_exceptions:bool=False
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
@@ -1045,6 +1057,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                     warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
                 except:
+                    if fatal_exceptions: raise
                     exc = traceback.format_exc()
                 if exc:
                     return Use.fail_or_default(default, ImportError, exc)
@@ -1068,6 +1081,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                                     )
                                     break
                         except:
+                            if fatal_exceptions: raise
                             pass
                     else:
                         log.warning(f"Cannot determine version for module {name}, continueing.")
@@ -1083,6 +1097,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                         warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
                     except:
+                        if fatal_exceptions: raise
                         exc = traceback.format_exc()
                     if exc:
                         return Use.fail_or_default(default, ImportError, exc)
@@ -1139,9 +1154,11 @@ use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
                         if hit:
                           version, hash_value = hit
                     except KeyError:  # json issues
+                        if fatal_exceptions: raise
                         if config["debugging"]:
                             log.error(traceback.format_exc())
                     except:
+                        if fatal_exceptions: raise
                         exc = traceback.format_exc()
                     if exc:
                         raise RuntimeWarning("Please specify version and hash for auto-installation. Sadly something went wrong with the JSON PyPI provided, otherwise we could've provided a suggestion.")
@@ -1187,6 +1204,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     else:
                         return Use.fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because none of the available hashes match the expected hash.")
                 except KeyError: # json issues
+                    if fatal_exceptions: raise
                     exc = traceback.format_exc()
                 if exc:
                     return Use.fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.")
@@ -1204,6 +1222,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             file.write(download_response.content)
                         print("Downloaded", path)
                     except:
+                        if fatal_exceptions: raise
                         exc = traceback.format_exc()
                     if exc:
                         return Use.fail_or_default(default, Use.AutoInstallationError, exc)
@@ -1214,6 +1233,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 mod = importer.load_module(module_name)
                 print("Direct zipimport of", name, "successful.")
             except:
+                if fatal_exceptions: raise
                 if config["debugging"]:
                     log.debug(traceback.format_exc())
                 print("Direct zipimport failed, attempting to extract and load manually...")
@@ -1297,6 +1317,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                   mod = importlib.import_module(module_name)  # ! not a good feeling about this one => cache
                   assert Version(mod.__version__) == target_version
                 except ImportError:
+                  if fatal_exceptions: raise
                   exc = traceback.format_exc()
                 log.debug(f"mod = {mod}")
                 for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
