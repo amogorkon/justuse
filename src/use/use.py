@@ -327,9 +327,6 @@ class Use:
     class MissingHash(ValueError):
         pass
 
-    class MissingHash(ValueError):
-        pass
-
     def __init__(self):        
         self._using = _using
         self._aspects = _aspects
