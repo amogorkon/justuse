@@ -892,7 +892,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 aspectize=None,
                 path_to_url:dict=None,
                 import_to_use: dict=None,
-                fatal_exceptions:bool=False
+                fatal_exceptions:bool=False,
+                exchange_sys_path:bool=False
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
@@ -1209,14 +1210,16 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 
                 os.chdir(folder)
 
-                temp_sys_path = copy(sys.path)
-                sys.path = [""]
+                if exchange_sys_path:
+                    temp_sys_path = copy(sys.path)
+                    sys.path = [""]
                 importlib.invalidate_caches()
                 try:
                     mod = importlib.import_module(package_name)
                 except ImportError:
                     exc = traceback.format_exc()
-                sys.path = temp_sys_path
+                if exchange_sys_path:
+                    sys.path = temp_sys_path
                 if exc:
                     return Use._fail_or_default(default, ImportError, f"Failed to import {module_name} from {path}")
 
