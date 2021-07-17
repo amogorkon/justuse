@@ -477,11 +477,11 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         return sys_version in SpecifierSet(specifier)
 
     @staticmethod
-    def _is_platform_compatible(info:Dict[str, str], platform_tags:set):
+    def _is_platform_compatible(info:Dict[str, str], platform_tags:set, include_sdist=False):
         assert isinstance(info, dict) and isinstance(platform_tags, set)
         info.update(Use._parse_filename(info["filename"]))  # filename as API, seriously WTF...
         # source is compatible with any platform by default, just need to check the version
-        if info["python_version"] == "source":
+        if info["python_version"] == "source" and include_sdist:
             return True
         our_python_tag = "".join((
                                 packaging.tags.interpreter_name(),
@@ -1132,7 +1132,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 mod = importer.load_module(module_name)
                 print("Direct zipimport of", name, "successful.")
             except:
-                if fatal_exceptions: raise
                 if config["debugging"]:
                     log.debug(traceback.format_exc())
                 print("Direct zipimport failed, attempting to extract and load manually...")
