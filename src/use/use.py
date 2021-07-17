@@ -1217,9 +1217,11 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 try:
                     mod = importlib.import_module(package_name)
                 except ImportError:
+                    if fatal_exceptions: raise
                     exc = traceback.format_exc()
-                if exchange_sys_path:
-                    sys.path = temp_sys_path
+                finally:
+                    if exchange_sys_path:
+                        sys.path = temp_sys_path
                 if exc:
                     return Use._fail_or_default(default, ImportError, f"Failed to import {module_name} from {path}")
 
