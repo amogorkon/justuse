@@ -80,6 +80,7 @@ import traceback
 import zipfile
 import zipimport
 from collections import defaultdict, namedtuple
+from copy import copy
 from enum import Enum
 from functools import singledispatch, update_wrapper, wraps
 from importlib import metadata
@@ -470,6 +471,9 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         # https://warehouse.readthedocs.io/api-reference/json.html
         # https://packaging.pypa.io/en/latest/specifiers.html
         specifier = info.get("requires_python", "")  # SpecifierSet("") matches anything, no need to artificially lock down versions at this point
+        # f.. you PyPI
+        if specifier is None:
+            specifier = ""
         return sys_version in SpecifierSet(specifier)
 
     @staticmethod
@@ -482,8 +486,8 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         our_python_tag = "".join((
                                 packaging.tags.interpreter_name(),
                                 packaging.tags.interpreter_version()))
-        python_tag = info["python_tag"]
-        platform_tag = info["platform_tag"]
+        python_tag = info.get("python_tag", "")
+        platform_tag = info.get("platform_tag", "")
         is_match = platform_tag in platform_tags and \
                 our_python_tag == python_tag
         log.debug("%s: \"%s\" in platform_tags and %s == %s", is_match, platform_tag, python_tag, our_python_tag)
@@ -543,13 +547,20 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             interpreter_tag = packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
         assert isinstance(interpreter_tag, str)
         
+        
         # update the release dicts to hold all info canonically
+        # be aware, the json returned from pypi ["releases"] can contain empty lists as dists :/
         for ver, dists in releases.items():
+            if not dists:
+                continue
             for d in dists:
                 d["version"] = ver # Add version info
                 d.update(Use._parse_filename(d["filename"]))
         
-        for ver, dists in sorted(releases.items(), key=lambda item: item[0]):
+        for ver, dists in sorted(releases.items(), key=lambda item: Version(item[0]), reverse=True):
+            print(ver)
+            if not dists:
+                continue
             for info in dists:
                 if Use._is_version_satisfied(info, sys_version) and \
                     Use._is_platform_compatible(info, platform_tags):
@@ -1195,16 +1206,18 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 original_cwd = Path.cwd()
                 
                 os.chdir(folder)
-                if not sys.path[0] == "":
-                    sys.path.insert(0, "")
+
+                temp_sys_path = copy(sys.path)
+                sys.path = [""]
                 importlib.invalidate_caches()
                 try:
-                  mod = importlib.import_module(module_name)  # ! not a good feeling about this one => cache
-                  assert Version(mod.__version__) == target_version, path
+                    mod = importlib.import_module(package_name)
                 except ImportError:
-                  if fatal_exceptions: raise
-                  exc = traceback.format_exc()
-                log.debug(f"mod = {mod}")
+                    exc = traceback.format_exc()
+                sys.path = temp_sys_path
+                if exc:
+                    return Use._fail_or_default(default, ImportError, f"Failed to import {module_name} from {path}")
+
                 for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
                     if not hasattr(mod, key): continue
                     rdist_info[key] = getattr(mod, key)
