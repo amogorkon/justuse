@@ -313,7 +313,9 @@ def test_auto_install_native():
     version = params["version"]
     hash_value = params["hash_value"]
     print(f"calling use({name!r}, {params}, auto_install=True) ...")
-    mod = use(name, hash_value=hash_value, version=version, auto_install=True)
+    import logging
+    logging.root.setLevel(logging.DEBUG)
+    mod = use(name, hash_value=hash_value, version=version, auto_install=True, fatal_exceptions=True)
     print(f"mod={mod}")
     assert mod, "No module was returned"
     assert mod.ndarray, "Wrong module was returned (expected 'nparray')"
