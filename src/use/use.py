@@ -1215,6 +1215,10 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     sys.path = [""]
                 importlib.invalidate_caches()
                 try:
+                    log.debug("Trying importlib.import_module")
+                    log.debug("  with cwd=%s,", os.getcwd())
+                    log.debug("  sys.path=%s", sys.path)
+                    
                     mod = importlib.import_module(package_name)
                 except ImportError:
                     if fatal_exceptions: raise
