@@ -488,10 +488,13 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                                 packaging.tags.interpreter_version()))
         python_tag = info.get("python_tag", "")
         platform_tag = info.get("platform_tag", "")
-        is_match = platform_tag in platform_tags and \
-                our_python_tag == python_tag
-        log.debug("%s: \"%s\" in platform_tags and %s == %s", is_match, platform_tag, python_tag, our_python_tag)
-        return is_match
+        for one_platform_tag in platform_tag.split("."):
+            is_match = one_platform_tag in platform_tags and \
+                         our_python_tag == python_tag
+            log.debug("%s: \"%s\" in platform_tags and %s == %s", is_match, one_platform_tag, python_tag, our_python_tag)
+            if is_match:
+                return True
+        return False
 
     @staticmethod
     def _find_matching_artifact(
