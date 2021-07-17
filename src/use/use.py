@@ -1215,6 +1215,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     sys.path = [""]
                 importlib.invalidate_caches()
                 try:
+                    sys.path.insert(0, "")
                     log.debug("Trying importlib.import_module")
                     log.debug("  with cwd=%s,", os.getcwd())
                     log.debug("  sys.path=%s", sys.path)
@@ -1224,6 +1225,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     if fatal_exceptions: raise
                     exc = traceback.format_exc()
                 finally:
+                    sys.path.remove("")
                     if exchange_sys_path:
                         sys.path = temp_sys_path
                 if exc:
