@@ -646,7 +646,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                     module_path:str, 
                     aspectize:dict, 
                     default=mode.fastfail,
-                    package:str="numpy") -> ModuleType:
+                    package:str=None) -> ModuleType:
         default
         mod = ModuleType(name)
         mod.__dict__.update(initial_globals or {})
