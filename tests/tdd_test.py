@@ -38,7 +38,7 @@ def test_is_platform_compatible_macos(reuse):
             'yanked': False, 
             'yanked_reason': None}
     platform_tags = {'win_amd64',}
-    assert reuse.is_platform_compatible(info, platform_tags)
+    assert reuse._is_platform_compatible(info, platform_tags)
 
 @pytest.mark.xfail(not_local, reason="in development") 
 def test_is_platform_compatible_win(reuse):
@@ -58,4 +58,4 @@ def test_is_platform_compatible_win(reuse):
         'yanked': False,
         'yanked_reason': None}
     platform_tags = {'win_amd64',}
-    assert reuse.is_platform_compatible(info, platform_tags)
+    assert reuse._is_platform_compatible(info, platform_tags)
