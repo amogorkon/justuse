@@ -968,11 +968,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 # we only enforce versions with auto-install
                 if target_version:
                     # pure despair :(
+                    this_version = None
                     for check in [
                         "metadata.distribution(name).version",
                         "mod.version",
                         "mod.version()",
                         "mod.__version__"]:
+                        if this_version: break
                         try:
                             check_value = eval(check)
                             if isinstance(check_value, str):
