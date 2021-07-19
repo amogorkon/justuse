@@ -79,29 +79,17 @@ import time
 import traceback
 import zipfile
 import zipimport
-
-from collections import defaultdict
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from copy import copy
 from enum import Enum
-from functools import singledispatch
-from functools import update_wrapper
-from functools import wraps
+from functools import singledispatch, update_wrapper, wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from itertools import chain
-from logging import DEBUG
-from logging import StreamHandler
-from logging import getLogger
-from logging import root
+from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
 from types import ModuleType
-from typing import Callable
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
-from typing import Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 from warnings import warn
 
 try:
@@ -113,7 +101,6 @@ import mmh3
 import packaging
 import requests
 import toml
-
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from yarl import URL
@@ -124,7 +111,14 @@ _reloaders = {}  # ProxyModule:Reloader
 _aspects = {} 
 _using = {}
 
-class Version(Version):  # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves. This is necessary to compare sys.version_info with Version.
+    # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves. This is necessary to compare sys.version_info with Version.
+class Version(Version):
+    def __init__(self, versionstr:str=None, major:int=0, minor:int=0, patch:int=0):
+        if not (major or minor or patch):
+            return super().__init__(versionstr)
+        if not versionstr:
+            return super().__init__('.'.join((str(major), str(minor), str(patch))))
+            
     def __iter__(self):
         yield from self.release
 
@@ -311,6 +305,7 @@ class Use:
     # lift module-level stuff up
     __doc__ = __doc__
     __version__ = __version__
+    __name__ = __name__
     # attempt at fix for #23 doesn't work..
     __path__ = str(Path(__file__).resolve().parent)
     
@@ -327,7 +322,8 @@ class Use:
     # ALIASES
     isfunction = inspect.isfunction
     ismethod = inspect.ismethod
-    isclass = inspect.isclass   
+    isclass = inspect.isclass
+    Version = Version
     class VersionWarning(Warning):
         pass
     class NotReloadableWarning(Warning):
