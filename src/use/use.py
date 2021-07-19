@@ -105,7 +105,7 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from yarl import URL
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 _reloaders = {}  # ProxyModule:Reloader
 _aspects = {} 
