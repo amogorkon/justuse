@@ -60,3 +60,28 @@ def test_is_platform_compatible_win(reuse):
         'yanked_reason': None}
     platform_tags = {'win_amd64',}
     assert reuse._is_platform_compatible(info, platform_tags)
+
+def test_classic_import_no_version():
+ with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
+    mod = use("tests.__init__", fatal_exceptions=True)
+    assert issubclass(w[-1].category, use.AmbiguityWarning)
+
+def test_classic_import_same_version():
+ ver = __import__("tests").__version__
+ with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
+    mod = use("tests.__init__", version=ver, fatal_exceptions=True)
+    assert not w
+    assert mod.__version__ == cur_ver_tup
+
+def test_classic_import_diff_version():
+ ver = __import__("tests").__version__
+ with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
+    cur_ver_tup:tuple = tuple(map(int, ver.split(".")))
+    new_ver_tup:tuple = (cur_ver_tup[0]+1, *cur_ver_tup[1:])
+    new_ver_str:str   = ".".join(map(str, new_ver_tup))
+    mod = use("tests.__init__", version=new_ver_str, fatal_exceptions=True)
+    assert issubclass(w[-1].category, use.VersionWarning)
+    assert mod.__version__ == cur_ver_tup
