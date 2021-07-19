@@ -6,7 +6,6 @@ from unittest import skip
 
 import pytest
 import requests
-from packaging.version import Version
 from yarl import URL
 
 from unit_test import reuse
@@ -61,27 +60,3 @@ def test_is_platform_compatible_win(reuse):
     platform_tags = {'win_amd64',}
     assert reuse._is_platform_compatible(info, platform_tags)
 
-@pytest.mark.xfail(not_local, reason="in development")
-def test_classic_import_no_version(reuse):
- with warnings.catch_warnings(record=True) as w:
-    warnings.simplefilter("always")
-    mod = reuse("mmh3", fatal_exceptions=True)
-    assert issubclass(w[-1].category, reuse.AmbiguityWarning)
-
-@pytest.mark.xfail(not_local, reason="in development")
-def test_classic_import_same_version(reuse):
- version = Version(__import__("mmh3").__version__)
- with warnings.catch_warnings(record=True) as w:
-    warnings.simplefilter("always")
-    mod = reuse("mmh3", version=ver, fatal_exceptions=True)
-    assert not w
-    assert mod.__version__ == cur_ver_tup
-
-@pytest.mark.xfail(not_local, reason="in development")
-def test_classic_import_diff_version(reuse):
- version = Version(__import__("mmh3").__version__)
- with warnings.catch_warnings(record=True) as w:
-    warnings.simplefilter("always")
-    mod = reuse("mmh3", version=str(version), fatal_exceptions=True)
-    assert issubclass(w[-1].category, reuse.VersionWarning)
-    assert Version(mod.__version__) == version

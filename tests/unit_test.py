@@ -3,7 +3,6 @@ import os
 import re
 import sys
 import warnings
-
 from collections import defaultdict
 from pathlib import Path
 from typing import Optional
@@ -13,7 +12,6 @@ from unittest.mock import patch
 import packaging
 import pytest
 import requests
-
 from yarl import URL
 
 if Path("use").is_dir(): os.chdir("..")
@@ -148,7 +146,6 @@ def test_pure_python_package(reuse):
 
 import os
 import sys
-
 from pathlib import Path
 from typing import Optional
 
@@ -158,7 +155,6 @@ sys.path.insert(0, str(import_base))
 
 import re
 import warnings
-
 from pathlib import Path
 from unittest import skip
 from unittest.mock import patch
@@ -166,7 +162,6 @@ from unittest.mock import patch
 import pytest
 import requests
 import use
-
 from yarl import URL
 
 
@@ -399,3 +394,26 @@ def test_find_windows_artifact(reuse):
 
 def test_parse_filename(reuse):
     assert reuse._parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl") == {'distribution': 'numpy', 'version': '1.19.5', 'build_tag': None, 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
+
+def test_classic_import_no_version(reuse):
+ with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
+    mod = reuse("mmh3", fatal_exceptions=True)
+    assert issubclass(w[-1].category, reuse.AmbiguityWarning)
+
+def test_classic_import_same_version(reuse):
+ version = reuse.Version(__import__("mmh3").__version__)
+ with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
+    mod = reuse("mmh3", version=version, fatal_exceptions=True)
+    assert not w
+    assert reuse.Version(mod.__version__) == version
+
+def test_classic_import_diff_version(reuse):
+ version = reuse.Version(__import__("mmh3").__version__)
+ with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
+    major, minor, patch = version
+    mod = reuse("mmh3", version=reuse.Version(major=major, minor=minor, patch=patch +1), fatal_exceptions=True)
+    assert issubclass(w[-1].category, reuse.VersionWarning)
+    assert reuse.Version(mod.__version__) == version

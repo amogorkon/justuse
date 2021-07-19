@@ -113,11 +113,13 @@ _using = {}
 
     # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves. This is necessary to compare sys.version_info with Version.
 class Version(Version):
-    def __init__(self, versionstr:str=None, major:int=0, minor:int=0, patch:int=0):
-        if not (major or minor or patch):
-            return super().__init__(versionstr)
-        if not versionstr:
+    def __init__(self, versionstr:str=None, *, major:int=0, minor:int=0, patch:int=0):
+        if (major or minor or patch):
             return super().__init__('.'.join((str(major), str(minor), str(patch))))
+        if isinstance(versionstr, str):
+            return super().__init__(versionstr)
+        else:
+            return super().__init__(str(versionstr))  # this is just wrong :|
             
     def __iter__(self):
         yield from self.release
@@ -910,8 +912,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
         
-        assert version is None or isinstance(version, str), "Version must be given as string."
-        target_version:Version = Version(version) if version else None
+        assert version is None or isinstance(version, str) or isinstance(version, Version), "Version must be given as string or packaging.version.Version."
+        target_version:Version = Version(str(version)) if version else None
         # just validating user input and canonicalizing it
         version:str = str(target_version) if target_version else None
         assert version if target_version else version is target_version, \
@@ -967,7 +969,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     for (check, pattern), decorator in aspectize.items():
                         Use._apply_aspect(mod, check, pattern, decorator)
                     self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
-                    warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
+                    if not target_version:
+                        warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
                 except:
                     if fatal_exceptions: raise
                     exc = traceback.format_exc()
