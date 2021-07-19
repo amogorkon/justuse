@@ -658,7 +658,8 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                     initial_globals:dict, 
                     module_path:str, 
                     aspectize:dict, 
-                    default=mode.fastfail) -> ModuleType:
+                    default=mode.fastfail,
+                    package:str=None) -> ModuleType:
         default
         mod = ModuleType(name)
         mod.__dict__.update(initial_globals or {})
@@ -675,6 +676,8 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
         )
         # not catching this causes the most irritating bugs ever!
+        if package:
+            mod.__package__ = package
         try:
             exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
         except: # reraise anything without handling - clean and simple.
@@ -906,7 +909,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 path_to_url:dict=None,
                 import_to_use: dict=None,
                 fatal_exceptions:bool=False,
-                exchange_sys_path:bool=False
+                exchange_sys_path:bool=True
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
@@ -978,11 +981,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 # we only enforce versions with auto-install
                 if target_version:
                     # pure despair :(
+                    this_version = None
                     for check in [
                         "metadata.distribution(name).version",
                         "mod.version",
                         "mod.version()",
                         "mod.__version__"]:
+                        if this_version: break
                         try:
                             check_value = eval(check)
                             if isinstance(check_value, str):
@@ -1223,12 +1228,10 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 
                 os.chdir(folder)
 
-                if exchange_sys_path:
-                    temp_sys_path = copy(sys.path)
-                    sys.path = [""]
+                temp_sys_path = copy(sys.path)
+                sys.path = ["", list(sys.path_importer_cache)[1]]
                 importlib.invalidate_caches()
                 try:
-                    sys.path.insert(0, "")
                     log.debug("Trying importlib.import_module")
                     log.debug("  with cwd=%s,", os.getcwd())
                     log.debug("  sys.path=%s", sys.path)
@@ -1238,9 +1241,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     if fatal_exceptions: raise
                     exc = traceback.format_exc()
                 finally:
-                    sys.path.remove("")
-                    if exchange_sys_path:
-                        sys.path = temp_sys_path
+                    sys.path = temp_sys_path
                 if exc:
                     return Use._fail_or_default(default, ImportError, f"Failed to import {module_name} from {path}")
 
