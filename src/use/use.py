@@ -79,17 +79,29 @@ import time
 import traceback
 import zipfile
 import zipimport
-from collections import defaultdict, namedtuple
+
+from collections import defaultdict
+from collections import namedtuple
 from copy import copy
 from enum import Enum
-from functools import singledispatch, update_wrapper, wraps
+from functools import singledispatch
+from functools import update_wrapper
+from functools import wraps
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
 from itertools import chain
-from logging import DEBUG, StreamHandler, getLogger, root
+from logging import DEBUG
+from logging import StreamHandler
+from logging import getLogger
+from logging import root
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Union
 from warnings import warn
 
 try:
@@ -101,6 +113,7 @@ import mmh3
 import packaging
 import requests
 import toml
+
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from yarl import URL
@@ -364,11 +377,11 @@ class Use:
                 data = response.json()
                 max_version = max(Version(version) for version in data["releases"].keys())
                 if Version(__version__) < max_version:
-                    warn(f"""Justuse is version {Version(__version__)}, but there is a newer version ({max_version}) on PyPI. 
+                    warn(f"""Justuse is version {Version(__version__)}, but there is a newer version {max_version} available on PyPI.
+To find out more about the changes check out https://github.com/amogorkon/justuse/wiki/What's-new
 Please consider upgrading via 'python -m pip install -U justuse'""", Use.VersionWarning)
             except:
                 log.debug(traceback.format_exc())  # we really don't need to bug the user about this (either pypi is down or internet is broken)
-                
         if config["debugging"]:
             root.setLevel(DEBUG)
 
