@@ -549,7 +549,8 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                     sorted(urls, 
                             key=lambda info: info.get("packagetype", ""))  # pre-sorting by type should ensure that we prefer binary packages over raw source
                         if Use._is_version_satisfied(info, sys_version) and
-                            Use._is_platform_compatible(info, platform_tags)
+                            Use._is_platform_compatible(info, platform_tags) and
+                            not info["yanked"]
                     ]
         if results:
             return results[0]
@@ -593,6 +594,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             if not dists:
                 continue
             for info in dists:
+                if info["yanked"]: continue
                 if Use._is_version_satisfied(info, sys_version) and \
                     Use._is_platform_compatible(info, platform_tags):
                     hash_value = info["digests"].get(hash_algo)
@@ -925,10 +927,18 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 path_to_url:dict=None,
                 import_to_use: dict=None,
                 fatal_exceptions:bool=False,
-                exchange_sys_path:bool=True
+                exchange_sys_path:bool=True,
+                package_name=None, module_name=None
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
+        
+        # the whole auto-install shebang
+        if not package_name or not module_name:
+            package_name, _, module_name = name.partition(".")
+            if not module_name or not package_name:
+                package_name = module_name or package_name or name
+                module_name = module_name or package_name or name
         
         assert version is None or isinstance(version, str) or isinstance(version, Version), "Version must be given as string or packaging.version.Version."
         target_version:Version = Version(str(version)) if version else None
@@ -983,7 +993,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             if not auto_install:
                 try:
                     # feels like cheating, doesn't it
-                    mod = importlib.import_module(name)  # ! => cache
+                    mod = importlib.import_module(module_name)  # ! => cache
                     for (check, pattern), decorator in aspectize.items():
                         Use._apply_aspect(mod, check, pattern, decorator)
                     self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
@@ -1026,7 +1036,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     if not (version):
                         warn(Use.AmbiguityWarning("No version was provided, even though auto_install was specified! Trying to load classically installed package instead."))
                     try:
-                        mod = importlib.import_module(name)  # ! => cache
+                        mod = importlib.import_module(module_name)  # ! => cache
                         for (check, pattern), decorator in aspectize.items():
                             Use._apply_aspect(mod, check, pattern, decorator)
                         self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
@@ -1047,11 +1057,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         else:
             if not auto_install:
                 return Use._fail_or_default(default, ImportError, f"Could not find any installed package '{name}' and auto_install was not requested.")
-            
-            # the whole auto-install shebang
-            package_name, _, module_name = name.partition(".")
-            if not module_name:
-                module_name = package_name
             
             # PEBKAC
             hit:tuple = None
@@ -1246,14 +1251,14 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 os.chdir(folder)
 
                 temp_sys_path = copy(sys.path)
-                sys.path = ["", list(sys.path_importer_cache)[1]]
+                sys.path = ["", list(sys.path_importer_cache)[1], Path(json.__file__).parent.parent]
                 importlib.invalidate_caches()
                 try:
                     log.debug("Trying importlib.import_module")
                     log.debug("  with cwd=%s,", os.getcwd())
                     log.debug("  sys.path=%s", sys.path)
                     
-                    mod = importlib.import_module(package_name)
+                    mod = importlib.import_module(module_name)
                 except ImportError:
                     if fatal_exceptions: raise
                     exc = traceback.format_exc()
