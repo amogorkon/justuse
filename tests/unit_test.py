@@ -138,33 +138,32 @@ def test_pure_python_package(reuse):
 
 @pytest.mark.skipif(sys.platform.startswith("win") and list(sys.version_info)[0:2] >= [3, 10],
     reason="windows Auto-installing native modules is not supported")
-def test_auto_install_native(reuse):
+def test_auto_install_native():
     rw = None
     try:
-        reuse("numpy", auto_install=True)
+        use("protobuf", auto_install=True, package_name="protobuf",
+            module_name="google.protobuf")
     except RuntimeWarning as w:
         rw = w
-    assert rw, "Expected a RuntimeWarning from unversioned auto-install"
-    match:Optional[re.Match] = re.search(
-        "use\\("
-        "\"(?P<name>.*)\", "
-        "version=\"(?P<version>.*)\", "
-        "hash_value=\"(?P<hash_value>.*)\", "
-        "auto_install=True"
-        "\\)",
-        rw.args[0]
-    )
-    assert match, f"Format did not match regex: {rw.args[0]!r}"
-    params:dict = match.groupdict()
-    name = "numpy"
-    version = params["version"]
-    hash_value = params["hash_value"]
-    print(f"calling use({name!r}, {params}, auto_install=True) ...")
-    mod = use(name, hash_value=hash_value, version=version, auto_install=True, fatal_exceptions=True)
-    print(f"mod={mod}")
-    assert mod, "No module was returned"
-    assert mod.ndarray, "Wrong module was returned (expected 'nparray')"
-    assert mod.__version__ == params["version"], "Wrong numpy version"
+        assert rw, "Expected a RuntimeWarning from unversioned auto-install"
+        match:Optional[re.Match] = re.search(
+            "use\\("
+            "\"(?P<name>.*)\", "
+            "version=\"(?P<version>.*)\", "
+            "hash_value=\"(?P<hash_value>.*)\", "
+            "auto_install=True"
+            "\\)",
+            rw.args[0]
+        )
+        assert match, f"Format did not match regex: {rw.args[0]!r}"
+        params:dict = match.groupdict()
+        version = params["version"]
+        hash_value = params["hash_value"]
+        print(f"calling use({params}, auto_install=True) ...")
+        mod = use("protobuf", version=version, hash_value=hash_value, auto_install=True, package_name="protobuf", module_name="google.protobuf")
+        print(f"mod={mod}")
+        assert mod, "No module was returned"
+        assert mod.__version__ == version
 
 def test_registry_first_line_warning(reuse):
     with open(reuse.home / "registry.json") as file:
@@ -224,28 +223,28 @@ def _extracted_from_test_registry_13(jsonfile, package_name, vers, file):
 
 def test_is_version_satisfied(reuse):
     sys_version = packaging.version.Version("3.6.0")
-    # numpy 1.19.5 normal case
-    info = {'comment_text': '', 'digests': {'md5': '2651049b70d2ec07d8afd7637f198807', 'sha256': 'cc6bd4fd593cb261332568485e20a0712883cf631f6f5e8e86a52caa8b2b50ff'}, 'downloads': -1, 'filename': 'numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl', 'has_sig': False, 'md5_digest': '2651049b70d2ec07d8afd7637f198807', 'packagetype': 'bdist_wheel', 'python_version': 'cp36', 'requires_python': '>=3.6', 'size': 15599590, 'upload_time': '2021-01-05T17:19:38', 'upload_time_iso_8601': '2021-01-05T17:19:38.152665Z', 'url': 'https://files.pythonhosted.org/packages/6a/9d/984f87a8d5b28b1d4afc042d8f436a76d6210fb582214f35a0ea1db3be66/numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl', 'yanked': False, 'yanked_reason': None}
+    # google.protobuf 1.19.5 normal case
+    info = {'comment_text': '', 'digests': {'md5': '2651049b70d2ec07d8afd7637f198807', 'sha256': 'cc6bd4fd593cb261332568485e20a0712883cf631f6f5e8e86a52caa8b2b50ff'}, 'downloads': -1, 'filename': 'google.protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl', 'has_sig': False, 'md5_digest': '2651049b70d2ec07d8afd7637f198807', 'packagetype': 'bdist_wheel', 'python_version': 'cp36', 'requires_python': '>=3.6', 'size': 15599590, 'upload_time': '2021-01-05T17:19:38', 'upload_time_iso_8601': '2021-01-05T17:19:38.152665Z', 'url': 'https://files.pythonhosted.org/packages/6a/9d/984f87a8d5b28b1d4afc042d8f436a76d6210fb582214f35a0ea1db3be66/google.protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl', 'yanked': False, 'yanked_reason': None}
     assert reuse._is_version_satisfied(info, sys_version)
     
     # requires >= python 4!
-    info = {'comment_text': '', 'digests': {'md5': '2651049b70d2ec07d8afd7637f198807', 'sha256': 'cc6bd4fd593cb261332568485e20a0712883cf631f6f5e8e86a52caa8b2b50ff'}, 'downloads': -1, 'filename': 'numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl', 'has_sig': False, 'md5_digest': '2651049b70d2ec07d8afd7637f198807', 'packagetype': 'bdist_wheel', 'python_version': 'cp36', 'requires_python': '>=4', 'size': 15599590, 'upload_time': '2021-01-05T17:19:38', 'upload_time_iso_8601': '2021-01-05T17:19:38.152665Z', 'url': 'https://files.pythonhosted.org/packages/6a/9d/984f87a8d5b28b1d4afc042d8f436a76d6210fb582214f35a0ea1db3be66/numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl', 'yanked': False, 'yanked_reason': None}
+    info = {'comment_text': '', 'digests': {'md5': '2651049b70d2ec07d8afd7637f198807', 'sha256': 'cc6bd4fd593cb261332568485e20a0712883cf631f6f5e8e86a52caa8b2b50ff'}, 'downloads': -1, 'filename': 'google.protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl', 'has_sig': False, 'md5_digest': '2651049b70d2ec07d8afd7637f198807', 'packagetype': 'bdist_wheel', 'python_version': 'cp36', 'requires_python': '>=4', 'size': 15599590, 'upload_time': '2021-01-05T17:19:38', 'upload_time_iso_8601': '2021-01-05T17:19:38.152665Z', 'url': 'https://files.pythonhosted.org/packages/6a/9d/984f87a8d5b28b1d4afc042d8f436a76d6210fb582214f35a0ea1db3be66/google.protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl', 'yanked': False, 'yanked_reason': None}
     assert not reuse._is_version_satisfied(info, sys_version)
 
     # pure python
-    info = {'comment_text': '', 'digests': {'md5': '2651049b70d2ec07d8afd7637f198807', 'sha256': 'cc6bd4fd593cb261332568485e20a0712883cf631f6f5e8e86a52caa8b2b50ff'}, 'downloads': -1, 'filename': 'numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl', 'has_sig': False, 'md5_digest': '2651049b70d2ec07d8afd7637f198807', 'packagetype': 'bdist_wheel', 'python_version': 'source', 'requires_python': '>=3.6', 'size': 15599590, 'upload_time': '2021-01-05T17:19:38', 'upload_time_iso_8601': '2021-01-05T17:19:38.152665Z', 'url': 'https://files.pythonhosted.org/packages/6a/9d/984f87a8d5b28b1d4afc042d8f436a76d6210fb582214f35a0ea1db3be66/numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl', 'yanked': False, 'yanked_reason': None}
+    info = {'comment_text': '', 'digests': {'md5': '2651049b70d2ec07d8afd7637f198807', 'sha256': 'cc6bd4fd593cb261332568485e20a0712883cf631f6f5e8e86a52caa8b2b50ff'}, 'downloads': -1, 'filename': 'google.protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl', 'has_sig': False, 'md5_digest': '2651049b70d2ec07d8afd7637f198807', 'packagetype': 'bdist_wheel', 'python_version': 'source', 'requires_python': '>=3.6', 'size': 15599590, 'upload_time': '2021-01-05T17:19:38', 'upload_time_iso_8601': '2021-01-05T17:19:38.152665Z', 'url': 'https://files.pythonhosted.org/packages/6a/9d/984f87a8d5b28b1d4afc042d8f436a76d6210fb582214f35a0ea1db3be66/google.protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl', 'yanked': False, 'yanked_reason': None}
     assert reuse._is_version_satisfied(info, sys_version)
 
 @pytest.mark.skipif(list(sys.version_info)[0:2] >= [3, 10],
-    reason="no binary distribution of numpy is available for python >= 3.10 on Windows")
+    reason="no binary distribution of google.protobuf is available for python >= 3.10 on Windows")
 def test_find_windows_artifact(reuse):
-    package_name = "numpy"
-    target_version = "1.19.5"
+    package_name = "protobuf"
+    target_version = "3.17.3"
     response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json").json()
     assert reuse._find_matching_artifact(response["urls"])
 
 def test_parse_filename(reuse):
-    assert reuse._parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl") == {'distribution': 'numpy', 'version': '1.19.5', 'build_tag': None, 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
+    assert reuse._parse_filename("protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl") == {'distribution': 'protobuf', 'version': '1.19.5', 'build_tag': None, 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
 
 def test_classic_import_no_version(reuse):
     with warnings.catch_warnings(record=True) as w:
