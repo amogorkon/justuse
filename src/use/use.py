@@ -549,7 +549,8 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                     sorted(urls, 
                             key=lambda info: info.get("packagetype", ""))  # pre-sorting by type should ensure that we prefer binary packages over raw source
                         if Use._is_version_satisfied(info, sys_version) and
-                            Use._is_platform_compatible(info, platform_tags)
+                            Use._is_platform_compatible(info, platform_tags) and
+                            not info["yanked"]
                     ]
         if results:
             return results[0]
@@ -593,6 +594,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             if not dists:
                 continue
             for info in dists:
+                if info["yanked"]: continue
                 if Use._is_version_satisfied(info, sys_version) and \
                     Use._is_platform_compatible(info, platform_tags):
                     hash_value = info["digests"].get(hash_algo)
