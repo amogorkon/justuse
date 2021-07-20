@@ -75,20 +75,23 @@ jobs:
           echo "Installing Python 3 ..."
           c:/temp/python-3.9.0.exe /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
           echo "Waiting for setup to complete ..."
-          [System.Threading.Thread]::Sleep(15000)
           $env:PATH = "$env:LOCALAPPDATA\Programs\Python\Python39-32;$env:LOCALAPPDATA\Programs\Python\Python39-32\lib;$env:PATH"
           env
-          ls -l $env:LOCALAPPDATA\Programs
-          ls -l $env:LOCALAPPDATA\Programs\Python
-          ls -l $env:LOCALAPPDATA\Programs\Python\Python39-32
-
-          echo "Environment PATH = $env:PATH"
-          python.exe --version
+          while (!(Test-Path "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe")) {
+            Write-Host "Waiting for installation"
+            Start-Sleep 1
+          }
+          
+          $pyver = ""
+          while (!($pyver.Contains(" 3.9"))) {
+            $pyver = $(
+              & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip --version || & { $global:LASTEXITCODE = 0; }
+            ) -join "`n"
+          }
           echo "Windows-Tests: Preloading package dependencies ..."
-          pip install --force-reinstall anyio mmh3 packaging pip pytest requests yarl
-          python.exe -m pip install --force-reinstall anyio mmh3 packaging pip pytest requests yarl
+          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip install anyio mmh3 packaging pip pytest requests yarl
           echo "Windows-Tests: Running tests ..."
-          python.exe -m pytest
+          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pytest
 
 
   test-macos:
