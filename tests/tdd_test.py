@@ -19,6 +19,7 @@ not_local = not Path("local_switch").exists()
 def test_template(reuse):
     pass
 
+@skip
 @pytest.mark.xfail(not_local, reason="in development") 
 def test_is_platform_compatible_macos(reuse):
     info = {'comment_text': '', 

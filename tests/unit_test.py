@@ -277,8 +277,9 @@ def test_version_warning(reuse):
   # no auto-install requested, wrong version only gives a warning
   with warnings.catch_warnings(record=True) as w:
     warnings.simplefilter("always")
-    reuse("pytest", version="0.0")
-    assert issubclass(w[-1].category, (use.AmbiguityWarning, use.VersionWarning))
+    # importing pip has no side effects, we don't actually need it in our tests but we can rely on it being installed
+    reuse("pip", version="0.0")
+    assert w[-1].category is use.VersionWarning 
 
 def test_pure_python_package(reuse):
   # https://pypi.org/project/example-pypi-package/
@@ -417,3 +418,12 @@ def test_classic_import_diff_version(reuse):
     mod = reuse("mmh3", version=reuse.Version(major=major, minor=minor, patch=patch +1), fatal_exceptions=True)
     assert issubclass(w[-1].category, reuse.VersionWarning)
     assert reuse.Version(mod.__version__) == version
+
+def test_use_ugrade_version_warning(reuse):
+    version = "0.0.0"
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        # no other way to change __version__ before the actual import while the version check happens on import
+        test_use = reuse(reuse.Path("../src/use/use.py"), initial_globals={"test_version":version})
+        assert test_use.test_version == test_use.__version__ == version
+        assert w[0].category.__name__ == reuse.VersionWarning.__name__

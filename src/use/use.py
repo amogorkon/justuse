@@ -57,6 +57,7 @@ File-Hashing inspired by
 :license: MIT
 """
 
+
 from __future__ import annotations
 
 import asyncio
@@ -105,16 +106,23 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from yarl import URL
 
-__version__ = "0.4.1"
+# injected via initial_globals for testing
+test_version: str
+try:
+    __version__ = test_version
+except NameError:
+    __version__ = "0.4.1"
+    test_version = None
 
 _reloaders = {}  # ProxyModule:Reloader
-_aspects = {} 
+_aspects = {}
 _using = {}
 
     # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves. This is necessary to compare sys.version_info with Version.
 class Version(Version):
     def __init__(self, versionstr:str=None, *, major:int=0, minor:int=0, patch:int=0):
         if (major or minor or patch):
+            # string as only argument, no way to construct a Version otherwise - WTF
             return super().__init__('.'.join((str(major), str(minor), str(patch))))
         if isinstance(versionstr, str):
             return super().__init__(versionstr)
@@ -122,7 +130,7 @@ class Version(Version):
             return super().__init__(str(versionstr))  # this is just wrong :|
             
     def __iter__(self):
-        yield from self.release
+        yield from self.release  # why not return the damn internal namedtuple :|
 
 mode = Enum("Mode", "fastfail")
 root.addHandler(StreamHandler(sys.stderr))
@@ -322,9 +330,6 @@ class Use:
     config = config
     
     # ALIASES
-    isfunction = inspect.isfunction
-    ismethod = inspect.ismethod
-    isclass = inspect.isclass
     Version = Version
     class VersionWarning(Warning):
         pass
@@ -451,6 +456,18 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         
     # hoisted functions - formerly module globals
     # staticmethods because module globals aren't reachable in tests while there should be no temptation for side effects via self
+
+    @staticmethod
+    def isfunction(x):
+        return inspect.isfunction
+    
+    @staticmethod
+    def ismethod(x):
+        return inspect.ismethod(x)
+    
+    @staticmethod
+    def isclass(x):
+        return inspect.isclass(x)
 
     @staticmethod
     def _get_platform_tags() -> set:
@@ -696,10 +713,11 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         """Apply the aspect as a side-effect, no copy is created."""
         # TODO: recursion?
         parent = mod
-        for obj in parent.__dict__.values():
-            if check(obj) and re.match(pattern, obj.__qualname__):
-                log.debug("Applying aspect to {parent}.{obj.__name__}")
-                parent.__dict__[obj.__name__] = decorator(obj)
+        for name, obj in parent.__dict__.items():
+            print(obj, type(obj))
+            if check(obj) and re.match(pattern, name):
+                log.debug(f"Applying aspect to {parent}.{name}")
+                parent.__dict__[name] = decorator(obj)
         return mod
 
     @methdispatch
@@ -1259,4 +1277,8 @@ If you want to auto-install the latest version: use("{name}", version="{version}
         assert mod, f"Well shit. ( {path} )"
         return mod
 
-sys.modules["use"] = Use()
+# we should avoid side-effects during testing
+if test_version:
+    Use()
+else:
+    sys.modules["use"] = Use()
