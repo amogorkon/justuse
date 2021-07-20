@@ -83,10 +83,9 @@ import zipimport
 from collections import defaultdict, namedtuple
 from copy import copy
 from enum import Enum
-from functools import singledispatch, update_wrapper, wraps
+from functools import singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import EXTENSION_SUFFIXES
-from itertools import chain
 from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
 from types import ModuleType
@@ -329,6 +328,12 @@ class Use:
     mode = mode
     config = config
     
+    # MODES
+    auto_install = 1
+    fatal_exceptions = 2
+    reloading = 4
+    
+    
     # ALIASES
     Version = Version
     class VersionWarning(Warning):
@@ -429,9 +434,9 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         # let's first take care of unregistered package folders
         for package_path in (self.home/"packages").iterdir():
             if package_path.stem not in (Path(version["path"]).stem 
-                                         for dist in  self._registry["distributions"].values()
-                                         for version in dist.values()
-                                         ):
+                                        for dist in  self._registry["distributions"].values()
+                                        for version in dist.values()
+                                        ):
                 if package_path.is_dir():
                     delete_folder(package_path)
                 else:
@@ -739,6 +744,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                 aspectize:dict=None,
                 path_to_url:dict=None,
                 import_to_use: dict=None,
+                modes:int=0
                 ) -> ModuleType:
         exc = None
         path_to_url
@@ -782,16 +788,21 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 self, 
                 path:Path, 
                 /,*,
-                reloading:bool=False,
                 initial_globals:dict=None, 
                 as_import:str=None,
                 default=mode.fastfail,
                 aspectize:dict=None,
                 path_to_url:dict=None,
                 import_to_use: dict=None,
+                modes:int=0,
                 ) -> ModuleType: 
         aspectize = aspectize or {}
         initial_globals = initial_globals or {}
+        
+        reloading = False
+        if Use.reloading & modes:
+            reloading = True
+        
         exc = None
         mod = None
         path_to_url
@@ -918,20 +929,28 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 name:str,
                 /,*,
                 version:str=None, 
-                initial_globals:dict=None, 
-                auto_install:bool=False, 
+                initial_globals:dict=None,
                 hash_algo:Hash=Hash.sha256, 
                 hash_value:str=None,
                 default=mode.fastfail, 
                 aspectize=None,
                 path_to_url:dict=None,
                 import_to_use: dict=None,
-                fatal_exceptions:bool=False,
-                exchange_sys_path:bool=True,
-                package_name=None, module_name=None
+                package_name=None, module_name=None,
+                modes:int=0,
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
+        
+        # we use boolean flags to reduce the complexity of the call signature
+        fatal_exceptions = False
+        if Use.fatal_exceptions & modes:
+            fatal_exceptions = True
+        
+        auto_install = False
+        if Use.auto_install & modes:
+            auto_install = True
+
         
         # the whole auto-install shebang
         if not package_name or not module_name:

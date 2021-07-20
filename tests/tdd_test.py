@@ -61,3 +61,6 @@ def test_is_platform_compatible_win(reuse):
     platform_tags = {'win_amd64',}
     assert reuse._is_platform_compatible(info, platform_tags)
 
+@pytest.mark.xfail(not_local, reason="in development") 
+def test_template(reuse):
+    pass

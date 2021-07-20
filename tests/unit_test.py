@@ -1,21 +1,23 @@
 import json
 import os
+import re
 import sys
 import warnings
 from collections import defaultdict
 from pathlib import Path
+from typing import Optional
 
-import pytest
-import re
-import requests
-from yarl import URL
 import packaging.tags
 import packaging.version
+import pytest
+import requests
+from yarl import URL
 
 if Path("use").is_dir(): os.chdir("..")
 import_base = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(import_base))
 import use
+
 __package__ = "tests"
 
 @pytest.fixture()
@@ -103,23 +105,23 @@ def test_classical_install(reuse):
 def test_autoinstall_PEBKAC(reuse):
     # auto-install requested, but no version or hash_value specified
     with pytest.raises(RuntimeWarning):
-        reuse("pytest", auto_install=True)
+        reuse("pytest", modes=reuse.auto_install)
   
     # forgot hash_value
     with pytest.raises(packaging.version.InvalidVersion):
-        reuse("pytest", auto_install=True, version="-1")
+        reuse("pytest", modes=reuse.auto_install, version="-1")
   
     # forgot version
     with pytest.raises(RuntimeWarning):
-        reuse("pytest", auto_install=True, hash_value="asdf")
+        reuse("pytest", modes=reuse.auto_install, hash_value="asdf")
     
     # impossible version
     with pytest.raises(AssertionError):  # version must be either str or tuple
-        reuse("pytest", auto_install=True, version=-1, hash_value="asdf")
+        reuse("pytest", modes=reuse.auto_install, version=-1, hash_value="asdf")
   
     # non-existing package
     with pytest.raises(ImportError):
-        reuse("4-^df", auto_install=True, version="0.0.1", hash_value="asdf")
+        reuse("4-^df", modes=reuse.auto_install, version="0.0.1", hash_value="asdf")
     
 def test_version_warning(reuse):
     # no auto-install requested, wrong version only gives a warning
@@ -132,16 +134,17 @@ def test_pure_python_package(reuse):
     # https://pypi.org/project/example-pypi-package/
     file = reuse.Path.home() / f".justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl"
     file.unlink(missing_ok=True)
-    test = reuse("example-pypi-package.examplepy", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", auto_install=True)
+    test = reuse("example-pypi-package.examplepy", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", modes=reuse.auto_install)
     assert str(test.Number(2)) == "2"
     file.unlink()
 
-@pytest.mark.skipif(sys.platform.startswith("win") and list(sys.version_info)[0:2] >= [3, 10],
+@pytest.mark.skipif(sys.platform.startswith("win") 
+  and list(sys.version_info)[0:2] >= [3, 10], 
     reason="windows Auto-installing native modules is not supported")
-def test_auto_install_native():
+def test_auto_install_native(reuse):
     rw = None
     try:
-        use("protobuf", auto_install=True, package_name="protobuf",
+        use("protobuf", modes=reuse.auto_install, package_name="protobuf",
             module_name="google.protobuf")
     except RuntimeWarning as w:
         rw = w
@@ -160,7 +163,7 @@ def test_auto_install_native():
         version = params["version"]
         hash_value = params["hash_value"]
         print(f"calling use({params}, auto_install=True) ...")
-        mod = use("protobuf", version=version, hash_value=hash_value, auto_install=True, package_name="protobuf", module_name="google.protobuf")
+        mod = use("protobuf", version=version, hash_value=hash_value, modes=reuse.auto_install, package_name="protobuf", module_name="google.protobuf")
         print(f"mod={mod}")
         assert mod, "No module was returned"
         assert mod.__version__ == version
@@ -188,7 +191,7 @@ def test_registry(reuse):
     file = use.Path.home() / f".justuse-python" / "packages" \
         / f"{package_name.replace('-','_')}-0.1.0-py3-none-any.whl"
     file.unlink(missing_ok=True)
-    _ = reuse(name, version=vers, hash_value=hash_value, auto_install=True)
+    _ = reuse(name, version=vers, hash_value=hash_value, modes=reuse.auto_install)
     with open(Path.home() / ".justuse-python" / "registry.json", "rb") \
                 as jsonfile:
         _extracted_from_test_registry_13(jsonfile, package_name, vers, file)
@@ -249,14 +252,14 @@ def test_parse_filename(reuse):
 def test_classic_import_no_version(reuse):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        _ = reuse("mmh3", fatal_exceptions=True)
+        _ = reuse("mmh3", modes=reuse.fatal_exceptions)
         assert issubclass(w[-1].category, reuse.AmbiguityWarning)
 
 def test_classic_import_same_version(reuse):
     version = reuse.Version(__import__("mmh3").__version__)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        mod = reuse("mmh3", version=version, fatal_exceptions=True)
+        mod = reuse("mmh3", version=version, modes=reuse.fatal_exceptions)
         assert not w
         assert reuse.Version(mod.__version__) == version
 
@@ -265,7 +268,7 @@ def test_classic_import_diff_version(reuse):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         major, minor, patch = version
-        mod = reuse("mmh3", version=reuse.Version(major=major, minor=minor, patch=patch +1), fatal_exceptions=True)
+        mod = reuse("mmh3", version=reuse.Version(major=major, minor=minor, patch=patch +1), modes=reuse.fatal_exceptions)
         assert issubclass(w[-1].category, reuse.VersionWarning)
         assert reuse.Version(mod.__version__) == version
 
