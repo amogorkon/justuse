@@ -1246,7 +1246,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 os.chdir(folder)
 
                 temp_sys_path = copy(sys.path)
-                sys.path = ["", list(sys.path_importer_cache)[1]]
+                # sys.path = ["", list(sys.path_importer_cache)[1], Path(json.__file__).parent.parent]
                 importlib.invalidate_caches()
                 try:
                     log.debug("Trying importlib.import_module")
