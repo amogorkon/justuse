@@ -963,6 +963,66 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         self._set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=inspect.getframeinfo(inspect.currentframe()))
         return mod
 
+
+    def _import_builtin(self, name, spec, default, aspectize):
+        try:
+            mod = spec.loader.create_module(spec)
+            spec.loader.exec_module(mod)  # ! => cache
+            if aspectize:
+                warn("Applying aspects to builtins may lead to unexpected behaviour, but there you go..", RuntimeWarning)
+            for (check, pattern), decorator in aspectize.items():
+                Use._apply_aspect(mod, check, pattern, decorator)
+            self._set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
+            return mod
+        except:
+            exc = traceback.format_exc()
+        if exc:
+            return Use._fail_or_default(default, ImportError, exc)
+
+    def _import_classical_install(self, name, module_name, spec, target_version, default, aspectize, fatal_exceptions):
+        exc = None
+        try:
+            mod = importlib.import_module(module_name)  # ! => cache
+            for (check, pattern), decorator in aspectize.items():
+                Use._apply_aspect(mod, check, pattern, decorator)
+            self._set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
+            if not target_version:
+                warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
+        except:
+            if fatal_exceptions: raise
+            exc = traceback.format_exc()
+        if exc:
+            return Use._fail_or_default(default, ImportError, exc)
+        # we only enforce versions with auto-install
+        if target_version:
+            # pure despair :(
+            this_version = None
+            for check in [
+                "metadata.distribution(name).version",
+                "mod.version",
+                "mod.version()",
+                "mod.__version__"]:
+                if this_version: break
+                try:
+                    check_value = eval(check)
+                    if isinstance(check_value, str):
+                        this_version = Version(check_value)
+                        if target_version != this_version:
+                            warn(
+                                f"{name} is expected to be version {target_version} ,  but got {this_version} instead",
+                                Use.VersionWarning,
+                            )
+                            break
+                except:
+                    if fatal_exceptions: raise
+            else:
+                log.warning(f"Cannot determine version for module {name}, continueing.")
+        self.persist_registry()
+        for (check, pattern), decorator in aspectize.items():
+            Use._apply_aspect(mod, check, pattern, decorator)
+        self._set_mod(name=name, mod=mod, path=None, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
+        return mod
+
     @__call__.register(str)
     def _use_str(
                 self,
@@ -992,7 +1052,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         # we use boolean flags to reduce the complexity of the call signature
         fatal_exceptions = bool(Use.fatal_exceptions & modes)
         auto_install = bool(Use.auto_install & modes)
-
         
         # the whole auto-install shebang
         if not package_name or not module_name:
@@ -1036,77 +1095,20 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             except metadata.PackageNotFoundError:  # indeed builtin!
                 builtin = True
             if builtin:
-                try:
-                    mod = spec.loader.create_module(spec)
-                    spec.loader.exec_module(mod)  # ! => cache
-                    if aspectize:
-                        warn("Applying aspects to builtins may lead to unexpected behaviour, but there you go..", RuntimeWarning)
-                    for (check, pattern), decorator in aspectize.items():
-                        Use._apply_aspect(mod, check, pattern, decorator)
-                    self._set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
-                    return mod
-                except:
-                    exc = traceback.format_exc()
-                if exc:
-                    return Use._fail_or_default(default, ImportError, exc)
-
+                return self._import_builtin(name, spec, default, aspectize)
+            
             # it seems to be installed in some way, for instance via pip
             if not auto_install:
-                try:
-                    # feels like cheating, doesn't it
-                    mod = importlib.import_module(module_name)  # ! => cache
-                    for (check, pattern), decorator in aspectize.items():
-                        Use._apply_aspect(mod, check, pattern, decorator)
-                    self._set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
-                    if not target_version:
-                        warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
-                except:
-                    if fatal_exceptions: raise
-                    exc = traceback.format_exc()
-                if exc:
-                    return Use._fail_or_default(default, ImportError, exc)
-                
-                # we only enforce versions with auto-install
-                if target_version:
-                    # pure despair :(
-                    this_version = None
-                    for check in [
-                        "metadata.distribution(name).version",
-                        "mod.version",
-                        "mod.version()",
-                        "mod.__version__"]:
-                        if this_version: break
-                        try:
-                            check_value = eval(check)
-                            if isinstance(check_value, str):
-                                this_version = Version(check_value)
-                                if target_version != this_version:
-                                    warn(
-                                        f"{name} is expected to be version {target_version} ,  but got {this_version} instead",
-                                        Use.VersionWarning,
-                                    )
-                                    break
-                        except:
-                            if fatal_exceptions: raise
-                            pass
-                    else:
-                        log.warning(f"Cannot determine version for module {name}, continueing.")
+                return self._import_classical_install(name, module_name, spec, target_version, default, aspectize, fatal_exceptions)
+            
             # spec & auto-install
             else:
                 if (metadata.version(name) == target_version) or not(version):
                     if not (version):
                         warn(Use.AmbiguityWarning("No version was provided, even though auto_install was specified! Trying to load classically installed package instead."))
-                    try:
-                        mod = importlib.import_module(module_name)  # ! => cache
-                        for (check, pattern), decorator in aspectize.items():
-                            Use._apply_aspect(mod, check, pattern, decorator)
-                        self._set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
-                        warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
-                    except:
-                        if fatal_exceptions: raise
-                        exc = traceback.format_exc()
-                    if exc:
-                        return Use._fail_or_default(default, ImportError, exc)
+                    mod =  self._import_classical_install(name, module_name, spec, target_version, default, aspectize, fatal_exceptions)
+                    warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
+                    return mod
                 # wrong version => wrong spec
                 existing_mod_meta_version = metadata.version(name)
                 if existing_mod_meta_version != target_version:
@@ -1118,7 +1120,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         else:
             if not auto_install:
                 return Use._fail_or_default(default, ImportError, f"Could not find any installed package '{name}' and auto_install was not requested.")
-            
             # PEBKAC
             hit:tuple = None
             
