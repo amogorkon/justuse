@@ -108,8 +108,8 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from yarl import URL
 
-# injected via initial_globals for testing
-test_version: str
+# injected via initial_globals for testing, you can safely ignore this
+test_version: Optional(str)
 try:
     __version__ = test_version
 except NameError:
@@ -120,7 +120,8 @@ _reloaders = {}  # ProxyModule:Reloader
 _aspects = {}
 _using = {}
 
-    # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves. This is necessary to compare sys.version_info with Version.
+# Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves. 
+# # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
 class Version(Version):
     def __init__(self, versionstr:str=None, *, major:int=0, minor:int=0, patch:int=0):
         if (major or minor or patch):
@@ -132,7 +133,7 @@ class Version(Version):
             return super().__init__(str(versionstr))  # this is just wrong :|
             
     def __iter__(self):
-        yield from self.release  # why not return the damn internal namedtuple :|
+        yield from self.release
 
 mode = Enum("Mode", "fastfail")
 root.addHandler(StreamHandler(sys.stderr))
@@ -373,6 +374,9 @@ class Use:
 
         with open(self.home / "config.toml") as file:
             config.update(toml.load(file))
+        
+        if config["debugging"]:
+            root.setLevel(DEBUG)
 
         if config["version_warning"]:
             try:
@@ -385,8 +389,6 @@ To find out more about the changes check out https://github.com/amogorkon/justus
 Please consider upgrading via 'python -m pip install -U justuse'""", Use.VersionWarning)
             except:
                 log.debug(traceback.format_exc())  # we really don't need to bug the user about this (either pypi is down or internet is broken)
-        if config["debugging"]:
-            root.setLevel(DEBUG)
 
     # for easy refactoring later
     @property
@@ -411,6 +413,14 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         (self.home / "config.toml").touch(mode=0o644, exist_ok=True)
         (self.home / "config_defaults.toml").touch(mode=0o644, exist_ok=True)
         (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
+
+    def recreate_registry(self):
+        number_of_backups = len(list((self.home/"registry.json").glob("*.bak")))
+        (self.home / "registry.json").rename(self.home / f"registry.json.{number_of_backups + 1}.bak")
+        (self.home / "registry.json").touch(mode=0o644)
+        self._registry = Use._load_registry(self.home / "registry.json")
+        self._user_registry:dict = Use._load_registry(self.home / "user_registry.json")
+        Use._merge_registry(self._registry, self._user_registry)
 
     def install(self):
         # yeah, really.. __builtins__ sometimes appears as a dict and other times as a module, don't ask me why
@@ -490,7 +500,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                 self._del_entry(name)
         self.persist_registry()
 
-    def set_mod(self, *, name, mod, spec, path, frame):
+    def _set_mod(self, *, name, mod, spec, path, frame):
         """Helper to get the order right."""
         self._using[name] = Use.ModInUse(name, mod, path, spec, frame)
         
@@ -810,7 +820,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if exc:
             return Use._fail_or_default(default, ImportError, exc)
         
-        self.set_mod(name=name, mod=mod, spec=None, path=url, frame=inspect.getframeinfo(inspect.currentframe()))
+        self._set_mod(name=name, mod=mod, spec=None, path=url, frame=inspect.getframeinfo(inspect.currentframe()))
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             assert as_import.isidentifier(), f"as_import must be a valid identifier."
@@ -933,7 +943,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             with open(path, "rb") as file:
                 code = file.read()
             # the path needs to be set before attempting to load the new module - recursion confusing ftw!
-            self.set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=inspect.getframeinfo(inspect.currentframe()))
+            self._set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=inspect.getframeinfo(inspect.currentframe()))
             try:
                 mod = Use._build_mod(name=name, 
                                 code=code, 
@@ -950,7 +960,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             sys.modules[as_import] = mod
-        self.set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=inspect.getframeinfo(inspect.currentframe()))
+        self._set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=inspect.getframeinfo(inspect.currentframe()))
         return mod
 
     @__call__.register(str)
@@ -1033,7 +1043,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         warn("Applying aspects to builtins may lead to unexpected behaviour, but there you go..", RuntimeWarning)
                     for (check, pattern), decorator in aspectize.items():
                         Use._apply_aspect(mod, check, pattern, decorator)
-                    self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
+                    self._set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                     return mod
                 except:
                     exc = traceback.format_exc()
@@ -1047,7 +1057,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     mod = importlib.import_module(module_name)  # ! => cache
                     for (check, pattern), decorator in aspectize.items():
                         Use._apply_aspect(mod, check, pattern, decorator)
-                    self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
+                    self._set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                     if not target_version:
                         warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
                 except:
@@ -1090,7 +1100,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         mod = importlib.import_module(module_name)  # ! => cache
                         for (check, pattern), decorator in aspectize.items():
                             Use._apply_aspect(mod, check, pattern, decorator)
-                        self.set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
+                        self._set_mod(name=name, mod=mod, spec=spec, path=None, frame=inspect.getframeinfo(inspect.currentframe()))
                         warn(f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')", Use.AmbiguityWarning)
                     except:
                         if fatal_exceptions: raise
@@ -1334,12 +1344,12 @@ If you want to auto-install the latest version: use("{name}", version="{version}
         self.persist_registry()
         for (check, pattern), decorator in aspectize.items():
             Use._apply_aspect(mod, check, pattern, decorator)
-        self.set_mod(name=name, mod=mod, path=None, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
+        self._set_mod(name=name, mod=mod, path=None, spec=spec, frame=inspect.getframeinfo(inspect.currentframe()))
 
-        assert mod, f"Well shit. ( {path} )"
+        assert mod, f"Well. Shit. ( {path} )"
         return mod
 
-# we should avoid side-effects during testing
+# we should avoid side-effects during testing, specifically for the version-upgrade-warning
 if test_version:
     Use()
 else:
