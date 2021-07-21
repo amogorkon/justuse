@@ -1036,7 +1036,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 aspectize=None,
                 path_to_url:dict=None,
                 import_to_use: dict=None,
-                package_name=None, module_name=None,
                 modes:int=0,
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
@@ -1054,11 +1053,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         auto_install = bool(Use.auto_install & modes)
         
         # the whole auto-install shebang
-        if not package_name or not module_name:
-            package_name, _, module_name = name.partition(".")
-            if not module_name or not package_name:
-                package_name = module_name or package_name or name
-                module_name = module_name or package_name or name
+        package_name, _, module_name = name.partition(".")
+        module_name = module_name or name
         
         assert version is None or isinstance(version, str) or isinstance(version, Version), "Version must be given as string or packaging.version.Version."
         target_version:Version = Version(str(version)) if version else None
@@ -1309,12 +1305,8 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             create_solib_links(file, folder)
                     print("Extracted.")
                 original_cwd = Path.cwd()
-                
                 os.chdir(folder)
-
                 importlib.invalidate_caches()
-                if sys.path[0] != "":
-                    sys.path.insert(0, "")
                 try:
                     log.debug("Trying importlib.import_module")
                     log.debug("  with cwd=%s,", os.getcwd())
@@ -1324,24 +1316,13 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     if fatal_exceptions: raise
                     exc = traceback.format_exc()
                 finally:
-                    module_to_del = []
-                    module_parts = module_name.split(".")
-                    for part in module_parts:
-                        module_to_del.append(part)
-                        module_key = ".".join(module_to_del)
-                        if module_key in sys.modules:
-                            log.info("Deleting sys.modules[%s]",
-                                repr(module_key))
-                            del sys.modules[module_key]
-                        
+                    os.chdir(original_cwd)
 
                 for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
                     if not hasattr(mod, key): continue
                     rdist_info[key] = getattr(mod, key)
                 if not exc:
                     print(f"Successfully loaded {package_name}, version {version}.")
-                os.chdir(original_cwd)
-            
         self.persist_registry()
         for (check, pattern), decorator in aspectize.items():
             Use._apply_aspect(mod, check, pattern, decorator)
