@@ -73,6 +73,7 @@ import os
 import re
 import shlex
 import signal
+import sqlite3
 import sys
 import tarfile
 import tempfile
@@ -93,6 +94,8 @@ from types import ModuleType
 from typing import Callable, Dict, List, Optional, Tuple, Union
 from warnings import warn
 
+import toml
+
 try:
     from pip._internal.utils.compatibility_tags import get_supported
 except ImportError:
@@ -101,7 +104,6 @@ except ImportError:
 import mmh3
 import packaging
 import requests
-import toml
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
 from yarl import URL
@@ -356,20 +358,12 @@ class Use:
         self._using = _using
         self._aspects = _aspects
         self._reloaders = _reloaders
+        self.home: Path
+        self._registry_dict = {}
 
-        self.home = Path.home() / ".justuse-python"
-        try:
-            self.home.mkdir(mode=0o755, exist_ok=True)
-        except PermissionError:
-            # this should fix the permission issues on android #80
-            self.home = Path(tempfile.mkdtemp(prefix="justuse_"))
-        (self.home / "packages").mkdir(mode=0o755, exist_ok=True)
-        (self.home / "registry.json").touch(mode=0o644, exist_ok=True)
-        (self.home / "user_registry.json").touch(mode=0o644, exist_ok=True)
-        (self.home / "config.toml").touch(mode=0o644, exist_ok=True)
-        (self.home / "config_defaults.toml").touch(mode=0o644, exist_ok=True)
-        (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
-        self._registry:dict = Use._load_registry(self.home / "registry.json")
+        self._set_up_files_and_directories()
+
+        self._registry = Use._load_registry(self.home / "registry.json")
         self._user_registry:dict = Use._load_registry(self.home / "user_registry.json")
         Use._merge_registry(self._registry, self._user_registry)
         
@@ -393,6 +387,30 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                 log.debug(traceback.format_exc())  # we really don't need to bug the user about this (either pypi is down or internet is broken)
         if config["debugging"]:
             root.setLevel(DEBUG)
+
+    # for easy refactoring later
+    @property
+    def _registry(self):
+        return self._registry_dict
+    
+    @_registry.setter
+    def _registry(self, value):	
+        self._registry_dict = value
+    
+
+    def _set_up_files_and_directories(self):
+        self.home = Path.home() / ".justuse-python"
+        try:
+            self.home.mkdir(mode=0o755, exist_ok=True)
+        except PermissionError:
+            # this should fix the permission issues on android #80
+            self.home = Path(tempfile.mkdtemp(prefix="justuse_"))
+        (self.home / "packages").mkdir(mode=0o755, exist_ok=True)
+        (self.home / "registry.json").touch(mode=0o644, exist_ok=True)
+        (self.home / "user_registry.json").touch(mode=0o644, exist_ok=True)
+        (self.home / "config.toml").touch(mode=0o644, exist_ok=True)
+        (self.home / "config_defaults.toml").touch(mode=0o644, exist_ok=True)
+        (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
 
     def install(self):
         # yeah, really.. __builtins__ sometimes appears as a dict and other times as a module, don't ask me why
