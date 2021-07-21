@@ -71,6 +71,7 @@ import json
 import linecache
 import os
 import re
+import shlex
 import signal
 import sys
 import tarfile
@@ -747,8 +748,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                 modes:int=0
                 ) -> ModuleType:
         exc = None
-        path_to_url
-        import_to_use
+
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
         
         aspectize = aspectize or {}
@@ -799,14 +799,10 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         aspectize = aspectize or {}
         initial_globals = initial_globals or {}
         
-        reloading = False
-        if Use.reloading & modes:
-            reloading = True
+        reloading = bool(Use.reloading & modes)
         
         exc = None
         mod = None
-        path_to_url
-        import_to_use
 
         if path.is_dir():
             return Use._fail_or_default(default, ImportError, f"Can't import directory {path}")
@@ -942,14 +938,16 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
         
-        # we use boolean flags to reduce the complexity of the call signature
-        fatal_exceptions = False
-        if Use.fatal_exceptions & modes:
-            fatal_exceptions = True
+        hash_values: list
+        if hash_value:
+            if isinstance(hash_value, str):
+                hash_values = shlex.split(hash_value)
+            else:
+                hash_values = list(hash_value)
         
-        auto_install = False
-        if Use.auto_install & modes:
-            auto_install = True
+        # we use boolean flags to reduce the complexity of the call signature
+        fatal_exceptions = bool(Use.fatal_exceptions & modes)
+        auto_install = bool(Use.auto_install & modes)
 
         
         # the whole auto-install shebang
