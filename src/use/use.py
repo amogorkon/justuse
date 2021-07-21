@@ -1267,22 +1267,27 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 
                 os.chdir(folder)
 
-                temp_sys_path = copy(sys.path)
-                sys.path = ["", list(sys.path_importer_cache)[1], Path(json.__file__).parent.parent]
                 importlib.invalidate_caches()
+                if sys.path[0] != "":
+                    sys.path.insert(0, "")
                 try:
                     log.debug("Trying importlib.import_module")
                     log.debug("  with cwd=%s,", os.getcwd())
                     log.debug("  sys.path=%s", sys.path)
-                    
                     mod = importlib.import_module(module_name)
                 except ImportError:
                     if fatal_exceptions: raise
                     exc = traceback.format_exc()
                 finally:
-                    sys.path = temp_sys_path
-                if exc:
-                    return Use._fail_or_default(default, ImportError, f"Failed to import {module_name} from {path}")
+                    module_to_del = []
+                    module_parts = module_name.split(".")
+                    for part in module_parts:
+                        module_to_del.append(part)
+                        module_key = ".".join(module_to_del)
+                        if module_key in sys.modules:
+                            log.info("Deleting sys.modules[%s]",
+                                repr(module_key))
+                            del sys.modules[module_key]
 
                 for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
                     if not hasattr(mod, key): continue
