@@ -1,4 +1,5 @@
 import json
+import logging as log
 import os
 import re
 import sys
@@ -138,35 +139,78 @@ def test_pure_python_package(reuse):
     assert str(test.Number(2)) == "2"
     file.unlink()
 
-@pytest.mark.skipif(sys.platform.startswith("win") 
-  and list(sys.version_info)[0:2] >= [3, 10], 
-    reason="windows Auto-installing native modules is not supported")
-def test_auto_install_native(reuse):
+def suggested_artifact(*args, **kwargs):
+    reuse = use
     rw = None
     try:
-        use("protobuf", modes=reuse.auto_install, package_name="protobuf",
-            module_name="google.protobuf")
-    except RuntimeWarning as w:
-        rw = w
-        assert rw, "Expected a RuntimeWarning from unversioned auto-install"
-        match:Optional[re.Match] = re.search(
-            "use\\("
-            "\"(?P<name>.*)\", "
-            "version=\"(?P<version>.*)\", "
-            "hash_value=\"(?P<hash_value>.*)\", "
-            "auto_install=True"
-            "\\)",
-            rw.args[0]
-        )
-        assert match, f"Format did not match regex: {rw.args[0]!r}"
-        params:dict = match.groupdict()
-        version = params["version"]
-        hash_value = params["hash_value"]
-        print(f"calling use({params}, auto_install=True) ...")
-        mod = use("protobuf", version=version, hash_value=hash_value, modes=reuse.auto_install, package_name="protobuf", module_name="google.protobuf")
-        print(f"mod={mod}")
-        assert mod, "No module was returned"
-        assert mod.__version__ == version
+        mod = reuse(*args, modes=use.auto_install, **kwargs)
+    except RuntimeWarning as r:
+        rw = r
+    except BaseException as e:
+        raise AssertionError(
+            f"suggested_artifact failed for use("
+            f"{', '.join(map(repr, args))}, "
+            f"{', '.join(map(repr, kwargs.items()))}"
+            f"): {e}") from e
+    assert rw
+    assert "version=" in str(rw), "warning does not suggest a version"
+    assert "hash_value=" in str(rw), "warning does not suggest a hash"
+    assert isinstance(rw.args[0], str)
+    match:Optional[re.Match] = re.search(
+           "version=\"?(?P<version>[^\"]+)\"?.*"
+        "hash_value=\"?(?P<hash_value>\\w+)\"?",
+        str(rw))
+    assert match
+    version, hash_value = (match.group("version"),
+                           match.group("hash_value"))
+    return (version, hash_value)
+
+@pytest.mark.skipif(sys.platform.startswith("win") 
+  and list(sys.version_info)[0:2] >= [3, 10], 
+    reason="windows Auto-installing native modules is not supported "
+           "when python >= 3.10")
+def test_autoinstall_protobuf(reuse):
+    kws = {"package_name":"protobuf", "module_name":"google.protobuf"}
+    ver, hash = suggested_artifact("protobuf", **kws)
+    mod = reuse("protobuf", **kws, modes=use.auto_install,
+                version=ver, hash_value=hash)
+    assert mod.__version__ == ver
+
+@pytest.mark.skipif(sys.platform.startswith("win"), 
+    reason="windows Auto-installing numpy")
+def test_autoinstall_numpy_dual_version(reuse):
+    ver1, hash1 = suggested_artifact("numpy", version="1.19.3")
+    mod1 = reuse("numpy", modes=use.auto_install,
+                version=ver1, hash_value=hash1)
+    mod2 = ver2 = None
+    assert mod1.__version__ == ver1
+    
+    ver2, hash2 = suggested_artifact("numpy", version="1.21.0rc2")
+    for attempt in (1, 2, 3):
+      log.warning("attempt %s", attempt)
+      try:
+        mod2 = reuse("numpy", modes=use.auto_install,
+                    version=ver2, hash_value=hash2)
+        break
+      except (AttributeError, KeyError):
+       log.warning("attempt %s: set _reload_guard", attempt)
+       for k in filter(lambda k:"_multiarray_umath" in k,sys.modules):
+         log.warning("attempt %s: set _reload_guard on %s", attempt,k)
+         setattr(sys.modules[k], "_reload_guard",
+           lambda: log.info("_reload_guard()"))
+         log.warning("attempt %s: did _reload_guard on %s", attempt,k)
+    
+    assert mod2.__version__ == ver2
+    assert mod1.__version__ == ver1
+
+@pytest.mark.skipif(sys.platform.startswith("win"), 
+    reason="windows Auto-installing numpy")
+def test_autoinstall_numpy(reuse):
+    ver, hash = suggested_artifact("numpy", version="1.19.3")
+    mod = reuse("numpy", modes=use.auto_install,
+                version=ver, hash_value=hash)
+    assert mod.__version__ == ver
+
 
 def test_registry_first_line_warning(reuse):
     with open(reuse.home / "registry.json") as file:
