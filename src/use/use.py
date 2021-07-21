@@ -486,7 +486,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                     self._del_entry(name, version)
         
         for name in self._registered_dist_names():
-            if self._entry_is_empty((name):
+            if self._entry_is_empty(name):
                 self._del_entry(name)
         self.persist_registry()
 
