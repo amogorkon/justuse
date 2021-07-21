@@ -1288,6 +1288,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             log.info("Deleting sys.modules[%s]",
                                 repr(module_key))
                             del sys.modules[module_key]
+                        
 
                 for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
                     if not hasattr(mod, key): continue
