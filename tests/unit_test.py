@@ -153,8 +153,8 @@ def suggested_artifact(*args, **kwargs):
             f"{', '.join(map(repr, kwargs.items()))}"
             f"): {e}") from e
     assert rw
-    assert "version=" in str(rw), "warning does not suggest a version"
-    assert "hash_value=" in str(rw), "warning does not suggest a hash"
+    assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
+    assert "hash_value=" in str(rw), f"warning does not suggest a hash: {rw}"
     assert isinstance(rw.args[0], str)
     match:Optional[re.Match] = re.search(
            "version=\"?(?P<version>[^\"]+)\"?.*"
@@ -237,7 +237,8 @@ def test_registry(reuse):
     file = use.Path.home() / f".justuse-python" / "packages" \
         / f"{package_name.replace('-','_')}-0.1.0-py3-none-any.whl"
     file.unlink(missing_ok=True)
-    _ = reuse(name, version=vers, hash_value=hash_value, modes=reuse.auto_install)
+    mod = reuse(name, version=vers, hash_value=hash_value, modes=reuse.auto_install)
+    assert mod
     with open(Path.home() / ".justuse-python" / "registry.json", "rb") \
                 as jsonfile:
         _extracted_from_test_registry_13(jsonfile, package_name, vers, file)

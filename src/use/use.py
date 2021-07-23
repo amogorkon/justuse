@@ -1,6 +1,5 @@
 
 
-
 """
 Just use() python code from anywhere - a functional import alternative with advanced features.
 
@@ -582,10 +581,14 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                                 packaging.tags.interpreter_version()))
         python_tag = info.get("python_tag", "")
         platform_tag = info.get("platform_tag", "")
+        platform_tags_strs = set(map(
+            lambda p: p if isinstance(p, str) \
+                else p.platform, 
+            platform_tags))
         for one_platform_tag in platform_tag.split("."):
-            is_match = one_platform_tag in platform_tags and \
+            is_match = one_platform_tag in platform_tags_strs and \
                          our_python_tag == python_tag
-            log.debug("%s: \"%s\" in platform_tags and %s == %s", is_match, one_platform_tag, python_tag, our_python_tag)
+            log.debug(f"%s: \"%s\" in {platform_tags_strs=} and %s == %s", is_match, one_platform_tag, python_tag, our_python_tag)
             if is_match:
                 return True
         return False
@@ -642,7 +645,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         assert isinstance(sys_version, Version)
         if not platform_tags: 
             platform_tags = set(packaging.tags._platform_tags())
-        assert isinstance(platform_tags, list)
+        assert isinstance(platform_tags, (list, set))
         platform_tags = set(platform_tags)
         if not interpreter_tag:
             interpreter_tag = packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
@@ -1150,10 +1153,12 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 elif response.status_code != 200:
                     raise RuntimeWarning(f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hash_value for the auto-installation was missing.")
                 data = response.json()
-                hit = Use._find_matching_artifact(data["urls"])
-                version = hit[0]
-                that_hash = hit[1]
-                if hit:
+                if not hit or not hit[0]:
+                    hit = Use._find_matching_artifact(data["urls"])
+                if hit and hit[0]:
+                    version = hit[0]
+                    that_hash = hit[1]
+                if hit and hit[0]:
                     raise RuntimeWarning(f"""Failed to auto-install '{package_name}' because hash_value is missing. This may work:
 use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
 """)
@@ -1176,6 +1181,7 @@ use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
                         hit = Use._find_latest_working_version(data["releases"], hash_algo=hash_algo.name)
                         if hit and hit[0]:
                             version = hit[0]
+                            hash_value = hit[1]
                             if isinstance(hit[1], list):
                                 hash_values = hit[1]
                             else:
@@ -1225,6 +1231,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         that_hash = entry["digests"].get(hash_algo.name)
                         if entry["yanked"]:
                             return Use._fail_or_default(default, Use.AutoInstallationError, f"Auto-installation of  '{package_name}' {target_version} failed because the release was yanked from PyPI.")
+                        log.error("that_hash=%s, hash_value=%s, hash_values=%s", that_hash, hash_value, hash_values)
                         if that_hash == hash_value or that_hash in hash_values:
                             break
                     else:
@@ -1258,19 +1265,95 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             if name in self._hacks:
                 #if version in self._hacks[name]:
                 mod = self._hacks[name]()
-            else:
-                # trying to import directly from zip
-                try:
-                    importer = zipimport.zipimporter(path)
-                    mod = importer.load_module(module_name)
-                    print("Direct zipimport of", name, "successful.")
-                except:
-                    if config["debugging"]:
-                        log.debug(traceback.format_exc())
-                    return self._fail_or_default(default, Use.AutoInstallationError, f"Direct zipimport of {name} {version} failed and the package was not registered with known hacks.. we're sorry, but that means you will need to resort to using pip/conda for now.")
-                if not url:
-                    url = URL(f"file:/{path}")
+                return mod
+
+            # trying to import directly from zip
+            try:
+                importer = zipimport.zipimporter(path)
+                mod = importer.load_module(module_name)
+                print("Direct zipimport of", name, "successful.")
+            except:
+                if config["debugging"]:
+                    log.debug(traceback.format_exc())
+                return self._fail_or_default(default, Use.AutoInstallationError, f"Direct zipimport of {name} {version} failed and the package was not registered with known hacks.. we're sorry, but that means you will need to resort to using pip/conda for now.")
+            if not url:
+                url = URL(f"file:/{path}")
+        
+            ###
+            # def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
+            print("hacking regular use!")
+            log.debug(f"outside of create_solib_links(...)")
+            folder = (path.parent/path.stem)
+            rdists = self._registry["distributions"]
+            if package_name not in rdists:
+                rdists[package_name] = {}
+            if version not in rdists[package_name]:
+                rdists[package_name][version] = {}
+            # Update package version metadata
+            assert url is not None
+            rdist_info = rdists[package_name][version]
+            rdist_info.update({
+                "package": package_name,
+                "version": version,
+                "url": url.human_repr(),
+                "path": str(path) if path else None,
+                "folder": folder.absolute().as_uri(),
+                "filename": path.name,
+                "hash": that_hash
+            })
+            use.persist_registry()
             
+            if not folder.exists():
+                folder.mkdir(mode=0o755, exist_ok=True)
+                print("Extracting to", folder, "...")
+
+                fileobj = archive = None
+                if path.suffix in (".whl", ".zip"):
+                    fileobj = open(tempfile.mkstemp()[0], "w")
+                    archive = zipfile.ZipFile(path, "r")
+                else:
+                    fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
+                    archive = tarfile.TarFile(fileobj=fileobj, mode="r")
+                with archive as file:
+                    with fileobj as _:
+                        file.extractall(folder)
+                        create_solib_links(file, folder)
+                print("Extracted.")
+            original_cwd = Path.cwd()
+            
+            os.chdir(folder)
+
+            importlib.invalidate_caches()
+            if sys.path[0] != "":
+                sys.path.insert(0, "")
+            try:
+                log.debug("Trying importlib.import_module")
+                log.debug("  with cwd=%s,", os.getcwd())
+                log.debug("  sys.path=%s", sys.path)
+                mod = importlib.import_module(module_name)
+            except ImportError:
+                if fatal_exceptions: raise
+                exc = traceback.format_exc()
+            finally:
+                module_to_del = []
+                module_parts = module_name.split(".")
+                for part in module_parts:
+                    module_to_del.append(part)
+                    module_key = ".".join(module_to_del)
+                    if module_key in sys.modules:
+                        log.info("Deleting sys.modules[%s]",
+                            repr(module_key))
+                        del sys.modules[module_key]
+                    
+
+            for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
+                if not hasattr(mod, key): continue
+                rdist_info[key] = getattr(mod, key)
+            if not exc:
+                print(f"Successfully loaded {package_name}, version {version}.")
+            os.chdir(original_cwd)
+                
+        ###
         self.persist_registry()
         for (check, pattern), decorator in aspectize.items():
             if mod is not None:
