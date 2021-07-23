@@ -614,9 +614,9 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             interpreter_tag = packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
         assert isinstance(interpreter_tag, str)
         
-        results = [info \
+        results = [(info["version"], info \
           ["digests"] \
-          [hash_algo] \
+          [hash_algo]) \
           for info in 
                     sorted(urls, 
                             key=lambda info: info.get("packagetype", ""))  # pre-sorting by type should ensure that we prefer binary packages over raw source
@@ -661,6 +661,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                 d["version"] = ver # Add version info
                 d.update(Use._parse_filename(d["filename"]))
         
+        result = ("", "")
         for ver, dists in sorted(releases.items(), key=lambda item: Version(item[0]), reverse=True):
             print(ver)
             if not dists:
@@ -673,7 +674,10 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                     if not hash_value:
                         raise Use.MissingHash(f"No hash digest found in "
                             "release distribution for {hash_algo=}")
-                    return (info["version"], hash_value)
+                    result = (info["version"], hash_value)
+        log.info("use._find_latest_working_version() returning %s",
+                 result)
+        return result
     
     @staticmethod
     def _load_registry(path):
@@ -875,6 +879,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             return Use._fail_or_default(default, ImportError, f"Can't import directory {path}")
         
         original_cwd = Path.cwd()
+        source_dir = original_cwd
         if not path.is_absolute():
             source_dir = getattr(self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename), "path", None) # type: ignore
             
@@ -1178,14 +1183,7 @@ use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
                 else:
                     try:
                         data = response.json()
-                        hit = Use._find_latest_working_version(data["releases"], hash_algo=hash_algo.name)
-                        if hit and hit[0]:
-                            version = hit[0]
-                            hash_value = hit[1]
-                            if isinstance(hit[1], list):
-                                hash_values = hit[1]
-                            else:
-                                hash_values = [hit[1]]
+                        version, hash_value = Use._find_latest_working_version(data["releases"], hash_algo=hash_algo.name)
                     except KeyError:  # json issues
                         if fatal_exceptions: raise
                         if config["debugging"]:
@@ -1195,10 +1193,7 @@ use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
                         exc = traceback.format_exc()
                     if exc:
                         raise RuntimeWarning("Please specify version and hash for auto-installation. Sadly something went wrong with the JSON PyPI provided, otherwise we could've provided a suggestion.")
-                    if hit and hit[0]:
-                        version = hit[0]
-                        that_hash = hit[1]
-                    else:
+                    if not version:
                         raise RuntimeWarning(f"We could not find any version or release for {package_name} that could satisfy our requirements!")
                     
                     raise RuntimeWarning(f"""Please specify version and hash for auto-installation of '{package_name}'. 
@@ -1208,8 +1203,12 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                    
             # all clear, let's check if we pulled it before
             entry = self._registry["distributions"].get(package_name, {}).get(version, {})
+            url = None
+            that_hash = hash_value
+            exc = None
             if entry and entry["path"]:
                 path = Path(entry["path"])
+                url = URL(entry["url"])
             if entry and path:
                 # someone messed with the packages without updating the registry
                 if not path.exists():
@@ -1217,7 +1216,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     self.persist_registry()
                     path = None
                     entry = None
-            url:URL
+                    url = None
             if not path:
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
                 version = str(target_version)
@@ -1230,8 +1229,8 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         url = URL(entry["url"])
                         that_hash = entry["digests"].get(hash_algo.name)
                         if entry["yanked"]:
-                            return Use._fail_or_default(default, Use.AutoInstallationError, f"Auto-installation of  '{package_name}' {target_version} failed because the release was yanked from PyPI.")
-                        log.error("that_hash=%s, hash_value=%s, hash_values=%s", that_hash, hash_value, hash_values)
+                            continue
+                        log.info("that_hash=%s, hash_value=%s, hash_values=%s", that_hash, hash_value, hash_values)
                         if that_hash == hash_value or that_hash in hash_values:
                             break
                     else:
@@ -1261,10 +1260,23 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         return Use._fail_or_default(default, Use.AutoInstallationError, exc)
             
             # now that we can be sure we got a valid package downloaded and ready, let's try to install it
-            
+            folder = (path.parent/path.stem)
+            rdists = self._registry["distributions"]
+            if not url:
+                url = URL(f"file:/{path}")
             if name in self._hacks:
                 #if version in self._hacks[name]:
-                mod = self._hacks[name]()
+                mod = self._hacks[name](
+                  package_name=package_name,
+                  rdists=rdists,
+                  version=version,
+                  url=url,
+                  path=path,
+                  that_hash=that_hash,
+                  folder=folder,
+                  fatal_exceptions=fatal_exceptions,
+                  module_name=module_name
+                )
                 return mod
 
             # trying to import directly from zip
@@ -1276,15 +1288,11 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 if config["debugging"]:
                     log.debug(traceback.format_exc())
                 return self._fail_or_default(default, Use.AutoInstallationError, f"Direct zipimport of {name} {version} failed and the package was not registered with known hacks.. we're sorry, but that means you will need to resort to using pip/conda for now.")
-            if not url:
-                url = URL(f"file:/{path}")
         
             ###
             # def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
             print("hacking regular use!")
             log.debug(f"outside of create_solib_links(...)")
-            folder = (path.parent/path.stem)
-            rdists = self._registry["distributions"]
             if package_name not in rdists:
                 rdists[package_name] = {}
             if version not in rdists[package_name]:
@@ -1373,7 +1381,9 @@ Use.mode = mode
 use: ModuleType = Use()
 if not test_version:
     sys.modules["use"] = use
-use
+
 # no circular import this way
-use(Path("package_hacks.py"))
+hacks_path = Path(Path(__file__).parent, "package_hacks.py")
+assert hacks_path.exists
+use(hacks_path)
 
