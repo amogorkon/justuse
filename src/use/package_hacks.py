@@ -102,7 +102,7 @@ def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_
     original_cwd = Path.cwd()
     
     os.chdir(folder)
-
+    exc = None
     importlib.invalidate_caches()
     if sys.path[0] != "":
         sys.path.insert(0, "")

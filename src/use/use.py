@@ -1107,7 +1107,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if any(Path(".").glob(f"{name}.py")):
             warn(f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))", 
                 Use.AmbiguityWarning)
-
+        exc = None
         spec = None
         if name in self._using:
             spec = self._using[name].spec
@@ -1205,7 +1205,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             entry = self._registry["distributions"].get(package_name, {}).get(version, {})
             url = None
             that_hash = hash_value
-            exc = None
             if entry and entry["path"]:
                 path = Path(entry["path"])
                 url = URL(entry["url"])
@@ -1357,9 +1356,8 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
                 if not hasattr(mod, key): continue
                 rdist_info[key] = getattr(mod, key)
-            if not exc:
-                print(f"Successfully loaded {package_name}, version {version}.")
-            os.chdir(original_cwd)
+            print(f"Successfully loaded {package_name}, version {version}.")
+        os.chdir(original_cwd)
                 
         ###
         self.persist_registry()
