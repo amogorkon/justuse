@@ -62,6 +62,7 @@ from __future__ import annotations
 import asyncio
 import atexit
 import codecs
+import gzip
 import hashlib
 import importlib.util
 import io
@@ -74,10 +75,12 @@ import shlex
 import signal
 import sqlite3
 import sys
+import tarfile
 import tempfile
 import threading
 import time
 import traceback
+import zipfile
 import zipimport
 from collections import defaultdict, namedtuple
 from copy import copy
@@ -326,8 +329,8 @@ class ModuleReloader:
 # an instance of types.ModuleType
 class Use(ModuleType):
     # lift module-level stuff up - ALIASES
-    from pathlib import Path
-    from yarl import URL
+    Path = Path #type: ignore
+    URL = URL #type: ignore
     # lift module-level stuff up
     __doc__ = __doc__
     __version__ = __version__
@@ -1317,7 +1320,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 with archive as file:
                     with fileobj as _:
                         file.extractall(folder)
-                        create_solib_links(file, folder)
+                        # create_solib_links(file, folder)
                 print("Extracted.")
             original_cwd = Path.cwd()
             
