@@ -176,6 +176,7 @@ def test_autoinstall_protobuf(reuse):
     ver, hash = suggested_artifact("protobuf", **kws)
     mod = reuse("protobuf", **kws, modes=use.auto_install,
                 version=ver, hash_value=hash)
+    assert mod, "mod is None from reuse()"
     assert mod.__version__ == ver
 
 @pytest.mark.skipif(sys.platform.startswith("win"), 
@@ -184,6 +185,7 @@ def test_autoinstall_numpy_dual_version(reuse):
     ver1, hash1 = suggested_artifact("numpy", version="1.19.3")
     mod1 = reuse("numpy", modes=use.auto_install,
                 version=ver1, hash_value=hash1)
+    assert mod1, "mod1 is None from reuse()"
     mod2 = ver2 = None
     assert mod1.__version__ == ver1
     
@@ -201,7 +203,7 @@ def test_autoinstall_numpy_dual_version(reuse):
                 setattr(sys.modules[k], "_reload_guard",
                 lambda: log.info("_reload_guard()"))
                 log.warning("attempt %s: did _reload_guard on %s", attempt,k)
-    
+    assert mod2, "mod is None from reuse()"
     assert mod2.__version__ == ver2
     assert mod1.__version__ == ver1
 

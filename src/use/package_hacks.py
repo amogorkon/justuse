@@ -62,9 +62,14 @@ def create_solib_links(archive: zipfile.ZipFile, folder: Path):
 
 
 @use.register_hack("numpy", specifier=SpecifierSet(">=1.0"))
-def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
+def numpy(*, package_name, version, path, fatal_exceptions, module_name,  url=None, **kwargs):
     print("hacking numpy!")
     log.debug(f"outside of create_solib_links(...)")
+    rdists = use._registry["distributions"]
+    folder = Path(str(path)).parent
+    mod = None
+    if url is None:
+        url = use.URL(f"file://{path}")
     if package_name not in rdists:
         rdists[package_name] = {}
     if version not in rdists[package_name]:
@@ -75,11 +80,9 @@ def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_
     rdist_info.update({
         "package": package_name,
         "version": version,
-        "url": url.human_repr(),
         "path": str(path) if path else None,
         "folder": folder.absolute().as_uri(),
         "filename": path.name,
-        "hash": that_hash
     })
     use.persist_registry()
     
@@ -128,7 +131,7 @@ def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_
 
     for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
         if not hasattr(mod, key): continue
-        rdist_info[key] = getattr(mod, key)
+        rdist_info[key] = getattr(mod, key, None)
     if not exc:
         print(f"Successfully loaded {package_name}, version {version}.")
     os.chdir(original_cwd)

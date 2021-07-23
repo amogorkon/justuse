@@ -1182,13 +1182,12 @@ use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
                     try:
                         data = response.json()
                         hit = Use._find_latest_working_version(data["releases"], hash_algo=hash_algo.name)
-                        if hit and hit[0]:
-                            version = hit[0]
-                            hash_value = hit[1]
-                            if isinstance(hit[1], list):
-                                hash_values = hit[1]
-                            else:
-                                hash_values = [hit[1]]
+
+                        if hit:
+                            if hit[0] and isinstance(hit, tuple):
+                                version = hit[0]
+                                hash_value = hit[1]
+                            hash_values = [hash_value]
                     except KeyError:  # json issues
                         if fatal_exceptions: raise
                         if config["debugging"]:
@@ -1198,9 +1197,10 @@ use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
                         exc = traceback.format_exc()
                     if exc:
                         raise RuntimeWarning("Please specify version and hash for auto-installation. Sadly something went wrong with the JSON PyPI provided, otherwise we could've provided a suggestion.")
-                    if hit and hit[0]:
-                        version = hit[0]
-                        that_hash = hit[1]
+                    if hit:
+                        if hit[0] and isinstance(hit, tuple):
+                            version = hit[0]
+                            that_hash = hit[1]
                     else:
                         raise RuntimeWarning(f"We could not find any version or release for {package_name} that could satisfy our requirements!")
                     
@@ -1232,6 +1232,8 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     for entry in response.json()["urls"]:
                         url = URL(entry["url"])
                         that_hash = entry["digests"].get(hash_algo.name)
+                        hash_value = that_hash
+                        hash_values = [hash_value]
                         if entry["yanked"]:
                             return Use._fail_or_default(default, Use.AutoInstallationError, f"Auto-installation of  '{package_name}' {target_version} failed because the release was yanked from PyPI.")
                         log.error("that_hash=%s, hash_value=%s, hash_values=%s", that_hash, hash_value, hash_values)
@@ -1267,7 +1269,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             
             if name in self._hacks:
                 #if version in self._hacks[name]:
-                mod = self._hacks[name]()
+                mod = self._hacks[name](**locals())
                 return mod
 
             # trying to import directly from zip
