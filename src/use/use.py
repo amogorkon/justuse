@@ -323,6 +323,8 @@ class ModuleReloader:
         self.stop()
         atexit.unregister(self.stop)
 
+# As we assign Use() to sys.modules, mypy is unhappy if it's not
+# an instance of types.ModuleType
 class Use(ModuleType):
     # lift module-level stuff up - ALIASES
     from pathlib import Path
@@ -630,7 +632,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                                     hash_algo:str,
                                     #testing
                                     sys_version:Version=None,
-                                    platform_tags:Set[str]=set(),
+                                    platform_tags:Set[str]=frozenset(),
                                     interpreter_tag:str=None,                                
                                     ) -> Tuple[str,str]:
         assert isinstance(releases, dict)
