@@ -153,8 +153,8 @@ def suggested_artifact(*args, **kwargs):
             f"{', '.join(map(repr, kwargs.items()))}"
             f"): {e}") from e
     assert rw
-    assert "version=" in str(rw), "warning does not suggest a version"
-    assert "hash_value=" in str(rw), "warning does not suggest a hash"
+    assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
+    assert "hash_value=" in str(rw), f"warning does not suggest a hash: {rw}"
     assert isinstance(rw.args[0], str)
     match:Optional[re.Match] = re.search(
            "version=\"?(?P<version>[^\"]+)\"?.*"
@@ -170,7 +170,9 @@ def suggested_artifact(*args, **kwargs):
     reason="windows Auto-installing native modules is not supported "
            "when python >= 3.10")
 def test_autoinstall_protobuf(reuse):
-    kws = {"package_name":"protobuf", "module_name":"google.protobuf"}
+    kws = {
+        "package_name":"protobuf", 
+        "module_name":"google.protobuf"}
     ver, hash = suggested_artifact("protobuf", **kws)
     mod = reuse("protobuf", **kws, modes=use.auto_install,
                 version=ver, hash_value=hash)
@@ -187,18 +189,18 @@ def test_autoinstall_numpy_dual_version(reuse):
     
     ver2, hash2 = suggested_artifact("numpy", version="1.21.0rc2")
     for attempt in (1, 2, 3):
-      log.warning("attempt %s", attempt)
-      try:
-        mod2 = reuse("numpy", modes=use.auto_install,
-                    version=ver2, hash_value=hash2)
-        break
-      except (AttributeError, KeyError):
-       log.warning("attempt %s: set _reload_guard", attempt)
-       for k in filter(lambda k:"_multiarray_umath" in k,sys.modules):
-         log.warning("attempt %s: set _reload_guard on %s", attempt,k)
-         setattr(sys.modules[k], "_reload_guard",
-           lambda: log.info("_reload_guard()"))
-         log.warning("attempt %s: did _reload_guard on %s", attempt,k)
+        log.warning("attempt %s", attempt)
+        try:
+            mod2 = reuse("numpy", modes=use.auto_install,
+                        version=ver2, hash_value=hash2)
+            break
+        except (AttributeError, KeyError):
+            log.warning("attempt %s: set _reload_guard", attempt)
+            for k in filter(lambda k:"_multiarray_umath" in k,sys.modules):
+                log.warning("attempt %s: set _reload_guard on %s", attempt,k)
+                setattr(sys.modules[k], "_reload_guard",
+                lambda: log.info("_reload_guard()"))
+                log.warning("attempt %s: did _reload_guard on %s", attempt,k)
     
     assert mod2.__version__ == ver2
     assert mod1.__version__ == ver1
@@ -235,7 +237,8 @@ def test_registry(reuse):
     file = use.Path.home() / f".justuse-python" / "packages" \
         / f"{package_name.replace('-','_')}-0.1.0-py3-none-any.whl"
     file.unlink(missing_ok=True)
-    _ = reuse(name, version=vers, hash_value=hash_value, modes=reuse.auto_install)
+    mod = reuse(name, version=vers, hash_value=hash_value, modes=reuse.auto_install)
+    assert mod
     with open(Path.home() / ".justuse-python" / "registry.json", "rb") \
                 as jsonfile:
         _extracted_from_test_registry_13(jsonfile, package_name, vers, file)
