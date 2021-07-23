@@ -1039,7 +1039,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 aspectize=None,
                 path_to_url:dict=None,
                 import_to_use: dict=None,
-                package_name=None, module_name=None,
                 modes:int=0,
                 ) -> ModuleType:
         initial_globals = initial_globals or {}
@@ -1057,11 +1056,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         auto_install = bool(Use.auto_install & modes)
         
         # the whole auto-install shebang
-        if not package_name or not module_name:
-            package_name, _, module_name = name.partition(".")
-            if not module_name or not package_name:
-                package_name = module_name or package_name or name
-                module_name = module_name or package_name or name
+        package_name, _, module_name = name.partition(".")
+        module_name = module_name or name
         
         assert version is None or isinstance(version, str) or isinstance(version, Version), "Version must be given as string or packaging.version.Version."
         target_version:Version = Version(str(version)) if version else None
