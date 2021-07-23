@@ -170,7 +170,9 @@ def suggested_artifact(*args, **kwargs):
     reason="windows Auto-installing native modules is not supported "
            "when python >= 3.10")
 def test_autoinstall_protobuf(reuse):
-    kws = {"package_name":"protobuf", "module_name":"google.protobuf"}
+    kws = {
+        "package_name":"protobuf", 
+        "module_name":"google.protobuf"}
     ver, hash = suggested_artifact("protobuf", **kws)
     mod = reuse("protobuf", **kws, modes=use.auto_install,
                 version=ver, hash_value=hash)
@@ -187,18 +189,18 @@ def test_autoinstall_numpy_dual_version(reuse):
     
     ver2, hash2 = suggested_artifact("numpy", version="1.21.0rc2")
     for attempt in (1, 2, 3):
-      log.warning("attempt %s", attempt)
-      try:
-        mod2 = reuse("numpy", modes=use.auto_install,
-                    version=ver2, hash_value=hash2)
-        break
-      except (AttributeError, KeyError):
-       log.warning("attempt %s: set _reload_guard", attempt)
-       for k in filter(lambda k:"_multiarray_umath" in k,sys.modules):
-         log.warning("attempt %s: set _reload_guard on %s", attempt,k)
-         setattr(sys.modules[k], "_reload_guard",
-           lambda: log.info("_reload_guard()"))
-         log.warning("attempt %s: did _reload_guard on %s", attempt,k)
+        log.warning("attempt %s", attempt)
+        try:
+            mod2 = reuse("numpy", modes=use.auto_install,
+                        version=ver2, hash_value=hash2)
+            break
+        except (AttributeError, KeyError):
+            log.warning("attempt %s: set _reload_guard", attempt)
+            for k in filter(lambda k:"_multiarray_umath" in k,sys.modules):
+                log.warning("attempt %s: set _reload_guard on %s", attempt,k)
+                setattr(sys.modules[k], "_reload_guard",
+                lambda: log.info("_reload_guard()"))
+                log.warning("attempt %s: did _reload_guard on %s", attempt,k)
     
     assert mod2.__version__ == ver2
     assert mod1.__version__ == ver1

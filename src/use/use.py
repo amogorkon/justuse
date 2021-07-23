@@ -64,7 +64,6 @@ import asyncio
 import atexit
 import codecs
 import hashlib
-import importlib.machinery
 import importlib.util
 import io
 import inspect
@@ -79,7 +78,6 @@ import sys
 import tempfile
 import threading
 import time
-import types
 import traceback
 import zipimport
 from collections import defaultdict, namedtuple
@@ -89,9 +87,8 @@ from functools import singledispatch, update_wrapper
 from importlib import metadata
 from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
-from inspect import Traceback
-from types import FrameType, ModuleType
-from typing import *
+from types import FrameType, ModuleType, TracebackType
+from typing import Dict, Optional, Set, List, Any, Tuple, Callable
 from warnings import warn
 
 import mmh3 # type: ignore
@@ -120,9 +117,9 @@ def get_supported():
     return ret
 
 # injected via initial_globals for testing, you can safely ignore this
-test_version: Optional[str]
+test_version: Optional[str] = locals().get("test_version", None)
 try:
-    __version__ = test_version
+    __version__ = test_version #type: ignore
 except NameError:
     __version__ = "0.4.1"
     test_version = None
@@ -840,7 +837,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if exc:
             return Use._fail_or_default(default, ImportError, exc)
         
-        frame:Union[FrameType, Traceback] = inspect.getframeinfo(inspect.currentframe()) # type: ignore
+        frame:Union[FrameType, TracebackType] = inspect.getframeinfo(inspect.currentframe()) # type: ignore
         self._set_mod(name=name, mod=mod, spec=None, path=url, frame=frame)
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
@@ -1002,6 +999,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             return Use._fail_or_default(default, ImportError, exc)
 
     def _import_classical_install(self, name, module_name, spec, target_version, default, aspectize, fatal_exceptions):
+        # sourcery no-metrics
         exc = None
         try:
             mod = importlib.import_module(module_name)  # ! => cache
@@ -1059,11 +1057,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 path_to_url:dict=None,
                 import_to_use: dict=None,
                 modes:int=0,
+                package_name:str=None, # internal use
+                module_name:str=None   # internal use
                 ) -> Optional[ModuleType]:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
         path:Optional[Path] = None
-        hash_values: list
+        hash_values: List[str] = []
         if hash_value:
             if isinstance(hash_value, str):
                 hash_values = shlex.split(hash_value)
@@ -1141,7 +1141,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             # PEBKAC
             hit:tuple[str,str]=("", "")
             
-            if target_version and not hash_value:  # let's try to be helpful
+            if target_version and not hash_values:  # let's try to be helpful
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json")
                 if response.status_code == 404:
                     raise RuntimeWarning(f"Are you sure {package_name} with version {version} exists?")
@@ -1157,9 +1157,9 @@ use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
 """)
                 else:
                     raise RuntimeWarning(f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!")
-            elif not target_version and hash_value:
+            elif not target_version and hash_values:
                 raise RuntimeWarning(f"Failed to auto-install '{package_name}' because no version was specified.")
-            elif not target_version and not hash_value:
+            elif not target_version and not hash_values:
                 # let's try to make an educated guess and give a useful suggestion
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
                 if response.status_code == 404:
@@ -1173,8 +1173,11 @@ use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
                         data = response.json()
                         hit = Use._find_latest_working_version(data["releases"], hash_algo=hash_algo.name)
                         if hit and hit[0]:
-                          version = hit[0]
-                          hash_value = hit[1]
+                            version = hit[0]
+                            if isinstance(hit[1], list):
+                                hash_values = hit[1]
+                            else:
+                                hash_values = [hit[1]]
                     except KeyError:  # json issues
                         if fatal_exceptions: raise
                         if config["debugging"]:
@@ -1220,7 +1223,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         that_hash = entry["digests"].get(hash_algo.name)
                         if entry["yanked"]:
                             return Use._fail_or_default(default, Use.AutoInstallationError, f"Auto-installation of  '{package_name}' {target_version} failed because the release was yanked from PyPI.")
-                        if that_hash == hash_value:
+                        if that_hash == hash_value or that_hash in hash_values:
                             break
                     else:
                         return Use._fail_or_default(default, Use.AutoInstallationError, f"Tried to auto-install {package_name} {target_version} but failed because none of the available hashes match the expected hash.")
@@ -1252,7 +1255,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             
             if name in self._hacks:
                 #if version in self._hacks[name]:
-                mod = self._hacks[name][version]()
+                mod = self._hacks[name]()
             else:
                 # trying to import directly from zip
                 try:
@@ -1263,9 +1266,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     if config["debugging"]:
                         log.debug(traceback.format_exc())
                     return self._fail_or_default(default, Use.AutoInstallationError, f"Direct zipimport of {name} {version} failed and the package was not registered with known hacks.. we're sorry, but that means you will need to resort to using pip/conda for now.")
-                
-                folder = path.parent / path.stem
-                rdists = self._registry["distributions"]
                 if not url:
                     url = URL(f"file:/{path}")
             
