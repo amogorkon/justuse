@@ -101,7 +101,6 @@ import toml
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version as PkgVersion
 from yarl import URL
-from typing import *
 
 
 def get_supported():
@@ -599,7 +598,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                         *, 
                         # for testability
                         sys_version:Version=None,  
-                        platform_tags:Set[str]=set(),
+                        platform_tags:Set[str]=frozenset(),
                         interpreter_tag:str=None,
                         ) -> Tuple[str, str]:
         """Pick from a list of possible urls and return the hash of the best fitting artifact."""
@@ -743,7 +742,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
     @staticmethod
     def _build_mod(*, name:str, 
                     code:bytes, 
-                    initial_globals:Optional[Dict[Any, Any]], 
+                    initial_globals:Optional[Dict[str,Any]], 
                     module_path:str, 
                     aspectize:dict, 
                     default=mode.fastfail,
@@ -841,7 +840,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if exc:
             return Use._fail_or_default(default, ImportError, exc)
         
-        frame:Union[FrameType, TracebackType] = inspect.getframeinfo(inspect.currentframe()) # type: ignore
+        frame:Union[FrameType, Traceback] = inspect.getframeinfo(inspect.currentframe()) # type: ignore
         self._set_mod(name=name, mod=mod, spec=None, path=url, frame=frame)
         if as_import:
             assert isinstance(as_import, str), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
@@ -1256,93 +1255,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 mod = self._hacks[name][version]()
             else:
                 # trying to import directly from zip
-                try:
-                    importer = zipimport.zipimporter(path)
-                    mod = importer.load_module(module_name)
-                    print("Direct zipimport of", name, "successful.")
-                except:
-                    if config["debugging"]:
-                        log.debug(traceback.format_exc())
-                    print("Direct zipimport failed, attempting to extract and load manually...")
-                
-                folder = path.parent / path.stem
-                rdists = self._registry["distributions"]
-                if not url:
-                    url = URL(f"file:/{path}")
-                
-                def create_solib_links(archive: Optional[Union[zipfile.ZipFile,tarfile.TarFile]], folder: Path):
-                    if not archive: return
-                    log.debug(f"create_solib_links({archive=}, {folder=})")
-                    # EXTENSION_SUFFIXES  == ['.cpython-38-x86_64-linux-gnu.so', '.abi3.so', '.so'] or ['.cp39-win_amd64.pyd', '.pyd']
-                    entries: List[str]
-                    entries = archive.getnames() if hasattr(archive, "getnames") else archive.namelist() # type:ignore
-                    log.debug(f"archive {entries=}")
-                    solibs = [*filter(lambda f: any(map(f.endswith, EXTENSION_SUFFIXES)), entries)]
-                    if not solibs:
-                        log.debug(f"No solibs found in archive")
-                        return
-                    # Set up links from 'xyz.cpython-3#-<...>.so' to 'xyz.so'
-                    log.debug(f"Creating {len(solibs)} symlinks for extensions...")
-                    log.debug(f"solibs = {solibs}")
-                    for solib in solibs:
-                        sofile = folder / solib
-                        log.debug(f"{sofile=}, {folder=}, {solib=}")
-                        split_on = [".python", ".cpython", ".cp"]
-                        simple_name, os_ext = None, EXTENSION_SUFFIXES[-1]
-                        for s in split_on:
-                            if not s in sofile.name: continue
-                            simple_name = sofile.name.split(s)[0]
-                        if simple_name is None: continue
-                        link = Path(sofile.parent / f"{simple_name}{os_ext}")
-                        if link == sofile: continue
-                        log.debug(f"{link=}, {sofile=}")
-                        link.unlink(missing_ok=True)
-                        link.symlink_to(sofile)
-                
-                log.debug(f"outside of create_solib_links(...)")
-                if package_name not in rdists:
-                    rdists[package_name] = {}
-                if version not in rdists[package_name]:
-                    rdists[package_name][version] = {}
-                # Update package version metadata
-                assert url is not None
-                rdist_info = rdists[package_name][version]
-                rdist_info.update({
-                    "package": package_name,
-                    "version": version,
-                    "url": url.human_repr(),
-                    "path": str(path) if path else None,
-                    "folder": folder.absolute().as_uri(),
-                    "filename": path.name,
-                    "hash": that_hash
-                })
-                self.persist_registry()
-                
-                if not mod:
-                    if not folder.exists():
-                        folder.mkdir(mode=0o755, exist_ok=True)
-                        print("Extracting to", folder, "...")
-        
-                        fileobj:BinaryIO
-                        fileobj = None # type: ignore
-                        archive:Union[tarfile.TarFile|zipfile.ZipFile]
-                        archive = None # type:ignore
-                        if path.suffix in (".whl", ".zip"):
-                            fileobj = open(tempfile.mkstemp()[0], "wb")
-                            archive = zipfile.ZipFile(path, "r")
-                        else:
-                            open_func: Callable[..., BinaryIO]
-                            open_func = gzip.open if path.suffix == ".gz" else open; # type:ignore
-                            fileobj = open_func(path, "r")
-                            archive = tarfile.TarFile(fileobj=fileobj, mode="r")
-                        with archive as file:  # type: ignore
-                            with fileobj as _:
-                                file.extractall(folder)# type:ignore
-                                create_solib_links(file, folder) # type:ignore
-                        print("Extracted.")
-                    original_cwd = Path.cwd()
-                    os.chdir(folder)
-                    importlib.invalidate_caches()
                 try:
                     importer = zipimport.zipimporter(path)
                     mod = importer.load_module(module_name)
