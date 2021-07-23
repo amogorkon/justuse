@@ -28,10 +28,9 @@ from packaging.specifiers import SpecifierSet
 # this is possible because we don't *import* this file, but use() it!
 import use
 
-# passed in via initial_globals
-use: object
-log: object
-
+root.addHandler(StreamHandler(sys.stderr))
+if "DEBUG" in os.environ: root.setLevel(DEBUG)
+log = getLogger(__name__)
 
 def create_solib_links(archive: zipfile.ZipFile, folder: Path):
     log.debug(f"create_solib_links({archive=}, {folder=})")

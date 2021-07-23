@@ -132,6 +132,7 @@ class Version(Version):
         yield from self.release
 
 mode = Enum("Mode", "fastfail")
+
 root.addHandler(StreamHandler(sys.stderr))
 if "DEBUG" in os.environ: root.setLevel(DEBUG)
 log = getLogger(__name__)
@@ -311,10 +312,12 @@ class ModuleReloader:
         atexit.unregister(self.stop)
 
 class Use:
-    # lift module-level stuff up
+    # lift module-level stuff up - ALIASES
     __doc__ = __doc__
     __version__ = __version__
     __name__ = __name__
+    Version = Version
+    
     # attempt at fix for #23 doesn't work..
     __path__ = str(Path(__file__).resolve().parent)
     
@@ -328,14 +331,12 @@ class Use:
     mode = mode
     config = config
     
-    # MODES
+    # MODES to reduce signature complexity
+    # enum.Flag wasn't really viable, but this is actually pretty cool
     auto_install = 1
     fatal_exceptions = 2
     reloading = 4
     
-    
-    # ALIASES
-    Version = Version
     class VersionWarning(Warning):
         pass
     class NotReloadableWarning(Warning):
@@ -1130,7 +1131,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 if response.status_code == 404:
                     raise RuntimeWarning(f"Are you sure {package_name} with version {version} exists?")
                 elif response.status_code != 200:
-                    raise RuntimeWarning(f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because you forgot to provide a matching hash_value for the auto-installation.")
+                    raise RuntimeWarning(f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hash_value for the auto-installation was missing.")
                 that_hash = None
                 data = response.json()
                 that_hash = Use._find_matching_artifact(data["urls"])
@@ -1265,6 +1266,6 @@ use = Use()
 if not test_version:
     sys.modules["use"] = use
 
-# no circular imports this way
+# no circular import this way
 use(Path("package_hacks.py"))
 
