@@ -657,7 +657,6 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         
         # update the release dicts to hold all info canonically
         # be aware, the json returned from pypi ["releases"] can contain empty lists as dists :/
-        version = kwargs.get("version", None)
         for ver, dists in releases.items():
             if not dists:
                 continue
