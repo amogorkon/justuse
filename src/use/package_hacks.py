@@ -175,8 +175,22 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
                 create_solib_links(file, folder)
         print("Extracted.")
     original_cwd = Path.cwd()
+    tgt = Path.home() / ".local/lib/python3.{sys.version_info[1]}/site-packages";
+    tgt.parent.mkdir(mode=0o755, exist_ok=True)
+    if tgt.exists: tgt.unlink()
+    tgt.symlink_to(folder.absolute())
     
     os.chdir(folder)
+    pwd = Path.cwd()
+    rslt = exec(
+      compile(
+        "\n\n".join([readstring(str(pth_path)) for pth_path in pwd.glob("*.pth")]),
+        "pth_file.py",
+        "single"
+      ),
+    )
+    log.info("rslt = %s", rslt)
+    
     exc = None
     importlib.invalidate_caches()
     if sys.path[0] != "":
@@ -193,44 +207,5 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
         log.debug("  mod=%s", getattr(mod, "__version__"))
     except BaseException as exc:
         log.error(exc)
-          
-    try:
-      if not mod:
-        log.debug("Trying importlib.import_module")
-        log.debug("  with cwd=%s,", os.getcwd())
-        log.debug("  sys.path=%s", sys.path)
-        log.debug("  sys.modules=%s", sys.modules)
-
-        mod = importlib.import_module("google.protobuf")
-        log.debug("  mod=%s", mod)
-        log.debug("  mod=%s", getattr(mod, "__version__"))
-    except BaseException as exc:
-        log.error(exc)
-    try:
-      if not mod:
-        log.debug("Trying importlib.import_module")
-        log.debug("  with cwd=%s,", os.getcwd())
-        log.debug("  sys.path=%s", sys.path)
-        log.debug("  sys.modules=%s", sys.modules)
-
-        mod = importlib.import_module("google.protobuf.__init__")
-        log.debug("  mod=%s", mod)
-        log.debug("  mod=%s", getattr(mod, "__version__"))
-    except BaseException as exc:
-        log.error(exc)
-    try:
-      if not mod:
-        log.debug("Trying importlib.import_module")
-        log.debug("  with cwd=%s,", os.getcwd())
-        log.debug("  sys.path=%s", sys.path)
-        log.debug("  sys.modules=%s", sys.modules)
-
-        mod = use(use.Path("./google/protobuf/__init__.py"))
-        log.debug("  mod=%s", mod)
-        log.debug("  mod=%s", getattr(mod, "__version__"))
-    except BaseException as exc:
-        log.error(exc)
-        raise
 
     return mod
-
