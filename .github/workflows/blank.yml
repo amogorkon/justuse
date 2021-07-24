@@ -39,7 +39,7 @@ jobs:
       - name: Run a multi-line script
         run: |
           echo "Linux-Tests: Preloading package dependencies ..."
-          python3 -m pip install anyio mmh3 packaging pip pytest requests yarl
+          python3 -m pip install anyio mmh3 packaging pip pytest pytest-env requests yarl
           echo "Linux-Tests: Running tests ..."
           python3 -m pytest
   
@@ -71,7 +71,7 @@ jobs:
             ) -join "`n"
           }
           echo "Windows-Tests: Preloading package dependencies ..."
-          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip install anyio mmh3 packaging pip pytest requests yarl
+          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip install anyio mmh3 packaging pip pytest pytest-env requests yarl
           echo "Windows-Tests: Running tests ..."
           & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pytest
 
@@ -84,7 +84,7 @@ jobs:
       - name: Run a multi-line script
         run: |
           echo "MacOS-Tests: Preloading package dependencies ..."
-          python3 -m pip install anyio mmh3 packaging pip pytest requests yarl
+          python3 -m pip install anyio mmh3 packaging pip pytest pytest-env requests yarl
           echo "MacOS-Tests: Running tests ..."
           python3 -m pytest
   
