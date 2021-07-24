@@ -100,20 +100,21 @@ def save_module_info(package_name, rdists, version, url, path, that_hash, folder
     use.persist_registry()
 
 def ensure_extracted(path, folder):
-    if not folder.exists():
-        folder.mkdir(mode=0o755, parents=True, exist_ok=True)
-        log.info("Extracting %s (from %s) to %s ...", path, url, folder)
-        fileobj = archive = None
-        if path.suffix in (".whl", ".egg", ".zip"):
-            fileobj = open(tempfile.mkstemp()[0], "w")
-            archive = zipfile.ZipFile(path, "r")
-        else:
-            fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
-            archive = tarfile.TarFile(fileobj=fileobj, mode="r")
-        with archive as file:
-            with fileobj as _:
-                file.extractall(folder)
-                create_solib_links(file, folder)
+    if folder.exists():
+        return
+    folder.mkdir(mode=0o755, parents=True, exist_ok=True)
+    log.info("Extracting %s (from %s) to %s ...", path, url, folder)
+    fileobj = archive = None
+    if path.suffix in (".whl", ".egg", ".zip"):
+        fileobj = open(tempfile.mkstemp()[0], "w")
+        archive = zipfile.ZipFile(path, "r")
+    else:
+        fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
+        archive = tarfile.TarFile(fileobj=fileobj, mode="r")
+    with archive as file:
+        with fileobj as _:
+            file.extractall(folder)
+            create_solib_links(file, folder)
 
 @use.register_hack("numpy", specifier=SpecifierSet(">=1.0"))
 def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
