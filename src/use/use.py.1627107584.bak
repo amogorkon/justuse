@@ -640,7 +640,6 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                                     sys_version:Version=None,
                                     platform_tags:Set[str]=frozenset(),
                                     interpreter_tag:str=None,                                
-                                    version=None,
                                     ) -> Tuple[str,str]:
         assert isinstance(releases, dict)
         assert isinstance(hash_algo, str)
@@ -648,7 +647,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             sys_version = Version(".".join(map(str, sys.version_info[0:3])))
         assert isinstance(sys_version, Version)
         if not platform_tags: 
-            platform_tags = set([*get_supported()])
+            platform_tags = set(packaging.tags._platform_tags())
         assert isinstance(platform_tags, (list, set))
         platform_tags = set(platform_tags)
         if not interpreter_tag:
@@ -658,6 +657,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         
         # update the release dicts to hold all info canonically
         # be aware, the json returned from pypi ["releases"] can contain empty lists as dists :/
+        version = kwargs.get("version", None)
         for ver, dists in releases.items():
             if not dists:
                 continue
