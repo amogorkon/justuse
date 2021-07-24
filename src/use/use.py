@@ -1291,9 +1291,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 return self._fail_or_default(default, Use.AutoInstallationError, f"Direct zipimport of {name} {version} failed and the package was not registered with known hacks.. we're sorry, but that means you will need to resort to using pip/conda for now.")
         
             ###
-            # def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
-            print("hacking regular use!")
-            log.debug(f"outside of create_solib_links(...)")
             if package_name not in rdists:
                 rdists[package_name] = {}
             if version not in rdists[package_name]:
@@ -1312,26 +1309,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             })
             use.persist_registry()
             
-            if not folder.exists():
-                folder.mkdir(mode=0o755, exist_ok=True)
-                print("Extracting to", folder, "...")
-
-                fileobj = archive = None
-                if path.suffix in (".whl", ".zip"):
-                    fileobj = open(tempfile.mkstemp()[0], "w")
-                    archive = zipfile.ZipFile(path, "r")
-                else:
-                    fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
-                    archive = tarfile.TarFile(fileobj=fileobj, mode="r")
-                with archive as file:
-                    with fileobj as _:
-                        file.extractall(folder)
-                        create_solib_links(file, folder)
-                print("Extracted.")
             original_cwd = Path.cwd()
-            
-            os.chdir(folder)
-
             importlib.invalidate_caches()
             if sys.path[0] != "":
                 sys.path.insert(0, "")

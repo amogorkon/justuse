@@ -71,6 +71,7 @@ def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_
         rdists[package_name][version] = {}
     # Update package version metadata
     assert url is not None
+    mod = None
     rdist_info = rdists[package_name][version]
     rdist_info.update({
         "package": package_name,
@@ -132,4 +133,67 @@ def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_
     if not exc:
         print(f"Successfully loaded {package_name}, version {version}.")
     os.chdir(original_cwd)
+    return mod
+
+@use.register_hack("protobuf", specifier=SpecifierSet(">=1.0"))
+def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
+    print("hacking numpy!")
+    log.debug(f"outside of create_solib_links(...)")
+    if package_name not in rdists:
+        rdists[package_name] = {}
+    if version not in rdists[package_name]:
+        rdists[package_name][version] = {}
+    # Update package version metadata
+    assert url is not None
+    mod = None
+    rdist_info = rdists[package_name][version]
+    rdist_info.update({
+        "package": package_name,
+        "version": version,
+        "url": url.human_repr(),
+        "path": str(path) if path else None,
+        "folder": folder.absolute().as_uri(),
+        "filename": path.name,
+        "hash": that_hash
+    })
+    use.persist_registry()
+    
+    if not folder.exists():
+        folder.mkdir(mode=0o755, exist_ok=True)
+        print("Extracting to", folder, "...")
+
+        fileobj = archive = None
+        if path.suffix in (".whl", ".zip"):
+            fileobj = open(tempfile.mkstemp()[0], "w")
+            archive = zipfile.ZipFile(path, "r")
+        else:
+            fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
+            archive = tarfile.TarFile(fileobj=fileobj, mode="r")
+        with archive as file:
+            with fileobj as _:
+                file.extractall(folder)
+                create_solib_links(file, folder)
+        print("Extracted.")
+    original_cwd = Path.cwd()
+    
+    os.chdir(folder)
+    exc = None
+    importlib.invalidate_caches()
+    if sys.path[0] != "":
+        sys.path.insert(0, "")
+    try:
+        log.debug("Trying importlib.import_module")
+        log.debug("  with cwd=%s,", os.getcwd())
+        log.debug("  sys.path=%s", sys.path)
+        mod = importlib.import_module("google.protobuf")
+    except ImportError:
+        os.chdir(original_cwd)
+        if fatal_exceptions: raise
+        exc = traceback.format_exc()
+    
+    for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
+        if not hasattr(mod, key): continue
+        rdist_info[key] = getattr(mod, key)
+    if not exc:
+        print(f"Successfully loaded {package_name}, version {version}.")
     return mod
