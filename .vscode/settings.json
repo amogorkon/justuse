@@ -1,5 +1,3 @@
 {
-    "editor.formatOnPaste": true,
-    "editor.formatOnSave": true,
-    "editor.formatOnType": true
+    "editor.formatOnSave": true
 }
