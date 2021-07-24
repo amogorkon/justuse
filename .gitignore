@@ -135,3 +135,4 @@ src/use/.test4.py
 Asylum.ipynb
 local_switch
 .vscode/launch.json
+.vscode/settings.json

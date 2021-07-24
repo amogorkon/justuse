@@ -180,95 +180,6 @@ def methdispatch(func):
     return wrapper
 
 
-# SurrogateModule is deprecated, will be merged with ProxyModule in the future
-class SurrogateModule(ModuleType):
-    def __init__(self, *, name, path, mod, initial_globals, aspectize):
-        self.__implementation = mod
-        self.__stopped = False
-
-        def __reload_threaded():
-            last_filehash = None
-            while not self.__stopped:
-                with open(path, "rb") as file:
-                    code = file.read()
-                current_filehash = Use._hashfileobject(code)
-                if current_filehash != last_filehash:
-                    try:
-                        mod = Use._build_mod(
-                            name=name,
-                            code=code,
-                            initial_globals=initial_globals,
-                            module_path=path.resolve(),
-                            aspectize=aspectize,
-                        )
-                        self.__implementation = mod
-                    except:
-                        print(traceback.format_exc())
-                last_filehash = current_filehash
-                time.sleep(1)
-
-        async def __reload_async():
-            last_filehash = None
-            while not self.__stopped:
-                with open(path, "rb") as file:
-                    code = file.read()
-                current_filehash = Use._hashfileobject(code)
-                if current_filehash != last_filehash:
-                    try:
-                        mod = Use._build_mod(
-                            name=name,
-                            code=code,
-                            initial_globals=initial_globals,
-                            module_path=path.resolve(),
-                            aspectize=aspectize,
-                        )
-                        self.__implementation = mod
-                    except:
-                        print(traceback.format_exc())
-                last_filehash = current_filehash
-                await asyncio.sleep(1)
-
-        try:
-            # this looks like a hack, but isn't one -
-            # jupyter is running an async loop internally, which works better async than threaded!
-            loop = asyncio.get_running_loop()
-            loop.create_task(__reload_async())
-        except RuntimeError:
-            atexit.register(self.__stop)
-            self.__thread = threading.Thread(
-                target=__reload_threaded, name=f"reloader__{name}"
-            )
-            self.__thread.start()
-
-    def __del__(self):
-        self.__stopped = True
-
-    def __stop(self):
-        self.__stopped = True
-
-    def __getattribute__(self, name):
-        if name in (
-            "_SurrogateModule__implementation",
-            "_SurrogateModule__stopped",
-            "_SurrogateModule__thread",
-            "_SurrogateModule__stop",
-        ):
-            return object.__getattribute__(self, name)
-        else:
-            return getattr(self.__implementation, name)
-
-    def __setattr__(self, name, value):
-        if name in (
-            "_SurrogateModule__implementation",
-            "_SurrogateModule__stopped",
-            "_SurrogateModule__thread",
-            "_SurrogateModule__stop",
-        ):
-            object.__setattr__(self, name, value)
-        else:
-            setattr(self.__implementation, name, value)
-
-
 class ProxyModule(ModuleType):
     def __init__(self, mod):
         self.__implementation = mod
@@ -302,7 +213,11 @@ class ModuleReloader:
         self._stopped = True
         self._thread = None
 
-    def start(self):
+    def start_async(self):
+        loop = asyncio.get_running_loop()
+        loop.create_task(self.run_async())
+
+    def start_threaded(self):
         assert not (
             self._thread is not None and not self._thread.is_alive()
         ), "Can't start another reloader thread while one is already running."
@@ -312,6 +227,27 @@ class ModuleReloader:
             target=self.run_threaded, name=f"reloader__{self.name}"
         )
         self._thread.start()
+
+    async def run_async(self):
+        last_filehash = None
+        while not self._stopped:
+            with open(self.path, "rb") as file:
+                code = file.read()
+            current_filehash = Use._hashfileobject(code)
+            if current_filehash != last_filehash:
+                try:
+                    mod = Use._build_mod(
+                        name=self.name,
+                        code=code,
+                        initial_globals=self.initial_globals,
+                        module_path=self.path.resolve(),
+                        aspectize=self.aspectize,
+                    )
+                    self.proxy.__implementation = mod
+                except:
+                    print(traceback.format_exc())
+            last_filehash = current_filehash
+            await asyncio.sleep(1)
 
     def run_threaded(self):
         last_filehash = None
@@ -418,9 +354,7 @@ class Use(ModuleType):
             try:
                 response = requests.get(f"https://pypi.org/pypi/justuse/json")
                 data = response.json()
-                max_version = max(
-                    Version(version) for version in data["releases"].keys()
-                )
+                max_version = max(Version(version) for version in data["releases"].keys())
                 if Version(__version__) < max_version:
                     warn(
                         f"""Justuse is version {Version(__version__)}, but there is a newer version {max_version} available on PyPI.
@@ -450,7 +384,13 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
             # this should fix the permission issues on android #80
             self.home = Path(tempfile.mkdtemp(prefix="justuse_"))
         (self.home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
-        for file in "registry.json", "user_registry.json", "config.toml", "config_defaults.toml", "usage.log":
+        for file in (
+            "registry.json",
+            "user_registry.json",
+            "config.toml",
+            "config_defaults.toml",
+            "usage.log",
+        ):
             (self.home / file).touch(mode=0o755, exist_ok=True)
 
     def recreate_registry(self):
@@ -485,9 +425,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
     def persist_registry(self):
         assert all(
             version is not None
-            for version in (
-                dist.keys() for dist in self._registry["distributions"].values()
-            )
+            for version in (dist.keys() for dist in self._registry["distributions"].values())
         )
 
         with open(self.home / "registry.json", "w") as file:
@@ -568,7 +506,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
     @staticmethod
     def isfunction(x):
         return inspect.isfunction(x)
-    
+
     @staticmethod
     def ismethod(x):
         return inspect.ismethod(x)
@@ -723,9 +661,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
                 info.update(Use._parse_filename(info["filename"]))
                 if (
                     Use._is_version_satisfied(info, sys_version)
-                    and (
-                        not version or Version(info["version"]) == Version(str(version))
-                    )
+                    and (not version or Version(info["version"]) == Version(str(version)))
                     and Use._is_platform_compatible(info, platform_tags)
                 ):
                     hash_value = info["digests"].get(hash_algo)
@@ -1026,37 +962,29 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             if exc:
                 return Use._fail_or_default(default, ImportError, exc)
 
-            threaded = False
-            try:
-                # this looks like a hack, but isn't one -
-                # jupyter is running an async loop internally, which works better async than threaded!
-                asyncio.get_running_loop()
+            mod = ProxyModule(mod)
+            reloader = ModuleReloader(
+                proxy=mod,
+                name=name,
+                path=path,
+                initial_globals=initial_globals,
+                aspectize=aspectize,
+            )
+            _reloaders[mod] = reloader
 
-                # Old, working implementation
-                mod = SurrogateModule(
-                    name=name,
-                    path=path,
-                    mod=mod,
-                    initial_globals=initial_globals,
-                    aspectize=aspectize,
-                )
+            threaded = False
+            # this looks like a hack, but isn't one -
+            # jupyter is running an async loop internally, which works better async than threaded!
+            try:
+                asyncio.get_running_loop()
             # we're dealing with non-async code, we need threading
-            # new experimental implementation
             except RuntimeError:
                 # can't have the code inside the handler because of "during handling of X, another exception Y happened"
                 threaded = True
-
-            if threaded:
-                mod = ProxyModule(mod)
-                reloader = ModuleReloader(
-                    proxy=mod,
-                    name=name,
-                    path=path,
-                    initial_globals=initial_globals,
-                    aspectize=aspectize,
-                )
-                _reloaders[mod] = reloader
-                reloader.start()
+            if not threaded:
+                reloader.start_async()
+            else:
+                reloader.start_threaded()
 
             if not all(
                 inspect.isfunction(value)
@@ -1395,9 +1323,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     )
 
             # all clear, let's check if we pulled it before
-            entry = (
-                self._registry["distributions"].get(package_name, {}).get(version, {})
-            )
+            entry = self._registry["distributions"].get(package_name, {}).get(version, {})
             url = None
             that_hash = hash_value
             if entry and entry["path"]:
@@ -1464,9 +1390,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     print("Downloading", url, "...")
                     download_response = requests.get(str(url), allow_redirects=True)
                     path = self.home / "packages" / Path(url.name).name
-                    this_hash: str = hash_algo.value(
-                        download_response.content
-                    ).hexdigest()
+                    this_hash: str = hash_algo.value(download_response.content).hexdigest()
                     if this_hash != hash_value:
                         return Use._fail_or_default(
                             default,
@@ -1482,9 +1406,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             raise
                         exc = traceback.format_exc()
                     if exc:
-                        return Use._fail_or_default(
-                            default, Use.AutoInstallationError, exc
-                        )
+                        return Use._fail_or_default(default, Use.AutoInstallationError, exc)
 
             # now that we can be sure we got a valid package downloaded and ready, let's try to install it
             folder = path.parent / path.stem
