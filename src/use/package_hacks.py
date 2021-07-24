@@ -175,7 +175,7 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
                 create_solib_links(file, folder)
         print("Extracted.")
     original_cwd = Path.cwd()
-    tgt = Path.home() / ".local/lib/python3.{sys.version_info[1]}/site-packages";
+    tgt = use.home / Path(f".local/lib/python3.{sys.version_info[1]}/site-packages");
     tgt.parent.mkdir(mode=0o755, exist_ok=True)
     if tgt.exists: tgt.unlink()
     tgt.symlink_to(folder.absolute())
