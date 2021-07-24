@@ -765,16 +765,15 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         mod.__file__ = module_path
         code_text = codecs.decode(code)
         # module file "<", ">" chars are specially handled by inspect
-        if not sys.platform.startswith("win"):
-          getattr(linecache, "cache")[f"<{name}>"] = (
-          len(code), # size of source code
-          None, # last modified time; None means there is no physical file
-          [*map( # a list of lines, including trailing newline on each
-              lambda ln: ln+"\x0a",
-              code_text.splitlines())
-          ],
-          mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
-          )
+        getattr(linecache, "cache")[f"<{name}>"] = (
+        len(code), # size of source code
+        None, # last modified time; None means there is no physical file
+        [*map( # a list of lines, including trailing newline on each
+            lambda ln: ln+"\x0a",
+            code_text.splitlines())
+        ],
+        mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
+        )
         # not catching this causes the most irritating bugs ever!
         if package:
             mod.__package__ = package
