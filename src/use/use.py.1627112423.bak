@@ -419,7 +419,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         except PermissionError:
             # this should fix the permission issues on android #80
             self.home = Path(tempfile.mkdtemp(prefix="justuse_"))
-        (self.home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
+        (self.home / "packages").mkdir(mode=0o755, exist_ok=True)
         (self.home / "registry.json").touch(mode=0o644, exist_ok=True)
         (self.home / "user_registry.json").touch(mode=0o644, exist_ok=True)
         (self.home / "config.toml").touch(mode=0o644, exist_ok=True)
