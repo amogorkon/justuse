@@ -64,8 +64,8 @@ import atexit
 import codecs
 import hashlib
 import importlib.util
-import io
 import inspect
+import io
 import json
 import linecache
 import os
@@ -89,10 +89,10 @@ from importlib import metadata
 from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
 from types import FrameType, ModuleType, TracebackType
-from typing import Dict, Optional, Set, List, Any, Tuple, Callable
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from warnings import warn
 
-import mmh3 # type: ignore
+import mmh3  # type: ignore
 import packaging
 import requests
 import toml
@@ -103,7 +103,8 @@ from yarl import URL
 
 def get_supported():
     try:
-        from pip._internal.utils.compatibility_tags import get_supported # type: ignore
+        from pip._internal.utils.compatibility_tags import \
+            get_supported  # type: ignore
         return [*get_supported()]
     except ImportError:
         pass
@@ -144,6 +145,7 @@ class Version(PkgVersion):
     def __iter__(self):
         yield from self.release
 
+# Really looking forward to actual builtin sentinel values..
 mode = Enum("Mode", "fastfail")
 
 root.addHandler(StreamHandler(sys.stderr))
@@ -165,7 +167,8 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-def methdispatch(func): # singledispatch for methods
+ # singledispatch for methods
+def methdispatch(func):
     dispatcher = singledispatch(func)
     def wrapper(*args, **kw):
         return dispatcher.dispatch(args[1].__class__)(*args, **kw)
@@ -173,6 +176,7 @@ def methdispatch(func): # singledispatch for methods
     update_wrapper(wrapper, func)
     return wrapper
 
+# SurrogateModule is deprecated, will be merged with ProxyModule in the future
 class SurrogateModule(ModuleType):
     def __init__(self, *, name, path, mod, initial_globals, aspectize):
         self.__implementation = mod
@@ -327,10 +331,12 @@ class ModuleReloader:
 # As we assign Use() to sys.modules, mypy is unhappy if it's not
 # an instance of types.ModuleType
 class Use(ModuleType):
-    # lift module-level stuff up - ALIASES
+    # sic! importing here will allow to call them via Use.Path and Use.URL
     from pathlib import Path
+
     from yarl import URL
-    # lift module-level stuff up
+
+    # lift module-level stuff up - ALIASES
     __doc__ = __doc__
     __version__ = __version__
     __name__ = __name__
@@ -372,7 +378,7 @@ class Use(ModuleType):
         self._reloaders = _reloaders
         self.home: Path
         self._registry_dict = {}
-        self._hacks = {} # {(name -> interval_tree of Version -> function} basically plugins for specific modules/versions
+        self._hacks = {} # {(name -> interval_tree of Version -> function} basically plugins/workarounds for specific packages/versions
 
         self._set_up_files_and_directories()
 
