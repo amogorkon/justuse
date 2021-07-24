@@ -1190,8 +1190,15 @@ use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
                     try:
                         data = response.json()
                         version, hash_value = Use._find_latest_working_version(data["releases"], hash_algo=hash_algo.name)
+                    except KeyError:  # json issues
+                        if fatal_exceptions: raise
+                        if config["debugging"]:
+                            log.error(traceback.format_exc())
                     except:
-                        raise
+                        if fatal_exceptions: raise
+                        exc = traceback.format_exc()
+                    if exc:
+                        raise RuntimeWarning("Please specify version and hash for auto-installation. Sadly something went wrong with the JSON PyPI provided, otherwise we could've provided a suggestion.")
                     if not version:
                         raise RuntimeWarning(f"We could not find any version or release for {package_name} that could satisfy our requirements!")
                     
