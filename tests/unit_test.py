@@ -174,6 +174,18 @@ def test_autoinstall_protobuf(reuse):
         "package_name":"protobuf", 
         "module_name":"google.protobuf"}
     ver, hash = suggested_artifact("protobuf", **kws)
+    if "protobuf" in sys.modules:
+        del sys.modules["protobuf"]
+    if "google" in sys.modules:
+        del sys.modules["google"]
+    if "protobuf.__init__" in sys.modules:
+        del sys.modules["protobuf.__init__"]
+    if "google.__init__" in sys.modules:
+        del sys.modules["google.__init__"]
+    if "google.protobuf" in sys.modules:
+        del sys.modules["google.protobuf"]
+    if "google.protobuf.__init__" in sys.modules:
+        del sys.modules["google.protobuf.__init__"]
     mod = reuse("protobuf", **kws, modes=use.auto_install,
                 version=ver, hash_value=hash)
     assert mod.__version__ == ver
@@ -327,4 +339,3 @@ def test_use_ugrade_version_warning(reuse):
         test_use = reuse(reuse.Path(r"../src/use/use.py"), initial_globals={"test_version":version})
         assert test_use.test_version == test_use.__version__ == version
         assert w[0].category.__name__ == reuse.VersionWarning.__name__
-
