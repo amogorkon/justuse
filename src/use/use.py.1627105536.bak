@@ -673,7 +673,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                 if info["yanked"]: continue
                 info.update(Use._parse_filename(info["filename"]))
                 if Use._is_version_satisfied(info, sys_version) and \
-                    Version(info["version"]) in (target_version, version) and \
+                    Version(info["version"]) == in (target_version, version) and \
                     Use._is_platform_compatible(info, platform_tags):
                     hash_value = info["digests"].get(hash_algo)
                     if not hash_value:
