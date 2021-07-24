@@ -74,10 +74,12 @@ import shlex
 import signal
 import sqlite3
 import sys
+import tarfile
 import tempfile
 import threading
 import time
 import traceback
+import zipfile
 import zipimport
 from collections import defaultdict, namedtuple
 from copy import copy
