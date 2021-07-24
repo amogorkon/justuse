@@ -203,13 +203,24 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
     if sys.path[0] != "":
         sys.path.insert(0, "")
     try:
+      module_to_del = []
+      module_parts = module_name.split(".")
+      for part in module_parts:
+          module_to_del.append(part)
+          module_key = ".".join(module_to_del)
+          if module_key in sys.modules:
+              log.info("Deleting sys.modules[%s]",
+                  repr(module_key))
+              del sys.modules[module_key]
+            
+
       if not mod:
         log.debug("Trying importlib.import_module")
         log.debug("  with cwd=%s,", os.getcwd())
         log.debug("  sys.path=%s", sys.path)
         log.debug("  sys.modules=%s", sys.modules)
 
-        mod_goog = reuse(Path("./google/__init__.py"))
+        mod_goog = use(Path("./google/__init__.py"))
         log.debug("  mod_goog=%s", mod_goog)
         log.debug("mod_goog.__spec__=%s",
            getattr(mod_goog,"__spec__",""))
@@ -218,7 +229,7 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
         mod_goog.__name__ = "__init__"
         sys.modules["google"] = mod_goog
         
-        mod_pbuf = reuse(Path("./google/protobuf/__init__.py"))
+        mod_pbuf = use(Path("./google/protobuf/__init__.py"))
         log.debug("  mod_pbuf=%s", mod_pbud)
         log.debug("mod_pbuf.__spec__=%s",
            getattr(mod_pbuf,"__spec__",""))
@@ -235,6 +246,7 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
         
     except BaseException as exc:
         log.error(exc)
+        raise
     log.info("returning mod=%s", mod)
     
     if package_name not in rdists:
