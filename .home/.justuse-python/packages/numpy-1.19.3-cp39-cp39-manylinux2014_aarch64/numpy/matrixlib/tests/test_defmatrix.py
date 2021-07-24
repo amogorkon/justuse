@@ -451,3 +451,4 @@ class TestShape:
         expanded = np.expand_dims(a, axis=1)
         assert_equal(expanded.ndim, 3)
         assert_(not isinstance(expanded, np.matrix))
+

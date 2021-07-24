@@ -217,3 +217,4 @@ def test_ceildiv_128_64():
 
             if c != d:
                 assert_equal(d, c)
+

@@ -543,3 +543,4 @@ def _numpy_tester():
         mode = "release"
     return NoseTester(raise_warnings=mode, depth=1,
                       check_fpu_mode=True)
+

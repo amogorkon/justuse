@@ -313,3 +313,4 @@ else:
 
     # Note that this will currently only make a difference on Linux
     core.multiarray._set_madvise_hugepage(use_hugepage)
+

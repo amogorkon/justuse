@@ -330,3 +330,4 @@ class build_clib(old_build_clib):
                 clib_libraries.extend(binfo.get('libraries', []))
         if clib_libraries:
             build_info['libraries'] = clib_libraries
+

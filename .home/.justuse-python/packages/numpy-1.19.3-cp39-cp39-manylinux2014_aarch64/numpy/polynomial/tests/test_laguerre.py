@@ -535,3 +535,4 @@ class TestMisc:
         tgt = np.exp(-x)
         res = lag.lagweight(x)
         assert_almost_equal(res, tgt)
+

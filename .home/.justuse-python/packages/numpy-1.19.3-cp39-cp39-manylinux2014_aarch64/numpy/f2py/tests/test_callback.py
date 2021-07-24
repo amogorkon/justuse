@@ -161,3 +161,4 @@ cf2py  intent(out) a
         f = getattr(self.module, 'string_callback_array')
         res = f(callback, cu, len(cu))
         assert_(res == 0, repr(res))
+

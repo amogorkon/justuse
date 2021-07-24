@@ -14,3 +14,4 @@ a[...]
 a[:]
 a.__array__()
 a.__array__(np.dtype(np.float64))
+

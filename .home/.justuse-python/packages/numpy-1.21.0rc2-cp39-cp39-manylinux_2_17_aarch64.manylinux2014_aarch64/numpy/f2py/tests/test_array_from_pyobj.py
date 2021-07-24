@@ -594,3 +594,4 @@ class TestSharedMemory:
             assert_(obj.flags['FORTRAN'])  # obj attributes changed inplace!
             assert_(not obj.flags['CONTIGUOUS'])
             assert_(obj.dtype.type is self.type.type)  # obj changed inplace!
+

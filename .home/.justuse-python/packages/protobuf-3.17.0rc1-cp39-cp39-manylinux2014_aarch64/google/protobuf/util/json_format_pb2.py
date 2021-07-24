@@ -981,3 +981,4 @@ _TESTBOOLMAP_BOOLMAPENTRY._options = None
 _TESTSTRINGMAP_STRINGMAPENTRY._options = None
 _TESTSTRINGSERIALIZER_STRINGMAPENTRY._options = None
 # @@protoc_insertion_point(module_scope)
+

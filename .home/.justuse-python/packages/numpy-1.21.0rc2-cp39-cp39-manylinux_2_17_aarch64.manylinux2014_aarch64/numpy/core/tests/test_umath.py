@@ -3622,3 +3622,4 @@ def test_outer_exceeds_maxdims():
     with assert_raises(ValueError):
         np.add.outer(deep, deep)
 
+

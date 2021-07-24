@@ -816,3 +816,4 @@ class TestDefaultRNG(RNG):
             np.random.default_rng(-1)
         with pytest.raises(ValueError):
             np.random.default_rng([12345, -1])
+

@@ -17,3 +17,4 @@ def test_isfileobj():
 
         with open(filename, 'rb') as f:
             assert_(isfileobj(f))
+

@@ -226,3 +226,4 @@ class RpcChannel(object):
     be of any specific class as long as its descriptor is method.input_type.
     """
     raise NotImplementedError
+

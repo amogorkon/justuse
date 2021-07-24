@@ -42,3 +42,4 @@ def test_from_template():
     normalized_pyf = normalize_whitespace(pyf)
     normalized_expected_pyf = normalize_whitespace(expected_pyf)
     assert_equal(normalized_pyf, normalized_expected_pyf)
+

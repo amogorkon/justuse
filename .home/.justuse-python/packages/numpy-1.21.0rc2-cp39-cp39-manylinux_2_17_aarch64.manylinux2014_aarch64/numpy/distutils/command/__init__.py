@@ -39,3 +39,4 @@ __all__ = ['build',
            'bdist_rpm',
            'sdist',
           ] + distutils_all
+

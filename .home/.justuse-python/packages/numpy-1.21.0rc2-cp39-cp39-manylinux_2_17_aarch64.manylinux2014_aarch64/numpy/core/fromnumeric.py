@@ -3787,3 +3787,4 @@ def alltrue(*args, **kwargs):
     numpy.all : Equivalent function; see for details.
     """
     return all(*args, **kwargs)
+

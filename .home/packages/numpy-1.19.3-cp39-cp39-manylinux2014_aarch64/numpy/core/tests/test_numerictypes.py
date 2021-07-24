@@ -552,3 +552,4 @@ class TestScalarTypeNames:
     def test_names_are_undersood_by_dtype(self, t):
         """ Test the dtype constructor maps names back to the type """
         assert np.dtype(t.__name__).type is t
+

@@ -28,3 +28,4 @@ class TestModuleDocString(util.F2PyTest):
                      foo()\n
                      Wrapper for ``foo``.\n\n''')
                      )
+

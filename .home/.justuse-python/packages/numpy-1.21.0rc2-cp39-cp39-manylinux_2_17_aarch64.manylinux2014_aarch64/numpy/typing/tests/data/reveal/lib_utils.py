@@ -28,3 +28,4 @@ reveal_type(np.source(np.interp, output=FILE))  # E: None
 reveal_type(np.lookfor("binary representation", output=FILE))  # E: None
 
 reveal_type(np.safe_eval("1 + 1"))  # E: Any
+

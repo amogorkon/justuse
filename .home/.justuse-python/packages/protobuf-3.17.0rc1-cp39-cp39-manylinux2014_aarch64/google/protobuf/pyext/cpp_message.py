@@ -63,3 +63,4 @@ class GeneratedProtocolMessageType(_message.MessageMeta):
   # Must be consistent with the protocol-compiler code in
   # proto2/compiler/internal/generator.*.
   _DESCRIPTOR_KEY = 'DESCRIPTOR'
+

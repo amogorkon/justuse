@@ -732,3 +732,4 @@ class TestArrayLikes:
         with pytest.raises(error):
             np.array(BadSequence())
 
+

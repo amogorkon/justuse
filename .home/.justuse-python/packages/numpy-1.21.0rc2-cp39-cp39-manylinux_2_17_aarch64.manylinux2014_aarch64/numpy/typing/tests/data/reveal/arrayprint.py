@@ -17,3 +17,4 @@ reveal_type(np.array_str(AR))  # E: str
 reveal_type(np.printoptions())  # E: contextlib._GeneratorContextManager
 with np.printoptions() as dct:
     reveal_type(dct)  # E: TypedDict
+

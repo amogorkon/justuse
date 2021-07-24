@@ -157,3 +157,4 @@ def Version():
 # For internal use only
 def IsPythonDefaultSerializationDeterministic():
   return _python_deterministic_proto_serialization
+

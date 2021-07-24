@@ -64,3 +64,4 @@ class TestAbstractInterface(util.F2PyTest):
         assert len(mod) == 1
         assert len(mod[0]['body']) == 1
         assert mod[0]['body'][0]['block'] == 'abstract interface'
+

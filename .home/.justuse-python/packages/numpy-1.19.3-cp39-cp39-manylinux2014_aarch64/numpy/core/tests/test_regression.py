@@ -2503,3 +2503,4 @@ class TestRegression:
         b[...] = 1
         assert b.strides[0] > int32_max * b.dtype.itemsize
         assert np.dot(b, b) == 2.0
+

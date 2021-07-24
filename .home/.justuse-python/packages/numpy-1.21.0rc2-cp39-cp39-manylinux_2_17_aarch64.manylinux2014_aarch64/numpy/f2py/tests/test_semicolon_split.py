@@ -61,3 +61,4 @@ end python module {module}
 
     def test_callstatement(self):
         assert_equal(self.module.foo(), 42)
+

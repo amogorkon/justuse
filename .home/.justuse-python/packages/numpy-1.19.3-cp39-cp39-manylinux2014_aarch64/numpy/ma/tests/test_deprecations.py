@@ -66,3 +66,4 @@ class TestMinimumMaximum:
         result = ma_max(data1d)
         assert_equal(result, ma_max(data1d, axis=None))
         assert_equal(result, ma_max(data1d, axis=0))
+

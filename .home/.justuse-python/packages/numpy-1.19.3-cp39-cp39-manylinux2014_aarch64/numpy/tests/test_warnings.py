@@ -72,3 +72,4 @@ def test_warning_calls():
         with tokenize.open(str(path)) as file:
             tree = ast.parse(file.read())
             FindFuncs(path).visit(tree)
+

@@ -11,3 +11,4 @@ np.issubsctype(1, np.int64)  # E: incompatible type "int"
 np.issubdtype(1, np.int64)  # E: incompatible type "int"
 
 np.find_common_type(np.int64, np.int64)  # E: incompatible type "Type[signedinteger[Any]]"
+

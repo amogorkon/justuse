@@ -2558,3 +2558,4 @@ class TestRegression:
                 f"Unexpected types order of ufunc in {operation}"
                 f"for {order}. Possible fix: Use signed before unsigned"
                 "in generate_umath.py")
+

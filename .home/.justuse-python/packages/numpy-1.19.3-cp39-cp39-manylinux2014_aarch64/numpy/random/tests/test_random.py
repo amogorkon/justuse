@@ -1683,3 +1683,4 @@ class TestSingleEltArrayInput:
 
             out = func(self.argOne, self.argTwo[0], self.argThree)
             assert_equal(out.shape, self.tgtShape)
+

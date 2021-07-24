@@ -17,3 +17,4 @@ if __name__ == '__main__':
           license="NumPy License (BSD Style)",
           configuration=configuration,
           )
+

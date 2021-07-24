@@ -1686,3 +1686,4 @@ class HermiteE(ABCPolyBase):
     domain = np.array(hermedomain)
     window = np.array(hermedomain)
     basis_name = 'He'
+

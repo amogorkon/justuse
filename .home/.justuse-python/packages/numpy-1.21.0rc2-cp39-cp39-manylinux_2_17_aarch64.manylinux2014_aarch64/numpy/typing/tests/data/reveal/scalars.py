@@ -114,3 +114,4 @@ reveal_type(f8.reshape(1))  # E: numpy.ndarray[Any, numpy.dtype[{float64}]]
 reveal_type(c16.reshape(1))  # E: numpy.ndarray[Any, numpy.dtype[{complex128}]]
 reveal_type(U.reshape(1))  # E: numpy.ndarray[Any, numpy.dtype[numpy.str_]]
 reveal_type(S.reshape(1))  # E: numpy.ndarray[Any, numpy.dtype[numpy.bytes_]]
+

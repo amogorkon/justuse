@@ -318,3 +318,4 @@ def test_distutils_parse_env_order(monkeypatch):
     with pytest.raises(ValueError):
         monkeypatch.setenv(env, '!b,^e,i')
         _parse_env_order(base_order, env)
+

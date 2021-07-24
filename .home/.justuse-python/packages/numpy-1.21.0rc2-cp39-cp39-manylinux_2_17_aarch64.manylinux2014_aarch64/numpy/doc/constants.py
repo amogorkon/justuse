@@ -411,3 +411,4 @@ if __doc__:
     del line, lines, new_lines, m, s, prev
 
 del constants, add_newdoc
+

@@ -1505,3 +1505,4 @@ class Polynomial(ABCPolyBase):
             return arg_str
         else:
             return f"{arg_str}^{{{i}}}"
+

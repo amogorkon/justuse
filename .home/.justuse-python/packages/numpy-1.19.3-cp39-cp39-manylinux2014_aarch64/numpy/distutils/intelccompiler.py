@@ -109,3 +109,4 @@ if platform.system() == 'Windows':
             MSVCCompiler.__init__(self, verbose, dry_run, force)
             version_match = simple_version_match(start=r'Intel\(R\).*?64,')
             self.__version = version_match
+

@@ -40,3 +40,4 @@ class TestArrayMemoryError:
 
         e = _ArrayMemoryError((2, 4), np.dtype((np.uint64, 16)))
         assert e._total_size == 1024
+

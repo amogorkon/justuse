@@ -86,3 +86,4 @@ class TestPublicPrivate():
         assert 'public' not in mod['vars']['a']['attrspec']
         assert 'private' not in mod['vars']['seta']['attrspec']
         assert 'public' in mod['vars']['seta']['attrspec']
+

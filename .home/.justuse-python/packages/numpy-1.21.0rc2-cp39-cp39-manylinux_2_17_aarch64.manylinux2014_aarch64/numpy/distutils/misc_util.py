@@ -2395,3 +2395,4 @@ def get_build_architecture():
     # systems, so delay the import to here.
     from distutils.msvccompiler import get_build_architecture
     return get_build_architecture()
+

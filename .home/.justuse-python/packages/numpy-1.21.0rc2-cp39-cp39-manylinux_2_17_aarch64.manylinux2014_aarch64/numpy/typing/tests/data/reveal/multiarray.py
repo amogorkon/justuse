@@ -33,3 +33,4 @@ reveal_type(b_i8_f8_f8.shape)  # E: tuple[builtins.int]
 
 reveal_type(b_f8.size)  # E: int
 reveal_type(b_i8_f8_f8.size)  # E: int
+

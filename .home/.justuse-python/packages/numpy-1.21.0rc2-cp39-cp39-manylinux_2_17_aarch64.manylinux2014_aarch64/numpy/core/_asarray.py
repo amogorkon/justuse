@@ -138,3 +138,4 @@ def require(a, dtype=None, requirements=None, *, like=None):
 _require_with_like = array_function_dispatch(
     _require_dispatcher
 )(require)
+

@@ -95,3 +95,4 @@ class Test_SIMD_MODULE:
         assert vdata == tuple(data_range)
         for i in data_range:
             assert vdata[i] == data_range[i]
+

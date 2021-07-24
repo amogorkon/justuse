@@ -20,3 +20,4 @@ np.dtype(  # E: No overload variant of "dtype" matches
 )
 
 np.dtype[np.float64](np.int64)  # E: Argument 1 to "dtype" has incompatible type
+

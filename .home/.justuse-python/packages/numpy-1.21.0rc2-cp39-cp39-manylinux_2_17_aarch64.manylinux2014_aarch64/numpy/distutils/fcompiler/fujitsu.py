@@ -44,3 +44,4 @@ if __name__ == '__main__':
     from numpy.distutils import customized_fcompiler
     log.set_verbosity(2)
     print(customized_fcompiler('fujitsu').get_version())
+

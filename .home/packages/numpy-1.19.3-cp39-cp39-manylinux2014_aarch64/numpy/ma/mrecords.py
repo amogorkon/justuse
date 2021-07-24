@@ -768,3 +768,4 @@ def addfield(mrecord, newfield, newfieldname=None):
                      *newmask.dtype.fields[newfieldname])
     newdata._mask = newmask
     return newdata
+

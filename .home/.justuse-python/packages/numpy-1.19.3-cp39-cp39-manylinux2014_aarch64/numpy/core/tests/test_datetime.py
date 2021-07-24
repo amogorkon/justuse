@@ -2371,3 +2371,4 @@ class TestDateTimeData:
     def test_basic(self):
         a = np.array(['1980-03-23'], dtype=np.datetime64)
         assert_equal(np.datetime_data(a.dtype), ('D', 1))
+

@@ -20,3 +20,4 @@ class TestNagFCompilerVersions:
             fc = numpy.distutils.fcompiler.new_fcompiler(compiler=comp)
             v = fc.version_match(vs)
             assert_(v == version)
+

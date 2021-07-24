@@ -34,3 +34,4 @@ reveal_type(np.ScalarType[11])  # E: Type[{clongdouble}]
 reveal_type(np.typecodes["Character"])  # E: Literal['c']
 reveal_type(np.typecodes["Complex"])  # E: Literal['FDG']
 reveal_type(np.typecodes["All"])  # E: Literal['?bhilqpBHILQPefdgFDGSUVOMm']
+

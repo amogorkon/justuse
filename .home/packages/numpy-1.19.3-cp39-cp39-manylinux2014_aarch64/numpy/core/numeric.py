@@ -2467,3 +2467,4 @@ extend_all(numerictypes)
 extend_all(arrayprint)
 extend_all(_asarray)
 extend_all(_ufunc_config)
+

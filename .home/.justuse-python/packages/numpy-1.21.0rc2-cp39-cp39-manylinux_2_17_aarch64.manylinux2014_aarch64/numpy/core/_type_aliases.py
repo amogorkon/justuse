@@ -242,3 +242,4 @@ for name in _toadd:
         sctypeDict[name] = allTypes['%s_' % name]
 
 del _toadd, name
+

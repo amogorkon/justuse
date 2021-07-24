@@ -28,3 +28,4 @@ class TestMachAr:
             except FloatingPointError as e:
                 msg = "Caught %s exception, should not have been raised." % e
                 raise AssertionError(msg)
+

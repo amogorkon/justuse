@@ -33,3 +33,4 @@ reveal_type(nd.ravel("C"))  # E: numpy.ndarray
 reveal_type(nd.squeeze())  # E: numpy.ndarray
 reveal_type(nd.squeeze(0))  # E: numpy.ndarray
 reveal_type(nd.squeeze((0, 2)))  # E: numpy.ndarray
+

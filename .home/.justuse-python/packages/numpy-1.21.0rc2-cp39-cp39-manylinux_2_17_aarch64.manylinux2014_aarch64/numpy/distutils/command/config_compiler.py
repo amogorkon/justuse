@@ -124,3 +124,4 @@ class config_cc(Command):
     def run(self):
         # Do nothing.
         return
+

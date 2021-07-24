@@ -6528,3 +6528,4 @@ add_newdoc('numpy.core.numerictypes', 'character',
     Abstract base class of all character string scalar types.
 
     """)
+

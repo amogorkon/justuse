@@ -201,3 +201,4 @@ end module f90_return_real
     @pytest.mark.parametrize('name', 't0,t4,t8,td,s0,s4,s8,sd'.split(','))
     def test_all(self, name):
         self.check_function(getattr(self.module.f90_return_real, name), name)
+

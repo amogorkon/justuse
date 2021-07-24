@@ -138,3 +138,4 @@ def UnixCCompiler_create_static_lib(self, objects, output_libname,
 
 replace_method(UnixCCompiler, 'create_static_lib',
                UnixCCompiler_create_static_lib)
+

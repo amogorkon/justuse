@@ -26,3 +26,4 @@ _1 = AR_i > str()  # E: Need type annotation
 _2 = AR_i > bytes()  # E: Need type annotation
 _3 = str() > AR_M  # E: Need type annotation
 _4 = bytes() > AR_M  # E: Need type annotation
+

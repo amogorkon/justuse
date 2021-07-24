@@ -340,3 +340,4 @@ def test_extended_precision() -> None:
             if msg_typ == "error":
                 marker = "Module has no attribute"
                 _test_fail(path, marker, msg, lineno)
+

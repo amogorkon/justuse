@@ -22,3 +22,4 @@ reveal_type(ar_iter[...])  # E: numpy.lib.arrayterator.Arrayterator[Any, numpy.d
 reveal_type(ar_iter[:])  # E: numpy.lib.arrayterator.Arrayterator[Any, numpy.dtype[{int64}]]
 reveal_type(ar_iter[0, 0, 0])  # E: numpy.lib.arrayterator.Arrayterator[Any, numpy.dtype[{int64}]]
 reveal_type(ar_iter[..., 0, :])  # E: numpy.lib.arrayterator.Arrayterator[Any, numpy.dtype[{int64}]]
+

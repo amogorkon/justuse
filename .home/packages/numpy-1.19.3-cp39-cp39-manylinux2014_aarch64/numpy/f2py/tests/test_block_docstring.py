@@ -21,3 +21,4 @@ class TestBlockDocString(util.F2PyTest):
     def test_block_docstring(self):
         expected = "'i'-array(2,3)\n"
         assert_equal(self.module.block.__doc__, expected)
+

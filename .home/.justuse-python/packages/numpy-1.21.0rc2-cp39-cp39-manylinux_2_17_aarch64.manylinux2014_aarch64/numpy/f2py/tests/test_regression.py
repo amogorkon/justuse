@@ -45,3 +45,4 @@ class TestNumpyVersionAttribute(util.F2PyTest):
         
         # Check that __f2py_numpy_version__ has the value numpy.__version__
         assert_string_equal(np.__version__, self.module.__f2py_numpy_version__)
+

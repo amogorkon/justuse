@@ -57,3 +57,4 @@ class TestAccuracy:
                         outval = outval[perm]
                         maxulperr = data_subset['ulperr'].max()
                         assert_array_max_ulp(npfunc(inval), outval, maxulperr)
+

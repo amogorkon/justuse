@@ -49,3 +49,4 @@ def customized_ccompiler(plat=None, compiler=None, verbose=1):
     c = ccompiler.new_compiler(plat=plat, compiler=compiler, verbose=verbose)
     c.customize('')
     return c
+

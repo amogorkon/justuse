@@ -19,3 +19,4 @@ np.isneginf(AR_c)  # E: incompatible type
 np.isneginf(AR_m)  # E: incompatible type
 np.isneginf(AR_M)  # E: incompatible type
 np.isneginf(AR_O)  # E: incompatible type
+

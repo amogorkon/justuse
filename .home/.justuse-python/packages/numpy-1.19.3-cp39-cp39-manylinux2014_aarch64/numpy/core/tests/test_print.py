@@ -198,3 +198,4 @@ class TestCommaDecimalPointLocale(CommaDecimalPointLocale):
 
     def test_locale_longdouble(self):
         assert_equal(str(np.longdouble('1.2')), str(float(1.2)))
+

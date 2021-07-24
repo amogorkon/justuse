@@ -41,3 +41,4 @@ def test_fcompiler_flags(monkeypatch):
         else:
             assert_(new_flags == prev_flags + [new_flag])
 
+

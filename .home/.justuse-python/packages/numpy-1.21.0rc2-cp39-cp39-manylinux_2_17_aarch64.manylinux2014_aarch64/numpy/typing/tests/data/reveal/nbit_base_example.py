@@ -17,3 +17,4 @@ reveal_type(add(f8, i8))  # E: {float64}
 reveal_type(add(f4, i8))  # E: {float64}
 reveal_type(add(f8, i4))  # E: {float64}
 reveal_type(add(f4, i4))  # E: {float32}
+

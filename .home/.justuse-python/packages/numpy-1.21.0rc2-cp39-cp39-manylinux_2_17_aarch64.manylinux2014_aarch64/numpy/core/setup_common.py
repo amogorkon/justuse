@@ -449,3 +449,4 @@ def check_for_right_shift_internal_compiler_error(cmd):
         }
         """), None, None)
     return not no_err
+

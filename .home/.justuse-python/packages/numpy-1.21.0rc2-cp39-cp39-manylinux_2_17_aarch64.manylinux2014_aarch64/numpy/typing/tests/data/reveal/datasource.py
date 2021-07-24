@@ -19,3 +19,4 @@ reveal_type(d3.exists("..."))  # E: bool
 reveal_type(d1.open("...", "r"))  # E: IO[Any]
 reveal_type(d2.open("...", encoding="utf8"))  # E: IO[Any]
 reveal_type(d3.open("...", newline="/n"))  # E: IO[Any]
+

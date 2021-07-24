@@ -259,3 +259,4 @@ def _dump(self, file, protocol=2):
 
 def _dumps(self, protocol=2):
     return pickle.dumps(self, protocol=protocol)
+

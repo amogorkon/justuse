@@ -1495,3 +1495,4 @@ random_st.random_sample(size=(1, 2))
 random_st.tomaxint()
 random_st.tomaxint(1)
 random_st.tomaxint((1,))
+

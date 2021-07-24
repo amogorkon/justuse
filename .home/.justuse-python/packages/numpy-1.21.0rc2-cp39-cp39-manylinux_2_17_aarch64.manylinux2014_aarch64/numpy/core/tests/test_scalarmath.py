@@ -822,3 +822,4 @@ def test_clongdouble_inf_loop(op):
         op(None, np.longdouble(3))
     except TypeError:
         pass
+

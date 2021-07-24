@@ -213,3 +213,4 @@ def _check_append_ext_library(libraries, lib_name, build_info):
                           stacklevel=2)
             break
     libraries.append((lib_name, build_info))
+

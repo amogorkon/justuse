@@ -783,3 +783,4 @@ class UnknownFieldSet(object):
       if isinstance(value._data, UnknownFieldSet):
         value._data._clear()  # pylint: disable=protected-access
     self._values = None
+

@@ -143,3 +143,4 @@ def buildhooks(m):
     if len(ret['docs']) <= 1:
         ret['docs'] = ''
     return ret, fwrap[0]
+

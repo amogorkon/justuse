@@ -838,3 +838,4 @@ def common_sign2map(a, var):  # obsolute
     # for strings this returns 0-rank but actually is 1-rank
     ret['arrdocstr'] = getarrdocsign(a, var)
     return ret
+

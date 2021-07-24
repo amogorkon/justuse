@@ -269,3 +269,4 @@ examples of custom array containers.
 
 See also `NEP 18 <http://www.numpy.org/neps/nep-0018-array-function-protocol.html>`_.
 """
+

@@ -15,3 +15,4 @@ np.sin.__name__
 np.sin.__doc__
 
 np.abs(np.array([1]))
+

@@ -374,3 +374,4 @@ def repmat(a, m, n):
     cols = origcols * n
     c = a.reshape(1, a.size).repeat(m, 0).reshape(rows, origcols).repeat(n, 0)
     return c.reshape(rows, cols)
+

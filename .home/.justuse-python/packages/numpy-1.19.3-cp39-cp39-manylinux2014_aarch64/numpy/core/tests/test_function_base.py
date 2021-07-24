@@ -368,3 +368,4 @@ class TestLinspace:
         stop = array(2, dtype='O')
         y = linspace(start, stop, 3)
         assert_array_equal(y, array([1., 1.5, 2.]))
+

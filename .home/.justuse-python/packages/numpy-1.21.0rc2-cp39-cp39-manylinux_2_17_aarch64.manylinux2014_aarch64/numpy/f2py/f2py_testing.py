@@ -44,3 +44,4 @@ def run(runtest, test_functions, repeat=1):
     if start_memusage:
         print('initial virtual memory size:', start_memusage, 'bytes')
         print('current virtual memory size:', current_memusage, 'bytes')
+

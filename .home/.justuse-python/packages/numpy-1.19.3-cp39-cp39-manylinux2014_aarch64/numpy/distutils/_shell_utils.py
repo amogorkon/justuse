@@ -89,3 +89,4 @@ if os.name == 'nt':
     NativeParser = WindowsParser
 elif os.name == 'posix':
     NativeParser = PosixParser
+

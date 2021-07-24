@@ -424,3 +424,4 @@ FIELD_TYPE_TO_WIRE_TYPE = {
     _FieldDescriptor.TYPE_SINT32: wire_format.WIRETYPE_VARINT,
     _FieldDescriptor.TYPE_SINT64: wire_format.WIRETYPE_VARINT,
     }
+

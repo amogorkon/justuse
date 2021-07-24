@@ -352,3 +352,4 @@ def test_array_almost_equal_matrix():
             a = np.array(m)
             assert_func(a, m)
             assert_func(m, a)
+

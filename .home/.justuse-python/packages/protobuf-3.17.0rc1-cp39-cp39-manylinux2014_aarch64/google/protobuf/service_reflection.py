@@ -285,3 +285,4 @@ class _ServiceStubBuilder(object):
     return stub.rpc_channel.CallMethod(
         method_descriptor, rpc_controller, request,
         method_descriptor.output_type._concrete_class, callback)
+

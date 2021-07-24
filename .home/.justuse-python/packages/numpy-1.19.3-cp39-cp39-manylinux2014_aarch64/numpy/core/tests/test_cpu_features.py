@@ -169,3 +169,4 @@ class Test_ARM_Features(AbstractTest):
                 # if the kernel reports any one of the following ARM8 features.
                 ASIMD=("AES", "SHA1", "SHA2", "PMULL", "CRC32")
             )
+

@@ -527,3 +527,4 @@ def add_newdoc(place, obj, doc, warn_on_python=True):
     elif isinstance(doc, list):
         for attr, docstring in doc:
             _add_docstring(getattr(new, attr), docstring.strip(), warn_on_python)
+

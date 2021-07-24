@@ -18,3 +18,4 @@ u8 & f8  # E: No overload variant
 # mypys' error message for `NoReturn` is unfortunately pretty bad
 # TODO: Reenable this once we add support for numerical precision for `number`s
 # a = u8 | 0  # E: Need type annotation
+

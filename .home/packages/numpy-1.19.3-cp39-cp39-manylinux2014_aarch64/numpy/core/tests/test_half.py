@@ -537,3 +537,4 @@ class TestHalf:
         c = np.array(b)
         assert_(c.dtype == float16)
         assert_equal(a, c)
+

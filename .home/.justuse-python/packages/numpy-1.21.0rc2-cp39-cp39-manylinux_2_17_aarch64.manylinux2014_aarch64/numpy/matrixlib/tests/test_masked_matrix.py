@@ -229,3 +229,4 @@ class TestConcatenator:
         # outer type is masked array, inner type is matrix
         assert_equal(type(actual), type(expected))
         assert_equal(type(actual.data), type(expected.data))
+

@@ -87,3 +87,4 @@ reveal_type(np.array_equal(A, A))  # E: bool
 reveal_type(np.array_equiv(i8, A))  # E: bool
 reveal_type(np.array_equiv(B, A))  # E: bool
 reveal_type(np.array_equiv(A, A))  # E: bool
+

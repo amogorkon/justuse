@@ -119,3 +119,4 @@ def test_plausible_finfo():
         assert_(info.nmant > 1)
         assert_(info.minexp < -1)
         assert_(info.maxexp > 1)
+

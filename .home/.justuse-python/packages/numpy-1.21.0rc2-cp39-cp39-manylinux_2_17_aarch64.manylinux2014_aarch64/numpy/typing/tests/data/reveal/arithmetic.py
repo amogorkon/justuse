@@ -544,3 +544,4 @@ reveal_type(b_ + u4)  # E: {uint32}
 reveal_type(b + u4)  # E: {uint32}
 reveal_type(i + u4)  # E: Any
 reveal_type(AR_f + u4)  # E: Any
+

@@ -183,3 +183,4 @@ float(np.array("1", dtype=np.str_))
 complex(np.array(1.0, dtype=np.float64))
 
 operator.index(np.array(1, dtype=np.int64))
+

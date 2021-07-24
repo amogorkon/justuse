@@ -23,3 +23,4 @@ class install_headers (old_install_headers):
             self.mkpath(d)
             (out, _) = self.copy_file(header, d)
             self.outfiles.append(out)
+

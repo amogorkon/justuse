@@ -208,3 +208,4 @@ def array_function_from_dispatcher(
             dispatcher, module, verify=verify,
             docs_from_dispatcher=docs_from_dispatcher)(implementation)
     return decorator
+

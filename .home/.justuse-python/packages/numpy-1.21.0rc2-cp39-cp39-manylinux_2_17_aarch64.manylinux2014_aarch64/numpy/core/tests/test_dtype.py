@@ -1521,3 +1521,4 @@ class TestUserDType:
             # Tests that a dtype must have its type field set up to np.dtype
             # or in this case a builtin instance.
             create_custom_field_dtype(blueprint, mytype, 2)
+

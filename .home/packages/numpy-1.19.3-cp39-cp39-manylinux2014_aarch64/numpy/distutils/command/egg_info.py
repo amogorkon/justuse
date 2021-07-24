@@ -23,3 +23,4 @@ class egg_info(_egg_info):
         # generate files.
         self.run_command("build_src")
         _egg_info.run(self)
+

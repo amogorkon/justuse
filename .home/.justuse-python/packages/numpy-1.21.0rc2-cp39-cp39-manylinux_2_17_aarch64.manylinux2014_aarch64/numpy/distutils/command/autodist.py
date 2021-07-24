@@ -146,3 +146,4 @@ def check_gcc_variable_attribute(cmd, attribute):
         }
         """) % (attribute, )
     return cmd.try_compile(body, None, None) != 0
+

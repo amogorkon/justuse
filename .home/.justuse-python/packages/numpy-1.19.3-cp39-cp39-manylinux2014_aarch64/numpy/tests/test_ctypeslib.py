@@ -363,3 +363,4 @@ class TestAsCtypesType:
             formats=[np.uint32, np.uint32]
         ))
         assert_raises(NotImplementedError, np.ctypeslib.as_ctypes_type, dt)
+

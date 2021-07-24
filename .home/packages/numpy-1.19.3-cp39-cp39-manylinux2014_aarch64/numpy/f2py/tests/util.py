@@ -359,3 +359,4 @@ class F2PyTest:
             self.module = build_module(self.sources, options=self.options,
                                        skip=self.skip, only=self.only,
                                        module_name=self.module_name)
+

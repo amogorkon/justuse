@@ -5362,3 +5362,4 @@ note
 original note"""
 
     assert_equal(np.ma.core.doc_note(method.__doc__, "note"), expected_doc)
+

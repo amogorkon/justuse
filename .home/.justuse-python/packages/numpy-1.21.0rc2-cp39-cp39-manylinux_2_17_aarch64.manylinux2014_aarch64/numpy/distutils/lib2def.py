@@ -114,3 +114,4 @@ if __name__ == '__main__':
     nm_output = getnm(nm_cmd, shell=False)
     dlist, flist = parse_nm(nm_output)
     output_def(dlist, flist, DEF_HEADER, deffile)
+

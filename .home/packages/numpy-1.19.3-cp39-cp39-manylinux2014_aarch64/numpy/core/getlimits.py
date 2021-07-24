@@ -547,3 +547,4 @@ class iinfo:
         return "%s(min=%s, max=%s, dtype=%s)" % (self.__class__.__name__,
                                     self.min, self.max, self.dtype)
 
+

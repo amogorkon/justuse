@@ -11,3 +11,4 @@ warnings.warn(("numpy.core.umath_tests is an internal NumPy "
               category=DeprecationWarning, stacklevel=2)
 
 from ._umath_tests import *
+

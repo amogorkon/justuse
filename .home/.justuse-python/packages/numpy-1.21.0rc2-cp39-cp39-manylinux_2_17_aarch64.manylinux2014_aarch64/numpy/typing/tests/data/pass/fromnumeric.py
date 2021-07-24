@@ -258,3 +258,4 @@ np.var(A, keepdims=True)
 np.var(B, keepdims=True)
 np.var(b, out=d)
 np.var(B, out=d)
+

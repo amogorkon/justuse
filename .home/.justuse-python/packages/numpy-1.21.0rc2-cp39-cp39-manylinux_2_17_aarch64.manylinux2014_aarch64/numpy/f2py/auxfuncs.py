@@ -855,3 +855,4 @@ def applyrules(rules, d, var={}):
             if ret[k] == []:
                 del ret[k]
     return ret
+

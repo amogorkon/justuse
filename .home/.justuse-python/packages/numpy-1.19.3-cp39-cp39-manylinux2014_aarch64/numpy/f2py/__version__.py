@@ -6,3 +6,4 @@ try:
     version = '%s_%s' % version_info
 except (ImportError, ValueError):
     version = str(major)
+

@@ -11,3 +11,4 @@ np.array2string(AR, sign="*")  # E: incompatible type
 np.array2string(AR, floatmode="default")  # E: incompatible type
 np.array2string(AR, formatter={"A": func1})  # E: incompatible type
 np.array2string(AR, formatter={"float": func2})  # E: Incompatible types
+

@@ -2865,3 +2865,4 @@ def test_warn_noclose():
                         casting='equiv', op_dtypes=[np.dtype('f4')])
         del it
         assert len(sup.log) == 1
+

@@ -33,3 +33,4 @@ class TestMixed(util.F2PyTest):
         a : int
         """)
         assert_equal(self.module.bar11.__doc__, expected)
+

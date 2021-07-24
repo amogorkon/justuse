@@ -178,3 +178,4 @@ making it a two-dimensional ``4x1`` array.  Combining the ``4x1`` array
 with ``b``, which has shape ``(3,)``, yields a ``4x3`` array.
 
 """
+

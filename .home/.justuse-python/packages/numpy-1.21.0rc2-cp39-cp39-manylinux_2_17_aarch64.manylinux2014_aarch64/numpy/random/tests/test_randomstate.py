@@ -2020,3 +2020,4 @@ def test_broadcast_size_error():
         random.binomial([1, 2], 0.3, size=(2, 1))
     with pytest.raises(ValueError):
         random.binomial([1, 2], [0.3, 0.7], size=(2, 1))
+

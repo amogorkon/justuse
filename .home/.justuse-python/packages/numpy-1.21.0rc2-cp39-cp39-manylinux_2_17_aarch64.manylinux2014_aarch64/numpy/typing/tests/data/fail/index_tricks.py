@@ -12,3 +12,4 @@ np.ogrid[1]  # E: Invalid index type
 np.ogrid[...]  # E: Invalid index type
 np.fill_diagonal(AR_LIKE_f, 2)  # E: incompatible type
 np.diag_indices(1.0)  # E: incompatible type
+

@@ -47,3 +47,4 @@ class TestSizeSumExample(util.F2PyTest):
 
         r = self.module.flatten([[1, 2, 3], [4, 5, 6]])
         assert_equal(r, [1, 2, 3, 4, 5, 6], repr(r))
+

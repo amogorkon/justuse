@@ -59,3 +59,4 @@ np.random.Generator(12333283902830213)  # E: incompatible type
 np.random.Generator("OxFEEDF00D")  # E: incompatible type
 np.random.Generator([123, 234])  # E: incompatible type
 np.random.Generator(np.array([123, 234], dtype="u4"))  # E: incompatible type
+

@@ -83,3 +83,4 @@ class EnvironmentConfig:
             self._conf = dist.get_option_dict(self._distutils_section)
         else:
             self._conf = dist
+

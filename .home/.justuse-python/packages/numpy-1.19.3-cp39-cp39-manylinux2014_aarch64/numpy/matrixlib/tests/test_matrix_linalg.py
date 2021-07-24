@@ -91,3 +91,4 @@ class TestNormInt64Matrix(_TestNorm2DMatrix, _TestNormInt64Base):
 
 class TestQRMatrix(_TestQR):
     array = np.matrix
+

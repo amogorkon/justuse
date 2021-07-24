@@ -320,3 +320,4 @@ def require(a, dtype=None, requirements=None):
             arr = arr.copy(order)
             break
     return arr
+

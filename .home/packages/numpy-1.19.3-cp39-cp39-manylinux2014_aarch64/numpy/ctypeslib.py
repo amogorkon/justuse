@@ -540,3 +540,4 @@ if ctypes is not None:
         result = result_type.from_address(addr)
         result.__keep = obj
         return result
+

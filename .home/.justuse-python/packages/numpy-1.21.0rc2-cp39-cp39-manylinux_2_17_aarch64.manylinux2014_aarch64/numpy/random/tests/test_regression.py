@@ -147,3 +147,4 @@ class TestRegression:
         perm = np.random.permutation(m)
         assert_array_equal(perm, np.array([2, 1, 4, 0, 3]))
         assert_array_equal(m.__array__(), np.arange(5))
+

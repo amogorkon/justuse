@@ -89,3 +89,4 @@ if __name__ == '__main__':
     print()
     print("promote_types")
     print_coercion_table(np.typecodes['All'], 0, 0, False, True)
+

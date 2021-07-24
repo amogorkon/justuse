@@ -435,3 +435,4 @@ if __name__ == '__main__':
         print("#%i" % i + 50*'.')
         print(eval("ModuleTester.test_%i.__doc__" % i))
         print("core_current : %.3f - %.3f" % (cur[0], cur[1]))
+

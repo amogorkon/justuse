@@ -20,3 +20,4 @@ class bdist_rpm(old_bdist_rpm):
             line = line.replace('setup.py', setup_py)
             new_spec_file.append(line)
         return new_spec_file
+

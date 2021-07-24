@@ -61,3 +61,4 @@ class MSVCCompiler(_MSVCCompiler):
         ld_args.append('/MANIFEST')
         _MSVCCompiler.manifest_setup_ldargs(self, output_filename,
                                             build_temp, ld_args)
+

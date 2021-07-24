@@ -45,3 +45,4 @@ np.ScalarType[11]
 np.typecodes["Character"]
 np.typecodes["Complex"]
 np.typecodes["All"]
+

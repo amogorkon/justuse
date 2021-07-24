@@ -1294,3 +1294,4 @@ class TestCApiAccess:
         a = a.reshape(5, 2)
         assign(a, 4, 10)
         assert_array_equal(a[-1], [10, 10])
+

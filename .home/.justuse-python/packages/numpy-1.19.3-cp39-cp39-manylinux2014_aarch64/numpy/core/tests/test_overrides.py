@@ -425,3 +425,4 @@ class TestNumPyFunctions:
         # note: the internal implementation of np.sum() calls the .sum() method
         array = np.array(1).view(MyArray)
         assert_equal(np.sum(array), 'summed')
+

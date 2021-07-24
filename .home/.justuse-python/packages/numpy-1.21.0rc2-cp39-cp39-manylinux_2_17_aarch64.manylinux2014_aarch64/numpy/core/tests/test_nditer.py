@@ -3244,3 +3244,4 @@ def test_debug_print(capfd):
         # The actual output may have additional pointers listed that are
         # stripped from the example output:
         assert res_line.startswith(expected_line.strip())
+

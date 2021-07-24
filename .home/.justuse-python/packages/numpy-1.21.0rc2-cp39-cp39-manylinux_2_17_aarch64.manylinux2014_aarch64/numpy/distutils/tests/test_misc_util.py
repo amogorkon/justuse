@@ -80,3 +80,4 @@ def test_installed_npymath_ini():
 
     assert isinstance(info, dict)
     assert "define_macros" in info
+

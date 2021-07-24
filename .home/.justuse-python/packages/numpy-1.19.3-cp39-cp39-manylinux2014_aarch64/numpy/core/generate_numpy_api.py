@@ -235,3 +235,4 @@ def do_generate_api(targets, sources):
     genapi.write_file(doc_file, s)
 
     return targets
+

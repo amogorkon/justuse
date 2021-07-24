@@ -56,3 +56,4 @@ class MSVCCompiler(_MSVCCompiler):
         if platform_bits == 32:
             self.compile_options += ['/arch:SSE2']
             self.compile_options_debug += ['/arch:SSE2']
+

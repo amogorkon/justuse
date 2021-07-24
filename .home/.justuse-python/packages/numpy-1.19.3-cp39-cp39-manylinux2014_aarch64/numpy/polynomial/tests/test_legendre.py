@@ -554,3 +554,4 @@ class TestMisc:
         tgt = 1.
         res = leg.legweight(x)
         assert_almost_equal(res, tgt)
+

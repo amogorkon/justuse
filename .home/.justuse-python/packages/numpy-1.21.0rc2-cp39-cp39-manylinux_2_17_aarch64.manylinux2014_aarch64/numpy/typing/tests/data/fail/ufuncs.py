@@ -39,3 +39,4 @@ np.matmul.accumulate()  # E: "None" not callable
 np.frexp.at()  # E: "None" not callable
 np.divmod.at()  # E: "None" not callable
 np.matmul.at()  # E: "None" not callable
+

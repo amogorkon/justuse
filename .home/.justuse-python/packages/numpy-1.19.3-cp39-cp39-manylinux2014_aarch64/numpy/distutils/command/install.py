@@ -77,3 +77,4 @@ class install(old_install):
                              "re-writing list of installed files to '%s'" %
                              self.record)
         return r
+

@@ -56,3 +56,4 @@ def test_repmat():
     y = np.array([[0, 1, 2, 3, 0, 1, 2, 3],
                   [0, 1, 2, 3, 0, 1, 2, 3]])
     assert_array_equal(x, y)
+

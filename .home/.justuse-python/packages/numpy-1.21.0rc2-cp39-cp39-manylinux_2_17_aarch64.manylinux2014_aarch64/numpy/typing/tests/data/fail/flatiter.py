@@ -23,3 +23,4 @@ a.copy(order='C')  # E: Unexpected keyword argument
 a[np.bool_()]  # E: No overload variant of "__getitem__"
 a[Index()]  # E: No overload variant of "__getitem__"
 a[supports_array]  # E: No overload variant of "__getitem__"
+

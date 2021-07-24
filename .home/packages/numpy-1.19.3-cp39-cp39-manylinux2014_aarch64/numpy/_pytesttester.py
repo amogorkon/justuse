@@ -208,3 +208,4 @@ class PytestTester:
             code = exc.code
 
         return code == 0
+

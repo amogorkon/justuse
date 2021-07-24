@@ -266,3 +266,4 @@ def IsTypePackable(field_type):
     True iff fields of this type are packable.
   """
   return field_type not in NON_PACKABLE_TYPES
+

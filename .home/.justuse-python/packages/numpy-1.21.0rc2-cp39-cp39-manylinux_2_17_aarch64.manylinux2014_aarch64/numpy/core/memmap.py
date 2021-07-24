@@ -335,3 +335,4 @@ class memmap(ndarray):
         if type(res) is memmap and res._mmap is None:
             return res.view(type=ndarray)
         return res
+

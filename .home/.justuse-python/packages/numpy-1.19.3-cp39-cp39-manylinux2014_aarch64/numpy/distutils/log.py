@@ -87,3 +87,4 @@ _global_color_map = {
 
 # don't use INFO,.. flags in set_verbosity, these flags are for set_threshold.
 set_verbosity(0, force=True)
+

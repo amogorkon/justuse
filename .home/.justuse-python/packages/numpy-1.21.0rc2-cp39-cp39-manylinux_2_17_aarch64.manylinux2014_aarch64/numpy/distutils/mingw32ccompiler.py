@@ -655,3 +655,4 @@ def generate_manifest(config):
             config.temp_files.append(manifest_name(config))
             man.write(manxml)
             man.close()
+

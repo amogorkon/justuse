@@ -100,3 +100,4 @@ reveal_type(np.stack([A, A], out=B))  # E: SubClass
 
 reveal_type(np.block([[A, A], [A, A]]))  # E: numpy.ndarray[Any, Any]
 reveal_type(np.block(C))  # E: numpy.ndarray[Any, Any]
+

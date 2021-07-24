@@ -22,3 +22,4 @@ class install_data (old_install_data):
                                    ('root', 'root'),
                                    ('force', 'force'),
                                   )
+

@@ -20,3 +20,4 @@ class TestString(util.F2PyTest):
         expected = strings.copy()
         expected[1, :] = 'AAA'
         assert_array_equal(out, expected)
+

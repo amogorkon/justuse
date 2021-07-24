@@ -863,3 +863,4 @@ _WKTJSONMETHODS = {
     'google.protobuf.Value': ['_ValueMessageToJsonObject',
                               '_ConvertValueMessage']
 }
+

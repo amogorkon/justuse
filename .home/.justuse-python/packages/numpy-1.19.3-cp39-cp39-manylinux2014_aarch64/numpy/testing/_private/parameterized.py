@@ -442,3 +442,4 @@ class parameterized:
     @classmethod
     def to_safe_name(cls, s):
         return str(re.sub("[^a-zA-Z0-9_]+", "_", s))
+

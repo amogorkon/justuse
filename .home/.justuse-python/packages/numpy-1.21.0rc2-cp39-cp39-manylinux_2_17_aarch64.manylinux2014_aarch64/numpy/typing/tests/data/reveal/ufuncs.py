@@ -66,3 +66,4 @@ reveal_type(np.matmul.signature)  # E: Literal['(n?,k),(k,m?)->(n?,m?)']
 reveal_type(np.matmul.identity)  # E: None
 reveal_type(np.matmul(AR_f8, AR_f8))  # E: Any
 reveal_type(np.matmul(AR_f8, AR_f8, axes=[(0, 1), (0, 1), (0, 1)]))  # E: Any
+

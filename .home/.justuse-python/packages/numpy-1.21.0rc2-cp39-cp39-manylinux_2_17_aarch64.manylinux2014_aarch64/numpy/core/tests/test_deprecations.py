@@ -1174,3 +1174,4 @@ class TestCtypesGetter(_DeprecationTestCase):
     )
     def test_not_deprecated(self, name: str) -> None:
         self.assert_not_deprecated(lambda: getattr(self.ctypes, name))
+

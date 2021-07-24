@@ -115,3 +115,4 @@ def dtype_from_ctypes_type(t):
     else:
         raise NotImplementedError(
             "Unknown ctypes type {}".format(t.__name__))
+

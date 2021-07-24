@@ -379,3 +379,4 @@ class TestRealScalars:
         # gh-2643, gh-6136, gh-6908
         assert_equal(repr(np.float64(0.1)), repr(0.1))
         assert_(repr(np.float64(0.20000000000000004)) != repr(0.2))
+

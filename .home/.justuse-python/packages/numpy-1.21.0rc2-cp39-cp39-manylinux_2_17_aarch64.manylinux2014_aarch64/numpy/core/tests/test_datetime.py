@@ -2468,3 +2468,4 @@ class TestDateTimeData:
 
         dt = np.datetime64('2000', '5μs')
         assert np.datetime_data(dt.dtype) == ('us', 5)
+

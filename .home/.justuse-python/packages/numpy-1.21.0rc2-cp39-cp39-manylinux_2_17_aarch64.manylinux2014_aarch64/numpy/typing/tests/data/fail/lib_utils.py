@@ -11,3 +11,4 @@ np.who(1)  # E: incompatible type
 np.lookfor(None)  # E: incompatible type
 
 np.safe_eval(None)  # E: incompatible type
+

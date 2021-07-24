@@ -46,3 +46,4 @@ reveal_type(np.random.__all__)  # E: list[builtins.str]
 reveal_type(np.rec.__all__)  # E: list[builtins.str]
 reveal_type(np.testing.__all__)  # E: list[builtins.str]
 reveal_type(f2py.__all__)  # E: list[builtins.str]
+

@@ -70,3 +70,4 @@ def test_multi_fortran_libs_link(tmp_path):
                 so = line.strip()
                 break
     assert so is not None
+

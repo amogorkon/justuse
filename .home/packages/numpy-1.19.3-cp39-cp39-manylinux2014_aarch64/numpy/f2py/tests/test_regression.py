@@ -25,3 +25,4 @@ class TestIntentInOut(util.F2PyTest):
         x = np.arange(3, dtype=np.float32)
         self.module.foo(x)
         assert_equal(x, [3, 1, 2])
+

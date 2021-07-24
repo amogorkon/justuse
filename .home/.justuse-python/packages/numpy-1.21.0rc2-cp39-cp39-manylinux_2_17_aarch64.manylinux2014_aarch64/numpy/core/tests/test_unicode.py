@@ -360,3 +360,4 @@ class TestByteorder_1009_UCS4(ByteorderValues):
     """Check the byteorder in unicode (size 1009, UCS4 values)"""
     ulen = 1009
     ucs_value = ucs4_value
+

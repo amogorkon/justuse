@@ -37,3 +37,4 @@ a.__array__()
 # array.
 object_array_scalar: Any = (i for i in range(10))
 np.array(object_array_scalar)
+

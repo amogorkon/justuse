@@ -50,3 +50,4 @@ reveal_type(np.UFUNC_PYVALS_NAME)  # E: str
 
 reveal_type(np.sctypeDict)  # E: dict
 reveal_type(np.sctypes)  # E: TypedDict
+

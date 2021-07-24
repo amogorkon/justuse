@@ -285,3 +285,4 @@ class TestSystemInfoReading:
         finally:
             os.chdir(previousDir)
         
+

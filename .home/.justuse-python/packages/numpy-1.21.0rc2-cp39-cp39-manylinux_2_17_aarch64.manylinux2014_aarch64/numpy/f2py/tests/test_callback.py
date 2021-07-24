@@ -324,3 +324,4 @@ class TestGH18335(util.F2PyTest):
         y = np.array([1, 2, 3], dtype=np.int8)
         r = self.module.gh18335(foo)
         assert r == 123 + 1
+

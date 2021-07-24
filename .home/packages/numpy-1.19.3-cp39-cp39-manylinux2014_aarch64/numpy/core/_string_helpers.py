@@ -98,3 +98,4 @@ def english_capitalize(s):
         return english_upper(s[0]) + s[1:]
     else:
         return s
+

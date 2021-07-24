@@ -43,3 +43,4 @@ for order_set, func in order_list:
     for order in invalid_orders:
         with pytest.raises(ValueError):
             func(order=order)
+

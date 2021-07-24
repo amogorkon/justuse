@@ -129,3 +129,4 @@ reveal_type(~u8)  # E: {uint64}
 reveal_type(~u4)  # E: {uint32}
 reveal_type(~b_)  # E: numpy.bool_
 reveal_type(~AR)  # E: Any
+

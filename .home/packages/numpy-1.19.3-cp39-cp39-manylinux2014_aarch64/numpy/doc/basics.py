@@ -339,3 +339,4 @@ be useful to test your code with the value
 ``1 + np.finfo(np.longdouble).eps``.
 
 """
+

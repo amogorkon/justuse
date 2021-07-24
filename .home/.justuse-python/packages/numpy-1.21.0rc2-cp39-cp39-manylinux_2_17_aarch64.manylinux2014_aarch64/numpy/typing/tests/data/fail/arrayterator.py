@@ -12,3 +12,4 @@ ar_iter[np.intp()]  # E: Invalid index type
 ar_iter[np.intp(), ...]  # E: Invalid index type
 ar_iter[AR_i8]  # E: Invalid index type
 ar_iter[AR_i8, :]  # E: Invalid index type
+

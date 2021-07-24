@@ -55,3 +55,4 @@ def test_full_reimport():
         """)
     p = subprocess.run([sys.executable, '-c', code])
     assert p.returncode == 0
+

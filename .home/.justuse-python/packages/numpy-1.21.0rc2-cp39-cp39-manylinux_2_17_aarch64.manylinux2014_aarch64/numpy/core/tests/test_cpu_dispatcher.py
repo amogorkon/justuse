@@ -40,3 +40,4 @@ def test_dispatcher():
 
     all_sfx.append("func") # add the baseline
     assert_equal(test["all"], all_sfx)
+

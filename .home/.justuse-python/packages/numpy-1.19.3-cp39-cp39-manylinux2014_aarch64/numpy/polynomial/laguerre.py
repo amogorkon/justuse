@@ -1630,3 +1630,4 @@ class Laguerre(ABCPolyBase):
     domain = np.array(lagdomain)
     window = np.array(lagdomain)
     basis_name = 'L'
+

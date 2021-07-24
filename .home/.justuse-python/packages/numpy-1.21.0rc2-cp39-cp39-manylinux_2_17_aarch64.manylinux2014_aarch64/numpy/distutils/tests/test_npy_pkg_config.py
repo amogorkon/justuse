@@ -82,3 +82,4 @@ class TestParseFlags:
         d = parse_flags("-L /usr/lib -lfoo -L/usr/lib -lbar")
         assert_(d['library_dirs'] == ['/usr/lib', '/usr/lib'])
         assert_(d['libraries'] == ['foo', 'bar'])
+

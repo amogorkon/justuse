@@ -42,3 +42,4 @@ def test_array_called():
     arr = np.array(wrapped, dtype=str)
     assert arr.dtype == 'U100'
     assert arr[0] == Wrapper.val
+

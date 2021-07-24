@@ -5283,3 +5283,4 @@ def test_mask_shape_assignment_does_not_break_masked():
     b = np.ma.array(1, mask=a.mask)
     b.shape = (1,)
     assert_equal(a.mask.shape, ())
+

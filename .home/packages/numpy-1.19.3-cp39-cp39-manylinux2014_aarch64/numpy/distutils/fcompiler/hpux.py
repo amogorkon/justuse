@@ -39,3 +39,4 @@ if __name__ == '__main__':
     log.set_verbosity(10)
     from numpy.distutils import customized_fcompiler
     print(customized_fcompiler(compiler='hpux').get_version())
+

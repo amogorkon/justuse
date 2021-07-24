@@ -1017,3 +1017,4 @@ def array(obj, dtype=None, shape=None, offset=0, strides=None, formats=None,
         if dtype is not None and (obj.dtype != dtype):
             obj = obj.view(dtype)
         return obj.view(recarray)
+

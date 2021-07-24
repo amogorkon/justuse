@@ -1422,3 +1422,4 @@ def irfft2(a, s=None, axes=(-2, -1), norm=None):
            [4., 4., 4., 4., 4.]])
     """
     return irfftn(a, s, axes, norm)
+

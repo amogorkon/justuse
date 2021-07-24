@@ -143,3 +143,4 @@ end module f90_return_char
     @pytest.mark.parametrize('name', 't0,t1,t5,ts,s0,s1,s5,ss'.split(','))
     def test_all(self, name):
         self.check_function(getattr(self.module.f90_return_char, name), name)
+

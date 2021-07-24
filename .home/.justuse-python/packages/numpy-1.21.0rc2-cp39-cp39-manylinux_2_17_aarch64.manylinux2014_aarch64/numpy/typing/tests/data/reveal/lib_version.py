@@ -16,3 +16,4 @@ reveal_type(version < "1.8.0")  # E: bool
 reveal_type(version <= version)  # E: bool
 reveal_type(version > version)  # E: bool
 reveal_type(version >= "1.8.0")  # E: bool
+

@@ -617,3 +617,4 @@ class TestMisc:
         assert_almost_equal(cheb.chebpts2(4), tgt)
         tgt = [-1.0, -0.707106781187, 0, 0.707106781187, 1.0]
         assert_almost_equal(cheb.chebpts2(5), tgt)
+

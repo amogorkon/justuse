@@ -299,3 +299,4 @@ _sym_db.RegisterMessage(CodeGeneratorResponse.File)
 
 DESCRIPTOR._options = None
 # @@protoc_insertion_point(module_scope)
+

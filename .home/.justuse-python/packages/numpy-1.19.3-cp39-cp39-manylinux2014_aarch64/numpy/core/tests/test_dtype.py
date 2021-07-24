@@ -1291,3 +1291,4 @@ class TestFromCTypes:
         expected = np.dtype([('f0', pair[0]), ('f1', pair[1])])
         assert_equal(pair_type, expected)
 
+

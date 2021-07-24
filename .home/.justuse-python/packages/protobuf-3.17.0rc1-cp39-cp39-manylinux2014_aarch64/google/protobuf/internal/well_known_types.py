@@ -861,3 +861,4 @@ WKTBASES = {
     'google.protobuf.Struct': Struct,
     'google.protobuf.Timestamp': Timestamp,
 }
+

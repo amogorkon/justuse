@@ -13,3 +13,4 @@ class develop(old_develop):
         # Make sure scripts are built.
         self.run_command('build_scripts')
         old_develop.install_for_development(self)
+

@@ -1060,3 +1060,4 @@ def test_overlap():
     #gh-10080, out overlaps one of the operands
     c = np.einsum('ij,jk->ik', a, b, out=b)
     assert_equal(c, d)
+

@@ -123,3 +123,4 @@ def test_compile_from_strings(tmpdir, fsource):
         assert_equal(ret_val, 0)
     finally:
         os.chdir(cwd)
+

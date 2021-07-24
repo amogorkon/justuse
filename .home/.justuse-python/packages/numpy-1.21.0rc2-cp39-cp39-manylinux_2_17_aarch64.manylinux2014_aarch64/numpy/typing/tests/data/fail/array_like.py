@@ -14,3 +14,4 @@ scalar = np.int64(1)
 scalar.__array__(dtype=np.float64)  # E: No overload variant
 array = np.array([1])
 array.__array__(dtype=np.float64)  # E: No overload variant
+

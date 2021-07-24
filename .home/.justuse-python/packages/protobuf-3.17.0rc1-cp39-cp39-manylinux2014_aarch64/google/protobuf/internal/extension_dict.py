@@ -211,3 +211,4 @@ class _ExtensionDict(object):
       return value is not None and value._is_present_in_parent
 
     return True
+

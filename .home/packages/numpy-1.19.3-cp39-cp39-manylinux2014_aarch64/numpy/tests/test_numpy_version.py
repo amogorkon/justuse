@@ -15,3 +15,4 @@ def test_valid_numpy_version():
         res = re.match(version_pattern + dev_suffix, np.__version__)
 
     assert_(res is not None, np.__version__)
+

@@ -554,3 +554,4 @@ class TestMisc:
         tgt = np.exp(-.5*x**2)
         res = herme.hermeweight(x)
         assert_almost_equal(res, tgt)
+

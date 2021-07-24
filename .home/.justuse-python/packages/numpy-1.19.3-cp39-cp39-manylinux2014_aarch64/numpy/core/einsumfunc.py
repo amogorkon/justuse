@@ -1413,3 +1413,4 @@ def einsum(*operands, out=None, optimize=False, **kwargs):
         return out
     else:
         return operands[0]
+

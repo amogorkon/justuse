@@ -340,3 +340,4 @@ def _name_get(dtype):
         name += _datetime_metadata_str(dtype)
 
     return name
+

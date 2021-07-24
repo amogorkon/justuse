@@ -435,3 +435,4 @@ if __name__ == '__main__':
         print(info.version)
     if options.min_version:
         print(info.version >= options.min_version)
+

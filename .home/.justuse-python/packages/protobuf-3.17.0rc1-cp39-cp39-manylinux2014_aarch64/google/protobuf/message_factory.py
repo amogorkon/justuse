@@ -185,3 +185,4 @@ def GetMessages(file_protos):
   while file_by_name:
     _AddFile(file_by_name.popitem()[1])
   return _FACTORY.GetMessages([file_proto.name for file_proto in file_protos])
+

@@ -23,3 +23,4 @@ extensions = [checks]
 setup(
     ext_modules=cythonize(extensions)
 )
+

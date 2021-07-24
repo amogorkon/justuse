@@ -670,3 +670,4 @@ def find_common_type(array_types, scalar_types):
         return _find_common_coerce(maxsc, maxa)
     else:
         return maxa
+

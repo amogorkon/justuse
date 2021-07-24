@@ -14,3 +14,4 @@ class TestView:
 
         assert_(isinstance(y, np.matrix))
         assert_equal(y.dtype, np.dtype('<i2'))
+

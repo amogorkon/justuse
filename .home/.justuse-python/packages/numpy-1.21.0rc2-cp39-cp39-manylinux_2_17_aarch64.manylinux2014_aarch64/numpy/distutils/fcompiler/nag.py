@@ -80,3 +80,4 @@ if __name__ == '__main__':
     compiler = customized_fcompiler(compiler='nagfor')
     print(compiler.get_version())
     print(compiler.get_flags_debug())
+

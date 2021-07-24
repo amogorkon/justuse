@@ -62,3 +62,4 @@ reveal_type(np.diag_indices(4))  # E: tuple[numpy.ndarray[Any, numpy.dtype[{int_
 reveal_type(np.diag_indices(2, 3))  # E: tuple[numpy.ndarray[Any, numpy.dtype[{int_}]]]
 
 reveal_type(np.diag_indices_from(AR_i8))  # E: tuple[numpy.ndarray[Any, numpy.dtype[{int_}]]]
+

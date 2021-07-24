@@ -884,3 +884,4 @@ class TestContextManager:
         with np.printoptions(**opts) as ctx:
             saved_opts = ctx.copy()
         assert_equal({k: saved_opts[k] for k in opts}, opts)
+

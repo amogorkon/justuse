@@ -748,3 +748,4 @@ def _deprecate_as_int(x, desc):
                 return ix
 
         raise TypeError(f"{desc} must be an integer") from e
+

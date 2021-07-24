@@ -75,3 +75,4 @@ def show():
             if k == "sources" and len(v) > 200:
                 v = v[:60] + " ...\n... " + v[-60:]
             print("    %s = %s" % (k,v))
+

@@ -212,3 +212,4 @@ class TestExecCommand:
                         self.check_nt(use_tee=1)
                     self.check_execute_in(use_tee=0)
                     self.check_execute_in(use_tee=1)
+

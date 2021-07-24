@@ -8180,3 +8180,4 @@ def append(a, b, axis=None):
            fill_value=999999)
     """
     return concatenate([a, b], axis)
+

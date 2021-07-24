@@ -51,3 +51,4 @@ class TestF77Mismatch:
                          """Both g77 and gfortran runtimes linked in lapack_lite ! This is likely to
 cause random crashes and wrong results. See numpy INSTALL.txt for more
 information.""")
+

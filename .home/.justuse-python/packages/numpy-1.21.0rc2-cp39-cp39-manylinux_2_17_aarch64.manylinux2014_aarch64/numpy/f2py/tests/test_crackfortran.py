@@ -139,3 +139,4 @@ class TestCrackFortran(util.F2PyTest):
     def test_gh2848(self):
         r = self.module.gh2848(1, 2)
         assert r == (1, 2)
+

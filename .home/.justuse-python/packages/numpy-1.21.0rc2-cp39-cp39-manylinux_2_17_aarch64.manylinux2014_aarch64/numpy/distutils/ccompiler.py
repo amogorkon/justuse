@@ -793,3 +793,4 @@ for _cc in ['msvc9', 'msvc', '_msvc', 'bcpp', 'cygwinc', 'emxc', 'unixc']:
     if _m is not None:
         setattr(_m, 'gen_lib_options', gen_lib_options)
 
+

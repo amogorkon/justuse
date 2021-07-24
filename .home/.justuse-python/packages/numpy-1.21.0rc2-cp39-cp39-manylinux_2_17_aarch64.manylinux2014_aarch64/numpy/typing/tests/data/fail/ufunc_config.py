@@ -19,3 +19,4 @@ np.seterrcall(func2)  # E: Argument 1 to "seterrcall" has incompatible type
 np.seterrcall(Write1())  # E: Argument 1 to "seterrcall" has incompatible type
 np.seterrcall(Write2())  # E: Argument 1 to "seterrcall" has incompatible type
 np.seterrcall(Write3())  # E: Argument 1 to "seterrcall" has incompatible type
+

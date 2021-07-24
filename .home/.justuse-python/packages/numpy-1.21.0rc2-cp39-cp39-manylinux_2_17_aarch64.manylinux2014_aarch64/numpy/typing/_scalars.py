@@ -28,3 +28,4 @@ _ScalarLike_co = Union[
 
 # `_VoidLike_co` is technically not a scalar, but it's close enough
 _VoidLike_co = Union[Tuple[Any, ...], np.void]
+

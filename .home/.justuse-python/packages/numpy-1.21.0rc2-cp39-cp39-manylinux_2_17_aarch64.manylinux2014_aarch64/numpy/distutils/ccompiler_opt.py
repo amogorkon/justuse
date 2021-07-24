@@ -2565,3 +2565,4 @@ def new_ccompiler_opt(compiler, dispatch_hpath, **kwargs):
     if not os.path.exists(dispatch_hpath) or not opt.is_cached():
         opt.generate_dispatch_header(dispatch_hpath)
     return opt
+

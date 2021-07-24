@@ -608,3 +608,4 @@ class TestComplexAbsoluteMixedDTypes(object):
         
         assert_array_max_ulp(h.real, g.real, 1)
         assert_array_max_ulp(h.imag, g.imag, 1)
+

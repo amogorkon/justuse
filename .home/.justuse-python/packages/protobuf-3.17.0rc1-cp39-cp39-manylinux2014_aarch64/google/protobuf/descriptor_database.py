@@ -175,3 +175,4 @@ def _ExtractSymbols(desc_proto, package):
       yield symbol
   for enum_type in desc_proto.enum_type:
     yield '.'.join((message_name, enum_type.name))
+

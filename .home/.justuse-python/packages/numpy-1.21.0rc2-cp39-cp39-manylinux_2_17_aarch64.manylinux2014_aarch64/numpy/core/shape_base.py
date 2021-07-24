@@ -898,3 +898,4 @@ def _block_concatenate(arrays, list_ndim, result_ndim):
         # usecase for those interested in performance
         result = result.copy()
     return result
+

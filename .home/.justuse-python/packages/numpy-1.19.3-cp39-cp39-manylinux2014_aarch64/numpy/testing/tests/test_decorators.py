@@ -208,3 +208,4 @@ class TestNoseDecorators:
             test[0](*test[1:])
             count += 1
         assert_(count == 3)
+

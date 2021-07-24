@@ -40,3 +40,4 @@ def test_build_import():
     finally:
         if has_import_lib:
             shutil.move(fullpath + '.bak', fullpath)
+

@@ -343,3 +343,4 @@ class TestSubclassing:
         diff2 = arr1 - arr2
         assert_('info' in diff2._optinfo)
         assert_(diff2._optinfo['info'] == 'test')
+

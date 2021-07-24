@@ -760,3 +760,4 @@ def test_block_dispatcher():
     assert_equal(list(_block_dispatcher([[a], [b, [c]]])), [a, b, c])
     # don't recurse into non-lists
     assert_equal(list(_block_dispatcher((a, b))), [(a, b)])
+

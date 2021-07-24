@@ -55,3 +55,4 @@ reveal_type(void_dtype_obj["f0"])  # E: numpy.dtype[Any]
 reveal_type(void_dtype_obj[0])  # E: numpy.dtype[Any]
 reveal_type(void_dtype_obj[["f0", "f1"]])  # E: numpy.dtype[numpy.void]
 reveal_type(void_dtype_obj[["f0"]])  # E: numpy.dtype[numpy.void]
+

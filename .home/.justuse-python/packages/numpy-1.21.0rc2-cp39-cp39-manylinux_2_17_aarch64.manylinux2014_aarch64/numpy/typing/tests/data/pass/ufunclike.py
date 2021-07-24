@@ -44,3 +44,4 @@ np.isneginf(AR_LIKE_u)
 np.isneginf(AR_LIKE_i)
 np.isneginf(AR_LIKE_f)
 np.isneginf(AR_LIKE_f, out=AR_U)
+

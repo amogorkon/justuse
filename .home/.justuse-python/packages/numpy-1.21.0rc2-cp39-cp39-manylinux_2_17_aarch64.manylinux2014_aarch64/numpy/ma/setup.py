@@ -10,3 +10,4 @@ if __name__ == "__main__":
     from numpy.distutils.core import setup
     config = configuration(top_path='').todict()
     setup(**config)
+

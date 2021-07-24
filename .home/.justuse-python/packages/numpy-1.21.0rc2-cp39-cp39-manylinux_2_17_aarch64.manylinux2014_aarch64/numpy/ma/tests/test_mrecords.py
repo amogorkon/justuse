@@ -491,3 +491,4 @@ def test_record_array_with_object_field():
         dtype=[('a', int), ('b', object)])
     # getting an item used to fail
     y[1]
+

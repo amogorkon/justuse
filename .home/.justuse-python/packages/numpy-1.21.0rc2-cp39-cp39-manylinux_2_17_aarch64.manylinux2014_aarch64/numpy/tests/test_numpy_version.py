@@ -42,3 +42,4 @@ def test_short_version():
     else:
         assert_(np.__version__.split("+")[0] == np.version.short_version,
                 "short_version mismatch in development version")
+

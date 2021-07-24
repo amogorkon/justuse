@@ -101,3 +101,4 @@ class TestAsIntegerRatio:
                 pytest.skip("longdouble too small on this platform")
 
             assert_equal(nf / df, f, "{}/{}".format(n, d))
+

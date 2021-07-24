@@ -154,3 +154,4 @@ if __name__ == '__main__':
     log.set_verbosity(2)
     from numpy.distutils import customized_fcompiler
     print(customized_fcompiler(compiler='absoft').get_version())
+

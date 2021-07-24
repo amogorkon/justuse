@@ -267,3 +267,4 @@ def buildhooks(pymod):
     if len(ret['docs']) <= 1:
         ret['docs'] = ''
     return ret, fhooks[0]
+

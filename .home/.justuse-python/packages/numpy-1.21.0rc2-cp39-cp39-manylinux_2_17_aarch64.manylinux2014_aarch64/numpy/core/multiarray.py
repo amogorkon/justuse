@@ -1688,3 +1688,4 @@ def datetime_as_string(arr, unit=None, timezone=None, casting=None):
     datetime with units 'm' according to the rule 'safe'
     """
     return (arr,)
+

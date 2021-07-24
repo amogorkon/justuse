@@ -646,3 +646,4 @@ class TestCasting:
         with pytest.raises(TypeError,
                     match="casting from object to the parametric DType"):
             cast._resolve_descriptors((np.dtype("O"), None))
+

@@ -129,3 +129,4 @@ if __name__ == '__main__':
     print("-"*50)
     print("where on large arrays")
     timer('numpy.ma.where(nmxl>2,nmxl,nmyl)', 'numpy.ma   ', nloop=100)
+

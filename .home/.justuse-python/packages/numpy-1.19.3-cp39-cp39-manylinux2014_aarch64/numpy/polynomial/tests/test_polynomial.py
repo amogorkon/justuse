@@ -591,3 +591,4 @@ class TestMisc:
 
     def test_polyline(self):
         assert_equal(poly.polyline(3, 4), [3, 4])
+

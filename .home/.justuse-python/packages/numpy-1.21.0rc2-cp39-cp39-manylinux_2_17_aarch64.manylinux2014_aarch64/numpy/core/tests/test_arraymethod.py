@@ -56,3 +56,4 @@ class TestSimpleStridedCall:
         # This is private API, which may be modified freely
         with pytest.raises(error):
             self.method._simple_strided_call(*args)
+

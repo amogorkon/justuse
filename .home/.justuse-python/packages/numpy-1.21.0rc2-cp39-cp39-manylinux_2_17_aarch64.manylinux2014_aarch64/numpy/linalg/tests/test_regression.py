@@ -146,3 +146,4 @@ class TestRegression:
         u_lstsq, res, rank, sv = linalg.lstsq(G, b, rcond=None)
         # check results just in case
         assert_array_almost_equal(u_lstsq, u)
+

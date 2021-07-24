@@ -1604,3 +1604,4 @@ def set_string_function(f, repr=True):
 
 set_string_function(_default_array_str, False)
 set_string_function(_default_array_repr, True)
+

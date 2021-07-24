@@ -57,3 +57,4 @@ class TestErrstate:
             a // 0
             
         foo()
+

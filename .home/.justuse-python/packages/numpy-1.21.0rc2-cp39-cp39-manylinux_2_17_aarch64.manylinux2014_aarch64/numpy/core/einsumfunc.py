@@ -1429,3 +1429,4 @@ def einsum(*operands, out=None, optimize=False, **kwargs):
         return out
     else:
         return asanyarray(operands[0], order=output_order)
+

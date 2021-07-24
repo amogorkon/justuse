@@ -78,3 +78,4 @@ def test_zero_padding():
         np.not_equal,
         SeedSequence(42, spawn_key=(0,)).generate_state(4),
         expected42)
+

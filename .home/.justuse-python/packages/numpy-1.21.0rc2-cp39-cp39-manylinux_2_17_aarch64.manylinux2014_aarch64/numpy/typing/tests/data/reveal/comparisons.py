@@ -250,3 +250,4 @@ reveal_type(b > u4)  # E: numpy.bool_
 reveal_type(i > u4)  # E: numpy.bool_
 reveal_type(AR > u4)  # E: numpy.ndarray[Any, numpy.dtype[numpy.bool_]]
 reveal_type(SEQ > u4)  # E: numpy.ndarray[Any, numpy.dtype[numpy.bool_]]
+

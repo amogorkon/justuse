@@ -1537,3 +1537,4 @@ reveal_type(random_st.random_sample(size=(1, 2)))  # E: numpy.ndarray[Any, numpy
 reveal_type(random_st.tomaxint())  # E: int
 reveal_type(random_st.tomaxint(1))  # E: numpy.ndarray[Any, numpy.dtype[{int_}]]
 reveal_type(random_st.tomaxint((1,)))  # E: numpy.ndarray[Any, numpy.dtype[{int_}]]
+

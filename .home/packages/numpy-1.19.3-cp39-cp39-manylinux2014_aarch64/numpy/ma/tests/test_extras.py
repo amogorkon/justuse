@@ -1686,3 +1686,4 @@ class TestStack:
         assert_equal(c.shape, c_shp)
         assert_array_equal(a1.mask, c[..., 0].mask)
         assert_array_equal(a2.mask, c[..., 1].mask)
+

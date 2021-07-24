@@ -367,3 +367,4 @@ def test_longdouble_from_int(int_val):
     True, False])
 def test_longdouble_from_bool(bool_val):
     assert np.longdouble(bool_val) == np.longdouble(int(bool_val))
+

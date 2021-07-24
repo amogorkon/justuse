@@ -30,3 +30,4 @@ class TestIsFile:
         """Test if all ``.pyi`` files are properly installed."""
         for file in FILES:
             assert_(os.path.isfile(file))
+

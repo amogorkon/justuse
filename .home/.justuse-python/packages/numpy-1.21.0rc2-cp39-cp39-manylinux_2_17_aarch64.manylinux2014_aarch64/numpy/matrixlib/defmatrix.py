@@ -1111,3 +1111,4 @@ def bmat(obj, ldict=None, gdict=None):
         return matrix(obj)
 
 mat = asmatrix
+

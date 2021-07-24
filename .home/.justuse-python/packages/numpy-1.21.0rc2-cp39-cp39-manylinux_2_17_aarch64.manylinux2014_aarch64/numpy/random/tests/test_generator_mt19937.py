@@ -2604,3 +2604,4 @@ def test_contig_req_out(dist, order, dtype):
     assert variates is out
     variates = dist(out=out, dtype=dtype, size=out.shape)
     assert variates is out
+

@@ -197,3 +197,4 @@ class _ArrayMemoryError(MemoryError):
             "Unable to allocate {} for an array with shape {} and data type {}"
             .format(size_str, self.shape, self.dtype)
         )
+

@@ -189,3 +189,4 @@ reveal_type(float(AR_U))  # E: float
 reveal_type(complex(AR_f8))  # E: complex
 
 reveal_type(operator.index(AR_i8))  # E: int
+

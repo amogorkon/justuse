@@ -79,3 +79,4 @@ class TestFromInt:
 
     def test_uint64_from_negative(self):
         assert_equal(np.uint64(-2), np.uint64(18446744073709551614))
+

@@ -129,3 +129,4 @@ else:
     def plugin(version: str) -> t.Type[_NumpyPlugin]:
         """An entry-point for mypy."""
         raise MYPY_EX
+

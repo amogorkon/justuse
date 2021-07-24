@@ -52,3 +52,4 @@ reveal_type(nd.getfield(float, 8))  # E: numpy.ndarray
 
 # setflags does not return a value
 # fill does not return a value
+

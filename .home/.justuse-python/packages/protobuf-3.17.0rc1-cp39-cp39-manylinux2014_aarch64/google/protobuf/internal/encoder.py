@@ -828,3 +828,4 @@ def MapEncoder(field_descriptor):
       encode_message(write, entry_msg, deterministic)
 
   return EncodeField
+

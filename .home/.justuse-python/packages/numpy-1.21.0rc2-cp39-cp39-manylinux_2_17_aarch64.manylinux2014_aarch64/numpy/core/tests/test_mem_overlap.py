@@ -929,3 +929,4 @@ class TestUFunc:
 
         x += x.T
         assert_array_equal(x - x.T, 0)
+

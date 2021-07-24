@@ -113,3 +113,4 @@ class TestGenericAlias:
         if sys.version_info >= (3, 9):
             with pytest.raises(exc_type):
                 func(NDArray_ref)
+

@@ -80,3 +80,4 @@ def func(a: np.float32) -> None: ...
 
 func(f2)  # E: incompatible type
 func(f8)  # E: incompatible type
+

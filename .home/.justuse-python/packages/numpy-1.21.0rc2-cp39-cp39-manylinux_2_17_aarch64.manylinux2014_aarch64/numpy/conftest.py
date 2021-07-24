@@ -117,3 +117,4 @@ def add_np(doctest_namespace):
 @pytest.fixture(autouse=True)
 def env_setup(monkeypatch):
     monkeypatch.setenv('PYTHONHASHSEED', '0')
+

@@ -618,3 +618,4 @@ class BuiltInRoundComplexDType(_DeprecationTestCase):
             self.assert_not_deprecated(round, args=(scalar,))
             self.assert_not_deprecated(round, args=(scalar, 0))
             self.assert_not_deprecated(round, args=(scalar,), kwargs={'ndigits': 0})
+

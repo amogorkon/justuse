@@ -72,3 +72,4 @@ class CommaDecimalPointLocale:
 
     def __exit__(self, type, value, traceback):
         locale.setlocale(locale.LC_NUMERIC, locale=self.cur_locale)
+

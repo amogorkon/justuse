@@ -131,3 +131,4 @@ class TestIndexErrors:
         a = np.zeros((0, 3))
         assert_raises(IndexError, lambda: a.item(100))
         assert_raises(IndexError, lambda: a.itemset(100, 1))
+

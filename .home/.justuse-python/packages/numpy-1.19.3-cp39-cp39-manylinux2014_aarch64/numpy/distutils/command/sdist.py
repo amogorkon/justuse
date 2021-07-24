@@ -25,3 +25,4 @@ class sdist(old_sdist):
             self.filelist.extend(headers)
 
         return
+

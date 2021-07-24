@@ -671,3 +671,4 @@ def test_empty_indexing():
     # empty chararray instead of a chararray with a single empty string in it.
     s = np.chararray((4,))
     assert_(s[[]].size == 0)
+

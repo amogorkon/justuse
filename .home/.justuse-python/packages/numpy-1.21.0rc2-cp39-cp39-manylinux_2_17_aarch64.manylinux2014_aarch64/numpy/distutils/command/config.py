@@ -515,3 +515,4 @@ class GrabStdout:
 
     def restore(self):
         sys.stdout = self.sys_stdout
+

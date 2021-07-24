@@ -29,3 +29,4 @@ np.geomspace(None, 'bob')  # E: Argument 1
 np.stack(generator)  # E: No overload variant
 np.hstack({1, 2})  # E: incompatible type
 np.vstack(1)  # E: incompatible type
+

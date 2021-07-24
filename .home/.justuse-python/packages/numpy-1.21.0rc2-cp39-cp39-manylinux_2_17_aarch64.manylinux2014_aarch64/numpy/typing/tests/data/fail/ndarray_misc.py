@@ -35,3 +35,4 @@ AR_M.__int__()  # E: Invalid self argument
 AR_M.__float__()  # E: Invalid self argument
 AR_M.__complex__()  # E: Invalid self argument
 AR_b.__index__()  # E: Invalid self argument
+

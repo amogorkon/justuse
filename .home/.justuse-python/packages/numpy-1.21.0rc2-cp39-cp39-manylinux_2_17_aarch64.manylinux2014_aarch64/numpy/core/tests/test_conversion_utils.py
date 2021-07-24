@@ -203,3 +203,4 @@ class TestIntpConverter:
         assert self.conv([1]*32) == (1,)*32
         with pytest.raises(ValueError):
             self.conv([1]*33)
+

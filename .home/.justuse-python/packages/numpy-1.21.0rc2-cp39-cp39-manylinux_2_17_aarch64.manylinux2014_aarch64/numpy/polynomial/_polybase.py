@@ -1139,3 +1139,4 @@ class ABCPolyBase(abc.ABC):
         if window is None:
             window = cls.window
         return series.convert(domain, cls, window)
+

@@ -38,3 +38,4 @@ vals = rng.standard_normal(n)
 
 for i in range(n):
     assert vals[i] == vals_cffi[i]
+

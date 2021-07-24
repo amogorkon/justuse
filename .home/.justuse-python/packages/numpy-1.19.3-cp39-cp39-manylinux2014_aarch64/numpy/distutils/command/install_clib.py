@@ -38,3 +38,4 @@ class install_clib(Command):
 
     def get_outputs(self):
         return self.outfiles
+

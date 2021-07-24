@@ -19,3 +19,4 @@ class PathScaleCCompiler(UnixCCompiler):
                              compiler_cxx=cxx_compiler,
                              linker_exe=cc_compiler,
                              linker_so=cc_compiler + ' -shared')
+

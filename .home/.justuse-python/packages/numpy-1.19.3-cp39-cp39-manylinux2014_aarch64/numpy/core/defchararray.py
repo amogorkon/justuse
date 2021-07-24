@@ -2793,3 +2793,4 @@ def asarray(obj, itemsize=None, unicode=None, order=None):
     """
     return array(obj, itemsize, copy=False,
                  unicode=unicode, order=order)
+

@@ -2072,3 +2072,4 @@ class Chebyshev(ABCPolyBase):
     domain = np.array(chebdomain)
     window = np.array(chebdomain)
     basis_name = 'T'
+

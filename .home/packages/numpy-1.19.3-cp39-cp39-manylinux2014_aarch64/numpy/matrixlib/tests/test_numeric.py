@@ -15,3 +15,4 @@ def test_diagonal():
     assert_equal(b1.diagonal(), diag_b1)
     assert_equal(np.diagonal(b1), array_b1)
     assert_equal(np.diag(b1), array_b1)
+

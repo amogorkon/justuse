@@ -29,3 +29,4 @@ class TestRegression:
         x = np.asmatrix(np.random.uniform(0, 1, (3, 3)))
         assert_equal(x.std().shape, ())
         assert_equal(x.argmax().shape, ())
+

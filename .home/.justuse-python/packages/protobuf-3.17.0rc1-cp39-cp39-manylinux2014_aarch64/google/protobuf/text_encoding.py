@@ -115,3 +115,4 @@ def CUnescape(text):
           .decode('unicode_escape')
           # Make it bytes again to return the proper type.
           .encode('raw_unicode_escape'))
+

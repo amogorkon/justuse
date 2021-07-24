@@ -192,3 +192,4 @@ _DEFAULT = SymbolDatabase(pool=descriptor_pool.Default())
 def Default():
   """Returns the default SymbolDatabase."""
   return _DEFAULT
+

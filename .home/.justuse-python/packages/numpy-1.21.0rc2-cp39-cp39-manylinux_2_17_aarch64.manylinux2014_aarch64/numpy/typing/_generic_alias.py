@@ -206,3 +206,4 @@ elif sys.version_info >= (3, 9):
 else:
     _DType = _GenericAlias(np.dtype, (ScalarType,))
     NDArray = _GenericAlias(np.ndarray, (Any, _DType))
+

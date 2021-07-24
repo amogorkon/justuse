@@ -26,3 +26,4 @@ if __name__ == '__main__':
     from distutils import log
     log.set_verbosity(2)
     print(customized_fcompiler(compiler='none').get_version())
+

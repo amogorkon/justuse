@@ -1824,3 +1824,4 @@ def ParseEnum(field, value):
       raise ValueError('Enum type "%s" has no value with number %d.' %
                        (enum_descriptor.full_name, number))
   return enum_value.number
+

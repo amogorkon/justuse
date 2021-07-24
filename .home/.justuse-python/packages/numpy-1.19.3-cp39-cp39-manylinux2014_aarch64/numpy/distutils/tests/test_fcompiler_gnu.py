@@ -53,3 +53,4 @@ class TestGFortranVersions:
         for vs, _ in g77_version_strings:
             v = fc.version_match(vs)
             assert_(v is None, (vs, v))
+

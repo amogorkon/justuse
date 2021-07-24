@@ -2021,3 +2021,4 @@ def test_ufunc_warn_with_nan(ufunc):
     else:
         raise ValueError('ufunc with more than 2 inputs')
 
+

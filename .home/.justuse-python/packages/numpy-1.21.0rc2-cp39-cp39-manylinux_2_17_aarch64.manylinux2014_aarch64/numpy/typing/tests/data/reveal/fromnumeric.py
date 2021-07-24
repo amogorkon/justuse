@@ -262,3 +262,4 @@ reveal_type(np.var(A, keepdims=True))  # E: Any
 reveal_type(np.var(B, keepdims=True))  # E: Any
 reveal_type(np.var(b, out=d))  # E: Any
 reveal_type(np.var(B, out=d))  # E: Any
+

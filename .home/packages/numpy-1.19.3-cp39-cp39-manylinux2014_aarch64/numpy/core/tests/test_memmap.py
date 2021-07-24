@@ -211,3 +211,4 @@ class TestMemmap:
 
         # ok now the file is not empty
         memmap(self.tmpfp, shape=(0,4), mode='w+')
+

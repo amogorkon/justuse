@@ -362,3 +362,4 @@ class NumpyTestProgram(nose.core.TestProgram):
         self.result = self.testRunner.run(self.test)
         self.success = self.result.wasSuccessful()
         return self.success
+

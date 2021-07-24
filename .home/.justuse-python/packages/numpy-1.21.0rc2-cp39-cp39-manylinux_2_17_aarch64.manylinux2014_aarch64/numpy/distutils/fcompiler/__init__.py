@@ -1020,3 +1020,4 @@ def get_f77flags(src):
 
 if __name__ == '__main__':
     show_fcompilers()
+

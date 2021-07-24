@@ -97,3 +97,4 @@ class TestCharacter:
         res_u = u'abc' * 5
         assert_(np_s * 5 == res_s)
         assert_(np_u * 5 == res_u)
+

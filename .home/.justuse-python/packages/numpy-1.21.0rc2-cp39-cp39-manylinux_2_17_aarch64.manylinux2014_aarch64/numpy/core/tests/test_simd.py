@@ -973,3 +973,4 @@ for target_name, npyv in targets.items():
             if skip_m:
                 pytest.mark.skip(reason=skip_m)(tcls)
             globals()[tcls.__name__] = tcls
+

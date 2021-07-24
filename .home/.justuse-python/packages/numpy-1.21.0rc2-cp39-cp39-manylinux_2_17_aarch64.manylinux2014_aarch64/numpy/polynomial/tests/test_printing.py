@@ -388,3 +388,4 @@ class TestLatexRepr:
         p = poly.HermiteE([1, 2, 3])
         assert_equal(self.as_latex(p),
             r'$x \mapsto 1.0\,{He}_{0}(x) + 2.0\,{He}_{1}(x) + 3.0\,{He}_{2}(x)$')
+

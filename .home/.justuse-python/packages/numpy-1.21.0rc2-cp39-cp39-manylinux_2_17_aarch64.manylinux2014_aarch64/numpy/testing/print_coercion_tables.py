@@ -197,3 +197,4 @@ if __name__ == '__main__':
     print_coercion_table(np.typecodes['All'], 0, 0, False, True)
     print("New casting type promotion:")
     print_new_cast_table(can_cast=True, legacy=True, flags=True)
+

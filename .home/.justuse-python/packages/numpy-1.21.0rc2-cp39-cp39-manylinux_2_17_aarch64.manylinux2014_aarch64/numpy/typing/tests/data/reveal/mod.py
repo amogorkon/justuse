@@ -145,3 +145,4 @@ reveal_type(divmod(f8, f8))  # E: Tuple[{float64}, {float64}]
 reveal_type(divmod(f4, f8))  # E: Tuple[{float64}, {float64}]
 reveal_type(divmod(f4, f4))  # E: Tuple[{float32}, {float32}]
 reveal_type(divmod(AR_b, f8))  # E: Tuple[numpy.ndarray[Any, numpy.dtype[numpy.floating[Any]]], numpy.ndarray[Any, numpy.dtype[numpy.floating[Any]]]]
+

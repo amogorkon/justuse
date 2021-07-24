@@ -135,3 +135,4 @@ def _MakeFileDescriptorProto(proto_file_name, full_name, field_items):
     field_proto.label = descriptor_pb2.FieldDescriptorProto.LABEL_OPTIONAL
     field_proto.type = f_type
   return file_proto
+

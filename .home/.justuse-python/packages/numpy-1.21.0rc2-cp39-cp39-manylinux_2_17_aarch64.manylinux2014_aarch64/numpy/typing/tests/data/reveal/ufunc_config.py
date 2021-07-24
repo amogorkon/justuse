@@ -23,3 +23,4 @@ reveal_type(np.geterrcall())  # E: Union[None, def (builtins.str, builtins.int) 
 
 reveal_type(np.errstate(call=func, all="call"))  # E: numpy.errstate[def (a: builtins.str, b: builtins.int)]
 reveal_type(np.errstate(call=Write(), divide="log", over="log"))  # E: numpy.errstate[ufunc_config.Write]
+

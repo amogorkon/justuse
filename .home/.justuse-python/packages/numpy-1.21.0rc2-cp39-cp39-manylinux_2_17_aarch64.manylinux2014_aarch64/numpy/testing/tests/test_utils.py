@@ -1612,3 +1612,4 @@ class TestAssertNoGcCycles:
         finally:
             # make sure that we stop creating reference cycles
             ReferenceCycleInDel.make_cycle = False
+

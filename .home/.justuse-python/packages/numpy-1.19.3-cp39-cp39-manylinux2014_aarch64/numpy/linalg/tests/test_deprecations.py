@@ -18,3 +18,4 @@ def test_qr_mode_full_future_warning():
     assert_warns(DeprecationWarning, np.linalg.qr, a, mode='f')
     assert_warns(DeprecationWarning, np.linalg.qr, a, mode='economic')
     assert_warns(DeprecationWarning, np.linalg.qr, a, mode='e')
+

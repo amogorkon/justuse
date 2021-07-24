@@ -2812,3 +2812,4 @@ def _multi_dot(arrays, order, i, j, out=None):
         return dot(_multi_dot(arrays, order, i, order[i, j]),
                    _multi_dot(arrays, order, order[i, j] + 1, j),
                    out=out)
+

@@ -1181,3 +1181,4 @@ def MakeDescriptor(desc_proto, package='', build_file_if_cpp=True,
                     list(nested_types.values()), list(enum_types.values()), [],
                     options=_OptionsOrNone(desc_proto),
                     create_key=_internal_create_key)
+

@@ -45,3 +45,4 @@ nd3.squeeze(0)
 
 nd4 = np.array([[[1, 2]]])
 nd4.squeeze((0, 1))
+

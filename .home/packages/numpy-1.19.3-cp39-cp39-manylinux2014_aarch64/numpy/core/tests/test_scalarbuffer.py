@@ -117,3 +117,4 @@ class TestScalarPEP3118:
         code_points = np.frombuffer(v, dtype='i4')
 
         assert_equal(code_points, [ord(c) for c in s])
+

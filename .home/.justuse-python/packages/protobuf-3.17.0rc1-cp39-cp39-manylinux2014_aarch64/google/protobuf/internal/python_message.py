@@ -1539,3 +1539,4 @@ class _OneofListener(_Listener):
       super(_OneofListener, self).Modified()
     except ReferenceError:
       pass
+

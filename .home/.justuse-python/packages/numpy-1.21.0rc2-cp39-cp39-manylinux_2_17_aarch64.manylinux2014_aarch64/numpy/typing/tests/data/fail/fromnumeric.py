@@ -152,3 +152,4 @@ np.var(a, axis=1.0)  # E: incompatible type
 np.var(a, out=False)  # E: incompatible type
 np.var(a, ddof='test')  # E: incompatible type
 np.var(a, keepdims=1.0)  # E: incompatible type
+

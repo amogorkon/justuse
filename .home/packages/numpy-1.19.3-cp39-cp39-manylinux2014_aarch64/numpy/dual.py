@@ -67,3 +67,4 @@ def restore_func(name):
 def restore_all():
     for name in _restore_dict.keys():
         restore_func(name)
+

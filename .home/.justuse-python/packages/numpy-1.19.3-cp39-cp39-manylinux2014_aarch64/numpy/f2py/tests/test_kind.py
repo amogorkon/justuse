@@ -30,3 +30,4 @@ class TestKind(util.F2PyTest):
             assert_(selectedrealkind(i) in [selected_real_kind(i), -1],
                     'selectedrealkind(%s): expected %r but got %r' %
                     (i, selected_real_kind(i), selectedrealkind(i)))
+

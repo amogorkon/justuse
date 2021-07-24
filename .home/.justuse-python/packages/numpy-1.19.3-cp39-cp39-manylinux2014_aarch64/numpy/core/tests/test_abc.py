@@ -52,3 +52,4 @@ class TestABC:
                     "{0} is not instance of Integral".format(t.__name__))
             assert_(issubclass(t, numbers.Integral),
                     "{0} is not subclass of Integral".format(t.__name__))
+

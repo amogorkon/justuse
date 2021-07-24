@@ -2448,3 +2448,4 @@ def test_broadcast_size_scalar():
     random.normal(mu, sigma, size=3)
     with pytest.raises(ValueError):
         random.normal(mu, sigma, size=2)
+
