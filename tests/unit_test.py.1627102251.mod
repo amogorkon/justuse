@@ -21,8 +21,6 @@ import use
 
 __package__ = "tests"
 
-import logging
-logging.root.setLevel(logging.DEBUG)
 @pytest.fixture()
 def reuse():
     # making a completely new one each time would take ages (_registry)
