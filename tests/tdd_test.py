@@ -8,7 +8,7 @@ import pytest
 import requests
 from yarl import URL
 
-from unit_test import reuse
+from .unit_test import reuse
 
 not_local = not Path("local_switch").exists()
 
