@@ -554,7 +554,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             "(?P<python_tag>.*)-"
             "(?P<abi_tag>.*)-"
             "(?P<platform_tag>.*)\\."
-            "(?P<ext>whl|zip|tar|egg|tar\\.gz)",
+            "(?P<ext>whl|zip|tar|tar\\.gz)",
             filename
         )
         if not match:
