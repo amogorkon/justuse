@@ -13,39 +13,21 @@ on:
   deployment_status:
   fork:
   gollum:
-  issue_comment:
-    types: [created, deleted]
-  issues:
-    types: [transferred, pinned, unpinned, closed, reopened, assigned, unassigned, labeled, unlabeled, locked, unlocked, milestoned, demilestoned]
-  label:
-    types: [created, edited, deleted]
   milestone:
     types: [created, closed, opened, edited, deleted]
   page_build:
-  project:
-    types: [created, updated, closed, reopened, edited, deleted]
-  project_card:
-    types: [created, moved, converted, edited, deleted]
-  project_column:
-    types: [created, updated, moved, deleted]
-  public:
   pull_request:
     types: [assigned, unassigned, labeled, unlabeled, opened, edited, closed, reopened, synchronize, ready_for_review, locked, unlocked, review_requested, review_request_removed]
   pull_request_review:
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
     types: [created, edited, deleted]
-  pull_request_target:
-    types: [assigned, unassigned, labeled, unlabeled, opened, edited, closed, reopened, synchronize, ready_for_review, locked, unlocked, review_requested, review_request_removed]
   push:
   registry_package:
     types: [published, updated]
   release:
     types: [published, unpublished, created, edited, deleted, prereleased, released]
   status:
-  watch:
-    types: [started]
-
   workflow_dispatch:
 
 jobs:
