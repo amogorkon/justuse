@@ -559,8 +559,6 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             "(?P<ext>whl|zip|tar|egg|tar\\.gz)",
             filename
         )
-        if not match:
-            log.debug(f"filename {filename} could not be matched")
         return match.groupdict() if match else {}
 
     @staticmethod
@@ -569,29 +567,28 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         # https://packaging.pypa.io/en/latest/specifiers.html
         specifier = info.get("requires_python", "")  # SpecifierSet("") matches anything, no need to artificially lock down versions at this point
         # f.. you PyPI
-        if specifier is None:
-            specifier = ""
-        return sys_version in SpecifierSet(specifier)
+        return sys_version in SpecifierSet(specifier or "")
 
     @staticmethod
     def _is_platform_compatible(info:Dict[str, str], platform_tags:set, include_sdist=False):
         assert isinstance(info, dict) and isinstance(platform_tags, set)
         info.update(Use._parse_filename(info["filename"]))  # filename as API, seriously WTF...
-        our_python_tag = "".join((
-                                packaging.tags.interpreter_name(),
-                                packaging.tags.interpreter_version()))
-        python_tag = info.get("python_tag", "")
-        platform_tag = info.get("platform_tag", "")
-        platform_tags_strs = set(map(
-            lambda p: p if isinstance(p, str) \
-                else p.platform, 
-            platform_tags))
+        our_python_tag:str = "".join((
+                               packaging.tags.interpreter_name(),
+                               packaging.tags.interpreter_version()))
+        python_tag:str = info.get("python_tag", "")
+        platform_tag:str = info.get("platform_tag", "")
+        platform_tags_strs:Set[str] = {
+          p if isinstance(p, str) else p.platform
+          for p in platform_tags
+        }
         for one_platform_tag in platform_tag.split("."):
             is_match = one_platform_tag in platform_tags_strs and \
                          our_python_tag == python_tag
-            log.debug(f"%s: \"%s\" in pl.. and %s == %s", is_match, one_platform_tag, python_tag, our_python_tag)
             if is_match:
-                log.info("[MATCH] \"%s\" in {platform_tags_strs=!r} and %s == %s", one_platform_tag, python_tag, our_python_tag)
+                log.info(
+                    f"[Y] %r in {platform_tags_strs=!r}, %s == %s",
+                    one_platform_tag, python_tag, our_python_tag)
                 return True
         return False
 
@@ -616,20 +613,16 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             interpreter_tag = packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
         assert isinstance(interpreter_tag, str)
         
-        results = [(info["version"], info \
-          ["digests"] \
-          [hash_algo]) \
-          for info in 
-                    sorted(urls, 
-                            key=lambda info: info.get("packagetype", ""))  # pre-sorting by type should ensure that we prefer binary packages over raw source
-                        if Use._is_version_satisfied(info, sys_version) and
-                            Use._is_platform_compatible(info, platform_tags) and
-                            not info["yanked"]
-                    ]
-        if results:
-            return results[0]
-        else: 
-            return ("", "")
+        results = [
+          (info["version"], info["digests"][hash_algo])
+          for info in sorted(urls, 
+                      key=lambda info: info.get("packagetype", ""))  # pre-sorting by type should ensure that we prefer binary packages over raw source
+                  if Use._is_version_satisfied(info, sys_version) 
+                 and Use._is_platform_compatible(info, platform_tags)
+                 and not info["yanked"]
+        ]
+        results.append(("", ""))
+        return results[0]
 
     @staticmethod
     def _find_latest_working_version(releases: Dict[str, List[Dict[str, str]]], # {version: [{comment_text: str, filename: str, url: str, version: str, hash: str, build_tag: str, python_tag: str, abi_tag: str, platform_tag: str}]}
@@ -637,14 +630,16 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                                     hash_algo:str,
                                     #testing
                                     sys_version:Version=None,
-                                    platform_tags:Set[str]=frozenset(),
+                                    platform_tags:Set[str]
+                                        =frozenset(),
                                     interpreter_tag:str=None,                                
                                     version=None,
                                     ) -> Tuple[str,str]:
         assert isinstance(releases, dict)
         assert isinstance(hash_algo, str)
         if not sys_version:
-            sys_version = Version(".".join(map(str, sys.version_info[0:3])))
+            sys_version = Version(
+                ".".join(map(str, sys.version_info[0:3])))
         assert isinstance(sys_version, Version)
         if not platform_tags: 
             platform_tags = set([*get_supported()])
@@ -658,17 +653,14 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         # update the release dicts to hold all info canonically
         # be aware, the json returned from pypi ["releases"] can contain empty lists as dists :/
         for ver, dists in releases.items():
-            if not dists:
-                continue
+            if not dists: continue
             for d in dists:
                 d["version"] = ver # Add version info
                 d.update(Use._parse_filename(d["filename"]))
-        
-        result = ("", "")
-        for ver, dists in sorted(releases.items(), key=lambda item: Version(item[0]), reverse=True):
-            print(ver)
-            if not dists:
-                continue
+        result:Tuple[str,str] = ("", "")
+        for ver, dists in sorted(releases.items(),
+                key=lambda item: Version(item[0]), reverse=True):
+            if not dists: continue
             for info in dists:
                 if info["yanked"]: continue
                 info.update(Use._parse_filename(info["filename"]))
@@ -1362,5 +1354,4 @@ if not test_version:
 hacks_path = Path(Path(__file__).parent, "package_hacks.py")
 assert hacks_path.exists()
 use(hacks_path)
-
 
