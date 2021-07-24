@@ -180,18 +180,17 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
         tgt.unlink()
     tgt.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
     
-    log.info("PROTOBUF: tgt=%s, symlink_to(folder=%s)", tgt, folder)
-    tgt.symlink_to(folder.absolute())
-    log.info("SUCCEEDED: tgt=%s, symlink_to(folder=%s)", tgt, folder)
+    log.info("PROTOBUF: folder=%s, symlink_to(tgt=%s)", folder, tgt)
+    folder.symlink_to(tgt.absolute())
+    log.info("PROTOBUF: folder=%s, symlink_to(tgt=%s): OK", folder, tgt)
     os.chdir(str(folder))
     
     pwd = Path.cwd()
-    log.info("PROTOBUF: Entered directory: pwd=%s", pwd)
     pth_src = \
         "\n\n".join([readstring(str(pth_path)) for pth_path in folder.glob("*.pth")])
     log.info("pth_src=[%s]", pth_src)
     sitedir = str(folder)
-    log.info("sitedir=[%s]", sitedir)
+    
     rslt = exec(
       compile(
         pth_src,
