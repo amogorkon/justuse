@@ -99,42 +99,59 @@ def save_module_info(package_name, rdists, version, url, path, that_hash, folder
     })
     use.persist_registry()
 
-def ensure_package_extracted_to(archive_path, folder):
-    folder.mkdir(mode=0o755, parents=True, exist_ok=True)
-    log.info("Extracting %s to %s ...", archive_path, folder)
-    fileobj = archive = None
-    if archive_path.suffix in (".whl", ".egg", ".zip"):
-        fileobj = open(tempfile.mkstemp()[0], "w")
-        archive = zipfile.ZipFile(archive_path, "r")
-    else:
-        fileobj = (gzip.open if archive_path.suffix == ".gz" else open)(archive_path, "r")
-        archive = tarfile.TarFile(fileobj=fileobj, mode="r")
-    with archive as file:
-        with fileobj as _:
-            file.extractall(folder)
-            create_solib_links(file, folder)
-
 @use.register_hack("numpy", specifier=SpecifierSet(">=1.0"))
 def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
     log.debug("hacking numpy!")
-    ensure_package_extracted_to(path, folder)
+    if not folder.exists():
+        folder.mkdir(mode=0o755, parents=True, exist_ok=True)
+        log.info("Extracting %s (from %s) to %s ...", path, url, folder)
+        fileobj = archive = None
+        if path.suffix in (".whl", ".egg", ".zip"):
+            fileobj = open(tempfile.mkstemp()[0], "w")
+            archive = zipfile.ZipFile(path, "r")
+        else:
+            fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
+            archive = tarfile.TarFile(fileobj=fileobj, mode="r")
+        with archive as file:
+            with fileobj as _:
+                file.extractall(folder)
+                create_solib_links(file, folder)
     if sys.path[0] != "": sys.path.insert(0, "")
     original_cwd = Path.cwd()
+    exc = mod = None
     try:
         os.chdir(folder)
         mod = importlib.import_module(module_name)
-        save_module_info(package_name, rdists, version, url, path, that_hash, folder)
-        return mod
+    except ImportError:
+        if fatal_exceptions: raise
+        exc = traceback.format_exc()
     finally:
         remove_cached_module(module_name)
-        os.chdir(original_cwd)    
-    
+        os.chdir(original_cwd)
+    if not exc:
+        save_module_info(package_name, rdists, version, url, path, that_hash, folder)
+    return mod
+
 @use.register_hack("protobuf", specifier=SpecifierSet(">=1.0"))
 def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
     log.debug("hacking protobuf!")
-    ensure_package_extracted_to(path, folder)
+    if not folder.exists():
+        folder.mkdir(mode=0o755, parents=True, exist_ok=True)
+        log.info("Extracting %s (from %s) to %s ...", path, url, folder)
+        fileobj = archive = None
+        if path.suffix in (".whl", ".egg", ".zip"):
+            fileobj = open(tempfile.mkstemp()[0], "w")
+            archive = zipfile.ZipFile(path, "r")
+        else:
+            fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
+            archive = tarfile.TarFile(fileobj=fileobj, mode="r")
+        with archive as file:
+            with fileobj as _:
+                file.extractall(folder)
+                create_solib_links(file, folder)
     if sys.path[0] != "": sys.path.insert(0, "")
     original_cwd = Path.cwd()
+    exc = mod = None
     try:
         os.chdir(folder)
         log.info("in dir: %s; original_cwd=%s", Path.cwd(), original_cwd)
@@ -159,9 +176,12 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
         sys.modules[module_name] = mod
         log.info("returning mod=%s", mod)
         mod = importlib.import_module(module_name)
-        save_module_info(package_name, rdists, version, url, path, that_hash, folder)
-        return mod
+    except ImportError:
+        if fatal_exceptions: raise
+        exc = traceback.format_exc()
     finally:
         remove_cached_module(module_name)
         os.chdir(original_cwd)
-    
+    if not exc:
+        save_module_info(package_name, rdists, version, url, path, that_hash, folder)
+    return mod
