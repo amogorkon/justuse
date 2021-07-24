@@ -17,16 +17,16 @@ import os
 import sys
 import tarfile
 import tempfile
-import traceback
 import zipfile
 from importlib.machinery import EXTENSION_SUFFIXES
 from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
 
-from packaging.specifiers import SpecifierSet
-
 # this is possible because we don't *import* this file, but use() it!
-import use
+__package__ = "use.use"
+from ..use import use as use1 # type: ignore
+use1: 'Use' = use1
+use = use1
 
 root.addHandler(StreamHandler(sys.stderr))
 if "DEBUG" in os.environ: root.setLevel(DEBUG)
@@ -115,8 +115,8 @@ def ensure_extracted(path, folder, url=None):
                 file.extractall(folder)
                 create_solib_links(file, folder)
 
-@use.register_hack("numpy", specifier=SpecifierSet(">=1.0"))
-def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
+@use.register_hack("numpy")
+def numpy(*, package_name, rdists, version, url, path, that_hash, folder, module_name):
     log.debug("hacking numpy!")
     ensure_extracted(path, folder, url)
     if sys.path[0] != "": sys.path.insert(0, "")
@@ -131,35 +131,27 @@ def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_
         remove_cached_module(module_name)
         os.chdir(original_cwd)
 
-@use.register_hack("protobuf", specifier=SpecifierSet(">=1.0"))
-def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
-    log.debug("hacking protobuf!")
+@use.register_hack("protobuf")
+def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, module_name):
     ensure_extracted(path, folder, url)
-    if sys.path[0] != "": sys.path.insert(0, "")
     original_cwd = Path.cwd()
-    mod = None
     try:
         os.chdir(folder)
         # needed because protobuf corrupts sys.path to looking here
         tgt = use.home / Path(
             f".local/lib/python3.{sys.version_info[1]}/site-packages")
-        log.info("folder=%s, symlink_to(tgt=%s)", folder, tgt)
         # remove any existing symlink here in case we already
         # loaded a different version
         tgt.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
-        tgt.unlink(missing_ok=True)
-        tgt.symlink_to(folder.absolute())
-        pth_src = "\n\n".join(readstring(str(pth_path)) \
-            for pth_path in folder.glob("*.pth"))
-        log.info("pth_src=[%s]", pth_src)
-        # variable is needed as protobuf assumes it will be in stack
-        sitedir = str(folder)
+        if tgt.exists(): tgt.unlink()
+        tgt.symlink_to(folder.absolute(), target_is_directory=True)
+        pth_src = "\n\n".join(readstring(str(pth_path)) for pth_path in folder.glob("*.pth"))
+        sitedir = "" #type: ignore
         # compile the hacky duct-tape protobuf embeds in its '.pth'
         # to make their 'google' namespace work properly - disgusting
         exec(compile(pth_src, "pth_file.py", "exec"))
         remove_cached_module(module_name)
-        mod = use(Path("./google/protobuf/__init__.py"))
-        sys.modules[module_name] = mod
+        sys.modules[module_name] = mod = use(Path("./google/protobuf/__init__.py"))
         save_module_info(package_name, rdists, version, url, path, that_hash, folder)
         return mod
     finally:

@@ -57,6 +57,3 @@ def test_is_platform_compatible_win(reuse):
         'yanked_reason': None}
     platform_tags = set(map(lambda i:i.platform, reuse.use.get_supported()))
     assert reuse._is_platform_compatible(info, platform_tags)
-
-def test_template(reuse):
-    pass
