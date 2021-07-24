@@ -575,9 +575,6 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
     def _is_platform_compatible(info:Dict[str, str], platform_tags:set, include_sdist=False):
         assert isinstance(info, dict) and isinstance(platform_tags, set)
         info.update(Use._parse_filename(info["filename"]))  # filename as API, seriously WTF...
-        # source is compatible with any platform by default, just need to check the version
-        if info["python_version"] == "source" and include_sdist:
-            pass
         our_python_tag = "".join((
                                 packaging.tags.interpreter_name(),
                                 packaging.tags.interpreter_version()))

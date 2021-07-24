@@ -149,119 +149,119 @@ def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_
 
 @use.register_hack("protobuf", specifier=SpecifierSet(">=1.0"))
 def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
-    original_cwd = Path.cwd()
-    
-    # Update package version metadata
-    assert url is not None
-    mod = None
-    if not folder.exists():
-        folder.mkdir(mode=0o755, parents=True, exist_ok=True)
-        print("Extracting to", folder, "...")
+  original_cwd = Path.cwd()
 
-        fileobj = archive = None
-        if path.suffix in (".whl", ".egg", ".zip"):
-            fileobj = open(tempfile.mkstemp()[0], "w")
-            archive = zipfile.ZipFile(path, "r")
-        else:
-            fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
-            archive = tarfile.TarFile(fileobj=fileobj, mode="r")
-        with archive as file:
-            with fileobj as _:
-                file.extractall(folder)
-                create_solib_links(file, folder)
-        log.info("Extracted.")
-    log.info("PROTOBUF: in dir: %s; original_cwd=%s", Path.cwd(), original_cwd)
-    tgt = use.home / Path(f".local/lib/python3.{sys.version_info[1]}/site-packages");
-    log.info("folder=%s, symlink_to(tgt=%s)", folder, tgt)
-    if tgt.exists():
-        tgt.unlink()
-    tgt.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
-    
-    log.info("PROTOBUF: tgt=%s, symlink_to(folder=%s)", tgt, folder)
-    tgt.symlink_to(folder.absolute())
-    log.info("SUCCEEDED: tgt=%s, symlink_to(folder=%s)", tgt, folder)
-    os.chdir(str(folder))
-    
-    pwd = Path.cwd()
-    log.info("PROTOBUF: Entered directory: pwd=%s", pwd)
-    pth_src = \
-        "\n\n".join([readstring(str(pth_path)) for pth_path in folder.glob("*.pth")])
-    log.info("pth_src=[%s]", pth_src)
-    sitedir = str(folder)
-    log.info("sitedir=[%s]", sitedir)
-    rslt = exec(
-      compile(
-        pth_src,
-        "pth_file.py",
-        "exec"
-      ),
-    )
-    log.info("rslt = %s", rslt)
-    
-    exc = None
-    importlib.invalidate_caches()
-    if sys.path[0] != "":
-        sys.path.insert(0, "")
-    try:
-      module_to_del = []
-      module_parts = module_name.split(".")
-      for part in module_parts:
-          module_to_del.append(part)
-          module_key = ".".join(module_to_del)
-          if module_key in sys.modules:
-              log.info("Deleting sys.modules[%s]",
-                  repr(module_key))
-              del sys.modules[module_key]
-            
+  # Update package version metadata
+  assert url is not None
+  mod = None
+  if not folder.exists():
+      folder.mkdir(mode=0o755, parents=True, exist_ok=True)
+      print("Extracting to", folder, "...")
 
-      if not mod:
-        log.debug("Trying importlib.import_module")
-        log.debug("  with cwd=%s,", os.getcwd())
-        log.debug("  sys.path=%s", sys.path)
-        log.debug("  sys.modules=%s", sys.modules)
+      fileobj = archive = None
+      if path.suffix in (".whl", ".egg", ".zip"):
+          fileobj = open(tempfile.mkstemp()[0], "w")
+          archive = zipfile.ZipFile(path, "r")
+      else:
+          fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
+          archive = tarfile.TarFile(fileobj=fileobj, mode="r")
+      with archive as file:
+          with fileobj as _:
+              file.extractall(folder)
+              create_solib_links(file, folder)
+      log.info("Extracted.")
+  log.info("PROTOBUF: in dir: %s; original_cwd=%s", Path.cwd(), original_cwd)
+  tgt = use.home / Path(f".local/lib/python3.{sys.version_info[1]}/site-packages");
+  log.info("folder=%s, symlink_to(tgt=%s)", folder, tgt)
+  if tgt.exists():
+      tgt.unlink()
+  tgt.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
 
-        #mod_goog = use(Path("./google/__init__.py"))
-        #log.debug("  mod_goog=%s", mod_goog)
-        #log.debug("mod_goog.__spec__=%s",
-        #   getattr(mod_goog,"__spec__",""))
-        
-        #mod_goog.__package__ = "google"
-        #mod_goog.__name__ = "__init__"
-        #sys.modules["google"] = mod_goog
-        
-        mod_pbuf = use(Path("./google/protobuf/__init__.py"))
-        log.debug("  mod_pbuf=%s", mod_pbuf)
-        log.debug("mod_pbuf.__spec__=%s",
-           getattr(mod_pbuf,"__spec__",""))
-        
-        sys.modules["google.protobuf"] = mod_pbuf
-        
-        # setattr(mod_goog, "protobuf", mod_pbuf)
-        mod = mod_pbuf
-        
-        log.debug("  mod=%s", mod)
-        log.debug("mod.__file__=%s",getattr(mod, "__file__",""))
-        log.debug("mod.__spec__=%s",getattr(mod, "__spec__",""))
-        log.debug("mod.__version__=%s",getattr(mod, "__version__",""))
-        
-    except BaseException as exc:
-        log.error(exc)
-        raise
-    log.info("returning mod=%s", mod)
-    
-    if package_name not in rdists:
-        rdists[package_name] = {}
-    if version not in rdists[package_name]:
-        rdists[package_name][version] = {}
-    rdist_info = rdists[package_name][version]
-    rdist_info.update({
-        "package": package_name,
-        "version": version,
-        "url": url.human_repr(),
-        "path": str(path) if path else None,
-        "folder": folder.absolute().as_uri(),
-        "filename": path.name,
-        "hash": that_hash
-    })
-    use.persist_registry()
-    return mod
+  log.info("PROTOBUF: tgt=%s, symlink_to(folder=%s)", tgt, folder)
+  tgt.symlink_to(folder.absolute())
+  log.info("SUCCEEDED: tgt=%s, symlink_to(folder=%s)", tgt, folder)
+  os.chdir(str(folder))
+
+  pwd = Path.cwd()
+  log.info("PROTOBUF: Entered directory: pwd=%s", pwd)
+  pth_src = "\n\n".join(
+      readstring(str(pth_path)) for pth_path in folder.glob("*.pth"))
+  log.info("pth_src=[%s]", pth_src)
+  sitedir = str(folder)
+  log.info("sitedir=[%s]", sitedir)
+  rslt = exec(
+    compile(
+      pth_src,
+      "pth_file.py",
+      "exec"
+    ),
+  )
+  log.info("rslt = %s", rslt)
+
+  exc = None
+  importlib.invalidate_caches()
+  if sys.path[0] != "":
+      sys.path.insert(0, "")
+  try:
+    module_to_del = []
+    module_parts = module_name.split(".")
+    for part in module_parts:
+        module_to_del.append(part)
+        module_key = ".".join(module_to_del)
+        if module_key in sys.modules:
+            log.info("Deleting sys.modules[%s]",
+                repr(module_key))
+            del sys.modules[module_key]
+
+
+    if not mod:
+      log.debug("Trying importlib.import_module")
+      log.debug("  with cwd=%s,", os.getcwd())
+      log.debug("  sys.path=%s", sys.path)
+      log.debug("  sys.modules=%s", sys.modules)
+
+      #mod_goog = use(Path("./google/__init__.py"))
+      #log.debug("  mod_goog=%s", mod_goog)
+      #log.debug("mod_goog.__spec__=%s",
+      #   getattr(mod_goog,"__spec__",""))
+
+      #mod_goog.__package__ = "google"
+      #mod_goog.__name__ = "__init__"
+      #sys.modules["google"] = mod_goog
+
+      mod_pbuf = use(Path("./google/protobuf/__init__.py"))
+      log.debug("  mod_pbuf=%s", mod_pbuf)
+      log.debug("mod_pbuf.__spec__=%s",
+         getattr(mod_pbuf,"__spec__",""))
+
+      sys.modules["google.protobuf"] = mod_pbuf
+
+      # setattr(mod_goog, "protobuf", mod_pbuf)
+      mod = mod_pbuf
+
+      log.debug("  mod=%s", mod)
+      log.debug("mod.__file__=%s",getattr(mod, "__file__",""))
+      log.debug("mod.__spec__=%s",getattr(mod, "__spec__",""))
+      log.debug("mod.__version__=%s",getattr(mod, "__version__",""))
+
+  except BaseException as exc:
+      log.error(exc)
+      raise
+  log.info("returning mod=%s", mod)
+
+  if package_name not in rdists:
+      rdists[package_name] = {}
+  if version not in rdists[package_name]:
+      rdists[package_name][version] = {}
+  rdist_info = rdists[package_name][version]
+  rdist_info.update({
+      "package": package_name,
+      "version": version,
+      "url": url.human_repr(),
+      "path": str(path) if path else None,
+      "folder": folder.absolute().as_uri(),
+      "filename": path.name,
+      "hash": that_hash
+  })
+  use.persist_registry()
+  return mod
