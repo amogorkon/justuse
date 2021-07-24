@@ -89,7 +89,7 @@ def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_
         print("Extracting to", folder, "...")
 
         fileobj = archive = None
-        if path.suffix in (".whl", ".egg", ".zip"):
+        if path.suffix in (".whl", ".zip"):
             fileobj = open(tempfile.mkstemp()[0], "w")
             archive = zipfile.ZipFile(path, "r")
         else:
@@ -163,7 +163,7 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
         print("Extracting to", folder, "...")
 
         fileobj = archive = None
-        if path.suffix in (".whl", ".egg", ".zip"):
+        if path.suffix in (".whl", ".zip"):
             fileobj = open(tempfile.mkstemp()[0], "w")
             archive = zipfile.ZipFile(path, "r")
         else:
@@ -182,54 +182,18 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
     if sys.path[0] != "":
         sys.path.insert(0, "")
     try:
-      if not mod:
         log.debug("Trying importlib.import_module")
         log.debug("  with cwd=%s,", os.getcwd())
         log.debug("  sys.path=%s", sys.path)
-        log.debug("  sys.modules=%s", sys.modules)
-
         mod = importlib.import_module("google.protobuf")
-        log.debug("  mod=%s", mod)
-        log.debug("  mod=%s", getattr(mod, "__version__"))
-    except BaseException as exc:
-        log.error(exc)
-          
-    try:
-      if not mod:
-        log.debug("Trying importlib.import_module")
-        log.debug("  with cwd=%s,", os.getcwd())
-        log.debug("  sys.path=%s", sys.path)
-        log.debug("  sys.modules=%s", sys.modules)
-
-        mod = importlib.import_module("google.protobuf")
-        log.debug("  mod=%s", mod)
-        log.debug("  mod=%s", getattr(mod, "__version__"))
-    except BaseException as exc:
-        log.error(exc)
-    try:
-      if not mod:
-        log.debug("Trying importlib.import_module")
-        log.debug("  with cwd=%s,", os.getcwd())
-        log.debug("  sys.path=%s", sys.path)
-        log.debug("  sys.modules=%s", sys.modules)
-
-        mod = importlib.import_module("google.protobuf.__init__")
-        log.debug("  mod=%s", mod)
-        log.debug("  mod=%s", getattr(mod, "__version__"))
-    except BaseException as exc:
-        log.error(exc)
-    try:
-      if not mod:
-        log.debug("Trying importlib.import_module")
-        log.debug("  with cwd=%s,", os.getcwd())
-        log.debug("  sys.path=%s", sys.path)
-        log.debug("  sys.modules=%s", sys.modules)
-
-        mod = use(use.Path("./google/protobuf/__init__.py"))
-        log.debug("  mod=%s", mod)
-        log.debug("  mod=%s", getattr(mod, "__version__"))
-    except BaseException as exc:
-        log.error(exc)
-        raise
-
+    except ImportError:
+        os.chdir(original_cwd)
+        if fatal_exceptions: raise
+        exc = traceback.format_exc()
+    
+    for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
+        if not hasattr(mod, key): continue
+        rdist_info[key] = getattr(mod, key)
+    if not exc:
+        print(f"Successfully loaded {package_name}, version {version}.")
     return mod
