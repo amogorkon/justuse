@@ -150,25 +150,10 @@ def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_
 @use.register_hack("protobuf", specifier=SpecifierSet(">=1.0"))
 def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
     original_cwd = Path.cwd()
-    if package_name not in rdists:
-        rdists[package_name] = {}
-    if version not in rdists[package_name]:
-        rdists[package_name][version] = {}
+    
     # Update package version metadata
     assert url is not None
     mod = None
-    rdist_info = rdists[package_name][version]
-    rdist_info.update({
-        "package": package_name,
-        "version": version,
-        "url": url.human_repr(),
-        "path": str(path) if path else None,
-        "folder": folder.absolute().as_uri(),
-        "filename": path.name,
-        "hash": that_hash
-    })
-    use.persist_registry()
-    
     if not folder.exists():
         folder.mkdir(mode=0o755, parents=True, exist_ok=True)
         print("Extracting to", folder, "...")
@@ -224,10 +209,47 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
         log.debug("  sys.path=%s", sys.path)
         log.debug("  sys.modules=%s", sys.modules)
 
-        mod = importlib.import_module("google.protobuf")
+        mod_goog = reuse(Path("./google/__init__.py"))
+        log.debug("  mod_goog=%s", mod_goog)
+        log.debug("mod_goog.__spec__=%s",
+           getattr(mod_goog,"__spec__",""))
+        
+        mod_goog.__package__ = "google"
+        mod_goog.__name__ = "__init__"
+        sys.modules["google"] = mod_goog
+        
+        mod_pbuf = reuse(Path("./google/protobuf/__init__.py"))
+        log.debug("  mod_pbuf=%s", mod_pbud)
+        log.debug("mod_pbuf.__spec__=%s",
+           getattr(mod_pbuf,"__spec__",""))
+        
+        sys.modules["google.protobuf"] = mod_pbuf
+        
+        setattr(mod_goog, "protobuf", mod_pbuf)
+        mod = mod_pbuf
+        
         log.debug("  mod=%s", mod)
-        log.debug("  mod=%s", getattr(mod, "__version__"))
+        log.debug("mod.__file__=%s",getattr(mod, "__file__",""))
+        log.debug("mod.__spec__=%s",getattr(mod, "__spec__",""))
+        log.debug("mod.__version__=%s",getattr(mod, "__version__",""))
+        
     except BaseException as exc:
         log.error(exc)
     log.info("returning mod=%s", mod)
+    
+    if package_name not in rdists:
+        rdists[package_name] = {}
+    if version not in rdists[package_name]:
+        rdists[package_name][version] = {}
+    rdist_info = rdists[package_name][version]
+    rdist_info.update({
+        "package": package_name,
+        "version": version,
+        "url": url.human_repr(),
+        "path": str(path) if path else None,
+        "folder": folder.absolute().as_uri(),
+        "filename": path.name,
+        "hash": that_hash
+    })
+    use.persist_registry()
     return mod
