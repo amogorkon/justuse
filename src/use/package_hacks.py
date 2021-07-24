@@ -137,8 +137,7 @@ def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_
 
 @use.register_hack("protobuf", specifier=SpecifierSet(">=1.0"))
 def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
-    print("hacking numpy!")
-    log.debug(f"outside of create_solib_links(...)")
+    original_cwd = Path.cwd()
     if package_name not in rdists:
         rdists[package_name] = {}
     if version not in rdists[package_name]:
@@ -173,18 +172,28 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
             with fileobj as _:
                 file.extractall(folder)
                 create_solib_links(file, folder)
-        print("Extracted.")
-    original_cwd = Path.cwd()
+        log.info("Extracted.")
+    log.info("PROTOBUF: in dir: %s; original_cwd=%s", Path.cwd(), original_cwd)
     tgt = use.home / Path(f".local/lib/python3.{sys.version_info[1]}/site-packages");
+    log.info("folder=%s, symlink_to(tgt=%s)", folder, tgt)
+    if tgt.exists:
+        tgt.unlink()
     tgt.parent.mkdir(mode=0o755, exist_ok=True)
-    if tgt.exists: tgt.unlink()
-    tgt.symlink_to(folder.absolute())
     
-    os.chdir(folder)
+    log.info("PROTOBUF: folder=%s, symlink_to(tgt=%s)", folder, tgt)
+    folder.symlink_to(tgt.absolute())
+    log.info("PROTOBUF: folder=%s, symlink_to(tgt=%s): OK", folder, tgt)
+    os.chdir(str(folder))
+    
     pwd = Path.cwd()
+    pth_src = \
+        "\n\n".join([readstring(str(pth_path)) for pth_path in folder.glob("*.pth")])
+    log.info("pth_src=[%s]", pth_src)
+    sitedir = str(folder)
+    
     rslt = exec(
       compile(
-        "\n\n".join([readstring(str(pth_path)) for pth_path in pwd.glob("*.pth")]),
+        pth_src
         "pth_file.py",
         "single"
       ),
@@ -207,5 +216,5 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
         log.debug("  mod=%s", getattr(mod, "__version__"))
     except BaseException as exc:
         log.error(exc)
-
+    log.info("returning mod=%s", mod)
     return mod
