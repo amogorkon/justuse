@@ -1069,7 +1069,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 path_to_url:dict=None,
                 import_to_use: dict=None,
                 modes:int=0,
-                fatal_exceptions=True,
                 package_name:str=None, # internal use
                 module_name:str=None   # internal use
                 ) -> Optional[ModuleType]:
