@@ -229,8 +229,7 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
         #mod_goog.__name__ = "__init__"
         #sys.modules["google"] = mod_goog
         
-        mod_pbuf = use(Path("./google/protobuf/__init__.py"),
-            fatal_exceptions=True)
+        mod_pbuf = use(Path("./google/protobuf/__init__.py"))
         log.debug("  mod_pbuf=%s", mod_pbuf)
         log.debug("mod_pbuf.__spec__=%s",
            getattr(mod_pbuf,"__spec__",""))
