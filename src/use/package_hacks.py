@@ -32,6 +32,18 @@ root.addHandler(StreamHandler(sys.stderr))
 if "DEBUG" in os.environ: root.setLevel(DEBUG)
 log = getLogger(__name__)
 
+def readstring(path, lines=False, /, encoding="ISO-8859-1", 
+    raw_lines=False):
+  mode = "rb" if encoding is None else "r"
+  with open(path, mode, buffering=-1,
+      encoding=encoding, newline=("\x0a" if encoding else None)) as f:
+    if lines:
+      if raw_lines:
+        return f.readlines()
+      else:
+        return list(map(str.rstrip, f.readlines()))
+    return f.read()
+
 def create_solib_links(archive: zipfile.ZipFile, folder: Path):
     log.debug(f"create_solib_links({archive=}, {folder=})")
     # EXTENSION_SUFFIXES  == ['.cpython-38-x86_64-linux-gnu.so', '.abi3.so', '.so'] or ['.cp39-win_amd64.pyd', '.pyd']
