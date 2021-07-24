@@ -176,7 +176,7 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
     log.info("PROTOBUF: in dir: %s; original_cwd=%s", Path.cwd(), original_cwd)
     tgt = use.home / Path(f".local/lib/python3.{sys.version_info[1]}/site-packages");
     log.info("folder=%s, symlink_to(tgt=%s)", folder, tgt)
-    if tgt.exists:
+    if tgt.exists():
         tgt.unlink()
     tgt.parent.mkdir(mode=0o755, exist_ok=True)
     
