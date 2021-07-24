@@ -122,13 +122,15 @@ def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_
     original_cwd = Path.cwd()
     try:
         os.chdir(folder)
+        remove_cached_module(module_name)
+        log.warning("Loading module '%s' from package '%s'/%s, via importlib.import_module",
+                    module_name, package_name, version)
         mod = importlib.import_module(module_name)
         save_module_info(package_name, rdists, version, url, path, that_hash, folder)
         return mod
     finally:
-        remove_cached_module(module_name)
         os.chdir(original_cwd)    
-    
+
 @use.register_hack("protobuf", specifier=SpecifierSet(">=1.0"))
 def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
     log.debug("hacking protobuf!")
@@ -137,28 +139,8 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
     original_cwd = Path.cwd()
     try:
         os.chdir(folder)
-        log.info("in dir: %s; original_cwd=%s", Path.cwd(), original_cwd)
-        # this is needed because protobuf corrupts sys.path somehow into looking here
-        tgt = use.home / Path(f".local/lib/python3.{sys.version_info[1]}/site-packages");
-        log.info("folder=%s, symlink_to(tgt=%s)", folder, tgt)
-        # remove any existing symlink here in case we already loaded a different version
-        if tgt.exists(): tgt.unlink()
-        tgt.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
-        tgt.symlink_to(folder.absolute())
-        pth_src = "\n\n".join(readstring(str(pth_path)) for pth_path in folder.glob("*.pth"))
-        log.info("pth_src=[%s]", pth_src)
-        # this variable is needed because protobuf assumes it will be in the stack...
-        sitedir = str(folder)
-        log.info("sitedir=[%s]", sitedir)
-        # compile the hacky duct-tape that protobuf embeds in its .pth file
-        # to make their 'google' namespace work properly - disgusting
-        exec(compile(pth_src, "pth_file.py", "exec"))
-        if sys.path[0] != "": sys.path.insert(0, "")
         remove_cached_module(module_name)
-        mod = use(Path("./google/protobuf/__init__.py"))
-        sys.modules[module_name] = mod
-        log.info("returning mod=%s", mod)
-        mod = importlib.import_module(module_name)
+        mod = use(Path("google", "protobuf", "__init__.py"))
         save_module_info(package_name, rdists, version, url, path, that_hash, folder)
         return mod
     finally:

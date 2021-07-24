@@ -167,9 +167,6 @@ def suggested_artifact(*args, **kwargs):
                            match.group("hash_value"))
     return (version, hash_value)
 
-@pytest.mark.skipif(sys.platform.startswith("win") ,
-    reason="windows Auto-installing native modules is not supported "
-           "when python >= 3.10")
 def test_autoinstall_protobuf(reuse):
     kws = {
         "package_name":"protobuf", 

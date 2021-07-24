@@ -573,11 +573,15 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
 
     @staticmethod
     def _is_platform_compatible(info:Dict[str, str], platform_tags:set, include_sdist=False):
+        MAX_CPYTHON_INTERPRETER_VERSION = 39
         assert isinstance(info, dict) and isinstance(platform_tags, set)
         info.update(Use._parse_filename(info["filename"]))  # filename as API, seriously WTF...
+        interp_version = packaging.tags.interpreter_version()
+        if int(interp_version,10) > MAX_CPYTHON_INTERPRETER_VERSION:
+            interp_version = str(MAX_CPYTHON_INTERPRETER_VERSION)
         our_python_tag = "".join((
                                 packaging.tags.interpreter_name(),
-                                packaging.tags.interpreter_version()))
+                                interp_version))
         python_tag = info.get("python_tag", "")
         platform_tag = info.get("platform_tag", "")
         platform_tags_strs = set(map(
@@ -885,6 +889,12 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         original_cwd = Path.cwd()
         source_dir = original_cwd
         if not path.is_absolute():
+            frame = inspect.currentframe()
+            while (filename := frame.f_code.co_filename).startswith("<") or not Path(filename).exists():
+                frame = frame.f_back
+                if not (frame and frame.f_code and frame.f_code.co_filename):
+                    break
+            path = Path(filename or original_cwd, path)
             source_dir = getattr(self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename), "path", None) # type: ignore
             
             # calling from another use()d module
@@ -1271,7 +1281,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                   path=path,
                   that_hash=that_hash,
                   folder=folder,
-                  fatal_exceptions=fatal_exceptions,
+                  fatal_exceptions=True,
                   module_name=module_name
                 )
                 return mod
