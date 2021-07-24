@@ -120,11 +120,7 @@ def get_supported():
 
 # injected via initial_globals for testing, you can safely ignore this
 test_version: Optional[str] = locals().get("test_version", None)
-try:
-    __version__ = test_version #type: ignore
-except NameError:
-    __version__ = "0.4.1"
-    test_version = None
+__version__ = test_version or "0.4.1"
 
 _reloaders: Dict['ProxyModule', Any] = {}  # ProxyModule:Reloader
 _aspects: Dict[Any, Any]= {}
