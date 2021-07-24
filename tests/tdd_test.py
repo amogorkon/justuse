@@ -70,3 +70,4 @@ def test_is_platform_compatible_win(reuse):
     }
     platform_tags = set(map(lambda i: i.platform, reuse.use.get_supported()))
     assert reuse._is_platform_compatible(info, platform_tags)
+

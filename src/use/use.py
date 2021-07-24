@@ -1252,6 +1252,10 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if any(Path(".").glob(f"{name}.py")):
             warn(
                 f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))",
+                Use.AmbiguityWarning,
+            )
+        exc = None
+        spec = None
         if name in self._using:
             spec = self._using[name].spec
         else:
