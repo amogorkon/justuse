@@ -220,14 +220,14 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
         log.debug("  sys.path=%s", sys.path)
         log.debug("  sys.modules=%s", sys.modules)
 
-        mod_goog = use(Path("./google/__init__.py"))
-        log.debug("  mod_goog=%s", mod_goog)
-        log.debug("mod_goog.__spec__=%s",
-           getattr(mod_goog,"__spec__",""))
+        #mod_goog = use(Path("./google/__init__.py"))
+        #log.debug("  mod_goog=%s", mod_goog)
+        #log.debug("mod_goog.__spec__=%s",
+        #   getattr(mod_goog,"__spec__",""))
         
-        mod_goog.__package__ = "google"
-        mod_goog.__name__ = "__init__"
-        sys.modules["google"] = mod_goog
+        #mod_goog.__package__ = "google"
+        #mod_goog.__name__ = "__init__"
+        #sys.modules["google"] = mod_goog
         
         mod_pbuf = use(Path("./google/protobuf/__init__.py"))
         log.debug("  mod_pbuf=%s", mod_pbud)
@@ -236,7 +236,7 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
         
         sys.modules["google.protobuf"] = mod_pbuf
         
-        setattr(mod_goog, "protobuf", mod_pbuf)
+        # setattr(mod_goog, "protobuf", mod_pbuf)
         mod = mod_pbuf
         
         log.debug("  mod=%s", mod)
