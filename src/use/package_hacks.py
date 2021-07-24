@@ -193,9 +193,9 @@ def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fat
     
     rslt = exec(
       compile(
-        pth_src
+        pth_src,
         "pth_file.py",
-        "single"
+        "exec"
       ),
     )
     log.info("rslt = %s", rslt)
