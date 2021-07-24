@@ -38,19 +38,18 @@ jobs:
           echo "Downloading recent Python 3 ..."
           Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.9.0/python-3.9.0.exe" -OutFile "c:/temp/python-3.9.0.exe"
           echo "Installing Python 3 ..."
-          c:/temp/python-3.9.0.exe /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
+          & "c:/temp/python-3.9.0.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
           echo "Waiting for setup to complete ..."
           $env:PATH = "$env:LOCALAPPDATA\Programs\Python\Python39-32;$env:LOCALAPPDATA\Programs\Python\Python39-32\lib;$env:PATH"
           env
           while (!(Test-Path "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe")) {
             Write-Host "Waiting for installation"
-            Start-Sleep 1
+            [System.Threading.Thread]::Sleep(1000)
           }
-          
           $pyver = ""
           while (!($pyver.Contains(" 3.9"))) {
             $pyver = $(
-              & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip --version | Out-Null || & { $global:LASTEXITCODE = 0; }
+              & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip --version || & { $global:LASTEXITCODE = 0; }
             ) -join "`n"
           }
           echo "Windows-Tests: Preloading package dependencies ..."
