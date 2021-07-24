@@ -99,51 +99,89 @@ def save_module_info(package_name, rdists, version, url, path, that_hash, folder
     })
     use.persist_registry()
 
-def ensure_package_extracted_to(archive_path, folder):
-    folder.mkdir(mode=0o755, parents=True, exist_ok=True)
-    log.info("Extracting %s to %s ...", archive_path, folder)
-    fileobj = archive = None
-    if archive_path.suffix in (".whl", ".egg", ".zip"):
-        fileobj = open(tempfile.mkstemp()[0], "w")
-        archive = zipfile.ZipFile(archive_path, "r")
-    else:
-        fileobj = (gzip.open if archive_path.suffix == ".gz" else open)(archive_path, "r")
-        archive = tarfile.TarFile(fileobj=fileobj, mode="r")
-    with archive as file:
-        with fileobj as _:
-            file.extractall(folder)
-            create_solib_links(file, folder)
-
 @use.register_hack("numpy", specifier=SpecifierSet(">=1.0"))
 def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
     log.debug("hacking numpy!")
-    ensure_package_extracted_to(path, folder)
+    if not folder.exists():
+        folder.mkdir(mode=0o755, parents=True, exist_ok=True)
+        log.info("Extracting %s (from %s) to %s ...", path, url, folder)
+        fileobj = archive = None
+        if path.suffix in (".whl", ".egg", ".zip"):
+            fileobj = open(tempfile.mkstemp()[0], "w")
+            archive = zipfile.ZipFile(path, "r")
+        else:
+            fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
+            archive = tarfile.TarFile(fileobj=fileobj, mode="r")
+        with archive as file:
+            with fileobj as _:
+                file.extractall(folder)
+                create_solib_links(file, folder)
     if sys.path[0] != "": sys.path.insert(0, "")
     original_cwd = Path.cwd()
+    exc = mod = None
     try:
         os.chdir(folder)
-        remove_cached_module(module_name)
-        log.warning("Loading module '%s' from package '%s'/%s, via importlib.import_module",
-                    module_name, package_name, version)
         mod = importlib.import_module(module_name)
-        save_module_info(package_name, rdists, version, url, path, that_hash, folder)
-        return mod
+    except ImportError:
+        if fatal_exceptions: raise
+        exc = traceback.format_exc()
     finally:
-        os.chdir(original_cwd)    
+        remove_cached_module(module_name)
+        os.chdir(original_cwd)
+    if not exc:
+        save_module_info(package_name, rdists, version, url, path, that_hash, folder)
+    return mod
 
 @use.register_hack("protobuf", specifier=SpecifierSet(">=1.0"))
 def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
     log.debug("hacking protobuf!")
-    ensure_package_extracted_to(path, folder)
+    if not folder.exists():
+        folder.mkdir(mode=0o755, parents=True, exist_ok=True)
+        log.info("Extracting %s (from %s) to %s ...", path, url, folder)
+        fileobj = archive = None
+        if path.suffix in (".whl", ".egg", ".zip"):
+            fileobj = open(tempfile.mkstemp()[0], "w")
+            archive = zipfile.ZipFile(path, "r")
+        else:
+            fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
+            archive = tarfile.TarFile(fileobj=fileobj, mode="r")
+        with archive as file:
+            with fileobj as _:
+                file.extractall(folder)
+                create_solib_links(file, folder)
     if sys.path[0] != "": sys.path.insert(0, "")
     original_cwd = Path.cwd()
+    exc = mod = None
     try:
         os.chdir(folder)
+        log.info("in dir: %s; original_cwd=%s", Path.cwd(), original_cwd)
+        # this is needed because protobuf corrupts sys.path somehow into looking here
+        tgt = use.home / Path(f".local/lib/python3.{sys.version_info[1]}/site-packages");
+        log.info("folder=%s, symlink_to(tgt=%s)", folder, tgt)
+        # remove any existing symlink here in case we already loaded a different version
+        if tgt.exists(): tgt.unlink()
+        tgt.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+        tgt.symlink_to(folder.absolute())
+        pth_src = "\n\n".join(readstring(str(pth_path)) for pth_path in folder.glob("*.pth"))
+        log.info("pth_src=[%s]", pth_src)
+        # this variable is needed because protobuf assumes it will be in the stack...
+        sitedir = str(folder)
+        log.info("sitedir=[%s]", sitedir)
+        # compile the hacky duct-tape that protobuf embeds in its .pth file
+        # to make their 'google' namespace work properly - disgusting
+        exec(compile(pth_src, "pth_file.py", "exec"))
+        if sys.path[0] != "": sys.path.insert(0, "")
         remove_cached_module(module_name)
-        mod = use(Path("google", "protobuf", "__init__.py"))
-        save_module_info(package_name, rdists, version, url, path, that_hash, folder)
-        return mod
+        mod = use(Path("./google/protobuf/__init__.py"))
+        sys.modules[module_name] = mod
+        log.info("returning mod=%s", mod)
+        mod = importlib.import_module(module_name)
+    except ImportError:
+        if fatal_exceptions: raise
+        exc = traceback.format_exc()
     finally:
         remove_cached_module(module_name)
         os.chdir(original_cwd)
-    
+    if not exc:
+        save_module_info(package_name, rdists, version, url, path, that_hash, folder)
+    return mod
