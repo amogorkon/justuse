@@ -21,6 +21,8 @@ import use
 
 __package__ = "tests"
 
+import logging
+logging.root.setLevel(logging.DEBUG)
 @pytest.fixture()
 def reuse():
     # making a completely new one each time would take ages (_registry)
@@ -40,7 +42,7 @@ def test_access_to_home(reuse):
 
 def test_other_case(reuse):
     with pytest.raises(NotImplementedError):
-        reuse(2)
+        reuse(2, fatal_exceptions=True)
 
 def test_fail_dir(reuse):
     with pytest.raises(ImportError):
@@ -82,7 +84,7 @@ def test_module_package_ambiguity(reuse):
     os.chdir(Path("tests/.tests"))
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        reuse("sys")
+        reuse("sys", fatal_exceptions=True)
     w_filtered = [*filter(
         lambda i: i.category is not DeprecationWarning, w)]
     assert len(w_filtered) == 1
@@ -98,7 +100,7 @@ def test_builtin():
 def test_classical_install(reuse):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        mod = reuse("pytest")
+        mod = reuse("pytest", fatal_exceptions=True)
         assert mod is pytest
         assert issubclass(w[-1].category, use.AmbiguityWarning)
 
@@ -106,36 +108,36 @@ def test_classical_install(reuse):
 def test_autoinstall_PEBKAC(reuse):
     # auto-install requested, but no version or hash_value specified
     with pytest.raises(RuntimeWarning):
-        reuse("pytest", modes=reuse.auto_install)
+        reuse("pytest", modes=reuse.auto_install, fatal_exceptions=True)
   
     # forgot hash_value
     with pytest.raises(packaging.version.InvalidVersion):
-        reuse("pytest", modes=reuse.auto_install, version="-1")
+        reuse("pytest", modes=reuse.auto_install, version="-1", fatal_exceptions=True)
   
     # forgot version
     with pytest.raises(RuntimeWarning):
-        reuse("pytest", modes=reuse.auto_install, hash_value="asdf")
+        reuse("pytest", modes=reuse.auto_install, hash_value="asdf", fatal_exceptions=True)
     
     # impossible version
     with pytest.raises(AssertionError):  # version must be either str or tuple
-        reuse("pytest", modes=reuse.auto_install, version=-1, hash_value="asdf")
+        reuse("pytest", modes=reuse.auto_install, version=-1, hash_value="asdf", fatal_exceptions=True)
   
     # non-existing package
     with pytest.raises(ImportError):
-        reuse("4-^df", modes=reuse.auto_install, version="0.0.1", hash_value="asdf")
+        reuse("4-^df", modes=reuse.auto_install, version="0.0.1", hash_value="asdf", fatal_exceptions=True)
     
 def test_version_warning(reuse):
     # no auto-install requested, wrong version only gives a warning
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        reuse("pytest", version="0.0")
+        reuse("pytest", version="0.0", fatal_exceptions=True)
         assert issubclass(w[-1].category, (use.AmbiguityWarning, use.VersionWarning))
 
 def test_pure_python_package(reuse):
     # https://pypi.org/project/example-pypi-package/
     file = reuse.Path.home() / f".justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl"
     file.unlink(missing_ok=True)
-    test = reuse("example-pypi-package.examplepy", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", modes=reuse.auto_install)
+    test = reuse("example-pypi-package.examplepy", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", modes=reuse.auto_install, fatal_exceptions=True)
     assert str(test.Number(2)) == "2"
     file.unlink()
 
@@ -143,7 +145,7 @@ def suggested_artifact(*args, **kwargs):
     reuse = use
     rw = None
     try:
-        mod = reuse(*args, modes=use.auto_install, **kwargs)
+        mod = reuse(*args, modes=use.auto_install, **kwargs, fatal_exceptions=True)
     except RuntimeWarning as r:
         rw = r
     except BaseException as e:
@@ -165,8 +167,7 @@ def suggested_artifact(*args, **kwargs):
                            match.group("hash_value"))
     return (version, hash_value)
 
-@pytest.mark.skipif(sys.platform.startswith("win") 
-  and list(sys.version_info)[0:2] >= [3, 10], 
+@pytest.mark.skipif(sys.platform.startswith("win") ,
     reason="windows Auto-installing native modules is not supported "
            "when python >= 3.10")
 def test_autoinstall_protobuf(reuse):
@@ -174,7 +175,7 @@ def test_autoinstall_protobuf(reuse):
         "package_name":"protobuf", 
         "module_name":"google.protobuf"}
     ver, hash = suggested_artifact("protobuf", **kws)
-    mod = reuse("protobuf", **kws, modes=use.auto_install,
+    mod = reuse("protobuf", **kws, modes=use.auto_install, fatal_exceptions=True,
                 version=ver, hash_value=hash)
     assert mod.__version__ == ver
 
@@ -182,7 +183,7 @@ def test_autoinstall_protobuf(reuse):
     reason="windows Auto-installing numpy")
 def test_autoinstall_numpy_dual_version(reuse):
     ver1, hash1 = suggested_artifact("numpy", version="1.19.3")
-    mod1 = reuse("numpy", modes=use.auto_install,
+    mod1 = reuse("numpy", modes=use.auto_install, fatal_exceptions=True,
                 version=ver1, hash_value=hash1)
     mod2 = ver2 = None
     assert mod1.__version__ == ver1
@@ -191,7 +192,7 @@ def test_autoinstall_numpy_dual_version(reuse):
     for attempt in (1, 2, 3):
         log.warning("attempt %s", attempt)
         try:
-            mod2 = reuse("numpy", modes=use.auto_install,
+            mod2 = reuse("numpy", modes=use.auto_install, fatal_exceptions=True,
                         version=ver2, hash_value=hash2)
             break
         except (AttributeError, KeyError):
@@ -209,7 +210,7 @@ def test_autoinstall_numpy_dual_version(reuse):
     reason="windows Auto-installing numpy")
 def test_autoinstall_numpy(reuse):
     ver, hash = suggested_artifact("numpy", version="1.19.3")
-    mod = reuse("numpy", modes=use.auto_install,
+    mod = reuse("numpy", modes=use.auto_install, fatal_exceptions=True,
                 version=ver, hash_value=hash)
     assert mod.__version__ == ver
 
@@ -237,7 +238,7 @@ def test_registry(reuse):
     file = use.Path.home() / f".justuse-python" / "packages" \
         / f"{package_name.replace('-','_')}-0.1.0-py3-none-any.whl"
     file.unlink(missing_ok=True)
-    mod = reuse(name, version=vers, hash_value=hash_value, modes=reuse.auto_install)
+    mod = reuse(name, version=vers, hash_value=hash_value, modes=reuse.auto_install, fatal_exceptions=True)
     assert mod
     with open(Path.home() / ".justuse-python" / "registry.json", "rb") \
                 as jsonfile:
@@ -299,14 +300,14 @@ def test_parse_filename(reuse):
 def test_classic_import_no_version(reuse):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        _ = reuse("mmh3", modes=reuse.fatal_exceptions)
+        _ = reuse("mmh3", modes=reuse.fatal_exceptions, fatal_exceptions=True)
         assert issubclass(w[-1].category, reuse.AmbiguityWarning)
 
 def test_classic_import_same_version(reuse):
     version = reuse.Version(__import__("mmh3").__version__)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        mod = reuse("mmh3", version=version, modes=reuse.fatal_exceptions)
+        mod = reuse("mmh3", version=version, modes=reuse.fatal_exceptions, fatal_exceptions=True)
         assert not w
         assert reuse.Version(mod.__version__) == version
 
@@ -327,3 +328,4 @@ def test_use_ugrade_version_warning(reuse):
         test_use = reuse(reuse.Path(r"../src/use/use.py"), initial_globals={"test_version":version})
         assert test_use.test_version == test_use.__version__ == version
         assert w[0].category.__name__ == reuse.VersionWarning.__name__
+
