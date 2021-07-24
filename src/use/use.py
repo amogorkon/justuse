@@ -346,11 +346,6 @@ class ModuleReloader:
 # As we assign Use() to sys.modules, mypy is unhappy if it's not
 # an instance of types.ModuleType
 class Use(ModuleType):
-    # sic! importing here will allow to call them via Use.Path and Use.URL
-    from pathlib import Path
-
-    from yarl import URL
-
     # lift module-level stuff up - ALIASES
     __doc__ = __doc__
     __version__ = __version__
@@ -455,11 +450,8 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
             # this should fix the permission issues on android #80
             self.home = Path(tempfile.mkdtemp(prefix="justuse_"))
         (self.home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
-        (self.home / "registry.json").touch(mode=0o644, exist_ok=True)
-        (self.home / "user_registry.json").touch(mode=0o644, exist_ok=True)
-        (self.home / "config.toml").touch(mode=0o644, exist_ok=True)
-        (self.home / "config_defaults.toml").touch(mode=0o644, exist_ok=True)
-        (self.home / "usage.log").touch(mode=0o644, exist_ok=True)
+        for file in "registry.json", "user_registry.json", "config.toml", "config_defaults.toml", "usage.log":
+            (self.home / file).touch(mode=0o755, exist_ok=True)
 
     def recreate_registry(self):
         number_of_backups = len(list((self.home / "registry.json").glob("*.bak")))
@@ -505,7 +497,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
             )
             file.write(text)
 
-    def register_hack(self, name, specifier):
+    def register_hack(self, name):
         def wrapper(func):
             self._hacks[name] = func
 
@@ -575,8 +567,8 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
 
     @staticmethod
     def isfunction(x):
-        return inspect.isfunction
-
+        return inspect.isfunction(x)
+    
     @staticmethod
     def ismethod(x):
         return inspect.ismethod(x)
@@ -1125,7 +1117,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             return mod
         except:
             exc = traceback.format_exc()
-        if exc:
             return Use._fail_or_default(default, ImportError, exc)
 
     def _import_classical_install(
@@ -1257,7 +1248,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
-
         # let's first see if the user might mean something else entirely
         if any(Path(".").glob(f"{name}.py")):
             warn(
@@ -1605,7 +1595,8 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 Use.Version = Version
 Use.config = config
 Use.mode = mode
-
+Use.Path = Path
+Use.URL = URL
 use: ModuleType = Use()
 if not test_version:
     sys.modules["use"] = use
