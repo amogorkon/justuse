@@ -577,7 +577,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         info.update(Use._parse_filename(info["filename"]))  # filename as API, seriously WTF...
         # source is compatible with any platform by default, just need to check the version
         if info["python_version"] == "source" and include_sdist:
-            pass
+            return True
         our_python_tag = "".join((
                                 packaging.tags.interpreter_name(),
                                 packaging.tags.interpreter_version()))
@@ -590,9 +590,8 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         for one_platform_tag in platform_tag.split("."):
             is_match = one_platform_tag in platform_tags_strs and \
                          our_python_tag == python_tag
-            log.debug(f"%s: \"%s\" in pl.. and %s == %s", is_match, one_platform_tag, python_tag, our_python_tag)
+            log.debug(f"%s: \"%s\" in {platform_tags_strs=} and %s == %s", is_match, one_platform_tag, python_tag, our_python_tag)
             if is_match:
-                log.info("[MATCH] \"%s\" in {platform_tags_strs=!r} and %s == %s", is_match, one_platform_tag, python_tag, our_python_tag)
                 return True
         return False
 
