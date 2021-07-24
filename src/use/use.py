@@ -568,6 +568,10 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
     @staticmethod
     def isfunction(x):
         return inspect.isfunction(x)
+    
+    @staticmethod
+    def ismethod(x):
+        return inspect.ismethod(x)
 
     @staticmethod
     def isclass(x):
@@ -1244,15 +1248,10 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
-
         # let's first see if the user might mean something else entirely
         if any(Path(".").glob(f"{name}.py")):
             warn(
                 f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))",
-                Use.AmbiguityWarning,
-            )
-        exc = None
-        spec = None
         if name in self._using:
             spec = self._using[name].spec
         else:

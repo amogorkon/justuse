@@ -129,7 +129,6 @@ def ensure_extracted(path, folder, url=None):
                 file.extractall(folder)
                 create_solib_links(file, folder)
 
-
 @use.register_hack("numpy")
 def numpy(
     *,
