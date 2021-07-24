@@ -415,11 +415,11 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
     def _set_up_files_and_directories(self):
         self.home = Path.home() / ".justuse-python"
         try:
-            self.home.mkdir(mode=0o755, exist_ok=True)
+            self.home.mkdir(mode=0o755, parents=True, exist_ok=True)
         except PermissionError:
             # this should fix the permission issues on android #80
             self.home = Path(tempfile.mkdtemp(prefix="justuse_"))
-        (self.home / "packages").mkdir(mode=0o755, exist_ok=True)
+        (self.home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
         (self.home / "registry.json").touch(mode=0o644, exist_ok=True)
         (self.home / "user_registry.json").touch(mode=0o644, exist_ok=True)
         (self.home / "config.toml").touch(mode=0o644, exist_ok=True)
@@ -554,7 +554,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             "(?P<python_tag>.*)-"
             "(?P<abi_tag>.*)-"
             "(?P<platform_tag>.*)\\."
-            "(?P<ext>whl|zip|tar|tar\\.gz)",
+            "(?P<ext>whl|zip|tar|egg|tar\\.gz)",
             filename
         )
         if not match:
@@ -577,7 +577,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         info.update(Use._parse_filename(info["filename"]))  # filename as API, seriously WTF...
         # source is compatible with any platform by default, just need to check the version
         if info["python_version"] == "source" and include_sdist:
-            return True
+            pass
         our_python_tag = "".join((
                                 packaging.tags.interpreter_name(),
                                 packaging.tags.interpreter_version()))
@@ -590,8 +590,9 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         for one_platform_tag in platform_tag.split("."):
             is_match = one_platform_tag in platform_tags_strs and \
                          our_python_tag == python_tag
-            log.debug(f"%s: \"%s\" in {platform_tags_strs=} and %s == %s", is_match, one_platform_tag, python_tag, our_python_tag)
+            log.debug(f"%s: \"%s\" in pl.. and %s == %s", is_match, one_platform_tag, python_tag, our_python_tag)
             if is_match:
+                log.info("[MATCH] \"%s\" in {platform_tags_strs=!r} and %s == %s", one_platform_tag, python_tag, our_python_tag)
                 return True
         return False
 
@@ -639,6 +640,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                                     sys_version:Version=None,
                                     platform_tags:Set[str]=frozenset(),
                                     interpreter_tag:str=None,                                
+                                    version=None,
                                     ) -> Tuple[str,str]:
         assert isinstance(releases, dict)
         assert isinstance(hash_algo, str)
@@ -646,7 +648,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
             sys_version = Version(".".join(map(str, sys.version_info[0:3])))
         assert isinstance(sys_version, Version)
         if not platform_tags: 
-            platform_tags = set(packaging.tags._platform_tags())
+            platform_tags = set([*get_supported()])
         assert isinstance(platform_tags, (list, set))
         platform_tags = set(platform_tags)
         if not interpreter_tag:
@@ -670,7 +672,9 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                 continue
             for info in dists:
                 if info["yanked"]: continue
+                info.update(Use._parse_filename(info["filename"]))
                 if Use._is_version_satisfied(info, sys_version) and \
+                    (not version or Version(info["version"]) == Version(str(version))) and \
                     Use._is_platform_compatible(info, platform_tags):
                     hash_value = info["digests"].get(hash_algo)
                     if not hash_value:
@@ -761,15 +765,16 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
         mod.__file__ = module_path
         code_text = codecs.decode(code)
         # module file "<", ">" chars are specially handled by inspect
-        getattr(linecache, "cache")[f"<{name}>"] = (
-        len(code), # size of source code
-        None, # last modified time; None means there is no physical file
-        [*map( # a list of lines, including trailing newline on each
-            lambda ln: ln+"\x0a",
-            code_text.splitlines())
-        ],
-        mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
-        )
+        if not sys.platform.startswith("win"):
+          getattr(linecache, "cache")[f"<{name}>"] = (
+          len(code), # size of source code
+          None, # last modified time; None means there is no physical file
+          [*map( # a list of lines, including trailing newline on each
+              lambda ln: ln+"\x0a",
+              code_text.splitlines())
+          ],
+          mod.__file__, # file name, e.g. "<mymodule>" or the actual path to the file
+          )
         # not catching this causes the most irritating bugs ever!
         if package:
             mod.__package__ = package
@@ -1069,6 +1074,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 path_to_url:dict=None,
                 import_to_use: dict=None,
                 modes:int=0,
+                fatal_exceptions=True,
                 package_name:str=None, # internal use
                 module_name:str=None   # internal use
                 ) -> Optional[ModuleType]:
@@ -1186,15 +1192,8 @@ use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
                     try:
                         data = response.json()
                         version, hash_value = Use._find_latest_working_version(data["releases"], hash_algo=hash_algo.name)
-                    except KeyError:  # json issues
-                        if fatal_exceptions: raise
-                        if config["debugging"]:
-                            log.error(traceback.format_exc())
                     except:
-                        if fatal_exceptions: raise
-                        exc = traceback.format_exc()
-                    if exc:
-                        raise RuntimeWarning("Please specify version and hash for auto-installation. Sadly something went wrong with the JSON PyPI provided, otherwise we could've provided a suggestion.")
+                        raise
                     if not version:
                         raise RuntimeWarning(f"We could not find any version or release for {package_name} that could satisfy our requirements!")
                     
@@ -1291,9 +1290,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 return self._fail_or_default(default, Use.AutoInstallationError, f"Direct zipimport of {name} {version} failed and the package was not registered with known hacks.. we're sorry, but that means you will need to resort to using pip/conda for now.")
         
             ###
-            # def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
-            print("hacking regular use!")
-            log.debug(f"outside of create_solib_links(...)")
             if package_name not in rdists:
                 rdists[package_name] = {}
             if version not in rdists[package_name]:
@@ -1312,26 +1308,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             })
             use.persist_registry()
             
-            if not folder.exists():
-                folder.mkdir(mode=0o755, exist_ok=True)
-                print("Extracting to", folder, "...")
-
-                fileobj = archive = None
-                if path.suffix in (".whl", ".zip"):
-                    fileobj = open(tempfile.mkstemp()[0], "w")
-                    archive = zipfile.ZipFile(path, "r")
-                else:
-                    fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
-                    archive = tarfile.TarFile(fileobj=fileobj, mode="r")
-                with archive as file:
-                    with fileobj as _:
-                        file.extractall(folder)
-                        create_solib_links(file, folder)
-                print("Extracted.")
             original_cwd = Path.cwd()
-            
-            os.chdir(folder)
-
             importlib.invalidate_caches()
             if sys.path[0] != "":
                 sys.path.insert(0, "")
@@ -1384,6 +1361,7 @@ if not test_version:
 
 # no circular import this way
 hacks_path = Path(Path(__file__).parent, "package_hacks.py")
-assert hacks_path.exists
+assert hacks_path.exists()
 use(hacks_path)
+
 
