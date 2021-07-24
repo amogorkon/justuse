@@ -592,7 +592,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""", Use.Version
                          our_python_tag == python_tag
             log.debug(f"%s: \"%s\" in pl.. and %s == %s", is_match, one_platform_tag, python_tag, our_python_tag)
             if is_match:
-                log.info("[MATCH] \"%s\" in {platform_tags_strs=!r} and %s == %s", one_platform_tag, python_tag, our_python_tag)
+                log.info("[MATCH] \"%s\" in {platform_tags_strs=!r} and %s == %s", is_match, one_platform_tag, python_tag, our_python_tag)
                 return True
         return False
 
