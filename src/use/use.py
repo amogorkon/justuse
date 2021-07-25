@@ -632,7 +632,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
                 packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
             )
         assert isinstance(interpreter_tag, str)
-        for include_sdist in (False, True): # prefer non-source
+        for _ in (False, True): # prefer non-source
             results = [
                 (info["version"], info["digests"][hash_algo])
                 for info in sorted(
