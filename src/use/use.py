@@ -1047,6 +1047,31 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             exc = traceback.format_exc()
             return Use._fail_or_default(default, ImportError, exc)
 
+    @staticmethod
+    def _get_version(
+        name:str,
+        package_name:Optional[str]=None,
+        mod:Optional[ModuleType]=None
+    ) -> Optional[Version]:
+        version = None
+        for lookup_name in (name, package_name):
+            try:
+                meta = metadata.distribution(name)
+                return Version(meta.version)
+            except metadata.PackageNotFoundError:
+                continue
+        if not mod:
+            return None
+        version = getattr(mod, "__version__", version)
+        if isinstance(version, str):
+            return Version(version_str)
+        version = getattr(mod, "version", version)
+        if callable(version):
+            vevsion = version()
+        if isinstance(version, str):
+            return Version(version_str)
+        return None
+
     def _import_classical_install(
         self,
         name,
@@ -1082,32 +1107,15 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if exc:
             return Use._fail_or_default(default, ImportError, exc)
         # we only enforce versions with auto-install
-        if target_version:
-            # pure despair :(
-            this_version = None
-            for check in [
-                "metadata.distribution(name).version",
-                "mod.version",
-                "mod.version()",
-                "mod.__version__",
-            ]:
-                if this_version:
-                    break
-                try:
-                    check_value = eval(check)
-                    if isinstance(check_value, str):
-                        this_version = Version(check_value)
-                        if target_version != this_version:
-                            warn(
-                                f"{name} is expected to be version {target_version} ,  but got {this_version} instead",
-                                Use.VersionWarning,
-                            )
-                            break
-                except:
-                    if fatal_exceptions:
-                        raise
-            else:
-                log.warning(f"Cannot determine version for module {name}, continueing.")
+        this_version = Use._get_version(name, package_name, mod)
+        if not this_version:
+            log.warning(f"Cannot find version for {name=}, {mod=}")
+        elif target_version != this_version:
+            warn(
+                f"{name} expected to be version {target_version},"
+                f" but got {this_version} instead",
+                Use.VersionWarning
+            )
         self.persist_registry()
         for (check, pattern), decorator in aspectize.items():
             Use._apply_aspect(mod, check, pattern, decorator)
