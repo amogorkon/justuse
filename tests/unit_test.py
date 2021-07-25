@@ -502,3 +502,4 @@ def test_use_ugrade_version_warning(reuse):
         )
         assert test_use.test_version == test_use.__version__ == version
         assert w[0].category.__name__ == reuse.VersionWarning.__name__
+

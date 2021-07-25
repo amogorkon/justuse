@@ -1462,7 +1462,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 }
             )
             use.persist_registry()
-
             original_cwd = Path.cwd()
             importlib.invalidate_caches()
             if sys.path[0] != "":
@@ -1527,3 +1526,4 @@ if not test_version:
 hacks_path = Path(Path(__file__).parent, "package_hacks.py")
 assert hacks_path.exists()
 use(hacks_path)
+

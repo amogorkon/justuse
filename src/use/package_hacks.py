@@ -99,18 +99,22 @@ def save_module_info(package_name, rdists, version, url, path, that_hash, folder
         rdists[package_name][version] = {}
     # Update package version metadata
     assert url is not None
-    rdists[package_name][version].update(
-        {
-            "package": package_name,
-            "version": version,
-            "url": url.human_repr(),
-            "path": str(path) if path else None,
-            "folder": folder.absolute().as_uri(),
-            "filename": path.name,
-            "hash": that_hash,
-        }
-    )
+    mod = None
+    rdist_info = rdists[package_name][version]
+    rdist_info.update({
+        "package": package_name,
+        "version": version,
+        "url": url.human_repr(),
+        "path": str(path) if path else None,
+        "folder": folder.absolute().as_uri(),
+        "filename": path.name,
+        "hash": that_hash
+    })
     use.persist_registry()
+    
+    if not folder.exists():
+        folder.mkdir(mode=0o755, parents=True, exist_ok=True)
+        print("Extracting to", folder, "...")
 
 
 def ensure_extracted(path, folder, url=None):
@@ -199,3 +203,4 @@ def protobuf(
     finally:
         remove_cached_module(module_name)
         os.chdir(original_cwd)
+

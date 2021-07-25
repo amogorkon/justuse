@@ -48,3 +48,4 @@ def parse_filename(filename: str) -> Optional[dict]:
         filename,
     )
     return match.groupdict() if match else None
+

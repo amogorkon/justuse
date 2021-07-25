@@ -7,3 +7,4 @@ def bar():
 
 def two():
     return 2
+

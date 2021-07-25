@@ -20,7 +20,6 @@ jobs:
         run: |
           echo "Linux-Tests: Preloading package dependencies ..."
           python3 -m pip install anyio mmh3 packaging pip pytest pytest-env requests yarl
-          python3 -m pip install --upgrade setuptools pip
           echo "Linux-Tests: Running tests ..."
           mkdir -p ~/.justuse-python/
           echo "debug = true" > ~/.justuse-python/config.toml
@@ -69,7 +68,6 @@ jobs:
         run: |
           echo "MacOS-Tests: Preloading package dependencies ..."
           python3 -m pip install anyio mmh3 packaging pip pytest pytest-env requests yarl
-          python3 -m pip install --upgrade setuptools pip
           echo "MacOS-Tests: Running tests ..."
           mkdir -p ~/.justuse-python/
           echo "debug = true" > ~/.justuse-python/config.toml
