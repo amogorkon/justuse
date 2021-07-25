@@ -44,7 +44,7 @@ True
                     hash_value="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")
 
 # to auto-install a certain version (within a virtual env and pip in secure hash-check mode) of a package you can do
->>> np = use("numpy", version="1.1.1", auto_install=True, hash_value=["9879de676"])
+>>> np = use("numpy", version="1.1.1", modes=use.auto_install, hash_value=["9879de676"])
 
 File-Hashing inspired by 
 - https://github.com/kalafut/py-imohash
@@ -1318,7 +1318,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 if hit and hit[0]:
                     raise RuntimeWarning(
                         f"""Failed to auto-install '{package_name}' because hash_value is missing. This may work:
-use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
+use("{name}", version="{version}", hash_value="{that_hash}", modes=use.auto_install)
 """
                     )
                 else:
@@ -1360,7 +1360,7 @@ use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
                     raise RuntimeWarning(
                         f"""Please specify version and hash for auto-installation of '{package_name}'. 
 To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
-If you want to auto-install the latest version: use("{name}", version="{version}", hash_value="{hash_value}", auto_install=True)
+If you want to auto-install the latest version: use("{name}", version="{version}", hash_value="{hash_value}", modes=use.auto_install)
 """
                     )
 

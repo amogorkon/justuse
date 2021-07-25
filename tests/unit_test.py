@@ -211,7 +211,18 @@ def suggested_artifact(*args, **kwargs):
     assert match
     version, hash_value = (match.group("version"), match.group("hash_value"))
     return (version, hash_value)
-
+    
+    
+def test_suggestion_works(reuse):
+    try:
+        mod = reuse("mmh3", modes=use.auto_install)
+    except RuntimeWarning as rw:
+        match = re.search(r"(use\(.*\))", str(rw))
+        assert match
+        mod = eval(match[1])
+        assert mod
+        return
+    assert False, "Missed expected RuntimeWsrning"
 
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="windows Auto-installing numpy"
