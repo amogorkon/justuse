@@ -212,7 +212,9 @@ def suggested_artifact(*args, **kwargs):
     version, hash_value = (match.group("version"), match.group("hash_value"))
     return (version, hash_value)
     
-    
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="windows Auto-installing numpy"
+)
 def test_suggestion_works(reuse):
     try:
         mod = reuse("numpy", modes=use.auto_install)
