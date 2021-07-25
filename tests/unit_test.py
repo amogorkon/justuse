@@ -516,9 +516,12 @@ def test_reloading(reuse):
     fd, file = tempfile.mkstemp(".py", "test_module")
     with Restorer():
         mod = None
+        newfile = f"{file}.t"
         for check in range(1, 5):
-            with open(file, "w") as f:
+            with open(newfile, "w") as f:
                 f.write(f"def foo(): return {check}")
+                f.flush()
+            os.rename(newfile, file)
             mod = mod or reuse(Path(file), modes=reuse.reloading)
             while mod.foo() < check: pass
 
