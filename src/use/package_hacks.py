@@ -17,38 +17,54 @@ import os
 import sys
 import tarfile
 import tempfile
-import traceback
 import zipfile
 from importlib.machinery import EXTENSION_SUFFIXES
 from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
 
-from packaging.specifiers import SpecifierSet
-
 # this is possible because we don't *import* this file, but use() it!
-import use
+__package__ = "use.use"
+from ..use import use as use1 # type: ignore
+use1: 'Use' = use1
+use = use1
 
 root.addHandler(StreamHandler(sys.stderr))
-if "DEBUG" in os.environ: root.setLevel(DEBUG)
+if "DEBUG" in os.environ:
+    root.setLevel(DEBUG)
 log = getLogger(__name__)
 
-def readstring(path, lines=False, /, encoding="ISO-8859-1", 
-    raw_lines=False):
-  mode = "rb" if encoding is None else "r"
-  with open(path, mode, buffering=-1,
-      encoding=encoding, newline=("\x0a" if encoding else None)) as f:
-    if lines:
-      if raw_lines:
-        return f.readlines()
-      else:
-        return list(map(str.rstrip, f.readlines()))
-    return f.read()
+
+def readstring(path, lines=False, /, encoding="ISO-8859-1", raw_lines=False):
+    mode = "rb" if encoding is None else "r"
+    with open(
+        path,
+        mode,
+        buffering=-1,
+        encoding=encoding,
+        newline=("\x0a" if encoding else None),
+    ) as f:
+        if lines:
+            if raw_lines:
+                return f.readlines()
+            else:
+                return list(map(str.rstrip, f.readlines()))
+        return f.read()
+
+
+def remove_cached_module(module_name):
+    module_to_del = []
+    module_parts = module_name.split(".")
+    for part in module_parts:
+        module_to_del.append(part)
+        module_key = ".".join(module_to_del)
+        if module_key in sys.modules:
+            log.info("Deleting sys.modules[%s]", repr(module_key))
+            del sys.modules[module_key]
+
 
 def create_solib_links(archive: zipfile.ZipFile, folder: Path):
     log.debug(f"create_solib_links({archive=}, {folder=})")
-    # EXTENSION_SUFFIXES  == ['.cpython-38-x86_64-linux-gnu.so', '.abi3.so', '.so'] or ['.cp39-win_amd64.pyd', '.pyd']
-    entries = archive.getnames() if hasattr(archive, "getnames") \
-        else archive.namelist()
+    entries = archive.getnames() if hasattr(archive, "getnames") else archive.namelist()
     log.debug(f"archive {entries=}")
     solibs = [*filter(lambda f: any(map(f.endswith, EXTENSION_SUFFIXES)), entries)]
     if not solibs:
@@ -63,20 +79,20 @@ def create_solib_links(archive: zipfile.ZipFile, folder: Path):
         split_on = [".python", ".cpython", ".cp"]
         simple_name, os_ext = None, EXTENSION_SUFFIXES[-1]
         for s in split_on:
-            if not s in sofile.name: continue
+            if not s in sofile.name:
+                continue
             simple_name = sofile.name.split(s)[0]
-        if simple_name is None: continue
+        if simple_name is None:
+            continue
         link = Path(sofile.parent / f"{simple_name}{os_ext}")
-        if link == sofile: continue
+        if link == sofile:
+            continue
         log.debug(f"{link=}, {sofile=}")
         link.unlink(missing_ok=True)
         link.symlink_to(sofile)
 
 
-@use.register_hack("numpy", specifier=SpecifierSet(">=1.0"))
-def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
-    print("hacking numpy!")
-    log.debug(f"outside of create_solib_links(...)")
+def save_module_info(package_name, rdists, version, url, path, that_hash, folder):
     if package_name not in rdists:
         rdists[package_name] = {}
     if version not in rdists[package_name]:
@@ -100,6 +116,11 @@ def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_
         folder.mkdir(mode=0o755, parents=True, exist_ok=True)
         print("Extracting to", folder, "...")
 
+
+def ensure_extracted(path, folder, url=None):
+    if not folder.exists():
+        folder.mkdir(mode=0o755, parents=True, exist_ok=True)
+        log.info("Extracting %s (from %s) to %s ...", path, url, folder)
         fileobj = archive = None
         if path.suffix in (".whl", ".egg", ".zip"):
             fileobj = open(tempfile.mkstemp()[0], "w")
@@ -111,157 +132,75 @@ def numpy(*, package_name, rdists, version, url, path, that_hash, folder, fatal_
             with fileobj as _:
                 file.extractall(folder)
                 create_solib_links(file, folder)
-        print("Extracted.")
-    original_cwd = Path.cwd()
-    
-    os.chdir(folder)
-    exc = None
-    importlib.invalidate_caches()
+
+
+@use.register_hack("numpy")
+def numpy(
+    *,
+    package_name,
+    rdists,
+    version,
+    url,
+    path,
+    that_hash,
+    folder,
+    fatal_exceptions,
+    module_name,
+):
+    log.debug("hacking numpy!")
+    ensure_extracted(path, folder, url)
     if sys.path[0] != "":
         sys.path.insert(0, "")
+    original_cwd = Path.cwd()
+    mod = None
     try:
-        log.debug("Trying importlib.import_module")
-        log.debug("  with cwd=%s,", os.getcwd())
-        log.debug("  sys.path=%s", sys.path)
+        os.chdir(folder)
         mod = importlib.import_module(module_name)
-    except ImportError:
-        if fatal_exceptions: raise
-        exc = traceback.format_exc()
+        save_module_info(package_name, rdists, version, url, path, that_hash, folder)
+        return mod
     finally:
-        module_to_del = []
-        module_parts = module_name.split(".")
-        for part in module_parts:
-            module_to_del.append(part)
-            module_key = ".".join(module_to_del)
-            if module_key in sys.modules:
-                log.info("Deleting sys.modules[%s]",
-                    repr(module_key))
-                del sys.modules[module_key]
-            
+        remove_cached_module(module_name)
+        os.chdir(original_cwd)
 
-    for key in ("__name__", "__package__", "__path__", "__file__", "__version__", "__author__"):
-        if not hasattr(mod, key): continue
-        rdist_info[key] = getattr(mod, key)
-    if not exc:
-        print(f"Successfully loaded {package_name}, version {version}.")
-    os.chdir(original_cwd)
-    return mod
 
-@use.register_hack("protobuf", specifier=SpecifierSet(">=1.0"))
-def protobuf(*, package_name, rdists, version, url, path, that_hash, folder, fatal_exceptions, module_name):
-    original_cwd = Path.cwd()
-    
-    # Update package version metadata
-    assert url is not None
-    mod = None
-    if not folder.exists():
-        folder.mkdir(mode=0o755, parents=True, exist_ok=True)
-        print("Extracting to", folder, "...")
-
-        fileobj = archive = None
-        if path.suffix in (".whl", ".egg", ".zip"):
-            fileobj = open(tempfile.mkstemp()[0], "w")
-            archive = zipfile.ZipFile(path, "r")
-        else:
-            fileobj = (gzip.open if path.suffix == ".gz" else open)(path, "r")
-            archive = tarfile.TarFile(fileobj=fileobj, mode="r")
-        with archive as file:
-            with fileobj as _:
-                file.extractall(folder)
-                create_solib_links(file, folder)
-        log.info("Extracted.")
-    log.info("PROTOBUF: in dir: %s; original_cwd=%s", Path.cwd(), original_cwd)
-    tgt = use.home / Path(f".local/lib/python3.{sys.version_info[1]}/site-packages");
-    log.info("folder=%s, symlink_to(tgt=%s)", folder, tgt)
-    if tgt.exists():
-        tgt.unlink()
-    tgt.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
-    
-    log.info("PROTOBUF: tgt=%s, symlink_to(folder=%s)", tgt, folder)
-    tgt.symlink_to(folder.absolute())
-    log.info("SUCCEEDED: tgt=%s, symlink_to(folder=%s)", tgt, folder)
-    os.chdir(str(folder))
-    
-    pwd = Path.cwd()
-    log.info("PROTOBUF: Entered directory: pwd=%s", pwd)
-    pth_src = \
-        "\n\n".join([readstring(str(pth_path)) for pth_path in folder.glob("*.pth")])
-    log.info("pth_src=[%s]", pth_src)
-    sitedir = str(folder)
-    log.info("sitedir=[%s]", sitedir)
-    rslt = exec(
-      compile(
-        pth_src,
-        "pth_file.py",
-        "exec"
-      ),
-    )
-    log.info("rslt = %s", rslt)
-    
-    exc = None
-    importlib.invalidate_caches()
+@use.register_hack("protobuf")
+def protobuf(
+    *,
+    package_name,
+    rdists,
+    version,
+    url,
+    path,
+    that_hash,
+    folder,
+    fatal_exceptions,
+    module_name,
+):
+    log.debug("hacking protobuf!")
+    ensure_extracted(path, folder, url)
     if sys.path[0] != "":
         sys.path.insert(0, "")
+    original_cwd = Path.cwd()
     try:
-      module_to_del = []
-      module_parts = module_name.split(".")
-      for part in module_parts:
-          module_to_del.append(part)
-          module_key = ".".join(module_to_del)
-          if module_key in sys.modules:
-              log.info("Deleting sys.modules[%s]",
-                  repr(module_key))
-              del sys.modules[module_key]
-            
+        os.chdir(folder)
+        # needed because protobuf corrupts sys.path to looking here
+        tgt = use.home / Path(
+            f".local/lib/python3.{sys.version_info[1]}/site-packages")
+        # remove any existing symlink here in case we already
+        # loaded a different version
+        tgt.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+        if tgt.exists(): tgt.unlink()
+        tgt.symlink_to(folder.absolute(), target_is_directory=True)
+        pth_src = "\n\n".join(readstring(str(pth_path)) for pth_path in folder.glob("*.pth"))
+        sitedir = "" #type: ignore
+        # compile the hacky duct-tape protobuf embeds in its '.pth'
+        # to make their 'google' namespace work properly - disgusting
+        exec(compile(pth_src, "pth_file.py", "exec"))
+        remove_cached_module(module_name)
+        sys.modules[module_name] = mod = use(Path("./google/protobuf/__init__.py"))
+        save_module_info(package_name, rdists, version, url, path, that_hash, folder)
+        return mod
+    finally:
+        remove_cached_module(module_name)
+        os.chdir(original_cwd)
 
-      if not mod:
-        log.debug("Trying importlib.import_module")
-        log.debug("  with cwd=%s,", os.getcwd())
-        log.debug("  sys.path=%s", sys.path)
-        log.debug("  sys.modules=%s", sys.modules)
-
-        #mod_goog = use(Path("./google/__init__.py"))
-        #log.debug("  mod_goog=%s", mod_goog)
-        #log.debug("mod_goog.__spec__=%s",
-        #   getattr(mod_goog,"__spec__",""))
-        
-        #mod_goog.__package__ = "google"
-        #mod_goog.__name__ = "__init__"
-        #sys.modules["google"] = mod_goog
-        
-        mod_pbuf = use(Path("./google/protobuf/__init__.py"))
-        log.debug("  mod_pbuf=%s", mod_pbuf)
-        log.debug("mod_pbuf.__spec__=%s",
-           getattr(mod_pbuf,"__spec__",""))
-        
-        sys.modules["google.protobuf"] = mod_pbuf
-        
-        # setattr(mod_goog, "protobuf", mod_pbuf)
-        mod = mod_pbuf
-        
-        log.debug("  mod=%s", mod)
-        log.debug("mod.__file__=%s",getattr(mod, "__file__",""))
-        log.debug("mod.__spec__=%s",getattr(mod, "__spec__",""))
-        log.debug("mod.__version__=%s",getattr(mod, "__version__",""))
-        
-    except BaseException as exc:
-        log.error(exc)
-        raise
-    log.info("returning mod=%s", mod)
-    
-    if package_name not in rdists:
-        rdists[package_name] = {}
-    if version not in rdists[package_name]:
-        rdists[package_name][version] = {}
-    rdist_info = rdists[package_name][version]
-    rdist_info.update({
-        "package": package_name,
-        "version": version,
-        "url": url.human_repr(),
-        "path": str(path) if path else None,
-        "folder": folder.absolute().as_uri(),
-        "filename": path.name,
-        "hash": that_hash
-    })
-    use.persist_registry()
-    return mod

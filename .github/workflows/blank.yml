@@ -3,32 +3,12 @@ name: Unit Tests
 
 
 on:
-  check_run:
-    types: [created, rerequested, completed]
-  check_suite:
-    types: [completed, requested, rerequested]
-  create:
-  delete:
-  deployment:
-  deployment_status:
   fork:
-  gollum:
-  milestone:
-    types: [created, closed, opened, edited, deleted]
-  page_build:
   pull_request:
-    types: [assigned, unassigned, labeled, unlabeled, opened, edited, closed, reopened, synchronize, ready_for_review, locked, unlocked, review_requested, review_request_removed]
-  pull_request_review:
-    types: [submitted, edited, dismissed]
-  pull_request_review_comment:
-    types: [created, edited, deleted]
+    types: [opened, edited, closed]
   push:
-  registry_package:
-    types: [published, updated]
   release:
-    types: [published, unpublished, created, edited, deleted, prereleased, released]
-  status:
-  workflow_dispatch:
+    types: [published, created, edited, released]
 
 jobs:
   test-ubuntu:
@@ -36,12 +16,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - name: Run a multi-line script
+      - name: Linux Tests
         run: |
           echo "Linux-Tests: Preloading package dependencies ..."
           python3 -m pip install anyio mmh3 packaging pip pytest pytest-env requests yarl
           echo "Linux-Tests: Running tests ..."
-          python3 -m pytest
+          mkdir -p ~/.justuse-python/
+          echo "debug = true" > ~/.justuse-python/config.toml
+          env DEBUG=1 ERRORS=1 python3 -m pytest
   
   test-windows:
     runs-on: windows-latest
@@ -55,15 +37,14 @@ jobs:
           echo "Downloading recent Python 3 ..."
           Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.9.0/python-3.9.0.exe" -OutFile "c:/temp/python-3.9.0.exe"
           echo "Installing Python 3 ..."
-          c:/temp/python-3.9.0.exe /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
+          & "c:/temp/python-3.9.0.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
           echo "Waiting for setup to complete ..."
           $env:PATH = "$env:LOCALAPPDATA\Programs\Python\Python39-32;$env:LOCALAPPDATA\Programs\Python\Python39-32\lib;$env:PATH"
           env
           while (!(Test-Path "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe")) {
             Write-Host "Waiting for installation"
-            Start-Sleep 1
+            [System.Threading.Thread]::Sleep(1000)
           }
-          
           $pyver = ""
           while (!($pyver.Contains(" 3.9"))) {
             $pyver = $(
@@ -73,6 +54,8 @@ jobs:
           echo "Windows-Tests: Preloading package dependencies ..."
           & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip install anyio mmh3 packaging pip pytest pytest-env requests yarl
           echo "Windows-Tests: Running tests ..."
+          $env:DEBUG = 1
+          $env:ERRORS = 1
           & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pytest
 
 
@@ -86,5 +69,7 @@ jobs:
           echo "MacOS-Tests: Preloading package dependencies ..."
           python3 -m pip install anyio mmh3 packaging pip pytest pytest-env requests yarl
           echo "MacOS-Tests: Running tests ..."
-          python3 -m pytest
+          mkdir -p ~/.justuse-python/
+          echo "debug = true" > ~/.justuse-python/config.toml
+          env DEBUG=1 ERRORS=1 python3 -m pytest
   
