@@ -212,19 +212,6 @@ def suggested_artifact(*args, **kwargs):
     version, hash_value = (match.group("version"), match.group("hash_value"))
     return (version, hash_value)
     
-    
-def test_suggestion_works(reuse):
-    try:
-        mod = reuse("numpy", modes=use.auto_install)
-    except RuntimeWarning as rw:
-        match = re.search(r"(use\(.*\))", str(rw))
-        assert match
-        log.info(f"eval(match[1]!r)")
-        mod = eval(match[1])
-        assert mod
-        return
-    assert False, "Missed expected RuntimeWsrning"
-
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="windows Auto-installing numpy"
 )
@@ -534,3 +521,19 @@ def test_reloading(reuse):
                 f.write(f"def foo(): return {check}")
             mod = mod or reuse(Path(file), modes=reuse.reloading)
             while mod.foo() < check: pass
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="windows Auto-installing numpy"
+)
+def test_suggestion_works(reuse):
+    try:
+        mod = reuse("xdis", modes=use.auto_install)
+    except RuntimeWarning as rw:
+        match = re.search(r"(use\(.*\))", str(rw))
+        assert match
+        log.info(f"eval(match[1]!r)")
+        mod = eval(match[1])
+        assert mod
+        return
+    assert False, "Missed expected RuntimeWsrning"
+
