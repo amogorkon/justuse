@@ -3,7 +3,10 @@ import logging as log
 import os
 import re
 import sys
+import tempfile
+import threading
 import warnings
+
 from collections import defaultdict
 from pathlib import Path
 from typing import Optional
@@ -502,4 +505,24 @@ def test_use_ugrade_version_warning(reuse):
         )
         assert test_use.test_version == test_use.__version__ == version
         assert w[0].category.__name__ == reuse.VersionWarning.__name__
+
+def test_reloading(reuse):
+    fd, file = tempfile.mkstemp(".py", "test_module")
+    with open(file,"w",encoding="UTF-8") as f:
+        f.write("def foo(): return 1")
+    
+    locks = set(threading._shutdown_locks)
+    try:
+        mod = reuse(use.Path(file), modes=use.reloading)
+        assert mod.foo() == 1
+        with open(file, "w", encoding="UTF-8") as f:
+            f.write("def foo(): return 2")
+            f.flush()
+        while mod.foo() == 1:
+            pass
+        assert mod.foo() == 2
+    finally:
+        new_locks = set(threading._shutdown_locks).difference(locks)
+        for lock in new_locks:
+          lock.release()
 
