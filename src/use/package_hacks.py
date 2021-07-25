@@ -131,9 +131,6 @@ def numpy(
     try:
         os.chdir(folder)
         mod = importlib.import_module(module_name)
-        use._save_module_info(
-            package_name, version, url, path, that_hash, folder
-        )
         return mod
     finally:
         remove_cached_module(module_name)
@@ -175,9 +172,6 @@ def protobuf(
         exec(compile(pth_src, "pth_file.py", "exec"))
         remove_cached_module(module_name)
         sys.modules[module_name] = mod = use(Path("./google/protobuf/__init__.py"))
-        use._save_module_info(
-            package_name, version, url, path, that_hash, folder
-        )
         return mod
     finally:
         remove_cached_module(module_name)
