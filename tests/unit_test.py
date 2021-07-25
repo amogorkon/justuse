@@ -3,9 +3,12 @@ import logging as log
 import os
 import re
 import sys
+import tempfile
 import warnings
+
 from collections import defaultdict
 from pathlib import Path
+from threading import _shutdown_locks
 from typing import Optional
 
 import packaging.tags
@@ -503,3 +506,19 @@ def test_use_ugrade_version_warning(reuse):
         assert test_use.test_version == test_use.__version__ == version
         assert w[0].category.__name__ == reuse.VersionWarning.__name__
 
+class Restorer:
+    def __enter__(self):
+        self.locks = set(_shutdown_locks)
+    def __exit__(self, arg1, arg2, arg3):
+        for lock in set(_shutdown_locks).difference(self.locks):
+            lock.release()
+
+def test_reloading(reuse):
+    fd, file = tempfile.mkstemp(".py", "test_module")
+    with Restorer():
+        mod = None
+        for check in range(1, 5):
+            with open(file, "w") as f:
+                f.write(f"def foo(): return {check}")
+            mod = mod or reuse(Path(file), modes=reuse.reloading)
+            while mod.foo() < check: pass
