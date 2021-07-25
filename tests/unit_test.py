@@ -215,10 +215,11 @@ def suggested_artifact(*args, **kwargs):
     
 def test_suggestion_works(reuse):
     try:
-        mod = reuse("mmh3", modes=use.auto_install)
+        mod = reuse("numpy", modes=use.auto_install)
     except RuntimeWarning as rw:
         match = re.search(r"(use\(.*\))", str(rw))
         assert match
+        log.info(f"eval(match[1]!r)")
         mod = eval(match[1])
         assert mod
         return
