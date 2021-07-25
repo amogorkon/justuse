@@ -1054,7 +1054,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         mod:Optional[ModuleType]=None
     ) -> Optional[Version]:
         version = None
-        for lookup_name in (name, package_name):
+        for _ in (name, package_name):
             try:
                 meta = metadata.distribution(name)
                 return Version(meta.version)
