@@ -92,31 +92,6 @@ def create_solib_links(archive: zipfile.ZipFile, folder: Path):
         link.symlink_to(sofile)
 
 
-def save_module_info(package_name, rdists, version, url, path, that_hash, folder):
-    if package_name not in rdists:
-        rdists[package_name] = {}
-    if version not in rdists[package_name]:
-        rdists[package_name][version] = {}
-    # Update package version metadata
-    assert url is not None
-    mod = None
-    rdist_info = rdists[package_name][version]
-    rdist_info.update({
-        "package": package_name,
-        "version": version,
-        "url": url.human_repr(),
-        "path": str(path) if path else None,
-        "folder": folder.absolute().as_uri(),
-        "filename": path.name,
-        "hash": that_hash
-    })
-    use.persist_registry()
-    
-    if not folder.exists():
-        folder.mkdir(mode=0o755, parents=True, exist_ok=True)
-        print("Extracting to", folder, "...")
-
-
 def ensure_extracted(path, folder, url=None):
     if not folder.exists():
         folder.mkdir(mode=0o755, parents=True, exist_ok=True)
@@ -156,7 +131,9 @@ def numpy(
     try:
         os.chdir(folder)
         mod = importlib.import_module(module_name)
-        save_module_info(package_name, rdists, version, url, path, that_hash, folder)
+        use._save_module_info(
+            package_name, version, url, path, that_hash, folder
+        )
         return mod
     finally:
         remove_cached_module(module_name)
@@ -198,9 +175,10 @@ def protobuf(
         exec(compile(pth_src, "pth_file.py", "exec"))
         remove_cached_module(module_name)
         sys.modules[module_name] = mod = use(Path("./google/protobuf/__init__.py"))
-        save_module_info(package_name, rdists, version, url, path, that_hash, folder)
+        use._save_module_info(
+            package_name, version, url, path, that_hash, folder
+        )
         return mod
     finally:
         remove_cached_module(module_name)
         os.chdir(original_cwd)
-

@@ -496,7 +496,38 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
                 self._del_entry(name)
         self.persist_registry()
 
-    def _set_mod(self, *, name, mod, spec, path, frame):
+
+    def _save_module_info(
+        self,
+        name:str,
+        version:Union[Version|str],
+        url:URL,
+        path:Union[Path|str],
+        that_hash:str,
+        folder:Path,
+        package_name:str=None,
+    ):
+        """Update the registry to contain the package's metadata.
+           Does not call Use.persist_registry() on its own."""
+        package_name = package_name or name
+        version = str(version)
+        rdists:Dict[str,dict] = self._registry["distributions"]
+        if package_name not in rdists:
+            rdists[package_name] = {}
+        if version not in rdists[package_name]:
+            rdists[package_name][version] = {}
+        assert url, "save_module_info received a missing URL"
+        rdists[package_name][version].update({
+            "package": package_name,
+            "version": version,
+            "url": url.human_repr(),
+            "path": str(path) if path else None,
+            "folder": folder.absolute().as_uri(),
+            "filename": path.name,
+            "hash": that_hash
+        })
+
+    def _set_mod(self, *, name, mod, frame, path=None, spec=None):
         """Helper to get the order right."""
         self._using[name] = Use.ModInUse(name, mod, path, spec, frame)
 
@@ -870,7 +901,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             return Use._fail_or_default(default, ImportError, exc)
 
         frame: Union[FrameType, TracebackType] = inspect.getframeinfo(inspect.currentframe())  # type: ignore
-        self._set_mod(name=name, mod=mod, spec=None, path=url, frame=frame)
+        self._set_mod(name=name, mod=mod, frame=frame)
         if as_import:
             assert isinstance(
                 as_import, str
@@ -906,8 +937,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 default, ImportError, f"Can't import directory {path}"
             )
 
-        original_cwd = Path.cwd()
-        source_dir = original_cwd
+        original_cwd = source_dir = Path.cwd()
         if not path.is_absolute():
             source_dir = getattr(self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename), "path", None)  # type: ignore
 
@@ -928,20 +958,14 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 # let's first check if we are running in jupyter
                 jupyter = "ipykernel" in sys.modules
                 # we're in jupyter, we use the CWD as set in the notebook
-                if jupyter:
-                    source_dir = original_cwd
-                else:
+                if not jupyter:
                     # let's see where we started
                     main_mod = __import__("__main__")
                     # if we're calling from a script file e.g. `python3 my/script.py` like pytest unittest
                     if hasattr(main_mod, "__file__"):
                         source_dir = Path(inspect.currentframe().f_back.f_back.f_code.co_filename).resolve().parent  # type: ignore
-                    else:
-                        # interactive startup - use current directory
-                        source_dir = original_cwd
         path = source_dir.joinpath(path).resolve()
         if not path.exists():
-            os.chdir(original_cwd)
             return Use._fail_or_default(default, ImportError, f"Sure '{path}' exists?")
         os.chdir(path.parent)
         name = path.stem
@@ -999,7 +1023,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             with open(path, "rb") as file:
                 code = file.read()
             # the path needs to be set before attempting to load the new module - recursion confusing ftw!
-            self._set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=inspect.getframeinfo(inspect.currentframe()))  # type: ignore
+            frame = inspect.getframeinfo(inspect.currentframe())  # type: ignore
+            self._set_mod(name=name, mod=mod, frame=frame)
             try:
                 mod = Use._build_mod(
                     name=name,
@@ -1021,7 +1046,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             ), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             sys.modules[as_import] = mod  # type:ignore
         frame = inspect.getframeinfo(inspect.currentframe())  # type: ignore
-        self._set_mod(name=f"<{name}>", mod=mod, path=path, spec=None, frame=frame)
+        self._set_mod(name=name, mod=mod, frame=frame)
         return mod
 
     def _import_builtin(self, name, spec, default, aspectize):
@@ -1035,17 +1060,40 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 )
             for (check, pattern), decorator in aspectize.items():
                 Use._apply_aspect(mod, check, pattern, decorator)
-            self._set_mod(
-                name=name,
-                mod=mod,
-                spec=spec,
-                path=None,
-                frame=inspect.getframeinfo(inspect.currentframe()),
-            )
+            frame = inspect.getframeinfo(inspect.currentframe())  # type: ignore
+            self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
             return mod
         except:
             exc = traceback.format_exc()
             return Use._fail_or_default(default, ImportError, exc)
+
+    @staticmethod
+    def _get_version(
+        name:Optional[str]=None,
+        package_name:Optional[str]=None,
+        /,
+        mod:Optional[ModuleType]=None
+    ) -> Optional[Version]:
+        assert name is None or isinstance(name, str)
+        version = None
+        for lookup_name in (name, package_name):
+            if not lookup_name: continue
+            try:
+                meta = metadata.distribution(name)
+                return Version(meta.version)
+            except metadata.PackageNotFoundError:
+                continue
+        if not mod:
+            return None
+        version = getattr(mod, "__version__", version)
+        if isinstance(version, str):
+            return Version(version)
+        version = getattr(mod, "version", version)
+        if callable(version):
+            vevsion = version()
+        if isinstance(version, str):
+            return Version(version)
+        return version
 
     def _import_classical_install(
         self,
@@ -1056,6 +1104,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         default,
         aspectize,
         fatal_exceptions,
+        package_name:Optional[str]=None,
     ):
         # sourcery no-metrics
         exc = None
@@ -1063,13 +1112,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             mod = importlib.import_module(module_name)  # ! => cache
             for (check, pattern), decorator in aspectize.items():
                 Use._apply_aspect(mod, check, pattern, decorator)
-            self._set_mod(
-                name=name,
-                mod=mod,
-                spec=spec,
-                path=None,
-                frame=inspect.getframeinfo(inspect.currentframe()),
-            )
+            frame = inspect.getframeinfo(inspect.currentframe())  # type: ignore
+            self._set_mod(name=name, mod=mod, frame=frame)
             if not target_version:
                 warn(
                     f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')",
@@ -1082,42 +1126,24 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if exc:
             return Use._fail_or_default(default, ImportError, exc)
         # we only enforce versions with auto-install
-        if target_version:
-            # pure despair :(
-            this_version = None
-            for check in [
-                "metadata.distribution(name).version",
-                "mod.version",
-                "mod.version()",
-                "mod.__version__",
-            ]:
-                if this_version:
-                    break
-                try:
-                    check_value = eval(check)
-                    if isinstance(check_value, str):
-                        this_version = Version(check_value)
-                        if target_version != this_version:
-                            warn(
-                                f"{name} is expected to be version {target_version} ,  but got {this_version} instead",
-                                Use.VersionWarning,
-                            )
-                            break
-                except:
-                    if fatal_exceptions:
-                        raise
-            else:
-                log.warning(f"Cannot determine version for module {name}, continueing.")
-        self.persist_registry()
+        this_version = Use._get_version(name, package_name, mod=mod)
+        if not this_version:
+            log.warning(f"Cannot find version for {name=}, {mod=}")
+        elif not target_version:
+            warn(
+                f"No version was specified",
+                Use.AmbiguityWarning
+            )
+        elif target_version != this_version:
+            warn(
+                f"{name} expected to be version {target_version},"
+                f" but got {this_version} instead",
+                Use.VersionWarning
+            )
         for (check, pattern), decorator in aspectize.items():
             Use._apply_aspect(mod, check, pattern, decorator)
-        self._set_mod(
-            name=name,
-            mod=mod,
-            path=None,
-            spec=spec,
-            frame=inspect.getframeinfo(inspect.currentframe()),
-        )
+        frame = inspect.getframeinfo(inspect.currentframe())  # type: ignore
+        self._set_mod(name=name, mod=mod, frame=frame)
         return mod
 
     @__call__.register(str)
@@ -1214,7 +1240,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
 
             # spec & auto-install
             else:
-                if (metadata.version(name) == target_version) or not (version):
+                this_version = Use._get_version	(name, package_name)
+
+                if this_version == target_version or not (version):
                     if not (version):
                         warn(
                             Use.AmbiguityWarning(
@@ -1229,21 +1257,21 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         default,
                         aspectize,
                         fatal_exceptions,
+                        package_name,
                     )
                     warn(
-                        f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')",
+                        f"Classically imported '{name}'. To pin this version use('{name}', version='{this_version}')",
                         Use.AmbiguityWarning,
                     )
                     return mod
                 # wrong version => wrong spec
-                existing_mod_meta_version = metadata.version(name)
-                if existing_mod_meta_version != target_version:
-                    log.warning(
-                        f"Setting {spec=} to None, because "
-                        "the {target_version=} does not match "
-                        "the {existing_mod_meta_version=}."
-                    )
+                this_version = Use._get_version(mod=mod)
+                if this_version != target_version:
                     spec = None
+                    log.warning(
+                        f"Setting {spec=}, since "
+                        f"{target_version=} != {this_version=}"
+                    )
         # no spec
         else:
             if not auto_install:
@@ -1418,7 +1446,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 mod = self._hacks[name](
                     package_name=package_name,
                     rdists=rdists,
-                    version=version,
+                    version=use._get_version(mod=mod),
                     url=url,
                     path=path,
                     that_hash=that_hash,
@@ -1441,77 +1469,26 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     Use.AutoInstallationError,
                     f"Direct zipimport of {name} {version} failed and the package was not registered with known hacks.. we're sorry, but that means you will need to resort to using pip/conda for now.",
                 )
-
-            ###
-            if package_name not in rdists:
-                rdists[package_name] = {}
-            if version not in rdists[package_name]:
-                rdists[package_name][version] = {}
-            # Update package version metadata
-            assert url is not None
-            rdist_info = rdists[package_name][version]
-            rdist_info.update(
-                {
-                    "package": package_name,
-                    "version": version,
-                    "url": url.human_repr(),
-                    "path": str(path) if path else None,
-                    "folder": folder.absolute().as_uri(),
-                    "filename": path.name,
-                    "hash": that_hash,
-                }
-            )
-            use.persist_registry()
-            original_cwd = Path.cwd()
-            importlib.invalidate_caches()
-            if sys.path[0] != "":
-                sys.path.insert(0, "")
-            try:
-                log.debug("Trying importlib.import_module")
-                log.debug("  with cwd=%s,", os.getcwd())
-                log.debug("  sys.path=%s", sys.path)
-                mod = importlib.import_module(module_name)
-            except ImportError:
-                if fatal_exceptions:
-                    raise
-                exc = traceback.format_exc()
-            finally:
-                module_to_del = []
-                module_parts = module_name.split(".")
-                for part in module_parts:
-                    module_to_del.append(part)
-                    module_key = ".".join(module_to_del)
-                    if module_key in sys.modules:
-                        log.info("Deleting sys.modules[%s]", repr(module_key))
-                        del sys.modules[module_key]
-
-            for key in (
-                "__name__",
-                "__package__",
-                "__path__",
-                "__file__",
-                "__version__",
-                "__author__",
-            ):
-                if not hasattr(mod, key):
-                    continue
-                rdist_info[key] = getattr(mod, key)
-            print(f"Successfully loaded {package_name}, version {version}.")
-        os.chdir(original_cwd)
-
-        ###
-        self.persist_registry()
+        # no spec
+        if True:
+            self.persist_registry()
         for (check, pattern), decorator in aspectize.items():
-            if mod is not None:
-                Use._apply_aspect(mod, check, pattern, decorator)
-        frame: FrameType = inspect.getframeinfo(inspect.currentframe())  # type:ignore
-        if frame is not None:
-            self._set_mod(name=name, mod=mod, path=None, spec=spec, frame=frame)
-
-        assert mod, f"Well. Shit. ( {path} )"
+          if mod is not None:
+              Use._apply_aspect(mod, check, pattern, decorator)
+        frame = inspect.getframeinfo(inspect.currentframe()) #type:ignore
+        if frame:
+          self._set_mod(name=name, mod=mod, frame=frame)
+        assert mod, f"Well. Shit, no module. ( {path} )"
+        this_version = Use._get_version(mod=mod) or version
+        assert this_version, f"Well. Shit, no version. ( {path} )"
+        self._save_module_info(
+            name, this_version, url, path, that_hash, folder,
+            package_name=package_name
+        )
+        self.persist_registry()
         return mod
-
-
+    pass
+    
 # we should avoid side-effects during testing, specifically for the version-upgrade-warning
 Use.Version = Version
 Use.config = config
