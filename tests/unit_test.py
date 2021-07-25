@@ -211,8 +211,7 @@ def suggested_artifact(*args, **kwargs):
     assert match
     version, hash_value = (match.group("version"), match.group("hash_value"))
     return (version, hash_value)
-
-
+    
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="windows Auto-installing numpy"
 )
@@ -513,12 +512,34 @@ class Restorer:
         for lock in set(_shutdown_locks).difference(self.locks):
             lock.release()
 
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="windows reloading"
+)
 def test_reloading(reuse):
     fd, file = tempfile.mkstemp(".py", "test_module")
     with Restorer():
         mod = None
+        newfile = f"{file}.t"
         for check in range(1, 5):
-            with open(file, "w") as f:
+            with open(newfile, "w") as f:
                 f.write(f"def foo(): return {check}")
+                f.flush()
+            os.rename(newfile, file)
             mod = mod or reuse(Path(file), modes=reuse.reloading)
             while mod.foo() < check: pass
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="windows Auto-installing numpy"
+)
+def test_suggestion_works(reuse):
+    try:
+        mod = reuse("xdis", modes=use.auto_install)
+    except RuntimeWarning as rw:
+        match = re.search(r"(use\(.*\))", str(rw))
+        assert match
+        log.info(f"eval(match[1]!r)")
+        mod = eval(match[1])
+        assert mod
+        return
+    assert False, "Missed expected RuntimeWsrning"
+

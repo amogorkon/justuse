@@ -44,7 +44,7 @@ True
                     hash_value="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")
 
 # to auto-install a certain version (within a virtual env and pip in secure hash-check mode) of a package you can do
->>> np = use("numpy", version="1.1.1", auto_install=True, hash_value=["9879de676"])
+>>> np = use("numpy", version="1.1.1", modes=use.auto_install, hash_value=["9879de676"])
 
 File-Hashing inspired by 
 - https://github.com/kalafut/py-imohash
@@ -87,7 +87,7 @@ from importlib import metadata
 from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
 from types import FrameType, ModuleType, TracebackType
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from warnings import warn
 
 import mmh3  # type: ignore
@@ -608,7 +608,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
                     our_python_tag,
                 )
                 return True
-        return False
+        return include_sdist
 
     @staticmethod
     def _find_matching_artifact(
@@ -632,16 +632,19 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
                 packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
             )
         assert isinstance(interpreter_tag, str)
-
-        results = [
-            (info["version"], info["digests"][hash_algo])
-            for info in sorted(
-                urls, key=lambda info: info.get("packagetype", "")
-            )  # pre-sorting by type should ensure that we prefer binary packages over raw source
-            if Use._is_version_satisfied(info, sys_version)
-            and Use._is_platform_compatible(info, platform_tags)
-            and not info["yanked"]
-        ]
+        for include_sdist in (False, True): # prefer non-source
+            results = [
+                (info["version"], info["digests"][hash_algo])
+                for info in sorted(
+                    urls, key=lambda info: info.get("packagetype", "")
+                )  # pre-sorting by type should ensure that we prefer binary packages over raw source
+                if Use._is_version_satisfied(info, sys_version)
+                and Use._is_platform_compatible(info, platform_tags)
+                and not info["yanked"]
+                and ".egg" not in info["filename"]
+            ]
+            if results:
+                return results[0]
         results.append(("", ""))
         return results[0]
 
@@ -681,30 +684,36 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
             for d in dists:
                 d["version"] = ver  # Add version info
                 d.update(Use._parse_filename(d["filename"]))
-        result: Tuple[str, str] = ("", "")
-        for ver, dists in sorted(
-            releases.items(), key=lambda item: Version(item[0]), reverse=True
-        ):
-            if not dists:
-                continue
-            for info in dists:
-                if info["yanked"]:
+        for include_sdist in (False, True): # prefer non-source
+            for ver, dists in sorted(
+                releases.items(), key=lambda item: Version(item[0]),
+                reverse=True
+            ):
+                if not dists:
                     continue
-                info.update(Use._parse_filename(info["filename"]))
-                if (
-                    Use._is_version_satisfied(info, sys_version)
-                    and (not version or Version(info["version"]) == Version(str(version)))
-                    and Use._is_platform_compatible(info, platform_tags)
-                ):
-                    hash_value = info["digests"].get(hash_algo)
-                    if not hash_value:
-                        raise Use.MissingHash(
-                            f"No hash digest found in "
-                            "release distribution for {hash_algo=}"
+                for info in dists:
+                    if info["yanked"] or ".egg" in info["filename"]:
+                        continue
+                    info.update(Use._parse_filename(info["filename"]))
+                    if (
+                        Use._is_version_satisfied(info, sys_version)
+                        and (not version or Version(info["version"]) == Version(str(version)))
+                        and Use._is_platform_compatible(info, platform_tags, include_sdist=include_sdist)
+                    ):
+                        hash_value = info["digests"].get(hash_algo)
+                        if not hash_value:
+                            raise Use.MissingHash(
+                                f"No hash digest found in "
+                                "release distribution for {hash_algo=}"
+                            )
+                        result = (info["version"], hash_value)
+                        log.info(
+                            "use._find_latest_working_version() "
+                            "returning %s",
+                            result
                         )
-                    result = (info["version"], hash_value)
-        log.info("use._find_latest_working_version() returning %s", result)
-        return result
+                        return result
+        return ("", "")
 
     @staticmethod
     def _load_registry(path):
@@ -1318,7 +1327,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 if hit and hit[0]:
                     raise RuntimeWarning(
                         f"""Failed to auto-install '{package_name}' because hash_value is missing. This may work:
-use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
+use("{name}", version="{version}", hash_value="{that_hash}", modes=use.auto_install)
 """
                     )
                 else:
@@ -1360,7 +1369,7 @@ use("{name}", version="{version}", hash_value="{that_hash}", auto_install=True)
                     raise RuntimeWarning(
                         f"""Please specify version and hash for auto-installation of '{package_name}'. 
 To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
-If you want to auto-install the latest version: use("{name}", version="{version}", hash_value="{hash_value}", auto_install=True)
+If you want to auto-install the latest version: use("{name}", version="{version}", hash_value="{hash_value}", modes=use.auto_install)
 """
                     )
 
@@ -1517,4 +1526,3 @@ if not test_version:
 hacks_path = Path(Path(__file__).parent, "package_hacks.py")
 assert hacks_path.exists()
 use(hacks_path)
-
