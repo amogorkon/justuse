@@ -94,7 +94,7 @@ import mmh3  # type: ignore
 import packaging
 import requests
 import toml
-from packaging.specifiers import SpecifierSet
+from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import Version as PkgVersion
 from yarl import URL
 
@@ -435,7 +435,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
             )
             file.write(text)
 
-    def register_hack(self, name):
+    def register_hack(self, name, specifier=Specifier(">=0")):
         def wrapper(func):
             self._hacks[name] = func
 
@@ -510,7 +510,8 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
         """Update the registry to contain the package's metadata.
            Does not call Use.persist_registry() on its own."""
         package_name = package_name or name
-        version = str(version)
+        version = str(version) if version else "0.0.0"
+        assert version not in ("None", "null", "")
         rdists:Dict[str,dict] = self._registry["distributions"]
         if package_name not in rdists:
             rdists[package_name] = {}
@@ -938,23 +939,21 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             )
 
         original_cwd = source_dir = Path.cwd()
-        if not path.is_absolute():
-            source_dir = getattr(self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename), "path", None)  # type: ignore
-
+        try:
+            if not path.is_absolute():
+                source_dir = getattr(
+                    self._using.get(
+                        inspect.currentframe(
+                        ).f_back.f_back.f_code.co_filename
+                    ), "path", None
+                )  # type: ignore
+    
             # calling from another use()d module
-            if source_dir:
-                # if calling from an actual file, we take that as starting point
-                if source_dir.exists():
-                    os.chdir(source_dir.parent)
-                    source_dir = source_dir.parent
-                else:
-                    return Use._fail_or_default(
-                        default,
-                        NotImplementedError,
-                        "Can't determine a relative path from a virtual file.",
-                    )
-            # there are a number of ways to call use() from a non-use() starting point
+            if source_dir and source_dir.exists():
+                os.chdir(source_dir.parent)
+                source_dir = source_dir.parent
             else:
+                # there are a number of ways to call use() from a non-use() starting point
                 # let's first check if we are running in jupyter
                 jupyter = "ipykernel" in sys.modules
                 # we're in jupyter, we use the CWD as set in the notebook
@@ -963,81 +962,96 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     main_mod = __import__("__main__")
                     # if we're calling from a script file e.g. `python3 my/script.py` like pytest unittest
                     if hasattr(main_mod, "__file__"):
-                        source_dir = Path(inspect.currentframe().f_back.f_back.f_code.co_filename).resolve().parent  # type: ignore
-        path = source_dir.joinpath(path).resolve()
-        if not path.exists():
-            return Use._fail_or_default(default, ImportError, f"Sure '{path}' exists?")
-        os.chdir(path.parent)
-        name = path.stem
-        if reloading:
-            try:
+                        source_dir = Path(inspect.currentframe(
+                            ).f_back.f_back.f_code.co_filename
+                        ).resolve().parent  # type: ignore
+            if not source_dir.exists():
+                return Use._fail_or_default(
+                    default,
+                    NotImplementedError,
+                    "Can't determine a relative path from a virtual file.",
+                )
+            path = source_dir.joinpath(path).resolve()
+            if not path.exists():
+                return Use._fail_or_default(
+                    default, ImportError, f"Sure '{path}' exists?"
+                )
+            os.chdir(path.parent)
+            name = path.stem
+            if reloading:
+                try:
+                    with open(path, "rb") as file:
+                        code = file.read()
+                    # initial instance, if this doesn't work, just throw the towel
+                    mod = Use._build_mod(
+                        name=name,
+                        code=code,
+                        initial_globals=initial_globals,
+                        module_path=str(path.resolve()),
+                        aspectize=aspectize,
+                    )
+                except:
+                    exc = traceback.format_exc()
+                if exc:
+                    return Use._fail_or_default(default, ImportError, exc)
+                mod = ProxyModule(mod)
+                reloader = ModuleReloader(
+                    proxy=mod,
+                    name=name,
+                    path=path,
+                    initial_globals=initial_globals,
+                    aspectize=aspectize,
+                )
+                _reloaders[mod] = reloader
+    
+                threaded = False
+                # this looks like a hack, but isn't one -
+                # jupyter is running an async loop internally, which works better async than threaded!
+                try:
+                    asyncio.get_running_loop()
+                # we're dealing with non-async code, we need threading
+                except RuntimeError:
+                    # can't have the code inside the handler because of "during handling of X, another exception Y happened"
+                    threaded = True
+                if not threaded:
+                    reloader.start_async()
+                else:
+                    reloader.start_threaded()
+    
+                if not all(
+                    inspect.isfunction(value)
+                    for key, value in mod.__dict__.items()
+                    if key not in initial_globals.keys() and not key.startswith("__")
+                ):
+                    warn(
+                        f"Beware {name} also contains non-function objects, it may not be safe to reload!",
+                        Use.NotReloadableWarning,
+                    )
+            else: # NOT reloading
                 with open(path, "rb") as file:
                     code = file.read()
-                # initial instance, if this doesn't work, just throw the towel
-                mod = Use._build_mod(
-                    name=name,
-                    code=code,
-                    initial_globals=initial_globals,
-                    module_path=str(path.resolve()),
-                    aspectize=aspectize,
-                )
-            except:
-                exc = traceback.format_exc()
-            if exc:
-                return Use._fail_or_default(default, ImportError, exc)
-
-            mod = ProxyModule(mod)
-            reloader = ModuleReloader(
-                proxy=mod,
-                name=name,
-                path=path,
-                initial_globals=initial_globals,
-                aspectize=aspectize,
-            )
-            _reloaders[mod] = reloader
-
-            threaded = False
-            # this looks like a hack, but isn't one -
-            # jupyter is running an async loop internally, which works better async than threaded!
-            try:
-                asyncio.get_running_loop()
-            # we're dealing with non-async code, we need threading
-            except RuntimeError:
-                # can't have the code inside the handler because of "during handling of X, another exception Y happened"
-                threaded = True
-            if not threaded:
-                reloader.start_async()
-            else:
-                reloader.start_threaded()
-
-            if not all(
-                inspect.isfunction(value)
-                for key, value in mod.__dict__.items()
-                if key not in initial_globals.keys() and not key.startswith("__")
-            ):
-                warn(
-                    f"Beware {name} also contains non-function objects, it may not be safe to reload!",
-                    Use.NotReloadableWarning,
-                )
-        else:
-            with open(path, "rb") as file:
-                code = file.read()
-            # the path needs to be set before attempting to load the new module - recursion confusing ftw!
-            frame = inspect.getframeinfo(inspect.currentframe())  # type: ignore
-            self._set_mod(name=name, mod=mod, frame=frame)
-            try:
-                mod = Use._build_mod(
-                    name=name,
-                    code=code,
-                    initial_globals=initial_globals,
-                    module_path=str(path),
-                    aspectize=aspectize,
-                )
-            except:
-                del self._using[f"<{name}>"]
-                exc = traceback.format_exc()
-        # let's not confuse the user and restore the cwd to the original in any case
-        os.chdir(original_cwd)
+                # the path needs to be set before attempting to load the new module - recursion confusing ftw!
+                frame = inspect.getframeinfo(inspect.currentframe())  # type: ignore
+                self._set_mod(name=name, mod=mod, frame=frame)
+                try:
+                    mod = Use._build_mod(
+                        name=name,
+                        code=code,
+                        initial_globals=initial_globals,
+                        module_path=str(path),
+                        aspectize=aspectize,
+                    )
+                except:
+                    del self._using[f"<{name}>"]
+                    exc = traceback.format_exc()
+        except:
+            exc = traceback.format_exc()
+            if fatal_exceptions:
+                raise
+            return Use._fail_or_default(default, ImportError, exc)
+        finally:
+            # let's not confuse the user and restore the cwd to the original in any case
+            os.chdir(original_cwd)
         if exc:
             return Use._fail_or_default(default, ImportError, exc)
         if as_import:
