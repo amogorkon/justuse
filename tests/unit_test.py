@@ -512,6 +512,9 @@ class Restorer:
         for lock in set(_shutdown_locks).difference(self.locks):
             lock.release()
 
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="windows reloading"
+)
 def test_reloading(reuse):
     fd, file = tempfile.mkstemp(".py", "test_module")
     with Restorer():
