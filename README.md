@@ -5,7 +5,7 @@
 [![Build](https://github.com/amogorkon/justuse/actions/workflows/blank.yml/badge.svg?branch=main)](https://github.com/amogorkon/justuse/actions/workflows/blank.yml)
 [![Downloads](https://pepy.tech/badge/justuse)](https://pepy.tech/project/justuse)
 [![justuse](https://snyk.io/advisor/python/justuse/badge.svg)](https://snyk.io/advisor/python/justuse)
-
+[![slack](https://img.shields.io/badge/slack-@justuse-purple.svg?logo=slack)](https://join.slack.com/t/justuse/shared_invite/zt-tot4bhq9-_qIXBdeiRIfhoMjxu0EhFw)
 
 
 # Just use() python the way you want!
