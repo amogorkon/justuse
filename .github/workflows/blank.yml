@@ -19,7 +19,7 @@ jobs:
       - name: Linux Tests
         run: |
           echo "Linux-Tests: Preloading package dependencies ..."
-          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env requests yarl
+          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env requests types-toml types-requests yarl
           echo "Linux-Tests: Running tests ..."
           mkdir -p ~/.justuse-python/
           echo "debug = true" > ~/.justuse-python/config.toml
@@ -52,7 +52,7 @@ jobs:
             ) -join "`n"
           }
           echo "Windows-Tests: Preloading package dependencies ..."
-          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip install anyio mmh3 mypy packaging pip pytest pytest-env requests yarl
+          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip install anyio mmh3 mypy packaging pip pytest pytest-env requests types-toml types-requests yarl
           echo "Windows-Tests: Running tests ..."
           $env:DEBUG = 1
           $env:ERRORS = 1
@@ -67,7 +67,7 @@ jobs:
       - name: Run a multi-line script
         run: |
           echo "MacOS-Tests: Preloading package dependencies ..."
-          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env requests yarl
+          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env requests types-toml types-requests yarl
           echo "MacOS-Tests: Running tests ..."
           mkdir -p ~/.justuse-python/
           echo "debug = true" > ~/.justuse-python/config.toml
