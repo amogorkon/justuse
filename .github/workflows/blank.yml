@@ -25,7 +25,6 @@ jobs:
           echo "Linux-Tests: Running tests ..."
           mkdir -p ~/.justuse-python/
           echo "debug = true" > ~/.justuse-python/config.toml
-          env DEBUG=1 ERRORS=1 python3 -m pytest
           [ -e tests/coverage.sh ] && env DEBUG=1 ERRORS=1 bash ./tests/coverage.sh || env DEBUG=1 ERRORS=1 python3 -m pytest
     
       - name: coverage.py badge
@@ -36,7 +35,8 @@ jobs:
       - name: Upload coverage badge
         run: |
           export GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
-          typeset -p; typeset -x; typeset -p -a; bash -x ./tests/coverage.sh upload
+          typeset -p; typeset -x; typeset -p -a; bash -x ./tests/coverage.sh upload || true
+
 
 
   test-windows:
