@@ -24,6 +24,7 @@ from pathlib import Path
 
 # this is possible because we don't *import* this file, but use() it!
 __package__ = "use.use"
+SOLIB_DELIMS = [".python", ".cpython", ".cp"]
 from ..use import use as use1 # type: ignore
 use1: 'Use' = use1
 use = use1
@@ -61,36 +62,22 @@ def remove_cached_module(module_name):
             log.info("Deleting sys.modules[%s]", repr(module_key))
             del sys.modules[module_key]
 
-
 def create_solib_links(archive: zipfile.ZipFile, folder: Path):
-    log.debug(f"create_solib_links({archive=}, {folder=})")
-    entries = archive.getnames() if hasattr(archive, "getnames") else archive.namelist()
-    log.debug(f"archive {entries=}")
-    solibs = [*filter(lambda f: any(map(f.endswith, EXTENSION_SUFFIXES)), entries)]
-    if not solibs:
-        log.debug(f"No solibs found in archive")
-        return
+    entries, os_ext = archive.namelist(), EXTENSION_SUFFIXES[-1]
+    log.debug(
+      f"create_solib_links({archive=}, {folder=}): archive {entries=}"
+    )
     # Set up links from 'xyz.cpython-3#-<...>.so' to 'xyz.so'
-    log.debug(f"Creating {len(solibs)} symlinks for extensions...")
-    log.debug(f"solibs = {solibs}")
-    for solib in solibs:
-        sofile = folder / solib
-        log.debug(f"{sofile=}, {folder=}, {solib=}")
-        split_on = [".python", ".cpython", ".cp"]
-        simple_name, os_ext = None, EXTENSION_SUFFIXES[-1]
-        for s in split_on:
-            if not s in sofile.name:
-                continue
-            simple_name = sofile.name.split(s)[0]
-        if simple_name is None:
-            continue
+    for solib in [*filter(
+        lambda f: any(map(f.endswith, EXTENSION_SUFFIXES)), entries
+    )]:
+        simple_name, sofile = None, folder / solib
+        for s in SOLIB_DELIMS:
+            if s in sofile.name:
+                simple_name = sofile.name.split(s)[0]
         link = Path(sofile.parent / f"{simple_name}{os_ext}")
-        if link == sofile:
-            continue
-        log.debug(f"{link=}, {sofile=}")
         link.unlink(missing_ok=True)
         link.symlink_to(sofile)
-
 
 def ensure_extracted(path, folder, url=None):
     if not folder.exists():
