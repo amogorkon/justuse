@@ -105,20 +105,22 @@ class PlatformTag(namedtuple("PlatformTag", ["platform"])):
     def __repr__(self):
         return self.platform
     
+_supported = None
 def get_supported() -> FrozenSet[PlatformTag]:
-    if not hasattr(get_supported, "_supported"):
+    global _supported
+    if _supported is None:
         items: List[PlatformTag] = []
         try:
-            from pip._internal.utils import compatibility_tags
+            from pip._internal.utils import compatibility_tags #type: ignore
             for tag in compatibility_tags.get_supported():
                 items.append(PlatformTag(platform=tag.platform))
         except ImportError:
             pass
-        for tag in packaging.tags._platform_tags():
-            items.append(PlatformTag(platform=str(tag)))
-        get_supported._supported = tags = frozenset(items)
+        for ptag in packaging.tags._platform_tags():
+            items.append(PlatformTag(platform=str(ptag)))
+        _supported = tags = frozenset(items)
         log.error(str(tags))
-    return get_supported._supported
+    return _supported
     
 class VerHash(namedtuple("VerHash", ["version", "hash"])):
     @staticmethod
@@ -524,7 +526,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
         version:Union[Version|str], #type: ignore
         url:Optional[URL],
         path:Optional[Path],
-        that_hash:str,
+        that_hash:Optional[str],
         folder:Path,
         package_name:str=None,
     ):
@@ -1556,3 +1558,4 @@ if not test_version:
 hacks_path = Path(Path(__file__).parent, "package_hacks.py")
 assert hacks_path.exists()
 use(hacks_path) #type: ignore
+
