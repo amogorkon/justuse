@@ -23,7 +23,8 @@ def test_template(reuse):
 
 
 def test_is_platform_compatible_macos(reuse):
-    platform_tag = list(map(lambda i: i.platform, reuse.use.get_supported()))[0]
+    platform_tags = reuse.use.get_supported()
+    platform_tag = next(iter(platform_tags))
     info = {
         "comment_text": "",
         "digests": {
@@ -44,12 +45,12 @@ def test_is_platform_compatible_macos(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    platform_tags = set(map(lambda i: i.platform, reuse.use.get_supported()))
     assert reuse._is_platform_compatible(info, platform_tags)
 
 
 def test_is_platform_compatible_win(reuse):
-    platform_tag = list(map(lambda i: i.platform, reuse.use.get_supported()))[0]
+    platform_tags = reuse.use.get_supported()
+    platform_tag = next(iter(platform_tags))
     info = {
         "comment_text": "",
         "digests": {
@@ -70,8 +71,9 @@ def test_is_platform_compatible_win(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    platform_tags = set(map(lambda i: i.platform, reuse.use.get_supported()))
-    assert reuse._is_platform_compatible(info, platform_tags)
+    assert reuse._is_platform_compatible(
+        info, platform_tags, include_sdist=False
+    )
 
 @pytest.mark.xfail(not_local, reason="Incomplete type hints")
 def test_types():
@@ -82,7 +84,7 @@ def test_types():
     exit_code:int = None
     prev_exit:Callable[int, ...] = sys.exit
     sys.exit:Callable[int, ...] = lambda *args: \
-        exec("global exit_code; exit_code=args[0]")
+        exec("exit_code=args[0]")
     try:
         prev_argv = sys.argv
         sys.argv = ["-m", *files]

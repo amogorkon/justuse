@@ -87,7 +87,7 @@ from importlib import metadata
 from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
 from types import FrameType, ModuleType, TracebackType
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Set, Tuple, Union
 from warnings import warn
 
 import mmh3  # type: ignore
@@ -99,23 +99,44 @@ from packaging.version import Version as PkgVersion
 from yarl import URL
 
 
-def get_supported():
-    try:
-        from pip._internal.utils.compatibility_tags import get_supported  # type: ignore
-
-        return [*get_supported()]
-    except ImportError:
-        pass
-
-    ret = []
-
-    class Tag:
-        def __init__(self, platform):
-            self.platform = platform
-
-    for tag in packaging.tags._platform_tags():
-        ret.append(Tag(platform=tag))
-    return ret
+class PlatformTag(namedtuple("PlatformTag", ["platform"])):
+    def __str__(self):
+        return self.platform
+    def __repr__(self):
+        return self.platform
+    
+def get_supported() -> FrozenSet[PlatformTag]:
+    if not hasattr(get_supported, "_supported"):
+        items: List[PlatformTag] = []
+        try:
+            from pip._internal.utils import compatibility_tags
+            for tag in compatibility_tags.get_supported():
+                items.append(PlatformTag(platform=tag.platform))
+        except ImportError:
+            pass
+        for tag in packaging.tags._platform_tags():
+            items.append(PlatformTag(platform=str(tag)))
+        get_supported._supported = tags = frozenset(items)
+        log.error(str(tags))
+    return get_supported._supported
+    
+class VerHash(namedtuple("VerHash", ["version", "hash"])):
+    @staticmethod
+    def empty(): return VerHash("", "")
+    
+    def __bool__(self):
+        return bool(self.version and self.hash)
+    def __eq__(self, other):
+        if (other is None or 
+            not hasattr(other, "__len__") \
+             or len(other) != len(self)):
+            return False
+        return (
+          Version(str(self.version)) == Version(str([*other][0])) \
+          and self.hash == [*other][1]
+        )
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
 
 # injected via initial_globals for testing, you can safely ignore this
@@ -500,9 +521,9 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
     def _save_module_info(
         self,
         name:str,
-        version:Union[Version|str],
-        url:URL,
-        path:Union[Path|str],
+        version:Union[Version|str], #type: ignore
+        url:Optional[URL],
+        path:Optional[Path],
         that_hash:str,
         folder:Path,
         package_name:str=None,
@@ -524,7 +545,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
             "url": url.human_repr(),
             "path": str(path) if path else None,
             "folder": folder.absolute().as_uri(),
-            "filename": path.name,
+            "filename": path.name, #type: ignore
             "hash": that_hash
         })
 
@@ -548,10 +569,6 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
         return inspect.isclass(x)
 
     @staticmethod
-    def _get_platform_tags() -> Set[str]:
-        return set(get_supported())
-
-    @staticmethod
     def _parse_filename(filename: str) -> dict:
         """Match the filename and return a dict of parts.
         >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
@@ -571,7 +588,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
         return match.groupdict() if match else {}
 
     @staticmethod
-    def _is_version_satisfied(info: Dict[str, str], sys_version: Version):
+    def _is_version_satisfied(info: Dict[str, str], sys_version: Version): #type: ignore
         # https://warehouse.readthedocs.io/api-reference/json.html
         # https://packaging.pypa.io/en/latest/specifiers.html
         specifier = info.get(
@@ -582,102 +599,109 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
 
     @staticmethod
     def _is_platform_compatible(
-        info: Dict[str, str], platform_tags: set, include_sdist=False
+        info: Dict[str, Any],
+        platform_tags: FrozenSet[PlatformTag],
+        include_sdist: bool=False,
     ):
-        assert isinstance(info, dict) and isinstance(platform_tags, set)
-        info.update(
-            Use._parse_filename(info["filename"])
-        )  # filename as API, seriously WTF...
+        assert isinstance(info, dict)
+        assert isinstance(platform_tags, frozenset)
+        # filename as API, seriously WTF...
+        if "platform_tag" not in info:
+            info.update(Use._parse_filename(info["filename"]))
         our_python_tag: str = "".join(
-            (packaging.tags.interpreter_name(), packaging.tags.interpreter_version())
+            (packaging.tags.interpreter_name(),
+             packaging.tags.interpreter_version())
         )
         python_tag: str = info.get("python_tag", "")
         platform_tag: str = info.get("platform_tag", "")
-        platform_tags_strs: Set[str] = {
-            p if isinstance(p, str) else p.platform for p in platform_tags
-        }
+        platform_srs: Set[str] = { *map(str, platform_tags) }
         for one_platform_tag in platform_tag.split("."):
-            is_match = (
-                one_platform_tag in platform_tags_strs and our_python_tag == python_tag
-            )
-            if is_match:
+            if (one_platform_tag in platform_srs
+                and our_python_tag == python_tag
+            ):
                 log.info(
-                    f"[Y] %r in {platform_tags_strs=!r}, %s == %s",
-                    one_platform_tag,
-                    python_tag,
-                    our_python_tag,
+                    f"[Y] %s in {platform_srs=!r}, %s == %s",
+                    one_platform_tag, python_tag, our_python_tag,
                 )
                 return True
-        return include_sdist
-
+        return (
+            include_sdist
+            and info["filename"].endswith(".egg")
+        )
+    
     @staticmethod
     def _find_matching_artifact(
         urls: List[Dict[str, Any]],
         hash_algo: str = Hash.sha256.name,
         *,
         # for testability
-        sys_version: Version = None,
-        platform_tags: Set[str] = frozenset(),
+        sys_version: Version = None, #type: ignore
+        platform_tags: FrozenSet[PlatformTag] = frozenset(),
         interpreter_tag: str = None,
-    ) -> Tuple[str, str]:
-        """Pick from a list of possible urls and return the hash of the best fitting artifact."""
-        if not sys_version:
-            sys_version = Version(".".join(map(str, sys.version_info[0:3])))
-        assert isinstance(sys_version, Version)
-        if not platform_tags:
-            platform_tags = Use._get_platform_tags()
-        assert isinstance(platform_tags, set)
-        if not interpreter_tag:
-            interpreter_tag = (
-                packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
-            )
-        assert isinstance(interpreter_tag, str)
+        include_sdist: bool = False,
+    ) -> VerHash:
+        """Pick from a list of possible urls and return the
+            `(version, hash_value)`
+            pair from the best-fitting artifact,
+            preferring bdist over sdist distribution archives."""
+        info_s = sorted(urls, key=lambda i: i.get("packagetype", ""))
         for include_sdist in (False, True): # prefer non-source
             results = [
-                (info["version"], info["digests"][hash_algo])
-                for info in sorted(
-                    urls, key=lambda info: info.get("packagetype", "")
-                )  # pre-sorting by type should ensure that we prefer binary packages over raw source
-                if Use._is_version_satisfied(info, sys_version)
-                and Use._is_platform_compatible(info, platform_tags)
-                and not info["yanked"]
-                and ".egg" not in info["filename"]
+                VerHash(info["version"], info["digests"][hash_algo])
+                for info in info_s
+                if Use._is_compatible(
+                    info, hash_algo, sys_version, platform_tags,
+                    include_sdist
+                )
             ]
             if results:
                 return results[0]
-        results.append(("", ""))
-        return results[0]
+        return VerHash.empty()
+    
+    @staticmethod
+    def _is_compatible(
+        info: Dict[str, Any],
+        hash_algo: str = Hash.sha256.name,
+        sys_version: Version = None, #type: ignore
+        platform_tags: FrozenSet[PlatformTag] = frozenset(),
+        include_sdist: bool = False
+    ):
+        """Return true if the artifact described by 'info'
+           is compatible with the current or specified system."""
+        assert isinstance(info, dict)
+        if "platform_tag" not in info:
+            info.update(Use._parse_filename(info["filename"]))
+        sys_version = sys_version or Version(
+            ".".join(map(str, sys.version_info[0:3]))
+        )
+        assert isinstance(sys_version, Version)
+        platform_tags = platform_tags or get_supported()
+        return (".egg" not in info["filename"] and (
+            include_sdist or (
+                Use._is_version_satisfied(info, sys_version)
+            and Use._is_platform_compatible(info, platform_tags,
+                    include_sdist)
+            and not info["yanked"]
+        )))
 
     @staticmethod
     def _find_latest_working_version(
         releases: Dict[
-            str, List[Dict[str, str]]
+            str, List[Dict[str, Any]]
         ],  # {version: [{comment_text: str, filename: str, url: str, version: str, hash: str, build_tag: str, python_tag: str, abi_tag: str, platform_tag: str}]}
         *,
         hash_algo: str,
         # testing
-        sys_version: Version = None,
-        platform_tags: Set[str] = frozenset(),
+        sys_version: Version = None, #type: ignore
+        platform_tags: FrozenSet[PlatformTag] = frozenset(),
         interpreter_tag: str = None,
         version=None,
-    ) -> Tuple[str, str]:
+    ) -> VerHash:
         assert isinstance(releases, dict)
         assert isinstance(hash_algo, str)
-        if not sys_version:
-            sys_version = Version(".".join(map(str, sys.version_info[0:3])))
-        assert isinstance(sys_version, Version)
-        if not platform_tags:
-            platform_tags = set([*get_supported()])
-        assert isinstance(platform_tags, (list, set))
-        platform_tags = set(platform_tags)
-        if not interpreter_tag:
-            interpreter_tag = (
-                packaging.tags.interpreter_name() + packaging.tags.interpreter_version()
-            )
-        assert isinstance(interpreter_tag, str)
-
         # update the release dicts to hold all info canonically
-        # be aware, the json returned from pypi ["releases"] can contain empty lists as dists :/
+        # be aware, the json returned from pypi ["releases"] can
+        # contain empty lists as dists :/
         for ver, dists in releases.items():
             if not dists:
                 continue
@@ -685,35 +709,19 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
                 d["version"] = ver  # Add version info
                 d.update(Use._parse_filename(d["filename"]))
         for include_sdist in (False, True): # prefer non-source
-            for ver, dists in sorted(
+            for ver, infos in sorted(
                 releases.items(), key=lambda item: Version(item[0]),
                 reverse=True
             ):
-                if not dists:
-                    continue
                 for info in dists:
-                    if info["yanked"] or ".egg" in info["filename"]:
-                        continue
-                    info.update(Use._parse_filename(info["filename"]))
-                    if (
-                        Use._is_version_satisfied(info, sys_version)
-                        and (not version or Version(info["version"]) == Version(str(version)))
-                        and Use._is_platform_compatible(info, platform_tags, include_sdist=include_sdist)
+                    if Use._is_compatible(
+                        info, hash_algo, sys_version, platform_tags,
+                        include_sdist
                     ):
-                        hash_value = info["digests"].get(hash_algo)
-                        if not hash_value:
-                            raise Use.MissingHash(
-                                f"No hash digest found in "
-                                "release distribution for {hash_algo=}"
-                            )
-                        result = (info["version"], hash_value)
-                        log.info(
-                            "use._find_latest_working_version() "
-                            "returning %s",
-                            result
+                        return VerHash(
+                          info["version"], info["digests"][hash_algo]
                         )
-                        return result
-        return ("", "")
+        return VerHash.empty()
 
     @staticmethod
     def _load_registry(path):
@@ -952,7 +960,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             if not path.is_absolute():
                 source_dir = getattr(
                     self._using.get(
-                        inspect.currentframe(
+                        inspect.currentframe( #type: ignore #type: ignore #type: ignore
                         ).f_back.f_back.f_code.co_filename
                     ), "path", None
                 )  # type: ignore
@@ -971,7 +979,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     main_mod = __import__("__main__")
                     # if we're calling from a script file e.g. `python3 my/script.py` like pytest unittest
                     if hasattr(main_mod, "__file__"):
-                        source_dir = Path(inspect.currentframe(
+                        source_dir = Path(inspect.currentframe( #type: ignore #type: ignore #type: ignore
                             ).f_back.f_back.f_code.co_filename
                         ).resolve().parent  # type: ignore
             if not source_dir.exists():
@@ -1055,8 +1063,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     exc = traceback.format_exc()
         except:
             exc = traceback.format_exc()
-            if fatal_exceptions:
-                raise
             return Use._fail_or_default(default, ImportError, exc)
         finally:
             # let's not confuse the user and restore the cwd to the original in any case
@@ -1096,14 +1102,15 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         package_name:Optional[str]=None,
         /,
         mod:Optional[ModuleType]=None
-    ) -> Optional[Version]:
+    ) -> Optional[Version]: #type: ignore
         assert name is None or isinstance(name, str)
         version = None
         for lookup_name in (name, package_name):
             if not lookup_name: continue
             try:
-                meta = metadata.distribution(name)
-                return Version(meta.version)
+                if lookup_name is not None:
+                    meta = metadata.distribution(lookup_name)
+                    return Version(meta.version)
             except metadata.PackageNotFoundError:
                 continue
         if not mod:
@@ -1179,6 +1186,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         initial_globals: dict = None,
         hash_algo: Hash = Hash.sha256,
         hash_value: str = None,
+        hash_values: List[str] = None,
         default=mode.fastfail,
         aspectize=None,
         path_to_url: dict = None,
@@ -1191,13 +1199,14 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
         path: Optional[Path] = None
-        hash_values: List[str] = []
+        hash_values = hash_values or []
         if hash_value:
             if isinstance(hash_value, str):
-                hash_values = shlex.split(hash_value)
+                hash_values += shlex.split(hash_value)
             else:
-                hash_values = list(hash_value)
-
+                hash_values += list(hash_value)
+        elif hash_values:
+            hash_value = " ".join(hash_values)
         # we use boolean flags to reduce the complexity of the call signature
         fatal_exceptions = bool(Use.fatal_exceptions & modes)
         auto_install = bool(Use.auto_install & modes)
@@ -1231,8 +1240,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))",
                 Use.AmbiguityWarning,
             )
-        exc = None
+        hit = None
+        data = None
         spec = None
+        entry = None
+        found = None
+        that_hash = None
+        all_that_hash: List[str] = []
         if name in self._using:
             spec = self._using[name].spec
         else:
@@ -1265,7 +1279,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             else:
                 this_version = Use._get_version	(name, package_name)
 
-                if this_version == target_version or not (version):
+                if this_version == target_version or not (version): #type: ignore #type: ignore
                     if not (version):
                         warn(
                             Use.AmbiguityWarning(
@@ -1283,13 +1297,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         package_name,
                     )
                     warn(
-                        f"Classically imported '{name}'. To pin this version use('{name}', version='{this_version}')",
+                        f"Classically imported '{name}'. To pin this version: use(\"{name}\", version=\"{this_version}\")",
                         Use.AmbiguityWarning,
                     )
                     return mod
                 # wrong version => wrong spec
                 this_version = Use._get_version(mod=mod)
-                if this_version != target_version:
+                if this_version != target_version: #type: ignore #type: ignore
                     spec = None
                     log.warning(
                         f"Setting {spec=}, since "
@@ -1304,9 +1318,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     f"Could not find any installed package '{name}' and auto_install was not requested.",
                 )
             # PEBKAC
-            hit: tuple[str, str] = ("", "")
-
-            if target_version and not hash_values:  # let's try to be helpful
+            if target_version and not (hash_value or hash_values):  # let's try to be helpful
                 response = requests.get(
                     f"https://pypi.org/pypi/{package_name}/{target_version}/json"
                 )
@@ -1319,80 +1331,90 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hash_value for the auto-installation was missing."
                     )
                 data = response.json()
-                if not hit or not hit[0]:
-                    hit = Use._find_matching_artifact(data["urls"])
-                if hit and hit[0]:
-                    version = hit[0]
-                    that_hash = hit[1]
-                if hit and hit[0]:
+                
+                hit = Use._find_matching_artifact(
+                    data["urls"], hash_algo=hash_algo.name
+                )
+                log.info(f"{hit=} from  Use._find_matching_artifact")
+                if hit:
+                    version, hash = hit.version, hit.hash
+                    hash_value = that_hash = hash
+                    hash_values = hash_values + [hash_value]
                     raise RuntimeWarning(
                         f"""Failed to auto-install '{package_name}' because hash_value is missing. This may work:
-use("{name}", version="{version}", hash_value="{that_hash}", modes=use.auto_install)
+use("{package_name}", version="{version}", hash_value="{that_hash}", modes=use.auto_install)
 """
                     )
                 else:
                     raise RuntimeWarning(
                         f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
                     )
-            elif not target_version and hash_values:
+            elif not target_version and (hash_value or hash_values):
                 raise RuntimeWarning(
                     f"Failed to auto-install '{package_name}' because no version was specified."
                 )
-            elif not target_version and not hash_values:
+            elif not target_version and not (hash_value or hash_values):
                 # let's try to make an educated guess and give a useful suggestion
-                response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
+                response = requests.get(
+                    f"https://pypi.org/pypi/{package_name}/json"
+                )
                 if response.status_code == 404:
                     # possibly typo - PEBKAC
                     raise RuntimeWarning(
-                        f"Are you sure package '{package_name}' exists? Could not find any package with that name on PyPI."
+                        f"Are you sure package '{package_name}' "
+                        "exists? Could not find any package with "
+                        "that name on PyPI."
                     )
                 elif response.status_code != 200:
                     # possibly server problems
                     return Use._fail_or_default(
                         default,
                         Use.AutoInstallationError,
-                        f"Tried to look up '{package_name}' but got a {response.status_code} from PyPI.",
+                        f"Tried to look up '{package_name}', but "
+                        "got a {response.status_code} from PyPI.",
                     )
-                else:
-                    try:
-                        data = response.json()
-                        version, hash_value = Use._find_latest_working_version(
-                            data["releases"], hash_algo=hash_algo.name
-                        )
-                    except:
-                        raise
-                    if not version:
-                        raise RuntimeWarning(
-                            f"We could not find any version or release for {package_name} that could satisfy our requirements!"
-                        )
-
-                    raise RuntimeWarning(
+                data = response.json()
+                log.info(data["releases"].keys())
+                hit = Use._find_latest_working_version(
+                    data["releases"],
+                    hash_algo=hash_algo.name
+                )
+                
+                if not hit: raise RuntimeWarning(
+                        f"We could not find any version or release "
+                        f"for {package_name} that could satisfy our "
+                        f"requirements!"
+                )
+                
+                version, hash = hit.version, hit.hash
+                hash_value = that_hash = hash
+                hash_values = all_that_hash
+                raise RuntimeWarning(
                         f"""Please specify version and hash for auto-installation of '{package_name}'. 
 To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
 If you want to auto-install the latest version: use("{name}", version="{version}", hash_value="{hash_value}", modes=use.auto_install)
 """
-                    )
-
+                )
+                
             # all clear, let's check if we pulled it before
-            entry = self._registry["distributions"].get(package_name, {}).get(version, {})
-            url = None
-            that_hash = hash_value
+            entry = entry or self._registry["distributions"].get(
+                package_name, {}
+            ).get(version, {})
             if entry and entry["path"]:
                 path = Path(entry["path"])
                 url = URL(entry["url"])
             if entry and path:
-                # someone messed with the packages without updating the registry
+                # someone messed with the packages without updating
+                # the registry
                 if not path.exists():
                     del self._registry["distributions"][package_name][version]
                     self.persist_registry()
                     path = None
                     entry = None
-                    url = None
             if not path:
                 response = requests.get(
-                    f"https://pypi.org/pypi/{package_name}/{target_version}/json"
+                f"https://pypi.org/pypi/{package_name}/{target_version}/json"
                 )
-                version = str(target_version)
                 if response.status_code != 200:
                     return Use._fail_or_default(
                         default,
@@ -1400,35 +1422,48 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         f"Tried to auto-install '{package_name}' {target_version} but failed with {response} while trying to pull info from PyPI.",
                     )
                 try:
-                    if not response.json()["urls"]:
+                    data = response.json()
+                    if not "urls" in data:
                         return Use._fail_or_default(
                             default,
                             Use.AutoInstallationError,
                             f"Tried to auto-install {package_name} {target_version} but failed because no valid URLs to download could be found.",
                         )
-                    for entry in response.json()["urls"]:
+                    for entry in data["urls"]:
                         url = URL(entry["url"])
-                        that_hash = entry["digests"].get(hash_algo.name)
-                        if entry["yanked"]:
-                            continue
-                        log.info(
-                            "that_hash=%s, hash_value=%s, hash_values=%s",
-                            that_hash,
-                            hash_value,
-                            hash_values,
+                        entry["version"] = str(target_version)
+                        log.debug(f"looking at {entry=}")
+                        all_that_hash.append(
+                            that_hash := entry["digests"].get(
+                                hash_algo.name)
                         )
-                        if that_hash == hash_value or that_hash in hash_values:
+                        if (not hash_value or not hash_values) or \
+                        (hash_value in all_that_hash or
+                            len(hash_values) > 1 and
+                            set(hash_values).intersection(
+                                set(all_that_hash)
+                        )):
+                            found = (entry, url, that_hash)
+                            hit = VerHash(version, that_hash)
+                            log.info(
+                              f"Matchrs user hash: {entry=} {hit=}"
+                            )
                             break
-                    else:
+                    if found is None:
                         return Use._fail_or_default(
                             default,
                             Use.AutoInstallationError,
-                            f"Tried to auto-install {package_name} {target_version} but failed because none of the available hashes match the expected hash.",
+                            f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hash_value=!r} or {hash_values=!r}).",
                         )
-                except KeyError:  # json issues
-                    if fatal_exceptions:
-                        raise
-                    exc = traceback.format_exc()
+                    entry, url, that_hash = found
+                    hash_value = that_hash
+                    hash_values = [hash_value]
+                except BaseException as be:  # json issues
+                    msg = (f"request to "
+        f"https://pypi.org/pypi/{package_name}/{target_version}/json"
+        f"lead to an error: {be}");
+                    raise RuntimeError(msg, response) from be
+                    # exc = traceback.format_exc()
                 if exc:
                     return Use._fail_or_default(
                         default,
@@ -1436,11 +1471,11 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.",
                     )
                 # we've got a complete JSON with a matching entry, let's download
-                path = self.home / "packages" / Path(url.name).name
+                path = self.home / "packages" / Path(url.name).name #type: ignore
                 if not path.exists():
                     print("Downloading", url, "...")
                     download_response = requests.get(str(url), allow_redirects=True)
-                    path = self.home / "packages" / Path(url.name).name
+                    path = self.home / "packages" / Path(url.name).name #type: ignore
                     this_hash: str = hash_algo.value(download_response.content).hexdigest()
                     if this_hash != hash_value:
                         return Use._fail_or_default(
@@ -1469,10 +1504,10 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 mod = self._hacks[name](
                     package_name=package_name,
                     rdists=rdists,
-                    version=use._get_version(mod=mod),
+                    version=Use._get_version(mod=mod),
                     url=url,
                     path=path,
-                    that_hash=that_hash,
+                    that_hash=hash_value,
                     folder=folder,
                     fatal_exceptions=fatal_exceptions,
                     module_name=module_name,
@@ -1514,10 +1549,10 @@ If you want to auto-install the latest version: use("{name}", version="{version}
     
 # we should avoid side-effects during testing, specifically for the version-upgrade-warning
 Use.Version = Version
-Use.config = config
-Use.mode = mode
-Use.Path = Path
-Use.URL = URL
+Use.config = config #type: ignore
+Use.mode = mode #type: ignore
+Use.Path = Path #type: ignore
+Use.URL = URL #type: ignore
 use: ModuleType = Use()
 if not test_version:
     sys.modules["use"] = use
@@ -1525,4 +1560,4 @@ if not test_version:
 # no circular import this way
 hacks_path = Path(Path(__file__).parent, "package_hacks.py")
 assert hacks_path.exists()
-use(hacks_path)
+use(hacks_path) #type: ignore
