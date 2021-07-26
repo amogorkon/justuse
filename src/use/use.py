@@ -669,7 +669,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
         """Return true if the artifact described by 'info'
            is compatible with the current or specified system."""
         assert isinstance(info, dict)
-        if not "platform_tag" in info:
+        if "platform_tag" not in info:
             info.update(Use._parse_filename(info["filename"]))
         sys_version = sys_version or Version(
             ".".join(map(str, sys.version_info[0:3]))
