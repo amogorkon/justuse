@@ -35,6 +35,13 @@ if [ "x$GITHUB_AUTH" != "x" ]; then
     python3 -m pip install --force-reinstall coverage pytest-cov
 fi
 
+if [ "x$1" = "xupload" ]; then
+  python3 -c $'import codecs\nwith open("/home/runner/work/justuse/justuse/coverage.svg", "r") as f:\n  fbytes = f.read()\n\nwith open("tmp.json", "w") as jf:\n  import json\n  jf.write(json.dumps({"body": "", "description":"", "files":{ "badge.svg": { "content":fbytes } }}))'
+  curl -X POST -H "Authorization: bearer $GITHUB_TOKEN" -H 'Accept: application/vnd.github.v3+json;q=1.0, application/json;q=0.8, application/xml;q=0.65, text/plain;q=0.5, application/*;q=0.3, text/html;q=0.2, application/xml+xhtml;q=0.1, */*;q=0.01' "https://api.github.com/gists" -d @tmp.json
+  exit
+fi
+
+
 covcom=( --cov-branch \
          --cov-report term-missing \
          --cov-report html:coverage/ \
