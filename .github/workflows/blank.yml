@@ -15,23 +15,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
       - name: Linux Tests
-        run: |
+        uses: actions/checkout@v2
+        with:
+          github-token: ${{ secrets.PAT_TOKEN }}
+      - run: |
           echo "Linux-Tests: Preloading package dependencies ..."
-          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env requests types-toml types-requests yarl
+          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests yarl
           echo "Linux-Tests: Running tests ..."
           mkdir -p ~/.justuse-python/
           echo "debug = true" > ~/.justuse-python/config.toml
           env DEBUG=1 ERRORS=1 python3 -m pytest
-  
+          [ -e tests/coverage.sh ] && env DEBUG=1 ERRORS=1 bash ./tests/coverage.sh || env DEBUG=1 ERRORS=1 python3 -m pytest
+    
+      - name: coverage.py badge
+        uses: tj-actions/coverage-badge-py@v1.6
+        with:
+          github-token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Upload coverage badge
+        run: |
+          export GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          typeset -p; typeset -x; typeset -p -a; bash -x ./tests/coverage.sh upload
+
+
   test-windows:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v2
       - name: Run a multi-line script
-        run: |
+        uses: actions/checkout@v2
+      - run: |
           echo "Setting TLS security properties ..."
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           echo "Downloading recent Python 3 ..."
@@ -52,7 +66,7 @@ jobs:
             ) -join "`n"
           }
           echo "Windows-Tests: Preloading package dependencies ..."
-          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip install anyio mmh3 mypy packaging pip pytest pytest-env requests types-toml types-requests yarl
+          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests yarl
           echo "Windows-Tests: Running tests ..."
           $env:DEBUG = 1
           $env:ERRORS = 1
@@ -63,11 +77,11 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v2
       - name: Run a multi-line script
-        run: |
+        uses: actions/checkout@v2
+      - run: |
           echo "MacOS-Tests: Preloading package dependencies ..."
-          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env requests types-toml types-requests yarl
+          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests yarl
           echo "MacOS-Tests: Running tests ..."
           mkdir -p ~/.justuse-python/
           echo "debug = true" > ~/.justuse-python/config.toml
