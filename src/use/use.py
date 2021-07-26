@@ -19,7 +19,7 @@ Goals/Features:
 Non-Goal:
 Completely replace the import statement.
 
-Notes: 
+Notes:
 pathlib.Path and yarl.URL can both be accessed as aliases via use.Path and use.URL
 inspect.isfunction, .ismethod and .isclass also can be accessed via their aliases use.isfunction, use.ismethod and use.isclass
 
@@ -31,7 +31,7 @@ Examples:
 >>> np.version == "1.1.1"
 True
 
-# equivalent to `from pprint import pprint; pprint(dictionary)` but without assigning 
+# equivalent to `from pprint import pprint; pprint(dictionary)` but without assigning
 # pprint to a global variable, thus no namespace pollution
 >>> use("pprint").pprint([1,2,3])
 [1,2,3]
@@ -46,7 +46,7 @@ True
 # to auto-install a certain version (within a virtual env and pip in secure hash-check mode) of a package you can do
 >>> np = use("numpy", version="1.1.1", modes=use.auto_install, hash_value=["9879de676"])
 
-File-Hashing inspired by 
+File-Hashing inspired by
 - https://github.com/kalafut/py-imohash
 - https://github.com/fmoo/python-varint/blob/master/varint.py
 
@@ -899,7 +899,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
                 )
         else:
             warn(
-                f"""Attempting to import from the interwebs with no validation whatsoever! 
+                f"""Attempting to import from the interwebs with no validation whatsoever!
 To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')""",
                 Use.NoValidationWarning,
             )
@@ -964,7 +964,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         ).f_back.f_back.f_code.co_filename
                     ), "path", None
                 )  # type: ignore
-    
+
             # calling from another use()d module
             if source_dir and source_dir.exists():
                 os.chdir(source_dir.parent)
@@ -1020,7 +1020,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     aspectize=aspectize,
                 )
                 _reloaders[mod] = reloader
-    
+
                 threaded = False
                 # this looks like a hack, but isn't one -
                 # jupyter is running an async loop internally, which works better async than threaded!
@@ -1034,7 +1034,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     reloader.start_async()
                 else:
                     reloader.start_threaded()
-    
+
                 if not all(
                     inspect.isfunction(value)
                     for key, value in mod.__dict__.items()
@@ -1240,7 +1240,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))",
                 Use.AmbiguityWarning,
             )
-        hit = None
+        hit:VerHash = VerHash.empty()
         data = None
         spec = None
         entry = None
@@ -1331,24 +1331,21 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hash_value for the auto-installation was missing."
                     )
                 data = response.json()
-                
-                hit = Use._find_matching_artifact(
+                version, that_hash = hit = Use._find_matching_artifact(
                     data["urls"], hash_algo=hash_algo.name
                 )
                 log.info(f"{hit=} from  Use._find_matching_artifact")
-                if hit:
-                    version, hash = hit.version, hit.hash
-                    hash_value = that_hash = hash
-                    hash_values = hash_values + [hash_value]
+                if that_hash:
+                    if that_hash is not None: hash_value = that_hash
+                    if that_hash is not None: hash_values = hash_values + [that_hash]
                     raise RuntimeWarning(
                         f"""Failed to auto-install '{package_name}' because hash_value is missing. This may work:
 use("{package_name}", version="{version}", hash_value="{that_hash}", modes=use.auto_install)
 """
                     )
-                else:
-                    raise RuntimeWarning(
-                        f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
-                    )
+                raise RuntimeWarning(
+                    f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
+                )
             elif not target_version and (hash_value or hash_values):
                 raise RuntimeWarning(
                     f"Failed to auto-install '{package_name}' because no version was specified."
@@ -1373,24 +1370,22 @@ use("{package_name}", version="{version}", hash_value="{that_hash}", modes=use.a
                         f"Tried to look up '{package_name}', but "
                         "got a {response.status_code} from PyPI.",
                     )
+                    
                 data = response.json()
-                log.info(data["releases"].keys())
-                hit = Use._find_latest_working_version(
-                    data["releases"],
-                    hash_algo=hash_algo.name
+                version, hash_value = hit = Use._find_latest_working_version(
+                    data["releases"], hash_algo=hash_algo.name
                 )
                 
-                if not hit: raise RuntimeWarning(
+                if not hash_value: raise RuntimeWarning(
                         f"We could not find any version or release "
                         f"for {package_name} that could satisfy our "
                         f"requirements!"
                 )
-                
-                version, hash = hit.version, hit.hash
-                hash_value = that_hash = hash
-                hash_values = all_that_hash
-                raise RuntimeWarning(
-                        f"""Please specify version and hash for auto-installation of '{package_name}'. 
+                if not target_version and (hash_value or hash_values):
+                    hash_values += [hash_value]
+                    raise RuntimeWarning(
+                        f"""Please specify version and hash for auto-installation of '{package_name}'.
+>>>>>>> Stashed changes
 To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
 If you want to auto-install the latest version: use("{name}", version="{version}", hash_value="{hash_value}", modes=use.auto_install)
 """
@@ -1457,7 +1452,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         )
                     entry, url, that_hash = found
                     hash_value = that_hash
-                    hash_values = [hash_value]
+                    if that_hash is not None: hash_values = [that_hash]
                 except BaseException as be:  # json issues
                     msg = (f"request to "
         f"https://pypi.org/pypi/{package_name}/{target_version}/json"
@@ -1546,7 +1541,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
         self.persist_registry()
         return mod
     pass
-    
+
 # we should avoid side-effects during testing, specifically for the version-upgrade-warning
 Use.Version = Version
 Use.config = config #type: ignore
