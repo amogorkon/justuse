@@ -2,10 +2,12 @@ import os
 import sys
 import warnings
 from pathlib import Path
+from setuptools import _find_all_simple
 from unittest import skip
 
 import pytest
 import requests
+from mypy.__main__ import console_entry
 from yarl import URL
 
 from .unit_test import reuse
@@ -71,3 +73,21 @@ def test_is_platform_compatible_win(reuse):
     platform_tags = set(map(lambda i: i.platform, reuse.use.get_supported()))
     assert reuse._is_platform_compatible(info, platform_tags)
 
+@pytest.mark.xfail(not not_local, reason="Incomplete type hints")
+def test_types():
+    files = list(filter(
+      lambda p: p.endswith(".py"),
+      _find_all_simple("./src")
+    ))
+    exit_code:int = None
+    prev_exit:Callable[int, ...] = sys.exit
+    sys.exit:Callable[int, ...] = lambda *args: \
+        exec("global exit_code; exit_code=args[0]")
+    try:
+        prev_argv = sys.argv
+        sys.argv = ["-m", *files]
+        console_entry()
+        assert exit_code == 0, "mypy completed with error(s)"
+    finally:
+      sys.argv = prev_argv
+      sys.exit = prev_exit
