@@ -25,8 +25,9 @@ from pathlib import Path
 # this is possible because we don't *import* this file, but use() it!
 __package__ = "use.use"
 SOLIB_DELIMS = [".python", ".cpython", ".cp"]
-from ..use import use as use1 # type: ignore
-use1: 'Use' = use1
+from ..use import use as use1  # type: ignore
+
+use1 = use1
 use = use1
 
 root.addHandler(StreamHandler(sys.stderr))
@@ -62,15 +63,12 @@ def remove_cached_module(module_name):
             log.info("Deleting sys.modules[%s]", repr(module_key))
             del sys.modules[module_key]
 
+
 def create_solib_links(archive: zipfile.ZipFile, folder: Path):
     entries, os_ext = archive.namelist(), EXTENSION_SUFFIXES[-1]
-    log.debug(
-      f"create_solib_links({archive=}, {folder=}): archive {entries=}"
-    )
+    log.debug(f"create_solib_links({archive=}, {folder=}): archive {entries=}")
     # Set up links from 'xyz.cpython-3#-<...>.so' to 'xyz.so'
-    for solib in [*filter(
-        lambda f: any(map(f.endswith, EXTENSION_SUFFIXES)), entries
-    )]:
+    for solib in [*filter(lambda f: any(map(f.endswith, EXTENSION_SUFFIXES)), entries)]:
         simple_name, sofile = None, folder / solib
         for s in SOLIB_DELIMS:
             if s in sofile.name:
@@ -78,6 +76,7 @@ def create_solib_links(archive: zipfile.ZipFile, folder: Path):
         link = Path(sofile.parent / f"{simple_name}{os_ext}")
         link.unlink(missing_ok=True)
         link.symlink_to(sofile)
+
 
 def ensure_extracted(path, folder, url=None):
     if not folder.exists():
@@ -145,15 +144,15 @@ def protobuf(
     try:
         os.chdir(folder)
         # needed because protobuf corrupts sys.path to looking here
-        tgt = use.home / Path(
-            f".local/lib/python3.{sys.version_info[1]}/site-packages")
+        tgt = use.home / Path(f".local/lib/python3.{sys.version_info[1]}/site-packages")
         # remove any existing symlink here in case we already
         # loaded a different version
         tgt.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
-        if tgt.exists(): tgt.unlink()
+        if tgt.exists():
+            tgt.unlink()
         tgt.symlink_to(folder.absolute(), target_is_directory=True)
         pth_src = "\n\n".join(readstring(str(pth_path)) for pth_path in folder.glob("*.pth"))
-        sitedir = "" #type: ignore
+        sitedir = ""  # type: ignore
         # compile the hacky duct-tape protobuf embeds in its '.pth'
         # to make their 'google' namespace work properly - disgusting
         exec(compile(pth_src, "pth_file.py", "exec"))

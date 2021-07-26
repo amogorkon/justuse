@@ -3,6 +3,7 @@ import sys
 import warnings
 from pathlib import Path
 from setuptools import _find_all_simple
+from typing import Callable
 from unittest import skip
 
 import pytest
@@ -10,7 +11,7 @@ import requests
 from mypy.__main__ import console_entry
 from yarl import URL
 
-from .unit_test import reuse
+from .unit_test import log, reuse
 
 not_local = "GITHUB_REF" in os.environ
 
@@ -71,24 +72,23 @@ def test_is_platform_compatible_win(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert reuse._is_platform_compatible(
-        info, platform_tags, include_sdist=False
-    )
+    assert reuse._is_platform_compatible(info, platform_tags, include_sdist=False)
+
 
 def test_types():
-    files = list(filter(
-      lambda p: p.endswith(".py"),
-      _find_all_simple("./src")
-    ))
-    prev_exit:Callable[int, ...] = sys.exit
+    files = list(filter(lambda p: p.endswith(".py"), _find_all_simple("./src")))
+    prev_exit: Callable[
+        [int],
+    ] = sys.exit
+
     def _myexit(code):
         global exit_code
         log.warning(f"exit({code}) called from mypy")
         exit_code = code
+
     try:
         prev_argv = sys.argv
         sys.argv = ["-m", *files]
         console_entry()
     finally:
-      sys.argv = prev_argv
-
+        sys.argv = prev_argv
