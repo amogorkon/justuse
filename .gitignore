@@ -136,3 +136,4 @@ Asylum.ipynb
 local_switch
 .vscode/launch.json
 .vscode/settings.json
+tests/.tests/.test3.py

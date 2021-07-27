@@ -1,9 +1,12 @@
 import os
-from importlib import Path
 
-here = Path(".").resolve()
-os.chdir(Path("../src"))
+from pathlib import Path
+
+here = Path()
+os.chdir(Path(__file__).resolve().parent / "../src/")
 
 import use
+
+mod = use("pip")
 
 os.chdir(here)
