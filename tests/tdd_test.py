@@ -75,20 +75,3 @@ def test_is_platform_compatible_win(reuse):
     assert reuse._is_platform_compatible(info, platform_tags, include_sdist=False)
 
 
-def test_types():
-    files = list(filter(lambda p: p.endswith(".py"), _find_all_simple("./src")))
-    prev_exit: Callable[
-        [int],
-    ] = sys.exit
-
-    def _myexit(code):
-        global exit_code
-        log.warning(f"exit({code}) called from mypy")
-        exit_code = code
-
-    try:
-        prev_argv = sys.argv
-        sys.argv = ["-m", *files]
-        console_entry()
-    finally:
-        sys.argv = prev_argv
