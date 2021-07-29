@@ -8,7 +8,7 @@ from unittest import skip
 
 import pytest
 import requests
-from mypy.__main__ import console_entry
+	
 from yarl import URL
 
 from .unit_test import log, reuse

@@ -302,7 +302,7 @@ class ModuleReloader:
         atexit.unregister(self.stop)
 
 
-# As we assign Use() to sys.modules, mypy is unhappy if it's not
+	
 # an instance of types.ModuleType
 class Use(ModuleType):
     # lift module-level stuff up - ALIASES
