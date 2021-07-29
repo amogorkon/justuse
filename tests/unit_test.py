@@ -9,7 +9,7 @@ import warnings
 from collections import defaultdict
 from pathlib import Path
 from threading import _shutdown_locks
-from typing import Optional
+
 
 import packaging.tags
 import packaging.version
@@ -136,7 +136,7 @@ def test_autoinstall_PEBKAC(reuse):
     # forgot version
     with pytest.raises(RuntimeWarning):
         reuse(
-            "pytest", hash_value="asdf", modes=reuse.auto_install, 
+            "pytest", hash_value="asdf", modes=reuse.auto_install,
         )
 
     # impossible version
@@ -205,14 +205,14 @@ def suggested_artifact(*args, **kwargs):
     assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
     assert "hash_value=" in str(rw), f"warning does not suggest a hash: {rw}"
     assert isinstance(rw.args[0], str)
-    match: Optional[re.Match] = re.search(
+    match = re.search(
         'version="?(?P<version>[^"]+)"?.*' 'hash_value="?(?P<hash_value>\\w+)"?',
         str(rw),
     )
     assert match
     version, hash_value = (match.group("version"), match.group("hash_value"))
     return (version, hash_value)
-    
+
 @pytest.mark.skipif(
     sys.platform.startswith("win"), reason="windows Auto-installing numpy"
 )

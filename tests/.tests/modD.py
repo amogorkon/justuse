@@ -1,4 +1,4 @@
-# type: ignore  # pylance
+# pylance
 print("FROM", __file__)
 
 import os

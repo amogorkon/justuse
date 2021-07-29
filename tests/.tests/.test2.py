@@ -27,17 +27,17 @@ info = {
     "yanked_reason": None,
 }
 
-from typing import Optional
+	
 import re
 
 
-def parse_filename(filename: str) -> Optional[dict]:
+def parse_filename(filename) -> Optional[dict]:
     """Match the filename and return a dict of parts.
     >>> parse_filename(...)  # TODO add a proper doctest
     {"distribution": .., "version": .., ...}
     """
     assert isinstance(filename, str)
-    match: Optional[re.Match] = re.match(
+    match = re.match(
         "(?P<distribution>.*)-"
         "(?P<version>.*)"
         "(?:-(?P<build_tag>.*))?-"

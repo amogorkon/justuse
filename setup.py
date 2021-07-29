@@ -57,7 +57,7 @@ requires=(
 
 with open("README.md") as f:
     LONG_DESCRIPTION = f.read()
-  
+
 setup(
     packages=find_packages(where="src"),
     package_dir={"": "src"},

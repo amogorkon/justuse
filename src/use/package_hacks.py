@@ -8,7 +8,7 @@ For the user, all of those appear equal and "pip-installable", but under the sur
 Now, we've given up to handle all special cases in our main code, because it's a mess.
 Instead, if anyone wants to do something special, they can do it in this file.
 
-The basic idea is that use(name, version) with auto_install maps to a dict of commands that will be run to install the package. 
+The basic idea is that use(name, version) with auto_install maps to a dict of commands that will be run to install the package.
 """
 
 import gzip
@@ -25,7 +25,7 @@ from pathlib import Path
 # this is possible because we don't *import* this file, but use() it!
 __package__ = "use.use"
 SOLIB_DELIMS = [".python", ".cpython", ".cp"]
-from ..use import use as use1  # type: ignore
+from ..use import use as use1
 
 use1 = use1
 use = use1
@@ -64,7 +64,7 @@ def remove_cached_module(module_name):
             del sys.modules[module_key]
 
 
-def create_solib_links(archive: zipfile.ZipFile, folder: Path):
+def create_solib_links(archive: zipfile.ZipFile, folder):
     entries, os_ext = archive.namelist(), EXTENSION_SUFFIXES[-1]
     log.debug(f"create_solib_links({archive=}, {folder=}): archive {entries=}")
     # Set up links from 'xyz.cpython-3#-<...>.so' to 'xyz.so'
@@ -152,7 +152,7 @@ def protobuf(
             tgt.unlink()
         tgt.symlink_to(folder.absolute(), target_is_directory=True)
         pth_src = "\n\n".join(readstring(str(pth_path)) for pth_path in folder.glob("*.pth"))
-        sitedir = ""  # type: ignore
+        sitedir = ""
         # compile the hacky duct-tape protobuf embeds in its '.pth'
         # to make their 'google' namespace work properly - disgusting
         exec(compile(pth_src, "pth_file.py", "exec"))

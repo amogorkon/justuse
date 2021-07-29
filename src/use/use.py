@@ -87,10 +87,10 @@ from importlib import metadata
 from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
 from types import FrameType, ModuleType, TracebackType
-from typing import Any, Callable, Dict, FrozenSet, List, Optional, Set, Tuple, Union
+
 from warnings import warn
 
-import mmh3  # type: ignore
+import mmh3
 import packaging
 import requests
 import toml
@@ -104,14 +104,14 @@ class PlatformTag(namedtuple("PlatformTag", ["platform"])):
         return self.platform
     def __repr__(self):
         return self.platform
-    
+
 _supported = None
 def get_supported() -> FrozenSet[PlatformTag]:
     global _supported
     if _supported is None:
-        items: List[PlatformTag] = []
+        items = []
         try:
-            from pip._internal.utils import compatibility_tags #type: ignore
+            from pip._internal.utils import compatibility_tags
             for tag in compatibility_tags.get_supported():
                 items.append(PlatformTag(platform=tag.platform))
         except ImportError:
@@ -121,15 +121,15 @@ def get_supported() -> FrozenSet[PlatformTag]:
         _supported = tags = frozenset(items)
         log.error(str(tags))
     return _supported
-    
+
 class VerHash(namedtuple("VerHash", ["version", "hash"])):
     @staticmethod
     def empty(): return VerHash("", "")
-    
+
     def __bool__(self):
         return bool(self.version and self.hash)
     def __eq__(self, other):
-        if (other is None or 
+        if (other is None or
             not hasattr(other, "__len__") \
              or len(other) != len(self)):
             return False
@@ -142,18 +142,18 @@ class VerHash(namedtuple("VerHash", ["version", "hash"])):
 
 
 # injected via initial_globals for testing, you can safely ignore this
-test_version: Optional[str] = locals().get("test_version", None)
+test_version = locals().get("test_version", None)
 __version__ = test_version or "0.4.1"
 
 _reloaders: Dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
-_aspects: Dict[Any, Any] = {}
-_using: Dict[Any, Any] = {}
+_aspects = {}
+_using = {}
 
 # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
 # # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
 class Version(PkgVersion):
     def __init__(
-        self, versionstr: str = None, *, major: int = 0, minor: int = 0, patch: int = 0
+        self, versionstr = None, *, major = 0, minor = 0, patch = 0
     ):
         if major or minor or patch:
             # string as only argument, no way to construct a Version otherwise - WTF
@@ -360,7 +360,7 @@ class Use(ModuleType):
         self._set_up_files_and_directories()
 
         self._registry = Use._load_registry(self.home / "registry.json")
-        self._user_registry: dict = Use._load_registry(self.home / "user_registry.json")
+        self._user_registry = Use._load_registry(self.home / "user_registry.json")
         Use._merge_registry(self._registry, self._user_registry)
 
         # for the user to copy&paste
@@ -423,7 +423,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
         )
         (self.home / "registry.json").touch(mode=0o644)
         self._registry = Use._load_registry(self.home / "registry.json")
-        self._user_registry: dict = Use._load_registry(self.home / "user_registry.json")
+        self._user_registry = Use._load_registry(self.home / "user_registry.json")
         Use._merge_registry(self._registry, self._user_registry)
 
     def install(self):
@@ -522,20 +522,20 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
 
     def _save_module_info(
         self,
-        name:str,
-        version:Union[Version|str], #type: ignore
-        url:Optional[URL],
-        path:Optional[Path],
-        that_hash:Optional[str],
-        folder:Path,
-        package_name:str=None,
+        name,
+        version:Union[Version|str],
+        url,
+        path,
+        that_hash,
+        folder,
+        package_name=None,
     ):
         """Update the registry to contain the package's metadata.
            Does not call Use.persist_registry() on its own."""
         package_name = package_name or name
         version = str(version) if version else "0.0.0"
         assert version not in ("None", "null", "")
-        rdists:Dict[str,dict] = self._registry["distributions"]
+        rdists = self._registry["distributions"]
         if package_name not in rdists:
             rdists[package_name] = {}
         if version not in rdists[package_name]:
@@ -547,7 +547,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
             "url": url.human_repr(),
             "path": str(path) if path else None,
             "folder": folder.absolute().as_uri(),
-            "filename": path.name, #type: ignore
+            "filename": path.name,
             "hash": that_hash
         })
 
@@ -571,13 +571,13 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
         return inspect.isclass(x)
 
     @staticmethod
-    def _parse_filename(filename: str) -> dict:
+    def _parse_filename(filename) -> dict:
         """Match the filename and return a dict of parts.
         >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
-        {'distribution': 'numpy', 'version': '1.19.5', 'build_tag': None, 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
+        {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
         """
         assert isinstance(filename, str)
-        match: Optional[re.Match] = re.match(
+        match = re.match(
             "(?P<distribution>.*)-"
             "(?P<version>.*)"
             "(?:-(?P<build_tag>.*))?-"
@@ -590,7 +590,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
         return match.groupdict() if match else {}
 
     @staticmethod
-    def _is_version_satisfied(info: Dict[str, str], sys_version: Version): #type: ignore
+    def _is_version_satisfied(info, sys_version):
         # https://warehouse.readthedocs.io/api-reference/json.html
         # https://packaging.pypa.io/en/latest/specifiers.html
         specifier = info.get(
@@ -601,22 +601,22 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
 
     @staticmethod
     def _is_platform_compatible(
-        info: Dict[str, Any],
-        platform_tags: FrozenSet[PlatformTag],
-        include_sdist: bool=False,
+        info,
+        platform_tags,
+        include_sdist=False,
     ):
         assert isinstance(info, dict)
         assert isinstance(platform_tags, frozenset)
         # filename as API, seriously WTF...
         if "platform_tag" not in info:
             info.update(Use._parse_filename(info["filename"]))
-        our_python_tag: str = "".join(
+        our_python_tag = "".join(
             (packaging.tags.interpreter_name(),
              packaging.tags.interpreter_version())
         )
-        python_tag: str = info.get("python_tag", "")
-        platform_tag: str = info.get("platform_tag", "")
-        platform_srs: Set[str] = { *map(str, platform_tags) }
+        python_tag = info.get("python_tag", "")
+        platform_tag = info.get("platform_tag", "")
+        platform_srs = { *map(str, platform_tags) }
         for one_platform_tag in platform_tag.split("."):
             if (one_platform_tag in platform_srs
                 and our_python_tag == python_tag
@@ -630,17 +630,17 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
             include_sdist
             and info["filename"].endswith(".egg")
         )
-    
+
     @staticmethod
     def _find_matching_artifact(
         urls: List[Dict[str, Any]],
-        hash_algo: str = Hash.sha256.name,
+        hash_algo = Hash.sha256.name,
         *,
         # for testability
-        sys_version: Version = None, #type: ignore
-        platform_tags: FrozenSet[PlatformTag] = frozenset(),
-        interpreter_tag: str = None,
-        include_sdist: bool = False,
+        sys_version = None,
+        platform_tags = frozenset(),
+        interpreter_tag = None,
+        include_sdist = False,
     ) -> VerHash:
         """Pick from a list of possible urls and return the
             `(version, hash_value)`
@@ -659,14 +659,14 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
             if results:
                 return results[0]
         return VerHash.empty()
-    
+
     @staticmethod
     def _is_compatible(
-        info: Dict[str, Any],
-        hash_algo: str = Hash.sha256.name,
-        sys_version: Version = None, #type: ignore
-        platform_tags: FrozenSet[PlatformTag] = frozenset(),
-        include_sdist: bool = False
+        info,
+        hash_algo = Hash.sha256.name,
+        sys_version = None,
+        platform_tags = frozenset(),
+        include_sdist = False
     ):
         """Return true if the artifact described by 'info'
            is compatible with the current or specified system."""
@@ -690,13 +690,13 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
     def _find_latest_working_version(
         releases: Dict[
             str, List[Dict[str, Any]]
-        ],  # {version: [{comment_text: str, filename: str, url: str, version: str, hash: str, build_tag: str, python_tag: str, abi_tag: str, platform_tag: str}]}
+        ],  # {version: [{comment_text, filename, url, version, hash, build_tag, python_tag, abi_tag, platform_tag: str}]}
         *,
-        hash_algo: str,
+        hash_algo,
         # testing
-        sys_version: Version = None, #type: ignore
-        platform_tags: FrozenSet[PlatformTag] = frozenset(),
-        interpreter_tag: str = None,
+        sys_version = None,
+        platform_tags = frozenset(),
+        interpreter_tag = None,
         version=None,
     ) -> VerHash:
         assert isinstance(releases, dict)
@@ -799,13 +799,13 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
     @staticmethod
     def _build_mod(
         *,
-        name: str,
-        code: bytes,
+        name,
+        code,
         initial_globals: Optional[Dict[str, Any]],
-        module_path: str,
-        aspectize: dict,
+        module_path,
+        aspectize,
         default=mode.fastfail,
-        package: str = None,
+        package = None,
     ) -> ModuleType:
         default
         mod = ModuleType(name)
@@ -844,9 +844,9 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
 
     @staticmethod
     def _apply_aspect(
-        mod: ModuleType,
-        check: Callable[..., Any],
-        pattern: str,
+        mod,
+        check,
+        pattern,
         decorator: Callable[[Callable[..., Any]], Any],
     ):
         """Apply the aspect as a side-effect, no copy is created."""
@@ -871,15 +871,15 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
         url: URL,
         /,
         *,
-        hash_algo: Hash = Hash.sha256,
-        hash_value: str = None,
+        hash_algo = Hash.sha256,
+        hash_value = None,
         initial_globals: Optional[Dict[Any, Any]] = None,
-        as_import: str = None,
+        as_import = None,
         default=mode.fastfail,
-        aspectize: dict = None,
-        path_to_url: dict = None,
-        import_to_use: dict = None,
-        modes: int = 0,
+        aspectize = None,
+        path_to_url = None,
+        import_to_use = None,
+        modes = 0,
     ) -> ModuleType:
         exc = None
 
@@ -920,7 +920,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if exc:
             return Use._fail_or_default(default, ImportError, exc)
 
-        frame: Union[FrameType, TracebackType] = inspect.getframeinfo(inspect.currentframe())  # type: ignore
+        frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
         if as_import:
             assert isinstance(
@@ -933,16 +933,16 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
     @__call__.register(Path)
     def _use_path(
         self,
-        path: Path,
+        path,
         /,
         *,
-        initial_globals: dict = None,
-        as_import: str = None,
+        initial_globals = None,
+        as_import = None,
         default=mode.fastfail,
-        aspectize: dict = None,
-        path_to_url: dict = None,
-        import_to_use: dict = None,
-        modes: int = 0,
+        aspectize = None,
+        path_to_url = None,
+        import_to_use = None,
+        modes = 0,
     ) -> Optional[ModuleType]:
         aspectize = aspectize or {}
         initial_globals = initial_globals or {}
@@ -962,10 +962,10 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             if not path.is_absolute():
                 source_dir = getattr(
                     self._using.get(
-                        inspect.currentframe( #type: ignore #type: ignore #type: ignore
+                        inspect.currentframe(
                         ).f_back.f_back.f_code.co_filename
                     ), "path", None
-                )  # type: ignore
+                )
 
             # calling from another use()d module
             if source_dir and source_dir.exists():
@@ -981,9 +981,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     main_mod = __import__("__main__")
                     # if we're calling from a script file e.g. `python3 my/script.py` like pytest unittest
                     if hasattr(main_mod, "__file__"):
-                        source_dir = Path(inspect.currentframe( #type: ignore #type: ignore #type: ignore
+                        source_dir = Path(inspect.currentframe(
                             ).f_back.f_back.f_code.co_filename
-                        ).resolve().parent  # type: ignore
+                        ).resolve().parent
             if not source_dir.exists():
                 return Use._fail_or_default(
                     default,
@@ -1050,7 +1050,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 with open(path, "rb") as file:
                     code = file.read()
                 # the path needs to be set before attempting to load the new module - recursion confusing ftw!
-                frame = inspect.getframeinfo(inspect.currentframe())  # type: ignore
+                frame = inspect.getframeinfo(inspect.currentframe())
                 self._set_mod(name=name, mod=mod, frame=frame)
                 try:
                     mod = Use._build_mod(
@@ -1075,8 +1075,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             assert isinstance(
                 as_import, str
             ), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
-            sys.modules[as_import] = mod  # type:ignore
-        frame = inspect.getframeinfo(inspect.currentframe())  # type: ignore
+            sys.modules[as_import] = mod
+        frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
         return mod
 
@@ -1091,7 +1091,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 )
             for (check, pattern), decorator in aspectize.items():
                 Use._apply_aspect(mod, check, pattern, decorator)
-            frame = inspect.getframeinfo(inspect.currentframe())  # type: ignore
+            frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
             return mod
         except:
@@ -1100,11 +1100,11 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
 
     @staticmethod
     def _get_version(
-        name:Optional[str]=None,
-        package_name:Optional[str]=None,
+        name=None,
+        package_name=None,
         /,
-        mod:Optional[ModuleType]=None
-    ) -> Optional[Version]: #type: ignore
+        mod=None
+    ) -> Optional[Version]:
         assert name is None or isinstance(name, str)
         version = None
         for lookup_name in (name, package_name):
@@ -1136,7 +1136,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         default,
         aspectize,
         fatal_exceptions,
-        package_name:Optional[str]=None,
+        package_name=None,
     ):
         # sourcery no-metrics
         exc = None
@@ -1144,7 +1144,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             mod = importlib.import_module(module_name)  # ! => cache
             for (check, pattern), decorator in aspectize.items():
                 Use._apply_aspect(mod, check, pattern, decorator)
-            frame = inspect.getframeinfo(inspect.currentframe())  # type: ignore
+            frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, frame=frame)
             if not target_version:
                 warn(
@@ -1174,33 +1174,33 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             )
         for (check, pattern), decorator in aspectize.items():
             Use._apply_aspect(mod, check, pattern, decorator)
-        frame = inspect.getframeinfo(inspect.currentframe())  # type: ignore
+        frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
         return mod
 
     @__call__.register(str)
     def _use_str(
         self,
-        name: str,
+        name,
         /,
         *,
-        version: str = None,
-        initial_globals: dict = None,
-        hash_algo: Hash = Hash.sha256,
-        hash_value: str = None,
-        hash_values: List[str] = None,
+        version = None,
+        initial_globals = None,
+        hash_algo = Hash.sha256,
+        hash_value = None,
+        hash_values = None,
         default=mode.fastfail,
         aspectize=None,
-        path_to_url: dict = None,
-        import_to_use: dict = None,
-        modes: int = 0,
+        path_to_url = None,
+        import_to_use = None,
+        modes = 0,
         fatal_exceptions=True,
-        package_name: str = None,  # internal use
-        module_name: str = None,  # internal use
+        package_name = None,  # internal use
+        module_name = None,  # internal use
     ) -> Optional[ModuleType]:
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
-        path: Optional[Path] = None
+        path = None
         hash_values = hash_values or []
         if hash_value:
             if isinstance(hash_value, str):
@@ -1220,14 +1220,14 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         assert (
             version is None or isinstance(version, str) or isinstance(version, Version)
         ), "Version must be given as string or packaging.version.Version."
-        target_version: Optional[Version] = Version(str(version)) if version else None
+        target_version = Version(str(version)) if version else None
         # just validating user input and canonicalizing it
         version = str(target_version) if target_version else None
         assert (
             version if target_version else version is target_version
         ), "Version must be None if target_version is None; otherwise, they must both have a value."
-        exc: Optional[str] = None
-        mod: Optional[ModuleType] = None
+        exc = None
+        mod = None
 
         if initial_globals or import_to_use or path_to_url:
             raise NotImplementedError(
@@ -1242,13 +1242,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))",
                 Use.AmbiguityWarning,
             )
-        hit:VerHash = VerHash.empty()
+        hit = VerHash.empty()
         data = None
         spec = None
         entry = None
         found = None
         that_hash = None
-        all_that_hash: List[str] = []
+        all_that_hash = []
         if name in self._using:
             spec = self._using[name].spec
         else:
@@ -1281,7 +1281,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             else:
                 this_version = Use._get_version	(name, package_name)
 
-                if this_version == target_version or not (version): #type: ignore #type: ignore
+                if this_version == target_version or not (version):
                     if not (version):
                         warn(
                             Use.AmbiguityWarning(
@@ -1305,7 +1305,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     return mod
                 # wrong version => wrong spec
                 this_version = Use._get_version(mod=mod)
-                if this_version != target_version: #type: ignore #type: ignore
+                if this_version != target_version:
                     spec = None
                     log.warning(
                         f"Setting {spec=}, since "
@@ -1372,12 +1372,12 @@ use("{package_name}", version="{version}", hash_value="{that_hash}", modes=use.a
                         f"Tried to look up '{package_name}', but "
                         "got a {response.status_code} from PyPI.",
                     )
-                    
+
                 data = response.json()
                 version, hash_value = hit = Use._find_latest_working_version(
                     data["releases"], hash_algo=hash_algo.name
                 )
-                
+
                 if not hash_value: raise RuntimeWarning(
                         f"We could not find any version or release "
                         f"for {package_name} that could satisfy our "
@@ -1392,7 +1392,7 @@ To get some valuable insight on the health of this package, please check out htt
 If you want to auto-install the latest version: use("{name}", version="{version}", hash_value="{hash_value}", modes=use.auto_install)
 """
                 )
-                
+
             # all clear, let's check if we pulled it before
             entry = entry or self._registry["distributions"].get(
                 package_name, {}
@@ -1468,12 +1468,12 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.",
                     )
                 # we've got a complete JSON with a matching entry, let's download
-                path = self.home / "packages" / Path(url.name).name #type: ignore
+                path = self.home / "packages" / Path(url.name).name
                 if not path.exists():
                     print("Downloading", url, "...")
                     download_response = requests.get(str(url), allow_redirects=True)
-                    path = self.home / "packages" / Path(url.name).name #type: ignore
-                    this_hash: str = hash_algo.value(download_response.content).hexdigest()
+                    path = self.home / "packages" / Path(url.name).name
+                    this_hash = hash_algo.value(download_response.content).hexdigest()
                     if this_hash != hash_value:
                         return Use._fail_or_default(
                             default,
@@ -1530,7 +1530,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
         for (check, pattern), decorator in aspectize.items():
           if mod is not None:
               Use._apply_aspect(mod, check, pattern, decorator)
-        frame = inspect.getframeinfo(inspect.currentframe()) #type:ignore
+        frame = inspect.getframeinfo(inspect.currentframe())
         if frame:
           self._set_mod(name=name, mod=mod, frame=frame)
         assert mod, f"Well. Shit, no module. ( {path} )"
@@ -1546,16 +1546,16 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 
 # we should avoid side-effects during testing, specifically for the version-upgrade-warning
 Use.Version = Version
-Use.config = config #type: ignore
-Use.mode = mode #type: ignore
-Use.Path = Path #type: ignore
-Use.URL = URL #type: ignore
-use: ModuleType = Use()
+Use.config = config
+Use.mode = mode
+Use.Path = Path
+Use.URL = URL
+use = Use()
 if not test_version:
     sys.modules["use"] = use
 
 # no circular import this way
 hacks_path = Path(Path(__file__).parent, "package_hacks.py")
 assert hacks_path.exists()
-use(hacks_path) #type: ignore
+use(hacks_path)
 

@@ -3,7 +3,7 @@ import sys
 import warnings
 from pathlib import Path
 from setuptools import _find_all_simple
-from typing import Callable
+	
 from unittest import skip
 
 import pytest

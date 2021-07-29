@@ -11,10 +11,6 @@ export PYTHON3
 
 
 if [ "x$1" != "xupload" ]; then
-  typeset -p -x
-  typeset -p
-  typeset -p -a
-  
   find . -regextype egrep "(" "(" -name .git -prune -false ")" -o -iregex '.*/\..*cache.*|.*cache.*/\..*' ")" -a -exec rm -vrf -- "{}" +
   rm -vrf -- ~/.justuse-python/packages
   rm  -vf -- ~/.justuse-python/registry.json
@@ -72,32 +68,14 @@ if [ "x$1" == "xupload" -a -f "$file" ]; then
     echo "Found an image to publish: [$file]" 1>&2
     for variant in \
         '"~/public_html/mixed/" "$file"'  \
-        ' "/public_html/mixed" "$file"'  \
-        '"~/public_html/mixed/" "$file"'  \
-        ' "/public_html/mixed/" "$file"'  \
-        '"~/public_html/mixed/$fn" "$file"'  \
-        ' "/public_html/mixed/$fn" "$file"'  \
-        '"~/public_html/mixed/$fn" "$file"'  \
-        ' "/public_html/mixed/$fn" "$file"'  \
-        '"/var/www/public_html/mixed/" "$file"'  \
-        '"/var/www/public_html/mixed" "$file"'  \
-        '"/var/www/public_html/mixed/$fn" "$file"'  \
-        '"/var/www/public_html/mixed/$fn" "$file"'  \
-        '"/var/www/mixed/" "$file"'  \
-        '"/var/www/mixed" "$file"'  \
-        '"/var/www/mixed/$fn" "$file"'  \
-        '"~/mixed/$fn" "$file"'  \
-        '"~public_html/mixed/$fn" "$file"'  \
         ;  \
     do
         eval "set -- $variant"
         cmd=(  busybox ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" \
                ftp.pinproject.com "$@"  )
         echo -E "Trying variant:" 1>&2
-        typeset -p -a cmd | sed -r -e 's~^ty[^=]*=\((.*)\)$~\1~; tz; s~^ty[^=]*=~~; 1h; 1!H; $!d; x; s~\n~ ~g; :z s~^ | $~~g; ' 1>&2
         command "${cmd[@]}"
         rs=$?
-        echo -E "[ $rs ] with variant=[$variant]" 1>&2
         if (( ! rs )); then
             break
         fi
@@ -105,48 +83,8 @@ if [ "x$1" == "xupload" -a -f "$file" ]; then
     [ $rs -eq 0 ] && echo "*** Image upload succeeded: $file ***" 1>&2 
 fi
 
-if [ "x$1" == "xupload" ]; then
-    echo "Trying some other ideas to publish: [$file]" 1>&2
-
-( cat <<'EOF0'
-import codecs, io, os, sys
-imgpath = os.getenv("COVERAGE_IMAGE")
-with open(imgpath, "r") as f:
-  fbytes = f.read()
-with open("tmp.json", "w") as jf:
-  import json
-  jf.write(json.dumps(
-    {
-      "body": "",
-      "description": "",
-      "files": {
-        "badge.svg": {
-          "content":fbytes
-        }
-      }
-    }
-  ))
-
-EOF0
-) | eval "$PYTHON3"
-
-    pyrs=$?
-    curl -X POST -H "Authorization: bearer $GITHUB_TOKEN" \
-       -H 'Accept: application/vnd.github.v3+json;q=1.0, */*;q=0.01' \
-       "https://api.github.com/gists" -d @tmp.json
-    rm -vf -- tmp.json 1>&2
-fi
-
-
 # run coverage!
 if [ "x$1" != "xupload" ]; then
-    
-    yes y | $PYTHON3 -m pip install \
-             types-requests || true
-    yes y | $PYTHON3 -m pip install --force-reinstall \
-             types-requests || true
-    yes y | mypy --install-types
-    
     covcom=( --cov-branch \
              --cov-report term-missing \
              --cov-report html:coverage/ \
@@ -194,7 +132,6 @@ if [ "x$1" != "xupload" ]; then
     set +e
     
     ls -lAp --color=always
-    find "$cdir" -mindepth 2 -name ".coverage" -printf '%-12s %.10T@ %p\n' | sort -k2n
     find "$cdir" -mindepth 2 -name ".coverage" -printf '%-12s %.10T@ %p\n' \
       | sort -k1n | cut -c 25- | tail -n 1 \
       | {
@@ -219,8 +156,6 @@ if [ "x$1" != "xupload" ]; then
       && mv ~/.justuse-python/config.toml.bak ~/.justuse-python/config.toml
     
 fi
-
-exit ${rs:-0} # upload
 
 exit ${rs:-0} # upload
 
