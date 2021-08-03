@@ -145,7 +145,7 @@ def load_mod(package, version):
   finally:
     sys.path.remove(pkg_path)
 
-@pytest.mark.xfail(True, "in testing")
+@pytest.mark.xfail(True, reason="in testing")
 def test_load_venv_mod():
   mod = load_mod("numpy", "1.19.3")
   assert mod.__version__ == "1.19.3"
