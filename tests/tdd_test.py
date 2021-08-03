@@ -119,7 +119,10 @@ def load_mod(package, version):
   while not pkg_path:
     if sys.platform.lower().startswith("win"):
       output = subprocess.check_output(
-        ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", *pip_args],
+        [
+          "cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&",
+          *pip_args
+        ],
         shell=False, encoding="UTF-8"
       )
     else:
