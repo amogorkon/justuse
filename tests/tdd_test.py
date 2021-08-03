@@ -90,7 +90,7 @@ def load_mod(package, version):
     venv_output = subprocess.check_output(
       [
         python_exe, "-m", "venv",
-        "--without-pip", venv_root
+        venv_root
       ], shell=False, encoding="UTF-8"
     )
     log.debug("venv created: venv_output=%r", venv_output)
@@ -121,20 +121,22 @@ def load_mod(package, version):
     )
     log.debug("pip subprocess output=%r", output)
     match = re.search(
-      f": {package}=={version} in (?P<path>(?:(?! \\({version}).)+)",
+      f": {package}=={version} in (?P<path>(?:(?! \\().)+)",
       output
     )
     pkg_path = match.group("path") if match else None
   assert Path(pkg_path).is_dir()
   orig_cwd = Path.cwd()
   try:
-    os.chdir(pkg_path)
+    sys.path.insert(0, pkg_path)
+    os.chdir(str(pkg_path))
     return importlib.import_module(package)
   finally:
-    os.chdir(orig_cwd)
+    sys.path.remove(pkg_path)
+    os.chdir(str(orig_cwd))
 
 @pytest.mark.xfail(True, reason="in testing")
 def test_load_venv_mod():
   mod = load_mod("numpy", "1.19.3")
+  log.warning(f"test_load_venv_mod: {mod=})")
   assert mod.__version__ == "1.19.3"
-
