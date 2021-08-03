@@ -94,10 +94,8 @@ def load_mod(package, version):
       ], shell=False, encoding="UTF-8"
     )
     log.debug("venv created: venv_output=%r", venv_output)
-  current_path = os.environ.get("PATH")
+  
   pip_args = [
-    "env",
-    f"PATH={venv_bin}{os.path.pathsep}{current_path}",
     python_exe,
     "-m", "pip",
     "--no-python-version-warning",
@@ -115,10 +113,23 @@ def load_mod(package, version):
   ]
   pkg_path = None
   log.info("Installing %s, version=%s", package, version)
+  
+  current_path = os.environ.get("PATH")
+  venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
   while not pkg_path:
-    output = subprocess.check_output(
-      pip_args, shell=False, encoding="UTF-8"
-    )
+    if sys.platform.lower().startswith("win"):
+      output = subprocess.check_output(
+        [
+          "cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&",
+          *pip_args
+        ],
+        shell=False, encoding="UTF-8"
+      )
+    else:
+      output = subprocess.check_output(
+        ["env", f"PATH={venv_path_var}", *pip_args],
+        shell=False, encoding="UTF-8"
+      )
     log.debug("pip subprocess output=%r", output)
     match = re.search(
       f": {package}=={version} in (?P<path>(?:(?! \\().)+)",
@@ -135,7 +146,6 @@ def load_mod(package, version):
     sys.path.remove(pkg_path)
     os.chdir(str(orig_cwd))
 
-@pytest.mark.xfail(True, reason="in testing")
 def test_load_venv_mod():
   mod = load_mod("numpy", "1.19.3")
   log.warning(f"test_load_venv_mod: {mod=})")
