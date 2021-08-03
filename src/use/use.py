@@ -87,7 +87,7 @@ from importlib import metadata
 from logging import DEBUG, StreamHandler, getLogger, root
 from pathlib import Path
 from types import FrameType, ModuleType, TracebackType
-
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Union
 from warnings import warn
 
 import mmh3

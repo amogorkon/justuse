@@ -1,11 +1,11 @@
-from packaging import tags
+from typing import Optional
+
 import requests
+from packaging import tags
 
 package_name = "numpy"
 target_version = "1.19.5"
-response = requests.get(
-    f"https://pypi.org/pypi/{package_name}/{target_version}/json"
-).json()
+response = requests.get(f"https://pypi.org/pypi/{package_name}/{target_version}/json").json()
 info = {
     "comment_text": "",
     "digests": {
@@ -27,7 +27,7 @@ info = {
     "yanked_reason": None,
 }
 
-	
+
 import re
 
 
@@ -48,4 +48,3 @@ def parse_filename(filename) -> Optional[dict]:
         filename,
     )
     return match.groupdict() if match else None
-
