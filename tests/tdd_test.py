@@ -75,3 +75,78 @@ def test_is_platform_compatible_win(reuse):
     assert reuse._is_platform_compatible(info, platform_tags, include_sdist=False)
 
 
+def load_mod(package, version):
+  import shlex, subprocess, sys, importlib
+  venv_root = \
+    Path.home() / ".justuse-python" / "venv" / package / version
+  if not venv_root.exists():
+    venv_root.mkdir(parents=True)
+  venv_bin = venv_root / "bin"
+  if not venv_bin.exists():
+    print(
+      subprocess.check_output(
+        [Path(sys.executable).stem, "-m", "venv", venv_root],
+        shell=False, encoding="UTF-8"
+      )
+    )
+  current_path = os.environ.get("PATH")
+  pip_args = [
+    "env",
+    f"PATH={venv_bin}{os.path.pathsep}{current_path}",
+    Path(sys.executable).stem,
+    "-m", "pip",
+    "--no-python-version-warning",
+    "--disable-pip-version-check",
+    "--no-color",
+    "--no-cache-dir",
+    "--isolated",
+    "install",
+    "--progress-bar", "ascii",
+    "--prefer-binary",
+    "--only-binary", ":all:",
+    "--no-build-isolation",
+    "--no-use-pep517",
+    "--no-compile",
+    "--no-warn-script-location",
+    "--no-warn-conflicts",
+    f"{package}=={version}",
+  ]
+  pkg_path = subprocess.check_output(
+    [
+      """
+      package="{package}"; version="{version}"
+      venv_root="{venv_root}"; venv_bin="{venv_bin}"
+      for attempt in 1 2; do
+        output="$( {pip_args} 2>&1 \
+          | sed -u -e "w /dev/stderr" )"
+        output_req="${{output##*satisfied: $package==$version in }}"
+        [ "x$output" != "x$output_req" ] \
+          && pkg_path="${{output_req%% \\(*}}" && break # "\\)"
+      done
+      test -n "$pkg_path" && test -d "$pkg_path" \
+          && echo "$pkg_path" \
+          || exit 255
+      """.format(
+        pip_args=shlex.join(pip_args),
+        package=package,
+        version=version,
+        venv_root=venv_root,
+        venv_bin=venv_bin,
+      )
+    ], shell=True, encoding="UTF-8"
+  ).strip()
+  if not Path(pkg_path).is_dir():
+    raise OSError(f"Expected a directory at '{pkp_path}'")
+  mod = None
+  try:
+    sys.path.insert(0, pkg_path)
+    mod = importlib.import_module(package)
+    return mod
+  finally:
+    sys.path.remove(pkg_path)
+
+@pytest.mark.xfail("in testing")
+def test_load_venv_mod():
+  mod = load_mod("numpy", "1.19.3")
+  assert mod.__version__ == "1.19.3"
+
