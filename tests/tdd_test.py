@@ -1,5 +1,9 @@
+import importlib
 import os
+import re
 import sys
+import shlex
+import subprocess
 import warnings
 from pathlib import Path
 from setuptools import _find_all_simple
@@ -76,34 +80,32 @@ def test_is_platform_compatible_win(reuse):
 
 
 def load_mod(package, version):
-  import shlex, subprocess, sys, importlib
   venv_root = \
     Path.home() / ".justuse-python" / "venv" / package / version
   if not venv_root.exists():
     venv_root.mkdir(parents=True)
   venv_bin = venv_root / "bin"
+  python_exe = Path(sys.executable).stem
   if not venv_bin.exists():
-    print(
-      subprocess.check_output(
-        [Path(sys.executable).stem, "-m", "venv", venv_root],
-        shell=False, encoding="UTF-8"
-      )
+    venv_output = subprocess.check_output(
+      [
+        python_exe, "-m", "venv",
+        "--without-pip", venv_root
+      ], shell=False, encoding="UTF-8"
     )
+    log.debug("venv created: venv_output=%r", venv_output)
   current_path = os.environ.get("PATH")
   pip_args = [
     "env",
     f"PATH={venv_bin}{os.path.pathsep}{current_path}",
-    Path(sys.executable).stem,
+    python_exe,
     "-m", "pip",
     "--no-python-version-warning",
     "--disable-pip-version-check",
     "--no-color",
-    "--no-cache-dir",
-    "--isolated",
     "install",
     "--progress-bar", "ascii",
     "--prefer-binary",
-    "--only-binary", ":all:",
     "--no-build-isolation",
     "--no-use-pep517",
     "--no-compile",
@@ -111,39 +113,25 @@ def load_mod(package, version):
     "--no-warn-conflicts",
     f"{package}=={version}",
   ]
-  pkg_path = subprocess.check_output(
-    [
-      """
-      package="{package}"; version="{version}"
-      venv_root="{venv_root}"; venv_bin="{venv_bin}"
-      for attempt in 1 2; do
-        output="$( {pip_args} 2>&1 \
-          | sed -u -e "w /dev/stderr" )"
-        output_req="${{output##*satisfied: $package==$version in }}"
-        [ "x$output" != "x$output_req" ] \
-          && pkg_path="${{output_req%% \\(*}}" && break # "\\)"
-      done
-      test -n "$pkg_path" && test -d "$pkg_path" \
-          && echo "$pkg_path" \
-          || exit 255
-      """.format(
-        pip_args=shlex.join(pip_args),
-        package=package,
-        version=version,
-        venv_root=venv_root,
-        venv_bin=venv_bin,
-      )
-    ], shell=True, encoding="UTF-8"
-  ).strip()
-  if not Path(pkg_path).is_dir():
-    raise OSError(f"Expected a directory at '{pkp_path}'")
-  mod = None
+  pkg_path = None
+  log.info("Installing %s, version=%s", package, version)
+  while not pkg_path:
+    output = subprocess.check_output(
+      pip_args, shell=False, encoding="UTF-8"
+    )
+    log.debug("pip subprocess output=%r", output)
+    match = re.search(
+      f": {package}=={version} in (?P<path>(?:(?! \\({version}).)+)",
+      output
+    )
+    pkg_path = match.group("path") if match else None
+  assert Path(pkg_path).is_dir()
+  orig_cwd = Path.cwd()
   try:
-    sys.path.insert(0, pkg_path)
-    mod = importlib.import_module(package)
-    return mod
+    os.chdir(pkg_path)
+    return importlib.import_module(package)
   finally:
-    sys.path.remove(pkg_path)
+    os.chdir(orig_cwd)
 
 @pytest.mark.xfail(True, reason="in testing")
 def test_load_venv_mod():
