@@ -4,11 +4,12 @@ from importlib import import_module
 
 mod = import_module("sys")
 
+
 class ProxyModule(ModuleType):
     def __init__(self, mod):
         self.__implementation = mod
         self.__condition = threading.RLock()
-    
+
     @property
     def path(self):
         print("accessing sys.path..")
@@ -29,5 +30,6 @@ class ProxyModule(ModuleType):
             return
         with self.__condition:
             setattr(self.__implementation, name, value)
-            
+
+
 sys = ProxyModule(mod)
