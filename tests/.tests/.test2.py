@@ -1,6 +1,8 @@
 from packaging import tags
 import requests
 
+from typing import Optional
+
 package_name = "numpy"
 target_version = "1.19.5"
 response = requests.get(
