@@ -532,7 +532,7 @@ def test_suggestion_works(reuse):
         mod = eval(match[1])
         assert mod
         return
-    assert False, "Missed expected RuntimeWsrning"
+    assert False, "Missed expected RuntimeWarning"
 
 
 def double_function(func):
