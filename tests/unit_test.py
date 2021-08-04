@@ -1,3 +1,5 @@
+import functools
+import inspect
 import json
 import logging as log
 import os
@@ -5,17 +7,18 @@ import re
 import sys
 import tempfile
 import warnings
-
 from collections import defaultdict
 from pathlib import Path
 from threading import _shutdown_locks
-
+from types import MethodType
 
 import packaging.tags
 import packaging.version
 import pytest
 import requests
 from yarl import URL
+
+from tests.simple_funcs import three
 
 if Path("use").is_dir():
     os.chdir("..")
@@ -70,9 +73,7 @@ def test_simple_url(reuse):
     import http.server
 
     port = 8089
-    with http.server.HTTPServer(
-        ("", port), http.server.SimpleHTTPRequestHandler
-    ) as svr:
+    with http.server.HTTPServer(("", port), http.server.SimpleHTTPRequestHandler) as svr:
         foo_uri = f"http://localhost:{port}/tests/.tests/foo.py"
         print(f"starting thread to handle HTTP request on port {port}")
         import threading
@@ -136,7 +137,9 @@ def test_autoinstall_PEBKAC(reuse):
     # forgot version
     with pytest.raises(RuntimeWarning):
         reuse(
-            "pytest", hash_value="asdf", modes=reuse.auto_install,
+            "pytest",
+            hash_value="asdf",
+            modes=reuse.auto_install,
         )
 
     # impossible version
@@ -187,11 +190,7 @@ def suggested_artifact(*args, **kwargs):
     reuse = use
     rw = None
     try:
-        mod = reuse(
-            *args,
-            modes=reuse.auto_install|reuse.fatal_exceptions,
-            **kwargs
-        )
+        mod = reuse(*args, modes=reuse.auto_install | reuse.fatal_exceptions, **kwargs)
     except RuntimeWarning as r:
         rw = r
     except BaseException as e:
@@ -213,25 +212,22 @@ def suggested_artifact(*args, **kwargs):
     version, hash_value = (match.group("version"), match.group("hash_value"))
     return (version, hash_value)
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="windows Auto-installing numpy"
-)
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows Auto-installing numpy")
 def test_autoinstall_protobuf(reuse):
     kws = {"package_name": "protobuf", "module_name": "google.protobuf"}
     ver, hash = suggested_artifact("protobuf", **kws)
     mod = reuse(
         "protobuf",
         **kws,
-        modes=reuse.auto_install|reuse.fatal_exceptions,
+        modes=reuse.auto_install | reuse.fatal_exceptions,
         version=ver,
         hash_value=hash,
     )
     assert mod.__version__ == ver
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="windows Auto-installing numpy"
-)
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows Auto-installing numpy")
 def test_autoinstall_numpy_dual_version(reuse):
     ver1, hash1 = suggested_artifact("numpy", version="1.19.3")
     mod1 = reuse(
@@ -258,23 +254,19 @@ def test_autoinstall_numpy_dual_version(reuse):
             log.warning("attempt %s: set _reload_guard", attempt)
             for k in filter(lambda k: "_multiarray_umath" in k, sys.modules):
                 log.warning("attempt %s: set _reload_guard on %s", attempt, k)
-                setattr(
-                    sys.modules[k], "_reload_guard", lambda: log.info("_reload_guard()")
-                )
+                setattr(sys.modules[k], "_reload_guard", lambda: log.info("_reload_guard()"))
                 log.warning("attempt %s: did _reload_guard on %s", attempt, k)
 
     assert mod2.__version__ == ver2
     assert mod1.__version__ == ver1
 
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="windows Auto-installing numpy"
-)
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows Auto-installing numpy")
 def test_autoinstall_numpy(reuse):
     ver, hash = suggested_artifact("numpy", version="1.19.3")
     mod = reuse(
         "numpy",
-        modes=reuse.auto_install|reuse.fatal_exceptions,
+        modes=reuse.auto_install | reuse.fatal_exceptions,
         version=ver,
         hash_value=hash,
     )
@@ -316,7 +308,7 @@ def test_registry(reuse):
         name,
         version=vers,
         hash_value=hash_value,
-        modes=reuse.auto_install|reuse.fatal_exceptions,
+        modes=reuse.auto_install | reuse.fatal_exceptions,
     )
     assert mod
     with open(Path.home() / ".justuse-python" / "registry.json", "rb") as jsonfile:
@@ -445,9 +437,7 @@ def test_find_windows_artifact(reuse):
 
 
 def test_parse_filename(reuse):
-    assert reuse._parse_filename(
-        "protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl"
-    ) == {
+    assert reuse._parse_filename("protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl") == {
         "distribution": "protobuf",
         "version": "1.19.5",
         "build_tag": None,
@@ -464,22 +454,18 @@ def test_classic_import_no_version(reuse):
         warnings.simplefilter("always")
         try:
             reuse("mmh3", modes=reuse.auto_install)
-            assert issubclass(
-                w[-1].category,
-                reuse.AmbiguityWarning
-            )
+            assert issubclass(w[-1].category, reuse.AmbiguityWarning)
             return
         except RuntimeWarning as w:
             rw = w
     log.warning(f"from try/catch: {rw=}")
 
+
 def test_classic_import_same_version(reuse):
     version = reuse.Version(__import__("mmh3").__version__)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        mod = reuse(
-            "mmh3", version=version, modes=reuse.fatal_exceptions
-        )
+        mod = reuse("mmh3", version=version, modes=reuse.fatal_exceptions)
         assert not w
         assert reuse.Version(mod.__version__) == version
 
@@ -509,16 +495,17 @@ def test_use_ugrade_version_warning(reuse):
         assert test_use.test_version == test_use.__version__ == version
         assert w[0].category.__name__ == reuse.VersionWarning.__name__
 
+
 class Restorer:
     def __enter__(self):
         self.locks = set(_shutdown_locks)
+
     def __exit__(self, arg1, arg2, arg3):
         for lock in set(_shutdown_locks).difference(self.locks):
             lock.release()
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="windows reloading"
-)
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows reloading")
 def test_reloading(reuse):
     fd, file = tempfile.mkstemp(".py", "test_module")
     with Restorer():
@@ -530,11 +517,11 @@ def test_reloading(reuse):
                 f.flush()
             os.rename(newfile, file)
             mod = mod or reuse(Path(file), modes=reuse.reloading)
-            while mod.foo() < check: pass
+            while mod.foo() < check:
+                pass
 
-@pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="windows Auto-installing numpy"
-)
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows Auto-installing numpy")
 def test_suggestion_works(reuse):
     try:
         mod = reuse("xdis", modes=use.auto_install)
@@ -546,3 +533,38 @@ def test_suggestion_works(reuse):
         assert mod
         return
     assert False, "Missed expected RuntimeWsrning"
+
+
+def double_function(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs) * 2
+
+    return wrapper
+
+
+def test_aspectize(reuse):
+    # baseline
+    mod = reuse(reuse.Path("simple_funcs.py"))
+    assert mod.two() == 2
+
+    # all functions, but not classes or methods
+    mod = reuse(
+        reuse.Path("simple_funcs.py"),
+        aspectize={(reuse.isfunction, ""): double_function},
+    )
+
+    assert mod.two() == 4
+    assert mod.three() == 6
+    inst = mod.Two()
+    assert inst() == 2
+    inst = mod.Three()
+    assert inst.three() == 3
+
+    # functions with specific names only
+    mod = reuse(
+        reuse.Path("simple_funcs.py"),
+        aspectize={(reuse.isfunction, "two"): double_function},
+    )
+    assert mod.two() == 4
+    assert mod.three() == 3
