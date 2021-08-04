@@ -1319,7 +1319,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     log.warning(
                         f"Setting {spec=}, since " f"{target_version=} != {this_version=}"
                     )
-        # no spec
         else:
             if not auto_install:
                 return Use._fail_or_default(
@@ -1362,7 +1361,7 @@ use("{package_name}", version="{version}", hash_value="{that_hash}", modes=use.a
                 raise RuntimeWarning(
                     f"Failed to auto-install '{package_name}' because no version was specified."
                 )
-            elif not target_version and not (hash_value or hash_values):
+            elif not target_version:
                 # let's try to make an educated guess and give a useful suggestion
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
                 if response.status_code == 404:
@@ -1409,14 +1408,11 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             if entry and entry["path"]:
                 path = Path(entry["path"])
                 url = URL(entry["url"])
-            if entry and path:
-                # someone messed with the packages without updating
-                # the registry
-                if not path.exists():
-                    del self._registry["distributions"][package_name][version]
-                    self.persist_registry()
-                    path = None
-                    entry = None
+            if entry and path and not path.exists():
+                del self._registry["distributions"][package_name][version]
+                self.persist_registry()
+                path = None
+                entry = None
             if not path:
                 response = requests.get(
                     f"https://pypi.org/pypi/{package_name}/{target_version}/json"
@@ -1532,9 +1528,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     Use.AutoInstallationError,
                     f"Direct zipimport of {name} {version} failed and the package was not registered with known hacks.. we're sorry, but that means you will need to resort to using pip/conda for now.",
                 )
-        # no spec
-        if True:
-            self.persist_registry()
+        self.persist_registry()
         for (check, pattern), decorator in aspectize.items():
             if mod is not None:
                 Use._apply_aspect(
