@@ -25,10 +25,7 @@ from pathlib import Path
 # this is possible because we don't *import* this file, but use() it!
 __package__ = "use.use"
 SOLIB_DELIMS = [".python", ".cpython", ".cp"]
-from ..use import use as use1
-
-use1 = use1
-use = use1
+import use
 
 root.addHandler(StreamHandler(sys.stderr))
 if "DEBUG" in os.environ:

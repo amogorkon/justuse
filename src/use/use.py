@@ -94,9 +94,9 @@ import mmh3
 import packaging
 import requests
 import toml
+from furl import furl as URL
 from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import Version as PkgVersion
-from yarl import URL
 
 
 class PlatformTag(namedtuple("PlatformTag", ["platform"])):
@@ -113,16 +113,37 @@ _supported = None
 def get_supported() -> FrozenSet[PlatformTag]:
     global _supported
     if _supported is None:
-        items = []
+        items: List[PlatformTag] = []
         try:
-            from pip._internal.utils import compatibility_tags
+            from pip._internal.utils import compatibility_tags  # type: ignore
 
             for tag in compatibility_tags.get_supported():
                 items.append(PlatformTag(platform=tag.platform))
         except ImportError:
             pass
-        for ptag in packaging.tags._platform_tags():
-            items.append(PlatformTag(platform=str(ptag)))
+        for tag in packaging.tags._platform_tags():
+            items.append(PlatformTag(platform=str(tag)))
+        _supported = tags = frozenset(items)
+        log.error(str(tags))
+    return _supported
+
+
+_supported = None
+
+
+def get_supported() -> FrozenSet[PlatformTag]:
+    global _supported
+    if _supported is None:
+        items: List[PlatformTag] = []
+        try:
+            from pip._internal.utils import compatibility_tags  # type: ignore
+
+            for tag in compatibility_tags.get_supported():
+                items.append(PlatformTag(platform=tag.platform))
+        except ImportError:
+            pass
+        for tag in packaging.tags._platform_tags():
+            items.append(PlatformTag(platform=str(tag)))
         _supported = tags = frozenset(items)
         log.error(str(tags))
     return _supported
@@ -526,13 +547,13 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
 
     def _save_module_info(
         self,
-        name,
-        version: Union[Version | str],
-        url,
-        path,
-        that_hash,
-        folder,
-        package_name=None,
+        name: str,
+        version: Union[Version | str],  # type: ignore
+        url: Optional[URL],
+        path: Optional[Path],
+        that_hash: Optional[str],
+        folder: Path,
+        package_name: str = None,
     ):
         """Update the registry to contain the package's metadata.
         Does not call Use.persist_registry() on its own."""
@@ -549,7 +570,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
             {
                 "package": package_name,
                 "version": version,
-                "url": url.human_repr(),
+                "url": str(url),
                 "path": str(path) if path else None,
                 "folder": folder.absolute().as_uri(),
                 "filename": path.name,
@@ -905,7 +926,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
 To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')""",
                 Use.NoValidationWarning,
             )
-        name = url.name
+        name = str(url)
 
         try:
             mod = Use._build_mod(
@@ -1251,7 +1272,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))",
                 Use.AmbiguityWarning,
             )
-        hit = VerHash.empty()
+        hit: VerHash = VerHash.empty()
         data = None
         spec = None
         entry = None
@@ -1327,6 +1348,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     f"Could not find any installed package '{name}' and auto_install was not requested.",
                 )
             # PEBKAC
+            hit: VerHash = VerHash.empty()
             if target_version and not (hash_value or hash_values):  # let's try to be helpful
                 response = requests.get(
                     f"https://pypi.org/pypi/{package_name}/{target_version}/json"
@@ -1340,6 +1362,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hash_value for the auto-installation was missing."
                     )
                 data = response.json()
+
                 version, that_hash = hit = Use._find_matching_artifact(
                     data["urls"], hash_algo=hash_algo.name
                 )
@@ -1349,6 +1372,12 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         hash_value = that_hash
                     if that_hash is not None:
                         hash_values = hash_values + [that_hash]
+
+                    if that_hash is not None:
+                        hash_value = that_hash
+                    if that_hash is not None:
+                        hash_values = hash_values + [that_hash]
+
                     raise RuntimeWarning(
                         f"""Failed to auto-install '{package_name}' because hash_value is missing. This may work:
 use("{package_name}", version="{version}", hash_value="{that_hash}", modes=use.auto_install)
@@ -1391,11 +1420,11 @@ use("{package_name}", version="{version}", hash_value="{that_hash}", modes=use.a
                         f"for {package_name} that could satisfy our "
                         f"requirements!"
                     )
+
                 if not target_version and (hash_value or hash_values):
                     hash_values += [hash_value]
                     raise RuntimeWarning(
                         f"""Please specify version and hash for auto-installation of '{package_name}'.
->>>>>>> Stashed changes
 To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
 If you want to auto-install the latest version: use("{name}", version="{version}", hash_value="{hash_value}", modes=use.auto_install)
 """
@@ -1472,11 +1501,17 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.",
                     )
                 # we've got a complete JSON with a matching entry, let's download
-                path = self.home / "packages" / Path(url.name).name
+                path = (
+                    self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
+                )
                 if not path.exists():
                     print("Downloading", url, "...")
                     download_response = requests.get(str(url), allow_redirects=True)
-                    path = self.home / "packages" / Path(url.name).name
+                    path = (
+                        self.home
+                        / "packages"
+                        / Path(url.asdict()["path"]["segments"][-1]).name
+                    )
                     this_hash = hash_algo.value(download_response.content).hexdigest()
                     if this_hash != hash_value:
                         return Use._fail_or_default(
@@ -1566,4 +1601,4 @@ if not test_version:
 # no circular import this way
 hacks_path = Path(Path(__file__).parent, "package_hacks.py")
 assert hacks_path.exists()
-use(hacks_path)
+use(hacks_path)  # type: ignore

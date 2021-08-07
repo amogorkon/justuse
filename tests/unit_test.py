@@ -16,7 +16,7 @@ import packaging.tags
 import packaging.version
 import pytest
 import requests
-from yarl import URL
+from furl import furl as URL
 
 from tests.simple_funcs import three
 
