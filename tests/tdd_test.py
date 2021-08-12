@@ -11,7 +11,6 @@ from unittest import skip
 import pytest
 import requests
 from setuptools import _find_all_simple
-from yarl import URL
 
 from .unit_test import log, reuse
 
@@ -140,8 +139,6 @@ def load_mod(package, version):
 def test_load_venv_mod():
     mod = load_mod("numpy", "1.19.3")
     log.warning(f"test_load_venv_mod: {mod=})")
-    assert mod.__version__ == "1.19.3"
-
-
+    assert mod.__version__ == 
 def test_db_setup(reuse):
     assert reuse.registry
