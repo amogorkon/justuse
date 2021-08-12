@@ -409,7 +409,7 @@ class Use(ModuleType):
 
         if config["version_warning"]:
             try:
-                response = requests.get(f"https://pypi.org/pypi/justuse/json")
+                response = requests.get("https://pypi.org/pypi/justuse/json")
                 data = response.json()
                 max_version = max(Version(version) for version in data["releases"].keys())
                 if Version(__version__) < max_version:
@@ -797,9 +797,7 @@ CREATE TABLE IF NOT EXISTS "package" (
 
         if "version" in registry and registry["version"] < registry_version:
             print(
-                f"Registry is being upgraded from version "
-                f"{registry.get('version',0)} to version"
-                f"{registry_version}"
+                f"Registry is being upgraded from version {registry.get('version',0)} to version {registry_version}"
             )
             registry["version"] = registry_version
         elif registry and "version" not in registry:
