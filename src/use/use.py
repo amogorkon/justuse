@@ -455,14 +455,14 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
     def _set_up_registry(self):
         self.registry.executescript(
             """
-CREATE TABLE "distributions" (
+CREATE TABLE IF NOT EXISTS "distributions" (
 	"id"	INTEGER,
 	"name"	TEXT NOT NULL,
 	"version"	TEXT NOT NULL,
 	PRIMARY KEY("id" AUTOINCREMENT)
 );
 
-CREATE TABLE "artifacts" (
+CREATE TABLE IF NOT EXISTS "artifacts" (
 	"id"	INTEGER,
 	"distribution_id"	INTEGER,
 	"tags"	TEXT,
@@ -476,7 +476,7 @@ CREATE TABLE "artifacts" (
 	PRIMARY KEY("id" AUTOINCREMENT)
 );
 
-CREATE TABLE "hashes" (
+CREATE TABLE IF NOT EXISTS "hashes" (
 	"algo"	TEXT NOT NULL,
 	"value"	TEXT NOT NULL,
 	"artifact_id"	INTEGER NOT NULL,
