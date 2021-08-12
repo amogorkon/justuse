@@ -463,8 +463,7 @@ CREATE TABLE IF NOT EXISTS "package" (
 );
 """
         )
-        self._registry_db_connection
-        .commit()
+        self._registry_db_connection.commit()
 
     def recreate_registry(self, use_db=False):
         if use_db:
