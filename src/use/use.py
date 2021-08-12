@@ -801,7 +801,7 @@ CREATE TABLE IF NOT EXISTS "package" (
             )
             registry["version"] = registry_version
         elif registry and "version" not in registry:
-            print(f"Registry is being upgraded from version 0")
+            print("Registry is being upgraded from version 0")
             new_registry = {
                 "version": registry_version,
                 "distributions": (dists := defaultdict(lambda: dict())),
@@ -979,7 +979,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             assert isinstance(
                 as_import, str
             ), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
-            assert as_import.isidentifier(), f"as_import must be a valid identifier."
+            assert as_import.isidentifier(), "as_import must be a valid identifier."
             sys.modules[as_import] = mod
         return mod
 
@@ -1218,7 +1218,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if not this_version:
             log.warning(f"Cannot find version for {name=}, {mod=}")
         elif not target_version:
-            warn(f"No version was specified", Use.AmbiguityWarning)
+            warn("No version was specified", Use.AmbiguityWarning)
         elif target_version != this_version:
             warn(
                 f"{name} expected to be version {target_version},"
