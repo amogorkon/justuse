@@ -11,7 +11,10 @@ Goals/Features:
 - securely auto-install packages (preliminary DONE, still some kinks with C-extensions)
 - support P2P package distribution (TODO)
 - unwrap aspect-decorators on demand (TODO)
-- easy introspection via internal dependency graph (TODO)
+- easy introspection via i
+
+def test_db_setup(reuse):
+      cur = reuse.registry.cursor()    nternal dependency graph (TODO)
 - relative imports on online-sources via URL-aliases (TODO)
 - module-level variable placeholders/guards aka "module-properties" (TODO)
 - load packages faster while using less memory than classical pip/import - ideal for embedded systems with limited resources (TODO)
@@ -202,10 +205,7 @@ if "DEBUG" in os.environ:
 log = getLogger(__name__)
 
 # defaults
-config = {
-    "version_warning": True,
-    "debugging": False,
-}
+config = {"version_warning": True, "debugging": False, "use_db": False}
 
 # sometimes all you need is a sledge hammer..
 def signal_handler(sig, frame):
@@ -384,7 +384,15 @@ class Use(ModuleType):
         )  # {(name -> interval_tree of Version -> function} basically plugins/workarounds for specific packages/versions
 
         self._set_up_files_and_directories()
-
+        try:
+            self._registry_db_connection = sqlite3.connect(self.home / "registry.db")
+            self.registry = self._registry_db_connection.cursor()
+        except:
+            raise RuntimeError(
+                "Could not connect to the registry database, please make sure it is accessible."
+            )
+        self._set_up_registry()
+        assert self.registry is not None, "Registry is None"
         self._registry = Use._load_registry(self.home / "registry.json")
         self._user_registry = Use._load_registry(self.home / "user_registry.json")
         Use._merge_registry(self._registry, self._user_registry)
@@ -439,18 +447,44 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
             "config.toml",
             "config_defaults.toml",
             "usage.log",
+            "registry.db",
+            "user_registry.toml",
         ):
             (self.home / file).touch(mode=0o755, exist_ok=True)
 
-    def recreate_registry(self):
-        number_of_backups = len(list((self.home / "registry.json").glob("*.bak")))
-        (self.home / "registry.json").rename(
-            self.home / f"registry.json.{number_of_backups + 1}.bak"
+    def _set_up_registry(self):
+        self.registry.execute(
+            """
+CREATE TABLE IF NOT EXISTS "package" (
+	"name"	TEXT NOT NULL,
+	"version"	TEXT NOT NULL,
+	"path"	TEXT NOT NULL,
+	PRIMARY KEY("name","version")
+);
+"""
         )
-        (self.home / "registry.json").touch(mode=0o644)
-        self._registry = Use._load_registry(self.home / "registry.json")
-        self._user_registry = Use._load_registry(self.home / "user_registry.json")
-        Use._merge_registry(self._registry, self._user_registry)
+        self._registry_db_connection
+        .commit()
+
+    def recreate_registry(self, use_db=False):
+        if use_db:
+            number_of_backups = len(list((self.home / "registry.db").glob("*.bak")))
+            (self.home / "registry.json").rename(
+                self.home / f"registry.json.{number_of_backups + 1}.bak"
+            )
+            (self.home / "registry.json").touch(mode=0o644)
+            self._registry = Use._load_registry(self.home / "registry.db")
+            self._user_registry = Use._load_registry(self.home / "user_registry.db")
+            Use._merge_registry(self._registry_db, self._user_registry, use_db=True)
+        else:
+            number_of_backups = len(list((self.home / "registry.json").glob("*.bak")))
+            (self.home / "registry.json").rename(
+                self.home / f"registry.json.{number_of_backups + 1}.bak"
+            )
+            (self.home / "registry.json").touch(mode=0o644)
+            self._registry = Use._load_registry(self.home / "registry.json")
+            self._user_registry = Use._load_registry(self.home / "user_registry.json")
+            Use._merge_registry(self._registry, self._user_registry)
 
     def install(self):
         # yeah, really.. __builtins__ sometimes appears as a dict and other times as a module, don't ask me why
