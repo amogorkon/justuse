@@ -460,7 +460,7 @@ CREATE TABLE "distributions" (
 	"name"	TEXT NOT NULL,
 	"version"	TEXT NOT NULL,
 	PRIMARY KEY("id" AUTOINCREMENT)
-)
+);
 
 CREATE TABLE "artifacts" (
 	"id"	INTEGER,
@@ -469,17 +469,21 @@ CREATE TABLE "artifacts" (
 	"url"	TEXT,
 	"filename"	TEXT,
 	"folder"	TEXT,
+	"date_of_installation"	INTEGER,
+	"number_of_uses"	INTEGER,
+	"date_of_last_use"	INTEGER,
 	FOREIGN KEY("distribution_id") REFERENCES "distributions"("id"),
 	PRIMARY KEY("id" AUTOINCREMENT)
-)
-CREATE TABLE "hash" (
+);
+
+CREATE TABLE "hashes" (
 	"algo"	TEXT NOT NULL,
 	"value"	TEXT NOT NULL,
 	"artifact_id"	INTEGER NOT NULL,
-	FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id"),
-	PRIMARY KEY("algo","value")
+	PRIMARY KEY("algo","value"),
+	FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id")
 );
-"""
+        """
         )
         self.registry.connection.commit()
 
