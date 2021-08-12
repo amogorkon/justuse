@@ -453,17 +453,35 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
             (self.home / file).touch(mode=0o755, exist_ok=True)
 
     def _set_up_registry(self):
-        self.registry.execute(
+        self.registry.executescript(
             """
-CREATE TABLE IF NOT EXISTS "package" (
+CREATE TABLE "distributions" (
+	"id"	INTEGER,
 	"name"	TEXT NOT NULL,
 	"version"	TEXT NOT NULL,
-	"path"	TEXT NOT NULL,
-	PRIMARY KEY("name","version")
+	PRIMARY KEY("id" AUTOINCREMENT)
+)
+
+CREATE TABLE "artifacts" (
+	"id"	INTEGER,
+	"distribution_id"	INTEGER,
+	"tags"	TEXT,
+	"url"	TEXT,
+	"filename"	TEXT,
+	"folder"	TEXT,
+	FOREIGN KEY("distribution_id") REFERENCES "distributions"("id"),
+	PRIMARY KEY("id" AUTOINCREMENT)
+)
+CREATE TABLE "hash" (
+	"algo"	TEXT NOT NULL,
+	"value"	TEXT NOT NULL,
+	"artifact_id"	INTEGER NOT NULL,
+	FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id"),
+	PRIMARY KEY("algo","value")
 );
 """
         )
-        self._registry_db_connection.commit()
+        self.registry.connection.commit()
 
     def recreate_registry(self, use_db=False):
         if use_db:
