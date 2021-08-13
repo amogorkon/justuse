@@ -65,7 +65,7 @@ jobs:
             ) -join "`n"
           }
           echo "Windows-Tests: Preloading package dependencies ..."
-          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests yarl
+          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests furl yarl
           echo "Windows-Tests: Running tests ..."
           $env:DEBUG = 1
           $env:ERRORS = 1
@@ -79,7 +79,7 @@ jobs:
         uses: actions/checkout@v2
       - run: |
           echo "MacOS-Tests: Preloading package dependencies ..."
-          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests yarl
+          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests furl yarl
           echo "MacOS-Tests: Running tests ..."
           mkdir -p ~/.justuse-python/
           echo "debug = true" > ~/.justuse-python/config.toml
