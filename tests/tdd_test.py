@@ -13,7 +13,6 @@ from unittest import skip
 import pytest
 import requests
 	
-from yarl import URL
 
 from .unit_test import log, reuse
 
