@@ -11,7 +11,10 @@ Goals/Features:
 - securely auto-install packages (preliminary DONE, still some kinks with C-extensions)
 - support P2P package distribution (TODO)
 - unwrap aspect-decorators on demand (TODO)
-- easy introspection via internal dependency graph (TODO)
+- easy introspection via i
+
+def test_db_setup(reuse):
+      cur = reuse.registry.cursor()    nternal dependency graph (TODO)
 - relative imports on online-sources via URL-aliases (TODO)
 - module-level variable placeholders/guards aka "module-properties" (TODO)
 - load packages faster while using less memory than classical pip/import - ideal for embedded systems with limited resources (TODO)
@@ -202,10 +205,7 @@ if "DEBUG" in os.environ:
 log = getLogger(__name__)
 
 # defaults
-config = {
-    "version_warning": True,
-    "debugging": False,
-}
+config = {"version_warning": True, "debugging": False, "use_db": False}
 
 # sometimes all you need is a sledge hammer..
 def signal_handler(sig, frame):
@@ -384,7 +384,15 @@ class Use(ModuleType):
         )  # {(name -> interval_tree of Version -> function} basically plugins/workarounds for specific packages/versions
 
         self._set_up_files_and_directories()
-
+        try:
+            self._registry_db_connection = sqlite3.connect(self.home / "registry.db")
+            self.registry = self._registry_db_connection.cursor()
+        except:
+            raise RuntimeError(
+                "Could not connect to the registry database, please make sure it is accessible."
+            )
+        self._set_up_registry()
+        assert self.registry is not None, "Registry is None"
         self._registry = Use._load_registry(self.home / "registry.json")
         self._user_registry = Use._load_registry(self.home / "user_registry.json")
         Use._merge_registry(self._registry, self._user_registry)
@@ -401,7 +409,7 @@ class Use(ModuleType):
 
         if config["version_warning"]:
             try:
-                response = requests.get(f"https://pypi.org/pypi/justuse/json")
+                response = requests.get("https://pypi.org/pypi/justuse/json")
                 data = response.json()
                 max_version = max(Version(version) for version in data["releases"].keys())
                 if Version(__version__) < max_version:
@@ -439,18 +447,65 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
             "config.toml",
             "config_defaults.toml",
             "usage.log",
+            "registry.db",
+            "user_registry.toml",
         ):
             (self.home / file).touch(mode=0o755, exist_ok=True)
 
-    def recreate_registry(self):
-        number_of_backups = len(list((self.home / "registry.json").glob("*.bak")))
-        (self.home / "registry.json").rename(
-            self.home / f"registry.json.{number_of_backups + 1}.bak"
+    def _set_up_registry(self):
+        self.registry.executescript(
+            """
+CREATE TABLE IF NOT EXISTS "distributions" (
+	"id"	INTEGER,
+	"name"	TEXT NOT NULL,
+	"version"	TEXT NOT NULL,
+	PRIMARY KEY("id" AUTOINCREMENT)
+);
+
+CREATE TABLE IF NOT EXISTS "artifacts" (
+	"id"	INTEGER,
+	"distribution_id"	INTEGER,
+	"tags"	TEXT,
+	"url"	TEXT,
+	"filename"	TEXT,
+	"folder"	TEXT,
+	"date_of_installation"	INTEGER,
+	"number_of_uses"	INTEGER,
+	"date_of_last_use"	INTEGER,
+	FOREIGN KEY("distribution_id") REFERENCES "distributions"("id"),
+	PRIMARY KEY("id" AUTOINCREMENT)
+);
+
+CREATE TABLE IF NOT EXISTS "hashes" (
+	"algo"	TEXT NOT NULL,
+	"value"	TEXT NOT NULL,
+	"artifact_id"	INTEGER NOT NULL,
+	PRIMARY KEY("algo","value"),
+	FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id")
+);
+        """
         )
-        (self.home / "registry.json").touch(mode=0o644)
-        self._registry = Use._load_registry(self.home / "registry.json")
-        self._user_registry = Use._load_registry(self.home / "user_registry.json")
-        Use._merge_registry(self._registry, self._user_registry)
+        self.registry.connection.commit()
+
+    def recreate_registry(self, use_db=False):
+        if use_db:
+            number_of_backups = len(list((self.home / "registry.db").glob("*.bak")))
+            (self.home / "registry.json").rename(
+                self.home / f"registry.json.{number_of_backups + 1}.bak"
+            )
+            (self.home / "registry.json").touch(mode=0o644)
+            self._registry = Use._load_registry(self.home / "registry.db")
+            self._user_registry = Use._load_registry(self.home / "user_registry.db")
+            Use._merge_registry(self._registry_db, self._user_registry, use_db=True)
+        else:
+            number_of_backups = len(list((self.home / "registry.json").glob("*.bak")))
+            (self.home / "registry.json").rename(
+                self.home / f"registry.json.{number_of_backups + 1}.bak"
+            )
+            (self.home / "registry.json").touch(mode=0o644)
+            self._registry = Use._load_registry(self.home / "registry.json")
+            self._user_registry = Use._load_registry(self.home / "user_registry.json")
+            Use._merge_registry(self._registry, self._user_registry)
 
     def install(self):
         # yeah, really.. __builtins__ sometimes appears as a dict and other times as a module, don't ask me why
@@ -764,13 +819,11 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
 
         if "version" in registry and registry["version"] < registry_version:
             print(
-                f"Registry is being upgraded from version "
-                f"{registry.get('version',0)} to version"
-                f"{registry_version}"
+                f"Registry is being upgraded from version {registry.get('version',0)} to version {registry_version}"
             )
             registry["version"] = registry_version
         elif registry and "version" not in registry:
-            print(f"Registry is being upgraded from version 0")
+            print("Registry is being upgraded from version 0")
             new_registry = {
                 "version": registry_version,
                 "distributions": (dists := defaultdict(lambda: dict())),
@@ -948,7 +1001,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             assert isinstance(
                 as_import, str
             ), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
-            assert as_import.isidentifier(), f"as_import must be a valid identifier."
+            assert as_import.isidentifier(), "as_import must be a valid identifier."
             sys.modules[as_import] = mod
         return mod
 
@@ -1187,7 +1240,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         if not this_version:
             log.warning(f"Cannot find version for {name=}, {mod=}")
         elif not target_version:
-            warn(f"No version was specified", Use.AmbiguityWarning)
+            warn("No version was specified", Use.AmbiguityWarning)
         elif target_version != this_version:
             warn(
                 f"{name} expected to be version {target_version},"
