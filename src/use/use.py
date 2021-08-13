@@ -829,7 +829,7 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
         default
         mod = ModuleType(name)
         mod.__dict__.update(initial_globals or {})
-        mod.__file__ = module_path
+        mod.__file__ = str(module_path)
         code_text = codecs.decode(code)
         # module file "<", ">" chars are specially handled by inspect
         if not sys.platform.startswith("win"):
