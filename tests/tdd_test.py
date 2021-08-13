@@ -11,7 +11,6 @@ from unittest import skip
 import pytest
 import requests
 from setuptools import _find_all_simple
-from yarl import URL
 
 from .unit_test import log, reuse
 
