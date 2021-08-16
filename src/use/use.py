@@ -375,14 +375,18 @@ class Use(ModuleType):
         )  # {(name -> interval_tree of Version -> function} basically plugins/workarounds for specific packages/versions
 
         self._set_up_files_and_directories()
-        try:
-            self.registry = sqlite3.connect(self.home / "registry.db").cursor()
-            self.registry.execute("PRAGMA foreign_keys=ON")
-            self.registry.execute("PRAGMA auto_vacuum = FULL")
-        except Exception as e:
-            raise RuntimeError(
-                f"Could not connect to the registry database, please make sure it is accessible. ({e})"
-            )
+        # might run into issues during testing otherwise
+        if not test_version:
+            try:
+                self.registry = sqlite3.connect(self.home / "registry.db").cursor()
+                self.registry.execute("PRAGMA foreign_keys=ON")
+                self.registry.execute("PRAGMA auto_vacuum = FULL")
+            except Exception as e:
+                raise RuntimeError(
+                    f"Could not connect to the registry database, please make sure it is accessible. ({e})"
+                )
+        else:
+            self.registry = sqlite3.connect(":memory:")
         self._set_up_registry()
         assert self.registry is not None, "Registry is None"
         self._registry = Use._load_registry(self.home / "registry.json")
@@ -999,6 +1003,7 @@ VALUES ({self.registry.lastrowid}, '{path}')
         import_to_use=None,
         modes=0,
     ) -> ModuleType:
+        log
         exc = None
 
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
@@ -1698,9 +1703,6 @@ Use.config = config
 Use.mode = mode
 Use.Path = Path
 Use.URL = URL
-Use.__doc__ = __doc__
-Use.__version__ = __version__
-Use.__name__ = __name__
 Use.__path__ = str(Path(__file__).resolve().parent)
 
 use = Use()
