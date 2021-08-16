@@ -685,25 +685,27 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             "--no-warn-conflicts",
             f"{package}=={version}",
         ]
-        pkg_path = (
-            venv_root
-            / "lib" 
-            / "python{ver}".format(
-                ver=".".join(map(str, sys.version_info[0:2]))
-              ) 
-            / "site-packages"
-        )
+
         log.info("Installing %s, version=%s", package, version)
         current_path = os.environ.get("PATH")
         venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
         
         if sys.platform.lower().startswith("win"):
+            pkg_path = venv_root / "Lib" / "site-packages"
             output = check_output(
                 ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
                 shell=False,
                 encoding="UTF-8",
             )
         else:
+            pkg_path = (
+                venv_root
+                / "lib" 
+                / "python{ver}".format(
+                    ver=".".join(map(str, sys.version_info[0:2]))
+                  ) 
+                / "site-packages"
+            )
             output = check_output(
                 ["env", f"PATH={venv_path_var}", *pip_args], shell=False, encoding="UTF-8"
             )
