@@ -121,7 +121,8 @@ def test_classical_install(reuse):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         mod = reuse("pytest", modes=reuse.fatal_exceptions)
-        assert mod is pytest
+        assert mod is pytest or \
+               mod._ProxyModule__implementation is pytest
         assert issubclass(w[-1].category, use.AmbiguityWarning)
 
 
