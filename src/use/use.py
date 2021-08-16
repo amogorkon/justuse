@@ -379,7 +379,7 @@ class Use(ModuleType):
         # might run into issues during testing otherwise
         if not test_version:
             try:
-                self.registry = sqlite3.connect(self.home / "registry.db").cursor()
+                self.registry = sqlite3.connect(self.home / "registry.db")
                 self.registry.execute("PRAGMA foreign_keys=ON")
                 self.registry.execute("PRAGMA auto_vacuum = FULL")
             except Exception as e:
@@ -622,7 +622,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         ).fetchall():
             if not Path(path).exists():
                 self.registry.execute(f"DELETE FROM distributions WHERE id=?", (ID,))
-        self.registry.connection.commit()
+        self.registry.commit()
 
     def _save_module_info(
         self,
@@ -659,28 +659,28 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
             }
         )
         if not (
-            ID := self.registry.execute(
+            ID := (cursor := self.registry.execute(
                 f"SELECT * FROM distributions WHERE name=? AND version=?",
                 (package_name, version),
-            ).fetchone()
+            )).fetchone()
         ):
-            self.registry.execute(
+            cursor = self.registry.execute(
                 f"""
 INSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
 VALUES ('{name}', '{version}', '{folder}', {time.time()}, {folder is None})
 """
             )
-            self.registry.execute(
+            cursor = self.registry.execute(
                 f"""
 INSERT INTO artifacts (distribution_id, path)
-VALUES ({self.registry.lastrowid}, '{path}') 
+VALUES ({cursor.lastrowid}, '{path}')
 """
             )
-            self.registry.execute(
+            cursor = self.registry.execute(
                 f""" INSERT INTO hashes (artifact_id, algo, value)
-                                  VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{that_hash}')"""
+                                  VALUES ({cursor.lastrowid}, '{hash_algo.name}', '{that_hash}')"""
             )
-        self.registry.connection.commit()
+        self.registry.commit()
 
     def _set_mod(self, *, name, mod, frame, path=None, spec=None):
         """Helper to get the order right."""
