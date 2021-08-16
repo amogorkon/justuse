@@ -376,18 +376,14 @@ class Use(ModuleType):
         )  # {(name -> interval_tree of Version -> function} basically plugins/workarounds for specific packages/versions
 
         self._set_up_files_and_directories()
-        # might run into issues during testing otherwise
-        if not test_version:
-            try:
-                self.registry = sqlite3.connect(self.home / "registry.db")
-                self.registry.execute("PRAGMA foreign_keys=ON")
-                self.registry.execute("PRAGMA auto_vacuum = FULL")
-            except Exception as e:
-                raise RuntimeError(
-                    f"Could not connect to the registry database, please make sure it is accessible. ({e})"
-                )
-        else:
-            self.registry = sqlite3.connect(":memory:")
+        try:
+            self.registry = sqlite3.connect(self.home / "registry.db").cursor()
+            self.registry.execute("PRAGMA foreign_keys=ON")
+            self.registry.execute("PRAGMA auto_vacuum = FULL")
+        except Exception as e:
+            raise RuntimeError(
+                f"Could not connect to the registry database, please make sure it is accessible. ({e})"
+            )
         self._set_up_registry()
         assert self.registry is not None, "Registry is None"
         self._registry = Use._load_registry(self.home / "registry.json")
@@ -622,7 +618,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         ).fetchall():
             if not Path(path).exists():
                 self.registry.execute(f"DELETE FROM distributions WHERE id=?", (ID,))
-        self.registry.commit()
+        self.registry.connection.commit()
 
     def _save_module_info(
         self,
@@ -659,28 +655,28 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
             }
         )
         if not (
-            ID := (cursor := self.registry.execute(
+            ID := self.registry.execute(
                 f"SELECT * FROM distributions WHERE name=? AND version=?",
                 (package_name, version),
-            )).fetchone()
+            ).fetchone()
         ):
-            cursor = self.registry.execute(
+            self.registry.execute(
                 f"""
 INSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
 VALUES ('{name}', '{version}', '{folder}', {time.time()}, {folder is None})
 """
             )
-            cursor = self.registry.execute(
+            self.registry.execute(
                 f"""
 INSERT INTO artifacts (distribution_id, path)
-VALUES ({cursor.lastrowid}, '{path}')
+VALUES ({self.registry.lastrowid}, '{path}') 
 """
             )
-            cursor = self.registry.execute(
-                f""" INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
-                                  VALUES ({cursor.lastrowid}, '{hash_algo.name}', '{that_hash}')"""
+            self.registry.execute(
+                f""" INSERT INTO hashes (artifact_id, algo, value)
+                                  VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{that_hash}')"""
             )
-        self.registry.commit()
+        self.registry.connection.commit()
 
     def _set_mod(self, *, name, mod, frame, path=None, spec=None):
         """Helper to get the order right."""
@@ -1773,6 +1769,9 @@ Use.config = config
 Use.mode = mode
 Use.Path = Path
 Use.URL = URL
+Use.__doc__ = __doc__
+Use.__version__ = __version__
+Use.__name__ = __name__
 Use.__path__ = str(Path(__file__).resolve().parent)
 
 use = Use()
