@@ -1703,6 +1703,9 @@ Use.config = config
 Use.mode = mode
 Use.Path = Path
 Use.URL = URL
+Use.__doc__ = __doc__
+Use.__version__ = __version__
+Use.__name__ = __name__
 Use.__path__ = str(Path(__file__).resolve().parent)
 
 use = Use()
