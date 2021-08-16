@@ -676,7 +676,7 @@ VALUES ({cursor.lastrowid}, '{path}')
 """
             )
             cursor = self.registry.execute(
-                f""" INSERT INTO hashes (artifact_id, algo, value)
+                f""" INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
                                   VALUES ({cursor.lastrowid}, '{hash_algo.name}', '{that_hash}')"""
             )
         self.registry.commit()
