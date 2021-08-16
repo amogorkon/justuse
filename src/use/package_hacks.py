@@ -96,7 +96,6 @@ def ensure_extracted(path, folder, url=None):
 def numpy(
     *,
     package_name,
-    rdists,
     version,
     url,
     path,
@@ -124,7 +123,6 @@ def numpy(
 def protobuf(
     *,
     package_name,
-    rdists,
     version,
     url,
     path,
