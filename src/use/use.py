@@ -1722,6 +1722,6 @@ if not test_version:
     sys.modules["use"] = use
 
 # no circular import this way
-hacks_path = Path(Path(__file__).parent, "package_hacks.py")
+hacks_path = Path(__file__).parent / "package_hacks.py"
 assert hacks_path.exists()
 use(hacks_path)  # type: ignore
