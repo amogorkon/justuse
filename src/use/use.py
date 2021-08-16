@@ -331,15 +331,6 @@ class ModuleReloader:
 
 # an instance of types.ModuleType
 class Use(ModuleType):
-    # lift module-level stuff up - ALIASES
-    __doc__ = __doc__
-    __version__ = __version__
-    __name__ = __name__
-    Version = Version
-
-    # attempt at fix for #23 doesn't work..
-    __path__ = str(Path(__file__).resolve().parent)
-
     class Hash(Enum):
         sha256 = hashlib.sha256
 
@@ -385,13 +376,18 @@ class Use(ModuleType):
         )  # {(name -> interval_tree of Version -> function} basically plugins/workarounds for specific packages/versions
 
         self._set_up_files_and_directories()
-        try:
-            self._registry_db_connection = sqlite3.connect(self.home / "registry.db")
-            self.registry = self._registry_db_connection.cursor()
-        except:
-            raise RuntimeError(
-                "Could not connect to the registry database, please make sure it is accessible."
-            )
+        # might run into issues during testing otherwise
+        if not test_version:
+            try:
+                self.registry = sqlite3.connect(self.home / "registry.db")
+                self.registry.execute("PRAGMA foreign_keys=ON")
+                self.registry.execute("PRAGMA auto_vacuum = FULL")
+            except Exception as e:
+                raise RuntimeError(
+                    f"Could not connect to the registry database, please make sure it is accessible. ({e})"
+                )
+        else:
+            self.registry = sqlite3.connect(":memory:")
         self._set_up_registry()
         assert self.registry is not None, "Registry is None"
         self._registry = Use._load_registry(self.home / "registry.json")
@@ -456,24 +452,23 @@ Please consider upgrading via 'python -m pip install -U justuse'""",
     def _set_up_registry(self):
         self.registry.executescript(
             """
+CREATE TABLE IF NOT EXISTS "artifacts" (
+	"id"	INTEGER,
+	"distribution_id"	INTEGER,
+	"path"	TEXT,
+	PRIMARY KEY("id" AUTOINCREMENT),
+	FOREIGN KEY("distribution_id") REFERENCES "distributions"("id") ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS "distributions" (
 	"id"	INTEGER,
 	"name"	TEXT NOT NULL,
 	"version"	TEXT NOT NULL,
-	PRIMARY KEY("id" AUTOINCREMENT)
-);
-
-CREATE TABLE IF NOT EXISTS "artifacts" (
-	"id"	INTEGER,
-	"distribution_id"	INTEGER,
-	"tags"	TEXT,
-	"url"	TEXT,
-	"filename"	TEXT,
-	"folder"	TEXT,
+	"installation_path"	TEXT,
 	"date_of_installation"	INTEGER,
 	"number_of_uses"	INTEGER,
 	"date_of_last_use"	INTEGER,
-	FOREIGN KEY("distribution_id") REFERENCES "distributions"("id"),
+	"pure_python_package"	INTEGER NOT NULL DEFAULT 1,
 	PRIMARY KEY("id" AUTOINCREMENT)
 );
 
@@ -482,11 +477,16 @@ CREATE TABLE IF NOT EXISTS "hashes" (
 	"value"	TEXT NOT NULL,
 	"artifact_id"	INTEGER NOT NULL,
 	PRIMARY KEY("algo","value"),
-	FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id")
+	FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id") ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS "depends_on" (
+	"origin_path"	TEXT,
+	"target_path"	TEXT
+, "time_of_use"	INTEGER)
         """
         )
-        self.registry.connection.commit()
+        self.registry.commit()
 
     def recreate_registry(self, use_db=False):
         if use_db:
@@ -497,7 +497,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             (self.home / "registry.json").touch(mode=0o644)
             self._registry = Use._load_registry(self.home / "registry.db")
             self._user_registry = Use._load_registry(self.home / "user_registry.db")
-            Use._merge_registry(self._registry_db, self._user_registry, use_db=True)
+            self._set_up_registry()
         else:
             number_of_backups = len(list((self.home / "registry.json").glob("*.bak")))
             (self.home / "registry.json").rename(
@@ -539,6 +539,12 @@ CREATE TABLE IF NOT EXISTS "hashes" (
                 + json.dumps(self._registry, indent=2)
             )
             file.write(text)
+
+    def del_entry(self, name, version):
+        # TODO: CASCADE to artifacts etc
+        self.registry.execute(
+            "DELETE FROM distributions WHERE name=? AND version=?", (name, version)
+        )
 
     def register_hack(self, name, specifier=Specifier(">=0")):
         def wrapper(func):
@@ -601,6 +607,23 @@ CREATE TABLE IF NOT EXISTS "hashes" (
                 self._del_entry(name)
         self.persist_registry()
 
+        installation_paths = self.registry.execute(
+            "SELECT installation_path FROM distributions"
+        ).fetchall()
+        for package_path in (self.home / "packages").iterdir():
+            if package_path.stem not in installation_paths:
+                if package_path.is_dir():
+                    delete_folder(package_path)
+                else:
+                    package_path.unlink()
+
+        for ID, path in self.registry.execute(
+            "SELECT id, installation_path FROM distributions"
+        ).fetchall():
+            if not Path(path).exists():
+                self.registry.execute(f"DELETE FROM distributions WHERE id=?", (ID,))
+        self.registry.commit()
+
     def _save_module_info(
         self,
         name: str,
@@ -610,6 +633,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         that_hash: Optional[str],
         folder: Path,
         package_name: str = None,
+        hash_algo=Hash.sha256,
     ):
         """Update the registry to contain the package's metadata.
         Does not call Use.persist_registry() on its own."""
@@ -617,6 +641,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         version = str(version) if version else "0.0.0"
         assert version not in ("None", "null", "")
         rdists = self._registry["distributions"]
+
         if package_name not in rdists:
             rdists[package_name] = {}
         if version not in rdists[package_name]:
@@ -633,6 +658,29 @@ CREATE TABLE IF NOT EXISTS "hashes" (
                 "hash": that_hash,
             }
         )
+        if not (
+            ID := (cursor := self.registry.execute(
+                f"SELECT * FROM distributions WHERE name=? AND version=?",
+                (package_name, version),
+            )).fetchone()
+        ):
+            cursor = self.registry.execute(
+                f"""
+INSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
+VALUES ('{name}', '{version}', '{folder}', {time.time()}, {folder is None})
+"""
+            )
+            cursor = self.registry.execute(
+                f"""
+INSERT INTO artifacts (distribution_id, path)
+VALUES ({cursor.lastrowid}, '{path}')
+"""
+            )
+            cursor = self.registry.execute(
+                f""" INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
+                                  VALUES ({cursor.lastrowid}, '{hash_algo.name}', '{that_hash}')"""
+            )
+        self.registry.commit()
 
     def _set_mod(self, *, name, mod, frame, path=None, spec=None):
         """Helper to get the order right."""
@@ -1025,6 +1073,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         import_to_use=None,
         modes=0,
     ) -> ModuleType:
+        log
         exc = None
 
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
@@ -1205,7 +1254,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         aspectize=aspectize,
                     )
                 except:
-                    del self._using[f"<{name}>"]
+                    del self._using[name]
                     exc = traceback.format_exc()
         except:
             exc = traceback.format_exc()
@@ -1554,6 +1603,10 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     )
 
             # all clear, let's check if we pulled it before
+            db_entry = self.registry.execute(
+                "SELECT * FROM distributions WHERE name=? AND version=?", (name, version)
+            ).fetchone()
+            print("registry got:", db_entry)
             entry = entry or self._registry["distributions"].get(package_name, {}).get(
                 version, {}
             )
@@ -1561,6 +1614,8 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 path = Path(entry["path"])
                 url = URL(entry["url"])
             if entry and path and not path.exists():
+                self.del_entry(package_name, version)
+                entry = None
                 del self._registry["distributions"][package_name][version]
                 self.persist_registry()
                 path = None
@@ -1662,7 +1717,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 # if version in self._hacks[name]:
                 mod = self._hacks[name](
                     package_name=package_name,
-                    rdists=rdists,
                     version=Use._get_version(mod=mod),
                     url=url,
                     path=path,
@@ -1699,7 +1753,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
         frame = inspect.getframeinfo(inspect.currentframe())
         if frame:
             self._set_mod(name=name, mod=mod, frame=frame)
-        assert mod, f"Well. Shit, no module. ( {path} )"
+        assert mod, f"Well. Shit. No module. ( {path} )"
         this_version = Use._get_version(mod=mod) or version
         assert this_version, f"Well. Shit, no version. ( {path} )"
         self._save_module_info(
@@ -1712,11 +1766,15 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 
 
 # we should avoid side-effects during testing, specifically for the version-upgrade-warning
+
+# ALIASES
 Use.Version = Version
 Use.config = config
 Use.mode = mode
 Use.Path = Path
 Use.URL = URL
+Use.__path__ = str(Path(__file__).resolve().parent)
+
 use = Use()
 if not test_version:
     sys.modules["use"] = use
