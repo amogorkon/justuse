@@ -144,22 +144,30 @@ f="$file"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"
 mkdir -p "$dir"
 python3 -m coverage_badge | tee "$file"
 echo "Found an image to publish: [$file]" 1>&2
-for variant in \
-    '"/public_html/mixed/$fn" "$file"'  \
-    ;  \
-do
-    eval "set -- $variant"
-    cmd=(  busybox ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" \
-          ftp.pinproject.com "$@"  )
-    echo -E "Trying variant:" 1>&2
-    if (( ! UID )); then
-      echo "$@" 1>&2
-    fi
-    command "${cmd[@]}"
-    rs=$?
-    if (( ! rs )); then
-        break
-    fi
+
+
+orig_file="$file"
+BADGE_FILENAME="$( ( git remote -v | cut -f2 | sed -r -e 's~[\t ].*$~~; s~^.*\.(net|edu|com|org)[:/]~~; s~\.git$~~; s~/~-~g; ' | head -1; git branch -v -a | grep -Fe "*" | cut -d " " -f2; ) | tr -s $'\n ' '.' | sed -r -e 's~\.*$~~; s~^~coverage_~; '; echo -n ".svg"; )";
+ 
+for filename in "$orig_file" "$BADGE_FILENAME"; do
+    fn="${filename##*/}"
+    for variant in \
+        '"/public_html/mixed/$fn" "$file"'  \
+        ;  \
+    do
+        eval "set -- $variant"
+        cmd=(  busybox ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" \
+              ftp.pinproject.com "$@"  )
+        echo -E "Trying variant:" 1>&2
+        if (( ! UID )); then
+          echo "$@" 1>&2
+        fi
+        command "${cmd[@]}"
+        rs=$?
+        if (( ! rs )); then
+            break
+        fi
+    done
 done
 [ $rs -eq 0 ] && echo "*** Image upload succeeded: $file ***" 1>&2 
 
