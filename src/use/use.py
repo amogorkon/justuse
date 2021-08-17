@@ -1344,7 +1344,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         assert (
             version if target_version else version is target_version
         ), "Version must be None if target_version is None; otherwise, they must both have a value."
-        
+
         exc = None
         mod = None
 
@@ -1519,7 +1519,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 "SELECT id, installation_path FROM distributions WHERE name=? AND version=?",
                 (name, version),
             ).fetchone()
-            
+
             if query:
                 query = self.registry.execute(
                     "SELECT path FROM artifacts WHERE distribution_id=?",
@@ -1598,7 +1598,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     path = (
                         self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
                     )
-                
+
                 if not path.exists():
                     print("Downloading", url, "...")
                     download_response = requests.get(str(url), allow_redirects=True)
@@ -1615,13 +1615,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         print("Downloaded", path)
                     except:
                         raise
-                        if fatal_exceptions:
-                            raise
-                        exc = traceback.format_exc()
-                    if exc:
-                        
-                        return Use._fail_or_default(default, Use.AutoInstallationError, exc)
-
             # now that we can be sure we got a valid package downloaded and ready, let's try to install it
             folder = path.parent / path.stem
 
