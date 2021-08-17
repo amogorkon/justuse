@@ -1453,7 +1453,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 )
             # PEBKAC
             hit: VerHash = VerHash.empty()
-            if target_version and not (hash_value or hash_values):  # let's try to be helpful
+            if target_version and not hash_value and not hash_values:  # let's try to be helpful
                 response = requests.get(
                     f"https://pypi.org/pypi/{package_name}/{target_version}/json"
                 )
