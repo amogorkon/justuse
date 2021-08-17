@@ -150,6 +150,7 @@ orig_file="$file"
 BADGE_FILENAME="$( ( git remote -v | cut -f2 | sed -r -e 's~[\t ].*$~~; s~^.*\.(net|edu|com|org)[:/]~~; s~\.git$~~; s~/~-~g; ' | head -1; git branch -v -a | grep -Fe "*" | cut -d " " -f2; ) | tr -s $'\n ' '.' | sed -r -e 's~\.*$~~; s~^~coverage_~; '; echo -n ".svg"; )";
  
 if [ $( python3 -m coverage_badge | wc -c ) -gt 800 ]; then
+  python3 -c "import coverage_badge" >/dev/null 2>&1 || python3 -m pip install --force-reinstall coverage-badge
   for filename in "$orig_file" "$BADGE_FILENAME"; do
       f="$file"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"; _dir="$dir"; f="$filename"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"; _fn="$fn"; f="$file"; fn="${f##*/}"
       fn="${filename##*/}"
