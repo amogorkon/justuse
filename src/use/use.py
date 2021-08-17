@@ -236,7 +236,14 @@ class ProxyModule(ModuleType):
         self.__condition = threading.RLock()
 
     def __getattribute__(self, name):
-        if name in ("_ProxyModule__implementation", "_ProxyModule__condition", "", "__class__", "__metaclass__", "__instancecheck__"):
+        if name in (
+            "_ProxyModule__implementation",
+            "_ProxyModule__condition",
+            "",
+            "__class__",
+            "__metaclass__",
+            "__instancecheck__",
+        ):
             return object.__getattribute__(self, name)
         with self.__condition:
             return getattr(self.__implementation, name)
@@ -384,7 +391,7 @@ class Use(ModuleType):
         # might run into issues during testing otherwise
         if not test_version:
             try:
-                self.registry = sqlite3.connect(self.home / "registry.db")
+                self.registry = sqlite3.connect(self.home / "registry.db").cursor()
                 self.registry.execute("PRAGMA foreign_keys=ON")
                 self.registry.execute("PRAGMA auto_vacuum = FULL")
             except Exception as e:
@@ -392,7 +399,7 @@ class Use(ModuleType):
                     f"Could not connect to the registry database, please make sure it is accessible. ({e})"
                 )
         else:
-            self.registry = sqlite3.connect(":memory:")
+            self.registry = sqlite3.connect(":memory:").cursor()
         self._set_up_registry()
         assert self.registry is not None, "Registry is None"
         self._registry = Use._load_registry(self.home / "registry.json")
@@ -491,7 +498,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
 , "time_of_use"	INTEGER)
         """
         )
-        self.registry.commit()
+        self.registry.connection.commit()
 
     def recreate_registry(self, use_db=False):
         if use_db:
@@ -627,7 +634,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         ).fetchall():
             if not Path(path).exists():
                 self.registry.execute(f"DELETE FROM distributions WHERE id=?", (ID,))
-        self.registry.commit()
+        self.registry.connection.commit()
 
     def _save_module_info(
         self,
@@ -663,29 +670,27 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
                 "hash": that_hash,
             }
         )
-        if not (
-            ID := (cursor := self.registry.execute(
-                f"SELECT * FROM distributions WHERE name=? AND version=?",
-                (package_name, version),
-            )).fetchone()
-        ):
-            cursor = self.registry.execute(
+        if not self.registry.execute(
+            f"SELECT * FROM distributions WHERE name='{package_name}' AND version='{version}'"
+        ).fetchone():
+            self.registry.execute(
                 f"""
 INSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
 VALUES ('{name}', '{version}', '{folder}', {time.time()}, {folder is None})
 """
             )
-            cursor = self.registry.execute(
+            self.registry.execute(
                 f"""
 INSERT INTO artifacts (distribution_id, path)
-VALUES ({cursor.lastrowid}, '{path}')
+VALUES ({self.registry.lastrowid}, '{path}')
 """
             )
-            cursor = self.registry.execute(
-                f""" INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
-                                  VALUES ({cursor.lastrowid}, '{hash_algo.name}', '{that_hash}')"""
+            self.registry.execute(
+                f""" 
+INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
+VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{that_hash}')"""
             )
-        self.registry.commit()
+        self.registry.connection.commit()
 
     def _set_mod(self, *, name, mod, frame, path=None, spec=None):
         """Helper to get the order right."""
@@ -706,7 +711,7 @@ VALUES ({cursor.lastrowid}, '{path}')
     # @staticmethod
     # def isclass(x):
     #     return inspect.isclass(x) and hasattr(x, "__call__")
-    
+
     @staticmethod
     def _load_venv_mod(package, version):
         venv_root = Path.home() / ".justuse-python" / "venv" / package / version
@@ -719,7 +724,7 @@ VALUES ({cursor.lastrowid}, '{path}')
                 [python_exe, "-m", "venv", venv_root], shell=False, encoding="UTF-8"
             )
             log.debug("venv created: venv_output=%r", venv_output)
-    
+
         pip_args = [
             python_exe,
             "-m",
@@ -742,7 +747,7 @@ VALUES ({cursor.lastrowid}, '{path}')
         log.info("Installing %s, version=%s", package, version)
         current_path = os.environ.get("PATH")
         venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
-        
+
         if sys.platform.lower().startswith("win"):
             pkg_path = venv_root / "Lib" / "site-packages"
             output = check_output(
@@ -753,10 +758,8 @@ VALUES ({cursor.lastrowid}, '{path}')
         else:
             pkg_path = (
                 venv_root
-                / "lib" 
-                / "python{ver}".format(
-                    ver=".".join(map(str, sys.version_info[0:2]))
-                  ) 
+                / "lib"
+                / "python{ver}".format(ver=".".join(map(str, sys.version_info[0:2])))
                 / "site-packages"
             )
             output = check_output(
@@ -765,7 +768,7 @@ VALUES ({cursor.lastrowid}, '{path}')
         log.debug("pip subprocess output=%r", output)
         match = re.search(f": {package}=={version} in (?P<path>(?:(?! \\().)+)", output)
         pkg_path = match.group("path") if match else pkg_path
-        
+
         assert Path(pkg_path).is_dir()
         orig_cwd = Path.cwd()
         try:
@@ -1058,14 +1061,17 @@ VALUES ({cursor.lastrowid}, '{path}')
 
     @staticmethod
     def _ensure_proxy(mod):
-        log.debug("_ensure_proxy(%s) is a %s", mod,
-            mod.__class__.__qualname__)
+        log.debug("_ensure_proxy(%s) is a %s", mod, mod.__class__.__qualname__)
         if mod.__class__ is not ModuleType:
             log.debug("_ensure_proxy(%s): isinstance -> True", mod)
             return mod
         new_mod = ProxyModule(mod)
-        log.debug("_ensure_proxy(%s): new_mod = %s, is a %s", mod,
-            new_mod, new_mod.__class__.__qualname__)
+        log.debug(
+            "_ensure_proxy(%s): new_mod = %s, is a %s",
+            mod,
+            new_mod,
+            new_mod.__class__.__qualname__,
+        )
         return new_mod
 
     @methdispatch
@@ -1419,7 +1425,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         package_name=None,  # internal use
         module_name=None,  # internal use
     ) -> Optional[ModuleType]:
-
         self.modes = modes
         initial_globals = initial_globals or {}
         aspectize = aspectize or {}
