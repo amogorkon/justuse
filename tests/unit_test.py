@@ -287,27 +287,6 @@ def test_use_global_install(reuse):
     del foo
 
 
-def test_registry(reuse):
-    name, vers, hash_value = (
-        "example-pypi-package.examplepy",
-        "0.1.0",
-        "ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77",
-    )
-    package_name, _ = name.split(".")
-    file = (
-        (use.Path.home() / ".justuse-python") / "packages"
-    ) / f"{package_name.replace('-','_')}-0.1.0-py3-none-any.whl"
-
-    file.unlink(missing_ok=True)
-    mod = reuse(
-        name,
-        version=vers,
-        hash_value=hash_value,
-        modes=reuse.auto_install | reuse.fatal_exceptions,
-    )
-    assert mod
-
-
 def test_is_version_satisfied(reuse):
     sys_version = packaging.version.Version("3.6.0")
     # google.protobuf 1.19.5 normal case
