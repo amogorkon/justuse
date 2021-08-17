@@ -236,7 +236,7 @@ class ProxyModule(ModuleType):
         self.__condition = threading.RLock()
 
     def __getattribute__(self, name):
-        if name in ("_ProxyModule__implementation", "_ProxyModule__condition", ""):
+        if name in ("_ProxyModule__implementation", "_ProxyModule__condition", "", "__class__", "__metaclass__", "__instancecheck__"):
             return object.__getattribute__(self, name)
         with self.__condition:
             return getattr(self.__implementation, name)
@@ -331,6 +331,11 @@ class ModuleReloader:
 
 # an instance of types.ModuleType
 class Use(ModuleType):
+    __name__ = __name__
+    __file__ = __file__
+    __spec__ = __spec__
+    Use = property(lambda _: Use)
+
     class Hash(Enum):
         sha256 = hashlib.sha256
 
@@ -1051,6 +1056,18 @@ VALUES ({cursor.lastrowid}, '{path}')
                 thing.__dict__[name] = decorator(obj)
         return thing
 
+    @staticmethod
+    def _ensure_proxy(mod):
+        log.debug("_ensure_proxy(%s) is a %s", mod,
+            mod.__class__.__qualname__)
+        if mod.__class__ is not ModuleType:
+            log.debug("_ensure_proxy(%s): isinstance -> True", mod)
+            return mod
+        new_mod = ProxyModule(mod)
+        log.debug("_ensure_proxy(%s): new_mod = %s, is a %s", mod,
+            new_mod, new_mod.__class__.__qualname__)
+        return new_mod
+
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
         raise NotImplementedError(
@@ -1122,7 +1139,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             ), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             assert as_import.isidentifier(), "as_import must be a valid identifier."
             sys.modules[as_import] = mod
-        return mod
+        return self._ensure_proxy(mod)
 
     @__call__.register(Path)
     def _use_path(
@@ -1179,6 +1196,10 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                             .resolve()
                             .parent
                         )
+            if source_dir is None:
+                source_dir = Path(main_mod.__loader__.path).parent
+            if not source_dir.joinpath(path).exists():
+                source_dir = Path.cwd()
             if not source_dir.exists():
                 return Use._fail_or_default(
                     default,
@@ -1271,7 +1292,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             sys.modules[as_import] = mod
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
-        return mod
+        return self._ensure_proxy(mod)
 
     def _import_builtin(self, name, spec, default, aspectize):
         try:
@@ -1288,7 +1309,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 )
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
-            return mod
+            return self._ensure_proxy(mod)
         except:
             exc = traceback.format_exc()
             return Use._fail_or_default(default, ImportError, exc)
@@ -1376,7 +1397,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             )
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
-        return mod
+        return self._ensure_proxy(mod)
 
     @__call__.register(str)
     def _use_str(
@@ -1504,7 +1525,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
                         Use.AmbiguityWarning,
                     )
-                    return mod
+                    return self._ensure_proxy(mod)
                 # wrong version => wrong spec
                 this_version = Use._get_version(mod=mod)
                 if this_version != target_version:
@@ -1725,7 +1746,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     fatal_exceptions=fatal_exceptions,
                     module_name=module_name,
                 )
-                return mod
+                return self._ensure_proxy(mod)
 
             # trying to import directly from zip
             try:
@@ -1760,7 +1781,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             name, this_version, url, path, that_hash, folder, package_name=package_name
         )
         self.persist_registry()
-        return mod
+        return self._ensure_proxy(mod)
 
     pass
 
@@ -1774,6 +1795,8 @@ Use.mode = mode
 Use.Path = Path
 Use.URL = URL
 Use.__path__ = str(Path(__file__).resolve().parent)
+Use.__name__ = __name__
+
 
 use = Use()
 if not test_version:
