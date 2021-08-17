@@ -92,7 +92,6 @@ for append in 1; do
     if (( append > 0 )); then 
       opts+=( --cov-append )
       opts+=( -vv )
-      export DEBUG=1 ERRORS=1
     fi
     
     if (( append > 0 )); then 
