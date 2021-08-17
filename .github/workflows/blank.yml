@@ -28,11 +28,6 @@ on:
     types: [published, updated]
   release:
     types: [published, unpublished, created, edited, deleted, prereleased, released]
-  pull_request:
-    types: [opened, edited, closed]
-  push:
-  release:
-    types: [published, created, edited, released]
 
 jobs:
   test-ubuntu:
