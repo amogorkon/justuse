@@ -18,25 +18,12 @@ jobs:
         run: |
           export FTP_USER="${{ secrets.FTP_USER }}"
           export FTP_PASS="${{ secrets.FTP_PASS }}"
-          [ -e tests/coverage.sh ] && bash ./tests/coverage.sh
-          [ -e tests/coverage.sh ] || {
-            python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml
-            python3 -m pytest
+          mkdir -p ~/.justuse-python/
+          echo "debug = true" > ~/.justuse-python/config.toml
+          [ -e tests/coverage.sh ] && bash tests/coverage.sh || {
+          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests furl yarl
+          DEBUG=1 VERBOSE=1 TRACE=1 PYTHONDEBUGMODE=1 PYTHONDONTWRITEBYTECODE=1 python3 -m pytest
           }
-      - name: Genetate coverage badge
-        uses: tj-actions/coverage-badge-py@v1.6
-        with:
-          token: ${{ secrets.PAT_TOKEN }}
-          github-token: ${{ secrets.PAT_TOKEN }}
-          repository: amogorkon/justuse
-          authentication: bearer ${{ secrets.PAT_TOKEN }}
-      - name: Upload coverage badge
-        run: |
-          export GITHUB_TOKEN="${{ secrets.PAT_TOKEN }}"
-          export GITHUB_PAT_TOKEN="${{ secrets.PAT_TOKEN }}"
-          export FTP_USER="${{ secrets.FTP_USER }}"
-          export FTP_PASS="${{ secrets.FTP_PASS }}"
-          bash tests/coverage.sh upload || true
 
   test-windows:
     runs-on: windows-latest
