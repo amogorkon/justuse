@@ -1,5 +1,4 @@
 #!/bin/bash
-arg1="$1"
 
 [ -d use -a -f use/use.py ] && cd ..
 [ -f unit_teat.py ] && cd ..
@@ -145,13 +144,7 @@ f="$file"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"
 mkdir -p "$dir"
 python3 -m coverage_badge | tee "$file"
 echo "Found an image to publish: [$file]" 1>&2
-for variant in \
-    '"/public_html/mixed/$fn" "$file"'  \
-    ;  \
-do
-    eval "set -- $variant"
-    cmd=(  busybox ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" \
-          ftp.pinproject.com "$@"  )
+cmd=(  busybox ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" "/public_html/mixed/$fn" "$file" )
     echo -E "Trying variant:" 1>&2
     if (( ! UID )); then
       echo "$@" 1>&2
@@ -161,7 +154,6 @@ do
     if (( ! rs )); then
         break
     fi
-done
 [ $rs -eq 0 ] && echo "*** Image upload succeeded: $file ***" 1>&2 
 
 exit ${rs:-0} # upload
