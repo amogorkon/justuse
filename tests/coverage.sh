@@ -1,4 +1,5 @@
 #!/bin/bash
+arg1="$1"
 
 [ -d use -a -f use/use.py ] && cd ..
 [ -f unit_teat.py ] && cd ..
@@ -17,7 +18,6 @@ if [ "x$GITHUB_AUTH$GITHUB_PATH$GITHUB_ROOT$GITHUB_USER$GITHUB_AUTHOR$GITHUB_REP
   
   yes y | $PYTHON3 -m pip install --force-reinstall --upgrade \
           -r requirements.txt
-  yes y | $PYTHON3 -m pip install --force-reinstall --upgrade pytest-cov pytest-env coverage coverage-badge
   which busybox 2>/dev/null || {
     if which apt; then
       apt install -y busybox || sudo apt install -y busybox
@@ -46,7 +46,7 @@ f="$default"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"
 if [ -d "$dir" ]; then
   :
 else
-  default="$PWD/coverage/justuse-$BADGE_FILENAME"
+  default="$PWD/coverage/$BADGE_FILENAME"
 fi
 echo "default=$default" 1>&2
 file="$default"
@@ -144,7 +144,13 @@ f="$file"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"
 mkdir -p "$dir"
 python3 -m coverage_badge | tee "$file"
 echo "Found an image to publish: [$file]" 1>&2
-cmd=(  busybox ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" "$file" "/public_html/mixed/$fn" )
+for variant in \
+    '"/public_html/mixed/$fn" "$file"'  \
+    ;  \
+do
+    eval "set -- $variant"
+    cmd=(  busybox ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" \
+          ftp.pinproject.com "$@"  )
     echo -E "Trying variant:" 1>&2
     if (( ! UID )); then
       echo "$@" 1>&2
@@ -154,6 +160,7 @@ cmd=(  busybox ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" "$file" "/public_ht
     if (( ! rs )); then
         break
     fi
+done
 [ $rs -eq 0 ] && echo "*** Image upload succeeded: $file ***" 1>&2 
 
 exit ${rs:-0} # upload
