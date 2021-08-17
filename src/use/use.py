@@ -681,7 +681,7 @@ VALUES ('{name}', '{version}', '{folder}', {time.time()}, {folder is None})
             )
             self.registry.execute(
                 f"""
-INSERT INTO artifacts (distribution_id, path)
+INSERT OR IGNORE INTO artifacts (distribution_id, path)
 VALUES ({self.registry.lastrowid}, '{path}')
 """
             )
