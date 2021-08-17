@@ -174,7 +174,7 @@ def test_pure_python_package(reuse):
     # https://pypi.org/project/example-pypi-package/
     file = (
         reuse.Path.home()
-        / '.justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl'
+        / ".justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl"
     )
 
     file.unlink(missing_ok=True)
@@ -275,11 +275,6 @@ def test_autoinstall_numpy(reuse):
     assert mod.__version__ == ver
 
 
-def test_registry_first_line_warning(reuse):
-    with open(reuse.home / "registry.json") as file:
-        assert file.readlines()[0].startswith("### WARNING")
-
-
 def test_use_global_install(reuse):
     from . import foo
 
@@ -300,7 +295,7 @@ def test_registry(reuse):
     )
     package_name, _ = name.split(".")
     file = (
-        (use.Path.home() / '.justuse-python') / "packages"
+        (use.Path.home() / ".justuse-python") / "packages"
     ) / f"{package_name.replace('-','_')}-0.1.0-py3-none-any.whl"
 
     file.unlink(missing_ok=True)
@@ -340,7 +335,7 @@ def _extracted_from_test_registry_13(jsonfile, package_name, vers, file):
     assert path.exists(), f"The package {path} did not get written."
     assert (
         path.absolute() == file.absolute()
-    ), 'The package did not get written to the expected location.'
+    ), "The package did not get written to the expected location."
     for k, v in use._registry.items():
         jsonv = jsondata.get(k, ...)
         if isinstance(jsonv, dict) and isinstance(v, defaultdict):
@@ -528,7 +523,7 @@ def test_suggestion_works(reuse):
     except RuntimeWarning as rw:
         match = re.search(r"(use\(.*\))", str(rw))
         assert match
-        log.info('eval(match[1]!r)')
+        log.info("eval(match[1]!r)")
         mod = eval(match[1])
         assert mod
         return
