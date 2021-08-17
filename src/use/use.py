@@ -1543,10 +1543,9 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     [query["id"],]
                 ).fetchone()
                 path = Path(query["path"])
-            if path:
-                    if not path.exists():
-                        with open(path, "wb") as f:
-                            f.write(requests.get(url).content)
+            if path and not path.exists():
+                with open(path, "wb") as f:
+                    f.write(requests.get(url).content)
             if not path:
                 response = requests.get(
                     f"https://pypi.org/pypi/{package_name}/{target_version}/json"
@@ -1632,13 +1631,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         print("Downloaded", path)
                     except:
                         raise
-                        if fatal_exceptions:
-                            raise
-                        exc = traceback.format_exc()
-                    if exc:
-                        
-                        return Use._fail_or_default(default, Use.AutoInstallationError, exc)
-
             # now that we can be sure we got a valid package downloaded and ready, let's try to install it
             folder = path.parent / path.stem
 
