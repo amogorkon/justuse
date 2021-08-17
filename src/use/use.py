@@ -128,27 +128,6 @@ def get_supported() -> FrozenSet[PlatformTag]:
     return _supported
 
 
-_supported = None
-
-
-def get_supported() -> FrozenSet[PlatformTag]:
-    global _supported
-    if _supported is None:
-        items: List[PlatformTag] = []
-        try:
-            from pip._internal.utils import compatibility_tags  # type: ignore
-
-            for tag in compatibility_tags.get_supported():
-                items.append(PlatformTag(platform=tag.platform))
-        except ImportError:
-            pass
-        for tag in packaging.tags._platform_tags():
-            items.append(PlatformTag(platform=str(tag)))
-        _supported = tags = frozenset(items)
-        log.error(str(tags))
-    return _supported
-
-
 class VerHash(namedtuple("VerHash", ["version", "hash"])):
     @staticmethod
     def empty():
@@ -969,7 +948,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     ) -> ModuleType:
         log.debug(f"use-url: {url}")
         exc = None
-
+        assert url is not None, f"called with url == {url!r}"
+        assert url != "None", f"called with url == {url!r}"
+        
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
 
         aspectize = aspectize or {}
@@ -1298,6 +1279,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         name: str,
         /,
         *,
+        path=None, url=None,
         version: str = None,
         hash_algo=Hash.sha256,
         hash_value: str = None,
@@ -1337,7 +1319,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         log.debug(f"use-str: {name}")
         self.modes = modes
         aspectize = aspectize or {}
-        path = url = None
         hash_values = hash_values or []
         if hash_value:
             if isinstance(hash_value, str):
@@ -1363,6 +1344,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         assert (
             version if target_version else version is target_version
         ), "Version must be None if target_version is None; otherwise, they must both have a value."
+        
         exc = None
         mod = None
 
@@ -1537,16 +1519,16 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 "SELECT id, installation_path FROM distributions WHERE name=? AND version=?",
                 (name, version),
             ).fetchone()
+            
             if query:
                 query = self.registry.execute(
                     "SELECT path FROM artifacts WHERE distribution_id=?",
                     [query["id"],]
                 ).fetchone()
+            if query:
                 path = Path(query["path"])
-            if path:
-                    if not path.exists():
-                        with open(path, "wb") as f:
-                            f.write(requests.get(url).content)
+            if path and not url:
+                url = URL(f"file:/{path.absolute()}")
             if not path:
                 response = requests.get(
                     f"https://pypi.org/pypi/{package_name}/{target_version}/json"
@@ -1616,6 +1598,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     path = (
                         self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
                     )
+                
                 if not path.exists():
                     print("Downloading", url, "...")
                     download_response = requests.get(str(url), allow_redirects=True)
@@ -1658,7 +1641,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 
             # trying to import directly from zip
             try:
-                print(2323, path, type(path))
+                print(23, path, type(path))
                 importer = zipimport.zipimporter(path)
                 mod = importer.load_module(module_name)
                 print("Direct zipimport of", name, "successful.")
