@@ -723,7 +723,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{that_hash}')"""
             )
             log.debug("venv created: venv_output=%r", venv_output)
 
-        pip_args = [
+        pip_args = (
             python_exe,
             "-m",
             "pip",
