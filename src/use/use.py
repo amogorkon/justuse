@@ -11,10 +11,7 @@ Goals/Features:
 - securely auto-install packages (preliminary DONE, still some kinks with C-extensions)
 - support P2P package distribution (TODO)
 - unwrap aspect-decorators on demand (TODO)
-- easy introspection via i
-
-def test_db_setup(reuse):
-      cur = reuse.registry.cursor()    nternal dependency graph (TODO)
+- easy introspection via internal dependency graph (TODO)
 - relative imports on online-sources via URL-aliases (TODO)
 - module-level variable placeholders/guards aka "module-properties" (TODO)
 - load packages faster while using less memory than classical pip/import - ideal for embedded systems with limited resources (TODO)
@@ -620,7 +617,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     @staticmethod
     def _load_venv_mod(package, version):
         venv_root = Use._venv_root(package, version)
-        venv_bin  = venv_root / "bin"
+        venv_bin = venv_root / "bin"
         python_exe = Path(sys.executable).stem
         if not venv_bin.exists():
             venv_output = check_output(
@@ -652,9 +649,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if sys.platform.lower().startswith("win"):
             pkg_path = venv_root / "Lib" / "site-packages"
             output = check_output(
-                ["cmd.exe", "/C", "set", f"PATH={venv_path_var}",
-                 "&", *pip_args],
-                encoding="UTF-8"
+                ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
+                encoding="UTF-8",
             )
         else:
             pkg_path = (
@@ -664,8 +660,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 / "site-packages"
             )
             output = check_output(
-                ["env", f"PATH={venv_path_var}", *pip_args], 
-                encoding="UTF-8"
+                ["env", f"PATH={venv_path_var}", *pip_args], encoding="UTF-8"
             )
         log.debug("pip subprocess output=%r", output)
         match = re.search(f": {package}=={version} in (?P<path>(?:(?! \\().)+)", output)
@@ -680,27 +675,23 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         finally:
             os.chdir(orig_cwd)
             sys.path.remove(pkg_path)
-            
+
     def _venv_root(package, version):
-        venv_root = (Path.home() / ".justuse-python"
-            / "venv"
-            / package / version)
+        venv_root = Path.home() / ".justuse-python" / "venv" / package / version
         if not venv_root.exists():
             venv_root.mkdir(parents=True)
         return venv_root
-    
+
     def _venv_is_win():
         return sys.platform.lower().startswith("win")
-    
+
     def _venv_unix_path():
         ver = ".".join(map(str, sys.version_info[0:2]))
-        return (Path("lib")
-                / f"python{ver}"
-                / "site-packages")
-    
+        return Path("lib") / f"python{ver}" / "site-packages"
+
     def _venv_windows_path():
         return Path("Lib") / "site-packages"
-    
+
     @staticmethod
     def _parse_filename(filename) -> dict:
         """Match the filename and return a dict of parts.
