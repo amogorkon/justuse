@@ -1224,6 +1224,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         package_name=None,
     ):
         # sourcery no-metrics
+        fatal_exceptions |= ("ERRORS" in os.environ)
         exc = None
         try:
             mod = importlib.import_module(module_name)  # ! => cache
@@ -1287,7 +1288,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         default=mode.fastfail,
         aspectize=None,
         modes: int = 0,
-        fatal_exceptions: bool = True,
+        fatal_exceptions: bool = False,
         package_name: str = None,  # internal use
         module_name: str = None,  # internal use
     ) -> Optional[ModuleType]:
@@ -1527,6 +1528,8 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 ).fetchone()
             if query:
                 path = Path(query["path"])
+                if not path.exists():
+                    path = None
             if path and not url:
                 url = URL(f"file:/{path.absolute()}")
             if not path:
@@ -1614,7 +1617,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             file.write(download_response.content)
                         print("Downloaded", path)
                     except:
-                        raise
                         if fatal_exceptions:
                             raise
                         exc = traceback.format_exc()
@@ -1641,6 +1643,10 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 
             # trying to import directly from zip
             try:
+                if not path.absolute():
+                    path = path.absolute()
+                if not path.is_file():
+                    path = orig_cwd.resolve(path).absolute()
                 print(23, path, type(path))
                 importer = zipimport.zipimporter(path)
                 mod = importer.load_module(module_name)

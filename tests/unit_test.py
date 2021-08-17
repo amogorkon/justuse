@@ -306,43 +306,6 @@ def test_registry(reuse):
         modes=reuse.auto_install | reuse.fatal_exceptions,
     )
     assert mod
-    with open(Path.home() / ".justuse-python" / "registry.json", "rb") as jsonfile:
-        _extracted_from_test_registry_13(jsonfile, package_name, vers, file)
-
-
-def _extracted_from_test_registry_13(jsonfile, package_name, vers, file):
-    jsonbytes = jsonfile.read()
-    jsondata = json.loads(
-        b"\x0a".join(
-            [
-                *filter(
-                    None,
-                    filter(lambda i: not i.startswith(b"#"), jsonbytes.splitlines()),
-                )
-            ]
-        )
-    )
-    assert jsondata, "An empty registry was written to disk."
-    dists = jsondata["distributions"]
-    assert dists, "No distribution metadata saved to registry."
-    package_dists = dists[package_name]
-    assert package_dists, f"No distribution metadata saved for package {package_name}"
-    dist = package_dists[vers]
-    assert dist, "No distribution saved for the expected version."
-    assert "path" in dist, "Registry metadata contains no 'path'."
-    path = Path(dist["path"])
-    assert path.exists(), f"The package {path} did not get written."
-    assert (
-        path.absolute() == file.absolute()
-    ), "The package did not get written to the expected location."
-    for k, v in use._registry.items():
-        jsonv = jsondata.get(k, ...)
-        if isinstance(jsonv, dict) and isinstance(v, defaultdict):
-            v = dict(v)
-        assert jsonv == v, (
-            f"The registry does not match the persisted json"
-            f" for key '{k}': expected: {jsonv}, found: {v}"
-        )
 
 
 def test_is_version_satisfied(reuse):
