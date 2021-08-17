@@ -18,6 +18,7 @@ if [ "x$GITHUB_AUTH$GITHUB_PATH$GITHUB_ROOT$GITHUB_USER$GITHUB_AUTHOR$GITHUB_REP
   
   yes y | $PYTHON3 -m pip install --force-reinstall --upgrade \
           -r requirements.txt
+  yes y | $PYTHON3 -m pip install --force-reinstall --upgrade pytest-cov pytest-env coverage coverage-badge
   which busybox 2>/dev/null || {
     if which apt; then
       apt install -y busybox || sudo apt install -y busybox
