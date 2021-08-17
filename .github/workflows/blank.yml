@@ -1,12 +1,33 @@
 name: Unit Tests
 
 on:
+  check_run:
+    types: [created, rerequested, completed]
+  check_suite:
+    types: [completed, requested, rerequested]
+  create:
+  delete:
+  deployment:
+  deployment_status:
   fork:
+  gollum:
+  page_build:
+  project:
+    types: [created, updated, closed, reopened, edited, deleted]
+  public:
   pull_request:
-    types: [opened, edited, closed]
+    types: [assigned, unassigned, labeled, unlabeled, opened, edited, closed, reopened, synchronize, ready_for_review, locked, unlocked, review_requested, review_request_removed]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  pull_request_target:
+    types: [assigned, unassigned, labeled, unlabeled, opened, edited, closed, reopened, synchronize, ready_for_review, locked, unlocked, review_requested, review_request_removed]
   push:
+  registry_package:
+    types: [published, updated]
   release:
-    types: [published, created, edited, released]
+    types: [published, unpublished, created, edited, deleted, prereleased, released]
 
 jobs:
   test-ubuntu:
@@ -18,25 +39,12 @@ jobs:
         run: |
           export FTP_USER="${{ secrets.FTP_USER }}"
           export FTP_PASS="${{ secrets.FTP_PASS }}"
-          [ -e tests/coverage.sh ] && bash ./tests/coverage.sh
-          [ -e tests/coverage.sh ] || {
-            python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml
+          mkdir -p ~/.justuse-python/
+          echo "debug = true" > ~/.justuse-python/config.toml
+          python3 -m pip install --force-reinstall anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests furl yarl coverage coverage-badge
+          [ -e tests/coverage.sh ] && bash tests/coverage.sh || {
             python3 -m pytest
           }
-      - name: Genetate coverage badge
-        uses: tj-actions/coverage-badge-py@v1.6
-        with:
-          token: ${{ secrets.PAT_TOKEN }}
-          github-token: ${{ secrets.PAT_TOKEN }}
-          repository: amogorkon/justuse
-          authentication: bearer ${{ secrets.PAT_TOKEN }}
-      - name: Upload coverage badge
-        run: |
-          export GITHUB_TOKEN="${{ secrets.PAT_TOKEN }}"
-          export GITHUB_PAT_TOKEN="${{ secrets.PAT_TOKEN }}"
-          export FTP_USER="${{ secrets.FTP_USER }}"
-          export FTP_PASS="${{ secrets.FTP_PASS }}"
-          bash tests/coverage.sh upload || true
 
   test-windows:
     runs-on: windows-latest

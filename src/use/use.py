@@ -236,7 +236,7 @@ class ProxyModule(ModuleType):
         self.__condition = threading.RLock()
 
     def __getattribute__(self, name):
-        if name in ("_ProxyModule__implementation", "_ProxyModule__condition", ""):
+        if name in ("_ProxyModule__implementation", "_ProxyModule__condition", "", "__class__", "__metaclass__", "__instancecheck__"):
             return object.__getattribute__(self, name)
         with self.__condition:
             return getattr(self.__implementation, name)
@@ -331,6 +331,11 @@ class ModuleReloader:
 
 # an instance of types.ModuleType
 class Use(ModuleType):
+    __name__ = __name__
+    __file__ = __file__
+    __spec__ = __spec__
+    Use = property(lambda _: Use)
+
     class Hash(Enum):
         sha256 = hashlib.sha256
 
@@ -702,75 +707,69 @@ VALUES ({cursor.lastrowid}, '{path}')
     # def isclass(x):
     #     return inspect.isclass(x) and hasattr(x, "__call__")
     
+    def _dummy():
+        pass
+    
     @staticmethod
     def _load_venv_mod(package, version):
-        venv_root = Path.home() / ".justuse-python" / "venv" / package / version
-        if not venv_root.exists():
-            venv_root.mkdir(parents=True)
-        venv_bin = venv_root / "bin"
+        venv_root = Use._venv_root(package, version)
+        venv_bin  = venv_root / "bin"
         python_exe = Path(sys.executable).stem
         if not venv_bin.exists():
-            venv_output = check_output(
-                [python_exe, "-m", "venv", venv_root], shell=False, encoding="UTF-8"
-            )
-            log.debug("venv created: venv_output=%r", venv_output)
-    
-        pip_args = [
-            python_exe,
-            "-m",
-            "pip",
-            "--no-python-version-warning",
-            "--disable-pip-version-check",
-            "--no-color",
-            "install",
-            "--progress-bar",
-            "ascii",
-            "--prefer-binary",
-            "--no-build-isolation",
-            "--no-use-pep517",
-            "--no-compile",
-            "--no-warn-script-location",
-            "--no-warn-conflicts",
+             check_output(
+                [python_exe, "-m", "venv", venv_root],
+                encoding="UTF-8"
+             )
+        pip_args = (
+            python_exe, "-m", "pip", "install",
+            "--progress-bar", "ascii", "--prefer-binary",
             f"{package}=={version}",
-        ]
-
-        log.info("Installing %s, version=%s", package, version)
+        )
         current_path = os.environ.get("PATH")
         venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
-        
-        if sys.platform.lower().startswith("win"):
-            pkg_path = venv_root / "Lib" / "site-packages"
+        if Use._venv_is_win():
+            pkg_path = venv_root / Use._venv_windows_path()
             output = check_output(
-                ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
-                shell=False,
-                encoding="UTF-8",
+                ["cmd.exe", "/C", "set", f"PATH={venv_path_var}",
+                 "&", *pip_args],
+                encoding="UTF-8"
             )
         else:
-            pkg_path = (
-                venv_root
-                / "lib" 
-                / "python{ver}".format(
-                    ver=".".join(map(str, sys.version_info[0:2]))
-                  ) 
-                / "site-packages"
-            )
+            pkg_path = venv_root / Use._venv_unix_path()
             output = check_output(
-                ["env", f"PATH={venv_path_var}", *pip_args], shell=False, encoding="UTF-8"
+                ["env", f"PATH={venv_path_var}", *pip_args], 
+                encoding="UTF-8"
             )
         log.debug("pip subprocess output=%r", output)
-        match = re.search(f": {package}=={version} in (?P<path>(?:(?! \\().)+)", output)
-        pkg_path = match.group("path") if match else pkg_path
-        
-        assert Path(pkg_path).is_dir()
         orig_cwd = Path.cwd()
         try:
             sys.path.insert(0, pkg_path)
-            os.chdir(str(pkg_path))
+            os.chdir(pkg_path)
             return importlib.import_module(package)
         finally:
+            os.chdir(orig_cwd)
             sys.path.remove(pkg_path)
-            os.chdir(str(orig_cwd))
-
+            
+    def _venv_root(package, version):
+        venv_root = (Path.home() / ".justuse-python"
+            / "venv"
+            / package / version)
+        if not venv_root.exists():
+            venv_root.mkdir(parents=True)
+        return venv_root
+    
+    def _venv_is_win():
+        return sys.platform.lower().startswith("win")
+    
+    def _venv_unix_path():
+        ver = ".".join(map(str, sys.version_info[0:2]))
+        return (Path("lib")
+                / f"python{ver}"
+                / "site-packages")
+    
+    def _venv_windows_path():
+        return Path("Lib") / "site-packages"
+    
     @staticmethod
     def _parse_filename(filename) -> dict:
         """Match the filename and return a dict of parts.
@@ -792,8 +791,10 @@ VALUES ({cursor.lastrowid}, '{path}')
 
     @staticmethod
     def _is_version_satisfied(info, sys_version):
-        # https://warehouse.readthedocs.io/api-reference/json.html
-        # https://packaging.pypa.io/en/latest/specifiers.html
+        """
+        @see https://warehouse.readthedocs.io/api-reference/json.html
+        @see https://packaging.pypa.io/en/latest/specifiers.html
+        """
         specifier = info.get(
             "requires_python", ""
         )  # SpecifierSet("") matches anything, no need to artificially lock down versions at this point
@@ -806,9 +807,11 @@ VALUES ({cursor.lastrowid}, '{path}')
         platform_tags,
         include_sdist=False,
     ):
+        """
+        Filename as API, seriously WTF...
+        """
         assert isinstance(info, dict)
         assert isinstance(platform_tags, frozenset)
-        # filename as API, seriously WTF...
         if "platform_tag" not in info:
             info.update(Use._parse_filename(info["filename"]))
         our_python_tag = "".join(
@@ -1051,6 +1054,18 @@ VALUES ({cursor.lastrowid}, '{path}')
                 thing.__dict__[name] = decorator(obj)
         return thing
 
+    @staticmethod
+    def _ensure_proxy(mod):
+        log.debug("_ensure_proxy(%s) is a %s", mod,
+            mod.__class__.__qualname__)
+        if mod.__class__ is not ModuleType:
+            log.debug("_ensure_proxy(%s): isinstance -> True", mod)
+            return mod
+        new_mod = ProxyModule(mod)
+        log.debug("_ensure_proxy(%s): new_mod = %s, is a %s", mod,
+            new_mod, new_mod.__class__.__qualname__)
+        return new_mod
+
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
         raise NotImplementedError(
@@ -1122,7 +1137,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             ), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             assert as_import.isidentifier(), "as_import must be a valid identifier."
             sys.modules[as_import] = mod
-        return mod
+        return self._ensure_proxy(mod)
 
     @__call__.register(Path)
     def _use_path(
@@ -1179,6 +1194,10 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                             .resolve()
                             .parent
                         )
+            if source_dir is None:
+                source_dir = Path(main_mod.__loader__.path).parent
+            if not source_dir.joinpath(path).exists():
+                source_dir = Path.cwd()
             if not source_dir.exists():
                 return Use._fail_or_default(
                     default,
@@ -1271,7 +1290,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             sys.modules[as_import] = mod
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
-        return mod
+        return self._ensure_proxy(mod)
 
     def _import_builtin(self, name, spec, default, aspectize):
         try:
@@ -1288,7 +1307,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 )
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
-            return mod
+            return self._ensure_proxy(mod)
         except:
             exc = traceback.format_exc()
             return Use._fail_or_default(default, ImportError, exc)
@@ -1376,7 +1395,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             )
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
-        return mod
+        return self._ensure_proxy(mod)
 
     @__call__.register(str)
     def _use_str(
@@ -1504,7 +1523,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
                         Use.AmbiguityWarning,
                     )
-                    return mod
+                    return self._ensure_proxy(mod)
                 # wrong version => wrong spec
                 this_version = Use._get_version(mod=mod)
                 if this_version != target_version:
@@ -1725,7 +1744,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     fatal_exceptions=fatal_exceptions,
                     module_name=module_name,
                 )
-                return mod
+                return self._ensure_proxy(mod)
 
             # trying to import directly from zip
             try:
@@ -1760,7 +1779,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             name, this_version, url, path, that_hash, folder, package_name=package_name
         )
         self.persist_registry()
-        return mod
+        return self._ensure_proxy(mod)
 
     pass
 
@@ -1774,6 +1793,8 @@ Use.mode = mode
 Use.Path = Path
 Use.URL = URL
 Use.__path__ = str(Path(__file__).resolve().parent)
+Use.__name__ = __name__
+
 
 use = Use()
 if not test_version:
