@@ -1345,7 +1345,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         assert (
             version if target_version else version is target_version
         ), "Version must be None if target_version is None; otherwise, they must both have a value."
-        
+
         exc = None
         mod = None
 
@@ -1392,39 +1392,58 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     fatal_exceptions,
                 )
 
-            # spec & auto-install
-            else:
-                this_version = Use._get_version(name, package_name)
+            this_version = Use._get_version(name, package_name)
 
-                if this_version == target_version or not (version):
-                    if not (version):
-                        warn(
-                            Use.AmbiguityWarning(
-                                "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
-                            )
-                        )
-                    mod = self._import_classical_install(
-                        name,
-                        module_name,
-                        spec,
-                        target_version,
-                        default,
-                        aspectize,
-                        fatal_exceptions,
-                        package_name,
-                    )
+            if this_version == target_version:
+                if not (version):
                     warn(
-                        f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
-                        Use.AmbiguityWarning,
+                        Use.AmbiguityWarning(
+                            "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
+                        )
                     )
-                    return self._ensure_proxy(mod)
-                # wrong version => wrong spec
-                this_version = Use._get_version(mod=mod)
-                if this_version != target_version:
-                    spec = None
-                    log.warning(
-                        f"Setting {spec=}, since " f"{target_version=} != {this_version=}"
+                mod = self._import_classical_install(
+                    name,
+                    module_name,
+                    spec,
+                    target_version,
+                    default,
+                    aspectize,
+                    fatal_exceptions,
+                    package_name,
+                )
+                warn(
+                    f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
+                    Use.AmbiguityWarning,
+                )
+                return self._ensure_proxy(mod)
+            elif not (version):
+                warn(
+                    Use.AmbiguityWarning(
+                        "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
                     )
+                )
+                mod = self._import_classical_install(
+                    name,
+                    module_name,
+                    spec,
+                    target_version,
+                    default,
+                    aspectize,
+                    fatal_exceptions,
+                    package_name,
+                )
+                warn(
+                    f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
+                    Use.AmbiguityWarning,
+                )
+                return self._ensure_proxy(mod)
+            # wrong version => wrong spec
+            this_version = Use._get_version(mod=mod)
+            if this_version != target_version:
+                spec = None
+                log.warning(
+                    f"Setting {spec=}, since " f"{target_version=} != {this_version=}"
+                )
         else:
             if not auto_install:
                 return Use._fail_or_default(
@@ -1520,7 +1539,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 "SELECT id, installation_path FROM distributions WHERE name=? AND version=?",
                 (name, version),
             ).fetchone()
-            
+
             if query:
                 query = self.registry.execute(
                     "SELECT path FROM artifacts WHERE distribution_id=?",
@@ -1601,7 +1620,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     path = (
                         self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
                     )
-                
+
                 if not path.exists():
                     print("Downloading", url, "...")
                     download_response = requests.get(str(url), allow_redirects=True)
@@ -1621,7 +1640,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             raise
                         exc = traceback.format_exc()
                     if exc:
-                        
+
                         return Use._fail_or_default(default, Use.AutoInstallationError, exc)
 
             # now that we can be sure we got a valid package downloaded and ready, let's try to install it
