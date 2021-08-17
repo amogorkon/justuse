@@ -707,40 +707,40 @@ VALUES ({cursor.lastrowid}, '{path}')
     # def isclass(x):
     #     return inspect.isclass(x) and hasattr(x, "__call__")
     
+    def _dummy():
+        pass
+    
     @staticmethod
     def _load_venv_mod(package, version):
-        if not (venv_root := Path.home() / ".justuse-python" / "venv" / package / version).exists(): venv_root.mkdir(parents=True)
+        venv_root = Use._venv_root(package, version)
+        venv_bin  = venv_root / "bin"
         python_exe = Path(sys.executable).stem
-        if not (venv_bin := venv_root / "bin").exists():
-            venv_output = check_output(
+        if not venv_bin.exists():
+             check_output(
                 [python_exe, "-m", "venv", venv_root],
-                encoding="UTF-8")
+                encoding="UTF-8"
+             )
         pip_args = (
-            python_exe, "-m", "pip",
-            "--disable-pip-version-check", "--no-color",
-            "install",
+            python_exe, "-m", "pip", "install",
             "--progress-bar", "ascii", "--prefer-binary",
             f"{package}=={version}",
         )
         current_path = os.environ.get("PATH")
         venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
-        if sys.platform.lower().startswith("win"):
-            pkg_path = venv_root / "Lib" / "site-packages"
+        if Use._venv_is_win():
+            pkg_path = venv_root / Use._venv_windows_path()
             output = check_output(
-                ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
-                encoding="UTF-8")
+                ["cmd.exe", "/C", "set", f"PATH={venv_path_var}",
+                 "&", *pip_args],
+                encoding="UTF-8"
+            )
         else:
-            pkg_path = (
-                venv_root / "lib" / "python{ver}".format(
-                    ver=".".join(map(str, sys.version_info[0:2]))
-                  ) 
-                / "site-packages")
+            pkg_path = venv_root / Use._venv_unix_path()
             output = check_output(
                 ["env", f"PATH={venv_path_var}", *pip_args], 
                 encoding="UTF-8"
             )
         log.debug("pip subprocess output=%r", output)
-        assert Path(pkg_path).is_dir()
         orig_cwd = Path.cwd()
         try:
             sys.path.insert(0, pkg_path)
@@ -749,7 +749,27 @@ VALUES ({cursor.lastrowid}, '{path}')
         finally:
             os.chdir(orig_cwd)
             sys.path.remove(pkg_path)
-
+            
+    def _venv_root(package, version):
+        venv_root = (Path.home() / ".justuse-python"
+            / "venv"
+            / package / version)
+        if not venv_root.exists():
+            venv_root.mkdir(parents=True)
+        return venv_root
+    
+    def _venv_is_win():
+        return sys.platform.lower().startswith("win")
+    
+    def _venv_unix_path():
+        ver = ".".join(map(str, sys.version_info[0:2]))
+        return (Path("lib")
+                / f"python{ver}"
+                / "site-packages")
+    
+    def _venv_windows_path():
+        return Path("Lib") / "site-packages"
+    
     @staticmethod
     def _parse_filename(filename) -> dict:
         """Match the filename and return a dict of parts.
