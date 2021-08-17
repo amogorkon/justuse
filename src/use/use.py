@@ -709,72 +709,46 @@ VALUES ({cursor.lastrowid}, '{path}')
     
     @staticmethod
     def _load_venv_mod(package, version):
-        venv_root = Path.home() / ".justuse-python" / "venv" / package / version
-        if not venv_root.exists():
-            venv_root.mkdir(parents=True)
-        venv_bin = venv_root / "bin"
+        if not (venv_root := Path.home() / ".justuse-python" / "venv" / package / version).exists(): venv_root.mkdir(parents=True)
         python_exe = Path(sys.executable).stem
-        if not venv_bin.exists():
+        if not (venv_bin := venv_root / "bin").exists():
             venv_output = check_output(
-                [python_exe, "-m", "venv", venv_root], shell=False, encoding="UTF-8"
-            )
-            log.debug("venv created: venv_output=%r", venv_output)
-    
-        pip_args = [
-            python_exe,
-            "-m",
-            "pip",
-            "--no-python-version-warning",
-            "--disable-pip-version-check",
-            "--no-color",
+                [python_exe, "-m", "venv", venv_root],
+                encoding="UTF-8")
+        pip_args = (
+            python_exe, "-m", "pip",
+            "--disable-pip-version-check", "--no-color",
             "install",
-            "--progress-bar",
-            "ascii",
-            "--prefer-binary",
-            "--no-build-isolation",
-            "--no-use-pep517",
-            "--no-compile",
-            "--no-warn-script-location",
-            "--no-warn-conflicts",
+            "--progress-bar", "ascii", "--prefer-binary",
             f"{package}=={version}",
-        ]
-
-        log.info("Installing %s, version=%s", package, version)
+        )
         current_path = os.environ.get("PATH")
         venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
-        
         if sys.platform.lower().startswith("win"):
             pkg_path = venv_root / "Lib" / "site-packages"
             output = check_output(
                 ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
-                shell=False,
-                encoding="UTF-8",
-            )
+                encoding="UTF-8")
         else:
             pkg_path = (
-                venv_root
-                / "lib" 
-                / "python{ver}".format(
+                venv_root / "lib" / "python{ver}".format(
                     ver=".".join(map(str, sys.version_info[0:2]))
                   ) 
-                / "site-packages"
-            )
+                / "site-packages")
             output = check_output(
-                ["env", f"PATH={venv_path_var}", *pip_args], shell=False, encoding="UTF-8"
+                ["env", f"PATH={venv_path_var}", *pip_args], 
+                encoding="UTF-8"
             )
         log.debug("pip subprocess output=%r", output)
-        match = re.search(f": {package}=={version} in (?P<path>(?:(?! \\().)+)", output)
-        pkg_path = match.group("path") if match else pkg_path
-        
         assert Path(pkg_path).is_dir()
         orig_cwd = Path.cwd()
         try:
             sys.path.insert(0, pkg_path)
-            os.chdir(str(pkg_path))
+            os.chdir(pkg_path)
             return importlib.import_module(package)
         finally:
+            os.chdir(orig_cwd)
             sys.path.remove(pkg_path)
-            os.chdir(str(orig_cwd))
 
     @staticmethod
     def _parse_filename(filename) -> dict:
@@ -797,8 +771,10 @@ VALUES ({cursor.lastrowid}, '{path}')
 
     @staticmethod
     def _is_version_satisfied(info, sys_version):
-        # https://warehouse.readthedocs.io/api-reference/json.html
-        # https://packaging.pypa.io/en/latest/specifiers.html
+        """
+        @see https://warehouse.readthedocs.io/api-reference/json.html
+        @see https://packaging.pypa.io/en/latest/specifiers.html
+        """
         specifier = info.get(
             "requires_python", ""
         )  # SpecifierSet("") matches anything, no need to artificially lock down versions at this point
@@ -811,9 +787,11 @@ VALUES ({cursor.lastrowid}, '{path}')
         platform_tags,
         include_sdist=False,
     ):
+        """
+        Filename as API, seriously WTF...
+        """
         assert isinstance(info, dict)
         assert isinstance(platform_tags, frozenset)
-        # filename as API, seriously WTF...
         if "platform_tag" not in info:
             info.update(Use._parse_filename(info["filename"]))
         our_python_tag = "".join(
