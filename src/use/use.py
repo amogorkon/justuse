@@ -715,7 +715,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "(?P<python_tag>.*)-"
             "(?P<abi_tag>.*)-"
             "(?P<platform_tag>.*)\\."
-            "(?P<ext>whl|zip|tar|egg|tar\\.gz)",
+            "(?P<ext>whl|zip|egg)",
             filename,
         )
         return match.groupdict() if match else {}
@@ -1337,7 +1337,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         log.debug(f"use-str: {name}")
         self.modes = modes
         aspectize = aspectize or {}
-        path = None
+        path = url = None
         hash_values = hash_values or []
         if hash_value:
             if isinstance(hash_value, str):
@@ -1347,7 +1347,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         elif hash_values:
             hash_value = " ".join(hash_values)
         # we use boolean flags to reduce the complexity of the call signature
-        fatal_exceptions = bool(Use.fatal_exceptions & modes)
+        fatal_exceptions = bool(Use.fatal_exceptions & modes) or "ERRORS" in os.environ
         auto_install = bool(Use.auto_install & modes)
 
         # the whole auto-install shebang
@@ -1540,12 +1540,13 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             if query:
                 query = self.registry.execute(
                     "SELECT path FROM artifacts WHERE distribution_id=?",
-                    (query["id"],),
+                    [query["id"],]
                 ).fetchone()
                 path = Path(query["path"])
-            else:
-                path = None
-
+            if path:
+                    if not path.exists():
+                        with open(path, "wb") as f:
+                            f.write(requests.get(url).content)
             if not path:
                 response = requests.get(
                     f"https://pypi.org/pypi/{package_name}/{target_version}/json"
@@ -1565,7 +1566,13 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             f"Tried to auto-install {package_name} {target_version} but failed because no valid URLs to download could be found.",
                         )
                     for entry in data["urls"]:
+                        if not entry["url"] or not ":" in entry["url"]:
+                            continue
                         url = URL(entry["url"])
+                        path = (
+                            self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
+                        )
+                        log.error("url = %s", url)
                         entry["version"] = str(target_version)
                         log.debug(f"looking at {entry=}")
                         all_that_hash.append(
@@ -1576,9 +1583,9 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             or len(hash_values) > 1
                             and set(hash_values).intersection(set(all_that_hash))
                         ):
-                            found = (entry, url, that_hash)
+                            found = (entry, that_hash)
                             hit = VerHash(version, that_hash)
-                            log.info(f"Matchrs user hash: {entry=} {hit=}")
+                            log.info(f"Matches user hash: {entry=} {hit=}")
                             break
                     if found is None:
                         return Use._fail_or_default(
@@ -1586,7 +1593,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             Use.AutoInstallationError,
                             f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hash_value=!r} or {hash_values=!r}).",
                         )
-                    entry, url, that_hash = found
+                    entry, that_hash = found
                     hash_value = that_hash
                     if that_hash is not None:
                         hash_values = [that_hash]
@@ -1605,17 +1612,13 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.",
                     )
                 # we've got a complete JSON with a matching entry, let's download
-                path = (
-                    self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
-                )
+                if not path:
+                    path = (
+                        self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
+                    )
                 if not path.exists():
                     print("Downloading", url, "...")
                     download_response = requests.get(str(url), allow_redirects=True)
-                    path = (
-                        self.home
-                        / "packages"
-                        / Path(url.asdict()["path"]["segments"][-1]).name
-                    )
                     this_hash = hash_algo.value(download_response.content).hexdigest()
                     if this_hash != hash_value:
                         return Use._fail_or_default(
@@ -1628,10 +1631,12 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             file.write(download_response.content)
                         print("Downloaded", path)
                     except:
+                        raise
                         if fatal_exceptions:
                             raise
                         exc = traceback.format_exc()
                     if exc:
+                        
                         return Use._fail_or_default(default, Use.AutoInstallationError, exc)
 
             # now that we can be sure we got a valid package downloaded and ready, let's try to install it
@@ -1642,7 +1647,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 mod = self._hacks[name](
                     package_name=package_name,
                     version=Use._get_version(mod=mod),
-                    url=URL(f"file:/{path}"),
+                    url=url,
                     path=path,
                     that_hash=hash_value,
                     folder=folder,
