@@ -7,6 +7,7 @@
 [![justuse](https://snyk.io/advisor/python/justuse/badge.svg)](https://snyk.io/advisor/python/justuse)
 [![slack](https://img.shields.io/badge/slack-@justuse-purple.svg?logo=slack)](https://join.slack.com/t/justuse/shared_invite/zt-tot4bhq9-_qIXBdeiRIfhoMjxu0EhFw)
 [![coverage](http://pinproject.com/mixed/coverage_greyblue9-justuse.main.svg)](https://github.com/amogorkon/justuse/avtions)
+[![CI Pipeline](https://github.com/greyblue9/justuse/actions/workflows/blank.yml/badge.svg)](https://github.com/greyblue9/justuse/actions/workflows/blank.yml)
 
 # Just use() python the way you want!
 
