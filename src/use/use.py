@@ -53,7 +53,8 @@ File-Hashing inspired by
 - https://github.com/kalafut/py-imohash
 - https://github.com/fmoo/python-varint/blob/master/varint.py
 
-:author: use-github@anselm.kiefner.de (Anselm Kiefner)
+:author: Anselm Kiefner (amogorkon)
+:author: David Reilly
 :license: MIT
 """
 
@@ -66,8 +67,6 @@ import codecs
 import hashlib
 import importlib.util
 import inspect
-import io
-import json
 import linecache
 import os
 import re
@@ -75,15 +74,12 @@ import shlex
 import signal
 import sqlite3
 import sys
-import tarfile
 import tempfile
 import threading
 import time
 import traceback
-import zipfile
 import zipimport
 from collections import defaultdict, namedtuple
-from copy import copy
 from enum import Enum
 from functools import singledispatch, update_wrapper
 from importlib import metadata
@@ -203,6 +199,8 @@ mode = Enum("Mode", "fastfail")
 root.addHandler(StreamHandler(sys.stderr))
 if "DEBUG" in os.environ:
     root.setLevel(DEBUG)
+
+# TODO: log to file
 log = getLogger(__name__)
 
 # defaults
@@ -377,6 +375,10 @@ class Use(ModuleType):
     class MissingHash(ValueError):
         pass
 
+    @staticmethod
+    def dict_factory(cursor, row):
+        return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+
     def __init__(self):
         self._using = _using
         self._aspects = _aspects
@@ -399,6 +401,8 @@ class Use(ModuleType):
                 )
         else:
             self.registry = sqlite3.connect(":memory:").cursor()
+        self.registry.row_factory = Use.dict_factory
+
         self._set_up_registry()
         self._user_registry = toml.load(self.home / "user_registry.toml")
 
@@ -560,9 +564,9 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         self,
         *,
         version: Union[Version | str],  # type: ignore
-        path: Optional[Path],
-        that_hash: Optional[str],
-        folder: Path,
+        artifact_path: Optional[Path],
+        hash_value=Optional[str],
+        installation_path=Path,
         name: str,
         hash_algo=Hash.sha256,
     ):
@@ -577,19 +581,19 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
             self.registry.execute(
                 f"""
 INSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
-VALUES ('{name}', '{version}', '{folder}', {time.time()}, {folder is None})
+VALUES ('{name}', '{version}', '{installation_path}', {time.time()}, {installation_path is None})
 """
             )
             self.registry.execute(
                 f"""
 INSERT OR IGNORE INTO artifacts (distribution_id, path)
-VALUES ({self.registry.lastrowid}, '{path}')
+VALUES ({self.registry.lastrowid}, '{artifact_path}')
 """
             )
             self.registry.execute(
                 f""" 
 INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
-VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{that_hash}')"""
+VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             )
         self.registry.connection.commit()
 
@@ -937,18 +941,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{that_hash}')"""
 
     @staticmethod
     def _ensure_proxy(mod):
-        log.debug("_ensure_proxy(%s) is a %s", mod, mod.__class__.__qualname__)
         if mod.__class__ is not ModuleType:
-            log.debug("_ensure_proxy(%s): isinstance -> True", mod)
             return mod
-        new_mod = ProxyModule(mod)
-        log.debug(
-            "_ensure_proxy(%s): new_mod = %s, is a %s",
-            mod,
-            new_mod,
-            new_mod.__class__.__qualname__,
-        )
-        return new_mod
+        return ProxyModule(mod)
 
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
@@ -972,7 +967,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{that_hash}')"""
         import_to_use=None,
         modes=0,
     ) -> ModuleType:
-        log
+        log.debug(f"use-url: {url}")
         exc = None
 
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
@@ -1037,6 +1032,21 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         import_to_use=None,
         modes=0,
     ) -> Optional[ModuleType]:
+        """Import a module from a path.
+
+        https://github.com/amogorkon/justuse/wiki/Use-Path
+
+        Args:
+            path ([type]): must be a pathlib.Path
+            initial_globals ([type], optional): Dict that should be globally available to the module before executing it. Defaults to None.
+            default ([type], optional): Return instead if an exception is encountered.
+            aspectize ([type], optional): Aspectize callables. Defaults to None.
+            modes (int, optional): [description]. Defaults to 0.
+
+        Returns:
+            Optional[ModuleType]: The module if it was imported, otherwise whatever was specified as default.
+        """
+        log.debug(f"use-path: {path}")
         aspectize = aspectize or {}
         initial_globals = initial_globals or {}
 
@@ -1251,6 +1261,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')",
                     Use.AmbiguityWarning,
                 )
+                return self._ensure_proxy(mod)
         except:
             if fatal_exceptions:
                 raise
@@ -1284,25 +1295,47 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
     @__call__.register(str)
     def _use_str(
         self,
-        name,
+        name: str,
         /,
         *,
-        version=None,
-        initial_globals=None,
+        version: str = None,
         hash_algo=Hash.sha256,
-        hash_value=None,
-        hash_values=None,
+        hash_value: str = None,
+        hash_values: list = None,
         default=mode.fastfail,
         aspectize=None,
-        path_to_url=None,
-        import_to_use=None,
-        modes=0,
-        fatal_exceptions=True,
-        package_name=None,  # internal use
-        module_name=None,  # internal use
+        modes: int = 0,
+        fatal_exceptions: bool = True,
+        package_name: str = None,  # internal use
+        module_name: str = None,  # internal use
     ) -> Optional[ModuleType]:
+        """
+        Import a package by name.
+
+        https://github.com/amogorkon/justuse/wiki/Use-String
+
+        Args:
+            name (str): The name of the package to import.
+            version (str or Version, optional): The version of the package to import. Defaults to None.
+            hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
+            hash_value ([type], optional): The hash of the package to import. Defaults to None.
+            hash_values (list of hash values, optional): For compatibility with different platforms. Defaults to None.
+            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
+            aspectize (dict, optional): Aspectize callables. Defaults to None.
+            modes (int, optional): Any combination of Use.modes . Defaults to 0.
+            fatal_exceptions (bool, optional): All exceptions are fatal. Defaults to True.
+            package_name (str, optional): internal use only. Defaults to None.
+            module_name (str, optional): internal use only. Defaults to None.
+
+        Raises:
+            RuntimeWarning: May be raised if the auto-installation of the package fails for some reason.
+
+        Returns:
+            Optional[ModuleType]: Module if successful, default as specified otherwise.
+        """
+
+        log.debug(f"use-str: {name}")
         self.modes = modes
-        initial_globals = initial_globals or {}
         aspectize = aspectize or {}
         path = None
         hash_values = hash_values or []
@@ -1332,11 +1365,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         ), "Version must be None if target_version is None; otherwise, they must both have a value."
         exc = None
         mod = None
-
-        if initial_globals or import_to_use or path_to_url:
-            raise NotImplementedError(
-                "If you require this functionality, please report it on https://github.com/amogorkon/justuse/issues so we can work out the specifics together."
-            )
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
@@ -1504,18 +1532,20 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 """
                     )
 
-            # all clear, let's check if we pulled it before
-            entry = self.registry.execute(
-                "SELECT * FROM distributions WHERE name=? AND version=?", (name, version)
+            # if it's a pure python package, there is only an artifact, no installation
+            query = self.registry.execute(
+                "SELECT id, installation_path FROM distributions WHERE name=? AND version=?",
+                (name, version),
             ).fetchone()
-            if entry and entry["path"]:
-                path = Path(entry["path"])
-                url = URL(entry["url"])
-            if entry and path and not path.exists():
-                self.del_entry(package_name, version)
-                entry = None
+            if query:
+                query = self.registry.execute(
+                    "SELECT path FROM artifacts WHERE distribution_id=?",
+                    (query["id"],),
+                ).fetchone()
+                path = Path(query["path"])
+            else:
                 path = None
-                entry = None
+
             if not path:
                 response = requests.get(
                     f"https://pypi.org/pypi/{package_name}/{target_version}/json"
@@ -1606,14 +1636,13 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 
             # now that we can be sure we got a valid package downloaded and ready, let's try to install it
             folder = path.parent / path.stem
-            if not url:
-                url = URL(f"file:/{path}")
+
             if name in self._hacks:
                 # if version in self._hacks[name]:
                 mod = self._hacks[name](
                     package_name=package_name,
                     version=Use._get_version(mod=mod),
-                    url=url,
+                    url=URL(f"file:/{path}"),
                     path=path,
                     that_hash=hash_value,
                     folder=folder,
@@ -1624,6 +1653,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 
             # trying to import directly from zip
             try:
+                print(2323, path, type(path))
                 importer = zipimport.zipimporter(path)
                 mod = importer.load_module(module_name)
                 print("Direct zipimport of", name, "successful.")
@@ -1635,7 +1665,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     Use.AutoInstallationError,
                     f"Direct zipimport of {name} {version} failed and the package was not registered with known hacks.. we're sorry, but that means you will need to resort to using pip/conda for now.",
                 )
-        self.persist_registry()
         for (check, pattern), decorator in aspectize.items():
             if mod is not None:
                 Use._apply_aspect(
@@ -1652,9 +1681,12 @@ If you want to auto-install the latest version: use("{name}", version="{version}
         this_version = Use._get_version(mod=mod) or version
         assert this_version, f"Well. Shit, no version. ( {path} )"
         self._save_module_info(
-            name, this_version, url, path, that_hash, folder, package_name=package_name
+            name=name,
+            version=this_version,
+            artifact_path=path,
+            hash_value=that_hash,
+            installation_path=folder,
         )
-        self.persist_registry()
         return self._ensure_proxy(mod)
 
     pass

@@ -327,7 +327,6 @@ def _extracted_from_test_registry_13(jsonfile, package_name, vers, file):
     assert dists, "No distribution metadata saved to registry."
     package_dists = dists[package_name]
     assert package_dists, f"No distribution metadata saved for package {package_name}"
-    print(343434, package_dists)
     dist = package_dists[vers]
     assert dist, "No distribution saved for the expected version."
     assert "path" in dist, "Registry metadata contains no 'path'."

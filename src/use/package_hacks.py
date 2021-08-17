@@ -19,17 +19,13 @@ import tarfile
 import tempfile
 import zipfile
 from importlib.machinery import EXTENSION_SUFFIXES
-from logging import DEBUG, StreamHandler, getLogger, root
+from logging import DEBUG, getLogger
 from pathlib import Path
 
-# this is possible because we don't *import* this file, but use() it!
 __package__ = "use.use"
 SOLIB_DELIMS = [".python", ".cpython", ".cp"]
 import use
 
-root.addHandler(StreamHandler(sys.stderr))
-if "DEBUG" in os.environ:
-    root.setLevel(DEBUG)
 log = getLogger(__name__)
 
 
