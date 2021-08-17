@@ -40,12 +40,13 @@ echo "cfile=${cfile}" 1>&2
 cdir="${cfile%/?*}"
 cd "$cdir"
 set +e
-default="/home/runner/work/justuse/justuse/coverage.svg"
+BADGE_FILENAME="coverage.svg"
+default="/home/runner/work/justuse/justuse/$BADGE_FILENAME"
 f="$default"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"
 if [ -d "$dir" ]; then
   :
 else
-  default="$PWD/coverage/justuse-coverage-badge.svg"
+  default="$PWD/coverage/justuse-$BADGE_FILENAME"
 fi
 echo "default=$default" 1>&2
 file="$default"
