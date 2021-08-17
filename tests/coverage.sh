@@ -144,7 +144,7 @@ f="$file"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"
 mkdir -p "$dir"
 python3 -m coverage_badge | tee "$file"
 echo "Found an image to publish: [$file]" 1>&2
-cmd=(  busybox ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" "/public_html/mixed/$fn" "$file" )
+cmd=(  busybox ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" "$file" "/public_html/mixed/$fn" )
     echo -E "Trying variant:" 1>&2
     if (( ! UID )); then
       echo "$@" 1>&2
