@@ -1,4 +1,5 @@
 #!/bin/bash
+arg1="$1"
 
 [ -d use -a -f use/use.py ] && cd ..
 [ -f unit_teat.py ] && cd ..
@@ -10,7 +11,7 @@ done
 export PYTHON3
 
 
-if [ "x$1" != "xupload" ]; then
+if [ "x$GITHUB_AUTH$GITHUB_PATH$GITHUB_ROOT$GITHUB_USER$GITHUB_AUTHOR$GITHUB_REPO$GITHUB_COMMIT$GITHUB_REF$GITHUB_UID$GITHUB$USERID" != "x" ]; then
   find . -regextype egrep "(" "(" -name .git -prune -false ")" -o -iregex '.*/\..*cache.*|.*cache.*/\..*' ")" -a -exec rm -vrf -- "{}" +
   rm -vrf -- ~/.justuse-python/packages
   rm  -vf -- ~/.justuse-python/registry.json
@@ -38,124 +39,128 @@ done
 echo "cfile=${cfile}" 1>&2
 cdir="${cfile%/?*}"
 cd "$cdir"
-
-if [ "x$1" != "xupload" ]; then
-  if [ ! -f .coveragerc ]; then
-    echo "Cannot find .coveragerc after mpving to $cdir: $(pwd)"
-    find "$( pwd )" -printf '%-12s %.10T@ %p\n' | sort -k2n
-    exit 123
-  fi
-fi
-
-if [ "x$1" != "xupload" ]; then
-    if [ "x$GITHUB_AUTH" != "x" ]; then
-        $PYTHON3 -m pip install --force-reinstall coverage \
-            pytest-cov pytest-env
-    fi
-fi
-
 set +e
 default="/home/runner/work/justuse/justuse/coverage.svg"
+f="$default"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"
+if [ -d "$dir" ]; then
+  :
+else
+  default="$PWD/coverage/justuse-coverage-badge.svg"
+fi
+echo "default=$default" 1>&2
+file="$default"
+echo "COVERAGE_IMAGE=$COVERAGE_IMAGE" 1>&2
 file="${COVERAGE_IMAGE:-${default}}"
-COVERAGE_IMAGE="$file"
+echo "file=$file" 1>&2
+
 export COVERAGE_IMAGE
 f="$file"
 fn="${f##*/}"
 dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"
 nme="${fn%.*}"
-
-if [ "x$1" == "xupload" -a -f "$file" ]; then
-    echo "Found an image to publish: [$file]" 1>&2
-    for variant in \
-        '"~/public_html/mixed/" "$file"'  \
-        ;  \
-    do
-        eval "set -- $variant"
-        cmd=(  busybox ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" \
-               ftp.pinproject.com "$@"  )
-        echo -E "Trying variant:" 1>&2
-        command "${cmd[@]}"
-        rs=$?
-        if (( ! rs )); then
-            break
-        fi
-    done
-    [ $rs -eq 0 ] && echo "*** Image upload succeeded: $file ***" 1>&2 
-fi
+if [ ! -f "$file" ]; then
 
 # run coverage!
-if [ "x$1" != "xupload" ]; then
-    covcom=( --cov-branch \
-             --cov-report term-missing \
-             --cov-report html:coverage/ \
-             --cov-report annotate:coverage/annotated \
-             --cov-report xml:coverage/cov.xml
-    )
-    covsrc=( --cov=use --cov=use.use --cov=package_hacks )
-    
-    mkdir -p ~/.justuse-python
-    rm -rf -- ~/.justuse-python/{packages/,registry.json}
-    
-    if grep -Fqe '=[^="]+=' -- ~/.justuse-python/config.toml; then
-        echo -E "Deleting malformed config.toml ..." 1>&2
-        rm -vf -- ~/.justuse-python/config.toml
+covcom=( --cov-branch \
+        --cov-report term-missing \
+        --cov-report html:coverage/ \
+        --cov-report annotate:coverage/annotated \
+        --cov-report xml:coverage/cov.xml
+)
+covsrc=( --cov=use --cov=use.use --cov=package_hacks )
+
+mkdir -p ~/.justuse-python
+rm -rf -- ~/.justuse-python/{packages/,registry.json}
+
+if grep -Fqe '=[^="]+=' -- ~/.justuse-python/config.toml; then
+    echo -E "Deleting malformed config.toml ..." 1>&2
+    rm -vf -- ~/.justuse-python/config.toml
+fi
+
+[ -e ~/.justuse-python/config.toml.bak ] \
+  && rm -vf -- ~/.justuse-python/config.toml.bak \
+  || true
+  
+mv -vf -- ~/.justuse-python/config.toml ~/.justuse-python/config.toml.bak \
+  && echo > ~/.justuse-python/config.toml
+
+opts=( -v )
+unset DEBUG ERRORS
+for append in 1; do
+
+    if (( append > 0 )); then 
+      opts+=( --cov-append )
+      opts+=( -vv )
+      export DEBUG=1 ERRORS=1
     fi
     
-    [ -e ~/.justuse-python/config.toml.bak ] \
-      && rm -vf -- ~/.justuse-python/config.toml.bak \
-      || true
+    if (( append > 0 )); then 
+      echo -E $'\ndebug = true\n\ndebugging = true\n\n'
+    else
+      echo -E $'\ndebug = false\n\ndebugging = false\n\n'
+    fi > ~/.justuse-python/config.toml
       
-    mv -vf -- ~/.justuse-python/config.toml ~/.justuse-python/config.toml.bak \
-      && echo > ~/.justuse-python/config.toml
+    $PYTHON3 -m pytest "${covcom[@]}" "${covsrc[@]}" "${opts[@]}"
+    rs=$?
     
-    opts=( -v )
-    unset DEBUG ERRORS
-    for append in 0 1; do
-    
-        if (( append > 0 )); then 
-          opts+=( --cov-append )
-          opts+=( -vv )
-          export DEBUG=1 ERRORS=1
-        fi
-        
-        if (( append > 0 )); then 
-          echo -E $'\ndebug = true\n\ndebugging = true\n\n'
-        else
-          echo -E $'\ndebug = false\n\ndebugging = false\n\n'
-        fi > ~/.justuse-python/config.toml
-          
-        $PYTHON3 -m pytest "${covcom[@]}" "${covsrc[@]}" "${opts[@]}"
-        rs=$?
-        
-        (( rs )) && exit $rs
-    done
-    set +e
-    
-    ls -lAp --color=always
-    find "$cdir" -mindepth 2 -name ".coverage" -printf '%-12s %.10T@ %p\n' \
-      | sort -k1n | cut -c 25- | tail -n 1 \
-      | {
-         max=0
-         IFS=$'\n'; while read -r cf; do
-             f="$cf"; fn="${f##*/}"
-             dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"
-             ((max += 1))
-             name=".coverage.$max"
-             (( max == 1 )) && name="${name%%[!0-9]1}"
-             echo -E "Copying cov data from $f to $( pwd )/$name" 1>&2 
-             cp -vf -- "$f" "./$name" 1>&2
-             cp -vf -- "$f" "./.coverage" 1>&2
-         done;
-       }
-    
-    
-    mkdir -p coverage
-    cp -vf -- .coverage coverage/.coverage
-    
-    [ -e ~/.justuse-python/config.toml.bak ] \
-      && mv ~/.justuse-python/config.toml.bak ~/.justuse-python/config.toml
-    
+    (( rs )) && exit $rs
+done
+set +e
+
+if [ ! -f .coveragerc ]; then
+  echo "Cannot find .coveragerc after mpving to $cdir: $(pwd)"
+  find "$( pwd )" -printf '%-12s %.10T@ %p\n' | sort -k2n
+  exit 123
 fi
+
+ls -lAp --color=always
+find "$cdir" -mindepth 2 -name ".coverage" -printf '%-12s %.10T@ %p\n' \
+  | sort -k1n | cut -c 25- | tail -n 1 \
+  | {
+    max=0
+    IFS=$'\n'; while read -r cf; do
+        f="$cf"; fn="${f##*/}"
+        dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"
+        ((max += 1))
+        name=".coverage.$max"
+        (( max == 1 )) && name="${name%%[!0-9]1}"
+        echo -E "Copying cov data from $f to $( pwd )/$name" 1>&2 
+        cp -vf -- "$f" "./$name" 1>&2
+        cp -vf -- "$f" "./.coverage" 1>&2
+    done;
+  }
+
+
+mkdir -p coverage
+cp -vf -- .coverage coverage/.coverage
+
+[ -e ~/.justuse-python/config.toml.bak ] \
+  && mv ~/.justuse-python/config.toml.bak ~/.justuse-python/config.toml
+fi
+
+
+f="$file"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"
+mkdir -p "$dir"
+python3 -m coverage_badge | tee "$file"
+echo "Found an image to publish: [$file]" 1>&2
+for variant in \
+    '"/public_html/mixed/$fn" "$file"'  \
+    ;  \
+do
+    eval "set -- $variant"
+    cmd=(  busybox ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" \
+          ftp.pinproject.com "$@"  )
+    echo -E "Trying variant:" 1>&2
+    if (( ! UID )); then
+      echo "$@" 1>&2
+    fi
+    command "${cmd[@]}"
+    rs=$?
+    if (( ! rs )); then
+        break
+    fi
+done
+[ $rs -eq 0 ] && echo "*** Image upload succeeded: $file ***" 1>&2 
 
 exit ${rs:-0} # upload
 
