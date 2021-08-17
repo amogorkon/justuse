@@ -287,64 +287,6 @@ def test_use_global_install(reuse):
     del foo
 
 
-def test_registry(reuse):
-    name, vers, hash_value = (
-        "example-pypi-package.examplepy",
-        "0.1.0",
-        "ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77",
-    )
-    package_name, _ = name.split(".")
-    file = (
-        (use.Path.home() / ".justuse-python") / "packages"
-    ) / f"{package_name.replace('-','_')}-0.1.0-py3-none-any.whl"
-
-    file.unlink(missing_ok=True)
-    mod = reuse(
-        name,
-        version=vers,
-        hash_value=hash_value,
-        modes=reuse.auto_install | reuse.fatal_exceptions,
-    )
-    assert mod
-    with open(Path.home() / ".justuse-python" / "registry.json", "rb") as jsonfile:
-        _extracted_from_test_registry_13(jsonfile, package_name, vers, file)
-
-
-def _extracted_from_test_registry_13(jsonfile, package_name, vers, file):
-    jsonbytes = jsonfile.read()
-    jsondata = json.loads(
-        b"\x0a".join(
-            [
-                *filter(
-                    None,
-                    filter(lambda i: not i.startswith(b"#"), jsonbytes.splitlines()),
-                )
-            ]
-        )
-    )
-    assert jsondata, "An empty registry was written to disk."
-    dists = jsondata["distributions"]
-    assert dists, "No distribution metadata saved to registry."
-    package_dists = dists[package_name]
-    assert package_dists, f"No distribution metadata saved for package {package_name}"
-    dist = package_dists[vers]
-    assert dist, "No distribution saved for the expected version."
-    assert "path" in dist, "Registry metadata contains no 'path'."
-    path = Path(dist["path"])
-    assert path.exists(), f"The package {path} did not get written."
-    assert (
-        path.absolute() == file.absolute()
-    ), "The package did not get written to the expected location."
-    for k, v in use._registry.items():
-        jsonv = jsondata.get(k, ...)
-        if isinstance(jsonv, dict) and isinstance(v, defaultdict):
-            v = dict(v)
-        assert jsonv == v, (
-            f"The registry does not match the persisted json"
-            f" for key '{k}': expected: {jsonv}, found: {v}"
-        )
-
-
 def test_is_version_satisfied(reuse):
     sys_version = packaging.version.Version("3.6.0")
     # google.protobuf 1.19.5 normal case

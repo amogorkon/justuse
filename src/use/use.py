@@ -128,27 +128,6 @@ def get_supported() -> FrozenSet[PlatformTag]:
     return _supported
 
 
-_supported = None
-
-
-def get_supported() -> FrozenSet[PlatformTag]:
-    global _supported
-    if _supported is None:
-        items: List[PlatformTag] = []
-        try:
-            from pip._internal.utils import compatibility_tags  # type: ignore
-
-            for tag in compatibility_tags.get_supported():
-                items.append(PlatformTag(platform=tag.platform))
-        except ImportError:
-            pass
-        for tag in packaging.tags._platform_tags():
-            items.append(PlatformTag(platform=str(tag)))
-        _supported = tags = frozenset(items)
-        log.error(str(tags))
-    return _supported
-
-
 class VerHash(namedtuple("VerHash", ["version", "hash"])):
     @staticmethod
     def empty():
@@ -715,7 +694,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "(?P<python_tag>.*)-"
             "(?P<abi_tag>.*)-"
             "(?P<platform_tag>.*)\\."
-            "(?P<ext>whl|zip|tar|egg|tar\\.gz)",
+            "(?P<ext>whl|zip|egg)",
             filename,
         )
         return match.groupdict() if match else {}
@@ -969,7 +948,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     ) -> ModuleType:
         log.debug(f"use-url: {url}")
         exc = None
-
+        assert url is not None, f"called with url == {url!r}"
+        assert url != "None", f"called with url == {url!r}"
+        
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
 
         aspectize = aspectize or {}
@@ -1243,6 +1224,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         package_name=None,
     ):
         # sourcery no-metrics
+        fatal_exceptions |= ("ERRORS" in os.environ)
         exc = None
         try:
             mod = importlib.import_module(module_name)  # ! => cache
@@ -1298,6 +1280,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         name: str,
         /,
         *,
+        path=None, url=None,
         version: str = None,
         hash_algo=Hash.sha256,
         hash_value: str = None,
@@ -1305,7 +1288,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         default=mode.fastfail,
         aspectize=None,
         modes: int = 0,
-        fatal_exceptions: bool = True,
+        fatal_exceptions: bool = False,
         package_name: str = None,  # internal use
         module_name: str = None,  # internal use
     ) -> Optional[ModuleType]:
@@ -1337,7 +1320,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         log.debug(f"use-str: {name}")
         self.modes = modes
         aspectize = aspectize or {}
-        path = None
         hash_values = hash_values or []
         if hash_value:
             if isinstance(hash_value, str):
@@ -1347,7 +1329,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         elif hash_values:
             hash_value = " ".join(hash_values)
         # we use boolean flags to reduce the complexity of the call signature
-        fatal_exceptions = bool(Use.fatal_exceptions & modes)
+        fatal_exceptions = bool(Use.fatal_exceptions & modes) or "ERRORS" in os.environ
         auto_install = bool(Use.auto_install & modes)
 
         # the whole auto-install shebang
@@ -1363,6 +1345,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         assert (
             version if target_version else version is target_version
         ), "Version must be None if target_version is None; otherwise, they must both have a value."
+
         exc = None
         mod = None
 
@@ -1409,39 +1392,58 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     fatal_exceptions,
                 )
 
-            # spec & auto-install
-            else:
-                this_version = Use._get_version(name, package_name)
+            this_version = Use._get_version(name, package_name)
 
-                if this_version == target_version or not (version):
-                    if not (version):
-                        warn(
-                            Use.AmbiguityWarning(
-                                "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
-                            )
-                        )
-                    mod = self._import_classical_install(
-                        name,
-                        module_name,
-                        spec,
-                        target_version,
-                        default,
-                        aspectize,
-                        fatal_exceptions,
-                        package_name,
-                    )
+            if this_version == target_version:
+                if not (version):
                     warn(
-                        f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
-                        Use.AmbiguityWarning,
+                        Use.AmbiguityWarning(
+                            "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
+                        )
                     )
-                    return self._ensure_proxy(mod)
-                # wrong version => wrong spec
-                this_version = Use._get_version(mod=mod)
-                if this_version != target_version:
-                    spec = None
-                    log.warning(
-                        f"Setting {spec=}, since " f"{target_version=} != {this_version=}"
+                mod = self._import_classical_install(
+                    name,
+                    module_name,
+                    spec,
+                    target_version,
+                    default,
+                    aspectize,
+                    fatal_exceptions,
+                    package_name,
+                )
+                warn(
+                    f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
+                    Use.AmbiguityWarning,
+                )
+                return self._ensure_proxy(mod)
+            elif not (version):
+                warn(
+                    Use.AmbiguityWarning(
+                        "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
                     )
+                )
+                mod = self._import_classical_install(
+                    name,
+                    module_name,
+                    spec,
+                    target_version,
+                    default,
+                    aspectize,
+                    fatal_exceptions,
+                    package_name,
+                )
+                warn(
+                    f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
+                    Use.AmbiguityWarning,
+                )
+                return self._ensure_proxy(mod)
+            # wrong version => wrong spec
+            this_version = Use._get_version(mod=mod)
+            if this_version != target_version:
+                spec = None
+                log.warning(
+                    f"Setting {spec=}, since " f"{target_version=} != {this_version=}"
+                )
         else:
             if not auto_install:
                 return Use._fail_or_default(
@@ -1537,15 +1539,18 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 "SELECT id, installation_path FROM distributions WHERE name=? AND version=?",
                 (name, version),
             ).fetchone()
+
             if query:
                 query = self.registry.execute(
                     "SELECT path FROM artifacts WHERE distribution_id=?",
-                    (query["id"],),
+                    [query["id"],]
                 ).fetchone()
+            if query:
                 path = Path(query["path"])
-            else:
-                path = None
-
+                if not path.exists():
+                    path = None
+            if path and not url:
+                url = URL(f"file:/{path.absolute()}")
             if not path:
                 response = requests.get(
                     f"https://pypi.org/pypi/{package_name}/{target_version}/json"
@@ -1565,7 +1570,13 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             f"Tried to auto-install {package_name} {target_version} but failed because no valid URLs to download could be found.",
                         )
                     for entry in data["urls"]:
+                        if not entry["url"] or not ":" in entry["url"]:
+                            continue
                         url = URL(entry["url"])
+                        path = (
+                            self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
+                        )
+                        log.error("url = %s", url)
                         entry["version"] = str(target_version)
                         log.debug(f"looking at {entry=}")
                         all_that_hash.append(
@@ -1576,9 +1587,9 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             or len(hash_values) > 1
                             and set(hash_values).intersection(set(all_that_hash))
                         ):
-                            found = (entry, url, that_hash)
+                            found = (entry, that_hash)
                             hit = VerHash(version, that_hash)
-                            log.info(f"Matchrs user hash: {entry=} {hit=}")
+                            log.info(f"Matches user hash: {entry=} {hit=}")
                             break
                     if found is None:
                         return Use._fail_or_default(
@@ -1586,7 +1597,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             Use.AutoInstallationError,
                             f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hash_value=!r} or {hash_values=!r}).",
                         )
-                    entry, url, that_hash = found
+                    entry, that_hash = found
                     hash_value = that_hash
                     if that_hash is not None:
                         hash_values = [that_hash]
@@ -1605,17 +1616,14 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.",
                     )
                 # we've got a complete JSON with a matching entry, let's download
-                path = (
-                    self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
-                )
+                if not path:
+                    path = (
+                        self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
+                    )
+
                 if not path.exists():
                     print("Downloading", url, "...")
                     download_response = requests.get(str(url), allow_redirects=True)
-                    path = (
-                        self.home
-                        / "packages"
-                        / Path(url.asdict()["path"]["segments"][-1]).name
-                    )
                     this_hash = hash_algo.value(download_response.content).hexdigest()
                     if this_hash != hash_value:
                         return Use._fail_or_default(
@@ -1632,6 +1640,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             raise
                         exc = traceback.format_exc()
                     if exc:
+
                         return Use._fail_or_default(default, Use.AutoInstallationError, exc)
 
             # now that we can be sure we got a valid package downloaded and ready, let's try to install it
@@ -1642,7 +1651,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 mod = self._hacks[name](
                     package_name=package_name,
                     version=Use._get_version(mod=mod),
-                    url=URL(f"file:/{path}"),
+                    url=url,
                     path=path,
                     that_hash=hash_value,
                     folder=folder,
@@ -1653,7 +1662,11 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 
             # trying to import directly from zip
             try:
-                print(2323, path, type(path))
+                if not path.absolute():
+                    path = path.absolute()
+                if not path.is_file():
+                    path = orig_cwd.resolve(path).absolute()
+                print(23, path, type(path))
                 importer = zipimport.zipimporter(path)
                 mod = importer.load_module(module_name)
                 print("Direct zipimport of", name, "successful.")
