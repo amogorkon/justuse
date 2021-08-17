@@ -1388,39 +1388,58 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     fatal_exceptions,
                 )
 
-            # spec & auto-install
-            else:
-                this_version = Use._get_version(name, package_name)
+            this_version = Use._get_version(name, package_name)
 
-                if this_version == target_version or not (version):
-                    if not (version):
-                        warn(
-                            Use.AmbiguityWarning(
-                                "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
-                            )
-                        )
-                    mod = self._import_classical_install(
-                        name,
-                        module_name,
-                        spec,
-                        target_version,
-                        default,
-                        aspectize,
-                        fatal_exceptions,
-                        package_name,
-                    )
+            if this_version == target_version:
+                if not (version):
                     warn(
-                        f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
-                        Use.AmbiguityWarning,
+                        Use.AmbiguityWarning(
+                            "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
+                        )
                     )
-                    return self._ensure_proxy(mod)
-                # wrong version => wrong spec
-                this_version = Use._get_version(mod=mod)
-                if this_version != target_version:
-                    spec = None
-                    log.warning(
-                        f"Setting {spec=}, since " f"{target_version=} != {this_version=}"
+                mod = self._import_classical_install(
+                    name,
+                    module_name,
+                    spec,
+                    target_version,
+                    default,
+                    aspectize,
+                    fatal_exceptions,
+                    package_name,
+                )
+                warn(
+                    f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
+                    Use.AmbiguityWarning,
+                )
+                return self._ensure_proxy(mod)
+            elif not (version):
+                warn(
+                    Use.AmbiguityWarning(
+                        "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
                     )
+                )
+                mod = self._import_classical_install(
+                    name,
+                    module_name,
+                    spec,
+                    target_version,
+                    default,
+                    aspectize,
+                    fatal_exceptions,
+                    package_name,
+                )
+                warn(
+                    f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
+                    Use.AmbiguityWarning,
+                )
+                return self._ensure_proxy(mod)
+            # wrong version => wrong spec
+            this_version = Use._get_version(mod=mod)
+            if this_version != target_version:
+                spec = None
+                log.warning(
+                    f"Setting {spec=}, since " f"{target_version=} != {this_version=}"
+                )
         else:
             if not auto_install:
                 return Use._fail_or_default(
