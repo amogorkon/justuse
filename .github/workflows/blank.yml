@@ -41,9 +41,9 @@ jobs:
           export FTP_PASS="${{ secrets.FTP_PASS }}"
           mkdir -p ~/.justuse-python/
           echo "debug = true" > ~/.justuse-python/config.toml
+          python3 -m pip install --force-reinstall anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests furl yarl coverage coverage-badge
           [ -e tests/coverage.sh ] && bash tests/coverage.sh || {
-          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests furl yarl
-          DEBUG=1 VERBOSE=1 TRACE=1 PYTHONDEBUGMODE=1 PYTHONDONTWRITEBYTECODE=1 python3 -m pytest
+            python3 -m pytest
           }
 
   test-windows:
