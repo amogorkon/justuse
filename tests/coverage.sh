@@ -150,7 +150,9 @@ orig_file="$file"
 BADGE_FILENAME="$( ( git remote -v | cut -f2 | sed -r -e 's~[\t ].*$~~; s~^.*\.(net|edu|com|org)[:/]~~; s~\.git$~~; s~/~-~g; ' | head -1; git branch -v -a | grep -Fe "*" | cut -d " " -f2; ) | tr -s $'\n ' '.' | sed -r -e 's~\.*$~~; s~^~coverage_~; '; echo -n ".svg"; )";
  
 for filename in "$orig_file" "$BADGE_FILENAME"; do
+    f="$file"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"; _dir="$dir"; f="$filename"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"; _fn="$fn"; f="$file"; fn="${f##*/}"
     fn="${filename##*/}"
+    rm -vf -- "$file" || rmdir "$file"; python3 -m coverage_badge | cat -v | tee "$_dir/$_fn" | tee "$file"; 
     for variant in \
         '"/public_html/mixed/$fn" "$file"'  \
         ;  \
