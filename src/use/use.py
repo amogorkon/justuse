@@ -941,7 +941,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         exc = None
         assert url is not None, f"called with url == {url!r}"
         assert url != "None", f"called with url == {url!r}"
-        
+
         assert hash_algo in Use.Hash, f"{hash_algo} is not a valid hashing algorithm!"
 
         aspectize = aspectize or {}
@@ -1215,7 +1215,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         package_name=None,
     ):
         # sourcery no-metrics
-        fatal_exceptions |= ("ERRORS" in os.environ)
+        fatal_exceptions |= "ERRORS" in os.environ
         exc = None
         try:
             mod = importlib.import_module(module_name)  # ! => cache
@@ -1271,7 +1271,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         name: str,
         /,
         *,
-        path=None, url=None,
+        path=None,
+        url=None,
         version: str = None,
         hash_algo=Hash.sha256,
         hash_value: str = None,
@@ -1534,7 +1535,9 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             if query:
                 query = self.registry.execute(
                     "SELECT path FROM artifacts WHERE distribution_id=?",
-                    [query["id"],]
+                    [
+                        query["id"],
+                    ],
                 ).fetchone()
             if query:
                 path = Path(query["path"])
@@ -1565,7 +1568,9 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             continue
                         url = URL(entry["url"])
                         path = (
-                            self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
+                            self.home
+                            / "packages"
+                            / Path(url.asdict()["path"]["segments"][-1]).name
                         )
                         log.error("url = %s", url)
                         entry["version"] = str(target_version)
@@ -1609,7 +1614,9 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 # we've got a complete JSON with a matching entry, let's download
                 if not path:
                     path = (
-                        self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
+                        self.home
+                        / "packages"
+                        / Path(url.asdict()["path"]["segments"][-1]).name
                     )
 
                 if not path.exists():
@@ -1653,11 +1660,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 
             # trying to import directly from zip
             try:
-                if not path.absolute():
-                    path = path.absolute()
-                if not path.is_file():
-                    path = orig_cwd.resolve(path).absolute()
-                print(23, path, type(path))
                 importer = zipimport.zipimporter(path)
                 mod = importer.load_module(module_name)
                 print("Direct zipimport of", name, "successful.")
