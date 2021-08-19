@@ -1353,9 +1353,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         all_that_hash = set()
         if name in self._using:
             spec = self._using[name].spec
-        else:
-            if not auto_install:
-                spec = importlib.util.find_spec(name)
+        elif not auto_install:
+            spec = importlib.util.find_spec(name)
 
         if spec:
             # let's check if it's a builtin
@@ -1544,14 +1543,14 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     )
                 try:
                     data = response.json()
-                    if not "urls" in data:
+                    if "urls" not in data:
                         return Use._fail_or_default(
                             default,
                             Use.AutoInstallationError,
                             f"Tried to auto-install {package_name} {target_version} but failed because no valid URLs to download could be found.",
                         )
                     for entry in data["urls"]:
-                        if not entry["url"] or not ":" in entry["url"]:
+                        if not entry["url"] or ":" not in entry["url"]:
                             continue
                         url = URL(entry["url"])
                         path = (
