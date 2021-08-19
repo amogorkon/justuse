@@ -121,17 +121,16 @@ def test_classical_install(reuse):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         mod = reuse("pytest", modes=reuse.fatal_exceptions)
-        assert mod is pytest or \
-               mod._ProxyModule__implementation is pytest
+        assert mod is pytest or mod._ProxyModule__implementation is pytest
         assert issubclass(w[-1].category, use.AmbiguityWarning)
 
 
 def test_autoinstall_PEBKAC(reuse):
-    # auto-install requested, but no version or hash_value specified
+    # auto-install requested, but no version or hashes specified
     with pytest.raises(RuntimeWarning):
         reuse("pytest", modes=reuse.auto_install)
 
-    # forgot hash_value
+    # forgot hashes
     with pytest.raises(packaging.version.InvalidVersion):
         reuse("pytest", version="-1", modes=reuse.auto_install)
 
@@ -139,7 +138,7 @@ def test_autoinstall_PEBKAC(reuse):
     with pytest.raises(RuntimeWarning):
         reuse(
             "pytest",
-            hash_value="asdf",
+            hashes="asdf",
             modes=reuse.auto_install,
         )
 
@@ -149,7 +148,7 @@ def test_autoinstall_PEBKAC(reuse):
             "pytest",
             modes=reuse.auto_install,
             version=-1,
-            hash_value="asdf",
+            hashes="asdf",
         )
 
     # non-existing package
@@ -158,7 +157,7 @@ def test_autoinstall_PEBKAC(reuse):
             "4-^df",
             modes=reuse.auto_install,
             version="0.0.1",
-            hash_value="asdf",
+            hashes="asdf",
         )
 
 
@@ -181,7 +180,7 @@ def test_pure_python_package(reuse):
     test = reuse(
         "example-pypi-package.examplepy",
         version="0.1.0",
-        hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77",
+        hashes="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77",
         modes=reuse.auto_install,
     )
     assert str(test.Number(2)) == "2"
@@ -204,15 +203,15 @@ def suggested_artifact(*args, **kwargs):
         ) from e
     assert rw
     assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
-    assert "hash_value=" in str(rw), f"warning does not suggest a hash: {rw}"
+    assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
     assert isinstance(rw.args[0], str)
     match = re.search(
-        'version="?(?P<version>[^"]+)"?.*' 'hash_value="?(?P<hash_value>\\w+)"?',
+        'version="?(?P<version>[^"]+)"?.*' 'hashes="?(?P<hashes>\\w+)"?',
         str(rw),
     )
     assert match
-    version, hash_value = (match.group("version"), match.group("hash_value"))
-    return (version, hash_value)
+    version, hashes = (match.group("version"), match.group("hashes"))
+    return (version, hashes)
 
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="windows Auto-installing numpy")
@@ -224,7 +223,7 @@ def test_autoinstall_protobuf(reuse):
         **kws,
         modes=reuse.auto_install | reuse.fatal_exceptions,
         version=ver,
-        hash_value=hash,
+        hashes=hash,
     )
     assert mod.__version__ == ver
 
@@ -236,7 +235,7 @@ def test_autoinstall_numpy_dual_version(reuse):
         "numpy",
         modes=use.auto_install,
         version=ver1,
-        hash_value=hash1,
+        hashes=hash1,
     )
     mod2 = ver2 = None
     assert mod1.__version__ == ver1
@@ -249,7 +248,7 @@ def test_autoinstall_numpy_dual_version(reuse):
                 "numpy",
                 modes=use.auto_install,
                 version=ver2,
-                hash_value=hash2,
+                hashes=hash2,
             )
             break
         except (AttributeError, KeyError):
@@ -270,7 +269,7 @@ def test_autoinstall_numpy(reuse):
         "numpy",
         modes=reuse.auto_install | reuse.fatal_exceptions,
         version=ver,
-        hash_value=hash,
+        hashes=hash,
     )
     assert mod.__version__ == ver
 

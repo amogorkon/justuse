@@ -41,7 +41,7 @@ True
 # it is possible to import standalone modules from online sources
 # with immediate sha1-hash-verificiation before execution of the code like
 >>> utils = use(use.URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
-                    hash_value="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")
+                    hashes="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")
 
 # to auto-install a certain version (within a virtual env and pip in secure hash-check mode) of a package you can do
 >>> np = use("numpy", version="1.1.1", modes=use.auto_install, hash_value=["9879de676"])
@@ -1275,8 +1275,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         url=None,
         version: str = None,
         hash_algo=Hash.sha256,
-        hash_value: str = None,
-        hash_values: list = None,
+        hashes: Optional[Union[str, list[str]]] = None,
         default=mode.fastfail,
         aspectize=None,
         modes: int = 0,
@@ -1293,8 +1292,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             name (str): The name of the package to import.
             version (str or Version, optional): The version of the package to import. Defaults to None.
             hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
-            hash_value ([type], optional): The hash of the package to import. Defaults to None.
-            hash_values (list of hash values, optional): For compatibility with different platforms. Defaults to None.
+            hashes (str | [str]), optional): A single hash or list of hashes of the package to import. Defaults to None.
             default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
             aspectize (dict, optional): Aspectize callables. Defaults to None.
             modes (int, optional): Any combination of Use.modes . Defaults to 0.
@@ -1308,18 +1306,15 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         Returns:
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
-
         log.debug(f"use-str: {name}")
         self.modes = modes
         aspectize = aspectize or {}
-        hash_values = hash_values or []
-        if hash_value:
-            if isinstance(hash_value, str):
-                hash_values += shlex.split(hash_value)
-            else:
-                hash_values += list(hash_value)
-        elif hash_values:
-            hash_value = " ".join(hash_values)
+
+        if not hashes:
+            hashes = set()
+        if isinstance(hashes, str):
+            hashes = set([hashes])
+
         # we use boolean flags to reduce the complexity of the call signature
         fatal_exceptions = bool(Use.fatal_exceptions & modes) or "ERRORS" in os.environ
         auto_install = bool(Use.auto_install & modes)
@@ -1355,7 +1350,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         entry = None
         found = None
         that_hash = None
-        all_that_hash = []
+        all_that_hash = set()
         if name in self._using:
             spec = self._using[name].spec
         else:
@@ -1445,7 +1440,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 )
             # PEBKAC
             hit: VerHash = VerHash.empty()
-            if target_version and not (hash_value or hash_values):  # let's try to be helpful
+            if target_version and not hashes:  # let's try to be helpful
                 response = requests.get(
                     f"https://pypi.org/pypi/{package_name}/{target_version}/json"
                 )
@@ -1455,7 +1450,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     )
                 elif response.status_code != 200:
                     raise RuntimeWarning(
-                        f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hash_value for the auto-installation was missing."
+                        f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hashes for the auto-installation was missing."
                     )
                 data = response.json()
 
@@ -1465,24 +1460,16 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 log.info(f"{hit=} from  Use._find_matching_artifact")
                 if that_hash:
                     if that_hash is not None:
-                        hash_value = that_hash
-                    if that_hash is not None:
-                        hash_values = hash_values + [that_hash]
-
-                    if that_hash is not None:
-                        hash_value = that_hash
-                    if that_hash is not None:
-                        hash_values = hash_values + [that_hash]
+                        hashes.add(that_hash)
 
                     raise RuntimeWarning(
                         f"""Failed to auto-install '{package_name}' because hash_value is missing. This may work:
-use("{package_name}", version="{version}", hash_value="{that_hash}", modes=use.auto_install)
-"""
+use("{package_name}", version="{version}", hashes="{list(hashes)}", modes=use.auto_install)"""
                     )
                 raise RuntimeWarning(
                     f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
                 )
-            elif not target_version and (hash_value or hash_values):
+            elif not target_version and hashes:
                 raise RuntimeWarning(
                     f"Failed to auto-install '{package_name}' because no version was specified."
                 )
@@ -1517,12 +1504,12 @@ use("{package_name}", version="{version}", hash_value="{that_hash}", modes=use.a
                         f"requirements!"
                     )
 
-                if not target_version and (hash_value or hash_values):
-                    hash_values += [hash_value]
+                if not target_version and (hash_value or hashes):
+                    hashes.add(hash_value)
                     raise RuntimeWarning(
                         f"""Please specify version and hash for auto-installation of '{package_name}'.
 To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
-If you want to auto-install the latest version: use("{name}", version="{version}", hash_value="{hash_value}", modes=use.auto_install)
+If you want to auto-install the latest version: use("{name}", version="{version}", hashes="{list(hashes)}", modes=use.auto_install)
 """
                     )
 
@@ -1575,14 +1562,9 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         log.error("url = %s", url)
                         entry["version"] = str(target_version)
                         log.debug(f"looking at {entry=}")
-                        all_that_hash.append(
-                            that_hash := entry["digests"].get(hash_algo.name)
-                        )
-                        if (not hash_value or not hash_values) or (
-                            hash_value in all_that_hash
-                            or len(hash_values) > 1
-                            and set(hash_values).intersection(set(all_that_hash))
-                        ):
+                        assert isinstance(all_that_hash, set)
+                        all_that_hash.add(that_hash := entry["digests"].get(hash_algo.name))
+                        if hashes or all_that_hash and hashes.intersection(all_that_hash):
                             found = (entry, that_hash)
                             hit = VerHash(version, that_hash)
                             log.info(f"Matches user hash: {entry=} {hit=}")
@@ -1591,20 +1573,16 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         return Use._fail_or_default(
                             default,
                             Use.AutoInstallationError,
-                            f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hash_value=!r} or {hash_values=!r}).",
+                            f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hash_value=!r} or {hashes=!r}).",
                         )
                     entry, that_hash = found
                     hash_value = that_hash
                     if that_hash is not None:
-                        hash_values = [that_hash]
+                        assert isinstance(hashes, set)
+                        hashes.add(that_hash)
                 except BaseException as be:  # json issues
-                    msg = (
-                        f"request to "
-                        f"https://pypi.org/pypi/{package_name}/{target_version}/json"
-                        f"lead to an error: {be}"
-                    )
+                    msg = f"request to https://pypi.org/pypi/{package_name}/{target_version}/json lead to an error: {be}"
                     raise RuntimeError(msg, response) from be
-                    # exc = traceback.format_exc()
                 if exc:
                     return Use._fail_or_default(
                         default,
