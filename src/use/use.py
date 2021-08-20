@@ -655,21 +655,12 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             os.chdir(orig_cwd)
             sys.path.remove(pkg_path)
 
+    @staticmethod
     def _venv_root(package, version):
         venv_root = Path.home() / ".justuse-python" / "venv" / package / version
         if not venv_root.exists():
             venv_root.mkdir(parents=True)
         return venv_root
-
-    def _venv_is_win():
-        return sys.platform.lower().startswith("win")
-
-    def _venv_unix_path():
-        ver = ".".join(map(str, sys.version_info[0:2]))
-        return Path("lib") / f"python{ver}" / "site-packages"
-
-    def _venv_windows_path():
-        return Path("Lib") / "site-packages"
 
     @staticmethod
     def _parse_filename(filename) -> dict:
@@ -708,9 +699,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         platform_tags,
         include_sdist=False,
     ):
-        """
-        Filename as API, seriously WTF...
-        """
+        # Filename as API, seriously WTF...
         assert isinstance(info, dict)
         assert isinstance(platform_tags, frozenset)
         if "platform_tag" not in info:
@@ -1463,7 +1452,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
 
                     raise RuntimeWarning(
                         f"""Failed to auto-install '{package_name}' because hash_value is missing. This may work:
-use("{package_name}", version="{version}", hashes="{list(hashes)}", modes=use.auto_install)"""
+use("{package_name}", version="{version}", hashes={hashes.pop()}, modes=use.auto_install)"""
                     )
                 raise RuntimeWarning(
                     f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
@@ -1478,17 +1467,14 @@ use("{package_name}", version="{version}", hashes="{list(hashes)}", modes=use.au
                 if response.status_code == 404:
                     # possibly typo - PEBKAC
                     raise RuntimeWarning(
-                        f"Are you sure package '{package_name}' "
-                        "exists? Could not find any package with "
-                        "that name on PyPI."
+                        f"Are you sure package '{package_name}' exists? Could not find any package with that name on PyPI."
                     )
                 elif response.status_code != 200:
                     # possibly server problems
                     return Use._fail_or_default(
                         default,
                         Use.AutoInstallationError,
-                        f"Tried to look up '{package_name}', but "
-                        "got a {response.status_code} from PyPI.",
+                        f"Tried to look up '{package_name}', but got a {response.status_code} from PyPI.",
                     )
 
                 data = response.json()
@@ -1498,9 +1484,7 @@ use("{package_name}", version="{version}", hashes="{list(hashes)}", modes=use.au
 
                 if not hash_value:
                     raise RuntimeWarning(
-                        f"We could not find any version or release "
-                        f"for {package_name} that could satisfy our "
-                        f"requirements!"
+                        f"We could not find any version or release for {package_name} that could satisfy our requirements!"
                     )
 
                 if not target_version and (hash_value or hashes):
@@ -1572,7 +1556,11 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         return Use._fail_or_default(
                             default,
                             Use.AutoInstallationError,
-                            f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hash_value=!r} or {hashes=!r}).",
+                            f"""
+Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} 
+but failed because none of the available hashes ({all_that_hash=!r})
+match the expected hash ({hash_value=!r} or {hashes=!r}).
+""",
                         )
                     entry, that_hash = found
                     hash_value = that_hash
