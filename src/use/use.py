@@ -599,53 +599,29 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         venv_bin = venv_root / "bin"
         python_exe = Path(sys.executable).stem
         if not venv_bin.exists():
-            venv_output = check_output(
-                [python_exe, "-m", "venv", venv_root], shell=False, encoding="UTF-8"
-            )
-            log.debug("venv created: venv_output=%r", venv_output)
-
+             check_output(
+                [python_exe, "-m", "venv", venv_root],
+                encoding="UTF-8"
+             )
         pip_args = (
-            python_exe,
-            "-m",
-            "pip",
-            "--no-python-version-warning",
-            "--disable-pip-version-check",
-            "--no-color",
-            "install",
-            "--progress-bar",
-            "ascii",
-            "--prefer-binary",
-            "--no-build-isolation",
-            "--no-use-pep517",
-            "--no-compile",
-            "--no-warn-script-location",
-            "--no-warn-conflicts",
+            python_exe, "-m", "pip", "install",
+            "--progress-bar", "ascii", "--prefer-binary",
             f"{package}=={version}",
         )
         current_path = os.environ.get("PATH")
         venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
-
-        if sys.platform.lower().startswith("win"):
-            pkg_path = venv_root / "Lib" / "site-packages"
+        if Use._venv_is_win():
+            pkg_path = venv_root / Use._venv_windows_path()
             output = check_output(
                 ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
                 encoding="UTF-8",
             )
         else:
-            pkg_path = (
-                venv_root
-                / "lib"
-                / "python{ver}".format(ver=".".join(map(str, sys.version_info[0:2])))
-                / "site-packages"
-            )
+            pkg_path = venv_root / Use._venv_unix_path()
             output = check_output(
                 ["env", f"PATH={venv_path_var}", *pip_args], encoding="UTF-8"
             )
         log.debug("pip subprocess output=%r", output)
-        match = re.search(f": {package}=={version} in (?P<path>(?:(?! \\().)+)", output)
-        pkg_path = match.group("path") if match else pkg_path
-
-        assert Path(pkg_path).is_dir()
         orig_cwd = Path.cwd()
         try:
             sys.path.insert(0, pkg_path)
