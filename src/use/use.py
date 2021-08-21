@@ -1439,7 +1439,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
 
                     raise RuntimeWarning(
                         f"""Failed to auto-install '{package_name}' because hash_value is missing. This may work:
-use("{package_name}", version="{version}", hashes="{list(hashes)}", modes=use.auto_install)"""
+use("{package_name}", version="{version}", hashes="{hashes!r}", modes=use.auto_install)"""
                     )
                 raise RuntimeWarning(
                     f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
@@ -1484,7 +1484,7 @@ use("{package_name}", version="{version}", hashes="{list(hashes)}", modes=use.au
                     raise RuntimeWarning(
                         f"""Please specify version and hash for auto-installation of '{package_name}'.
 To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
-If you want to auto-install the latest version: use("{name}", version="{version}", hashes="{list(hashes)}", modes=use.auto_install)
+If you want to auto-install the latest version: use("{name}", version="{version}", hashes="{hashes!r}", modes=use.auto_install)
 """
                     )
 
@@ -1555,7 +1555,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     if that_hash is not None:
                         assert isinstance(hashes, set)
                         hashes.add(that_hash)
-                except BaseException as be:  # json issues
+                except KeyError as be:  # json issues
                     msg = f"request to https://pypi.org/pypi/{package_name}/{target_version}/json lead to an error: {be}"
                     raise RuntimeError(msg, response) from be
                 if exc:

@@ -86,6 +86,7 @@ def test_db_setup(reuse):
     assert reuse.registry
 
 
+@pytest.mark.skipif(True, reason="in development")
 def test_unsupported_artifact(reuse):
     hashes = {
         "win": "1fdae7d980a2fa617d119d0dc13ecb5c23cc63a8b04ffcb5298f2c59d86851e9",

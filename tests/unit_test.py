@@ -188,6 +188,7 @@ def test_pure_python_package(reuse):
 
 
 def suggested_artifact(*args, **kwargs):
+    import use
     reuse = use
     rw = None
     try:
@@ -206,11 +207,18 @@ def suggested_artifact(*args, **kwargs):
     assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
     assert isinstance(rw.args[0], str)
     match = re.search(
-        'version="?(?P<version>[^"]+)"?.*' 'hashes="?(?P<hashes>\\w+)"?',
+        'version="?(?P<version>[^"]+)".*'
+        'hashes="?(?P<hashes>[^()]+)"',
         str(rw),
     )
     assert match
-    version, hashes = (match.group("version"), match.group("hashes"))
+    hashes_evalstr = match.group("hashes")
+    log.debug("eval'ing the following string from rw message: %r",
+        hashes_evalstr)
+    hashes = eval(hashes_evalstr)
+    log.debug("eval'ed to the following value: %r", hashes)
+    assert isinstance(hashes, set), f"The wrong type of object is given in the warning message: {str(rw)}"
+    version = match.group("version")
     return (version, hashes)
 
 
