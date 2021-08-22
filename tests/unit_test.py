@@ -208,7 +208,7 @@ def suggested_artifact(*args, **kwargs):
     assert isinstance(rw.args[0], str)
     match = re.search(
         'version="?(?P<version>[^"]+)".*'
-        'hashes="?(?P<hashes>[^()]+)"',
+        'hashes=?(?P<hashes>[^()]+), ',
         str(rw),
     )
     assert match
