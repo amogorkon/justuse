@@ -661,7 +661,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "(?P<python_tag>.*)-"
             "(?P<abi_tag>.*)-"
             "(?P<platform_tag>.*)\\."
-            "(?P<ext>whl|zip)",
+            "(?P<ext>whl|zip|egg)",
             filename,
         )
         return match.groupdict() if match else {}
@@ -706,7 +706,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     our_python_tag,
                 )
                 return True
-        return include_sdist
+        return include_sdist and info["filename"].endswith(".egg")
 
     @staticmethod
     def _find_matching_artifact(
@@ -752,7 +752,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         sys_version = sys_version or Version(".".join(map(str, sys.version_info[0:3])))
         assert isinstance(sys_version, Version)
         platform_tags = platform_tags or get_supported()
-        return (
+        return ".egg" not in info["filename"] and (
             include_sdist
             or (
                 Use._is_version_satisfied(info, sys_version)
@@ -773,23 +773,28 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         platform_tags=frozenset(),
         interpreter_tag=None,
         version=None,
-        return_info=False,
     ) -> VerHash:
         assert isinstance(releases, dict)
         assert isinstance(hash_algo, str)
         # update the release dicts to hold all info canonically
         # be aware, the json returned from pypi ["releases"] can
         # contain empty lists as dists :/
-        for ver, infos in reversed(releases.items()):
-            result = use._find_matching_artifact(
-                infos,
-                hash_algo,
-                sys_version=sys_version,
-                platform_tags=platform_tags
-            )
-            if not result:
+        for ver, dists in releases.items():
+            if not dists:
                 continue
-            return result
+            for d in dists:
+                d["version"] = ver  # Add version info
+                d.update(Use._parse_filename(d["filename"]))
+        for include_sdist in (False, True):  # prefer non-source
+            for ver, infos in sorted(
+                releases.items(), key=lambda item: Version(item[0]), reverse=True
+            ):
+                for info in dists:
+                    if Use._is_compatible(
+                        info, hash_algo, sys_version, platform_tags, include_sdist
+                    ):
+                        return VerHash(info["version"], info["digests"][hash_algo])
+        return VerHash.empty()
 
     @staticmethod
     def _varint_encode(number):
@@ -1235,19 +1240,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
         return self._ensure_proxy(mod)
-    
-    @staticmethod
-    def get_sample_data(package_name):
-        response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
-        data = response.json()
-        for v, infos in data["releases"].items():
-            for info in infos:
-                info["version"] = v
-                info.update(
-                    Use._parse_filename(info["filename"]) or {}
-                )
-        return data
-    
+
     @__call__.register(str)
     def _use_str(
         self,
@@ -1446,7 +1439,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
 
                     raise RuntimeWarning(
                         f"""Failed to auto-install '{package_name}' because hash_value is missing. This may work:
-use("{package_name}", version="{version}", hashes={hashes!r}, modes=use.auto_install)"""
+use("{package_name}", version="{version}", hashes="{hashes!r}", modes=use.auto_install)"""
                     )
                 raise RuntimeWarning(
                     f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
@@ -1475,12 +1468,6 @@ use("{package_name}", version="{version}", hashes={hashes!r}, modes=use.auto_ins
                     )
 
                 data = response.json()
-                for v, infos in data["releases"].items():
-                    for info in infos:
-                        info["version"] = v
-                        info.update(
-                            Use._parse_filename(info["filename"]) or {}
-                        )
                 version, hash_value = hit = Use._find_latest_working_version(
                     data["releases"], hash_algo=hash_algo.name
                 )
@@ -1497,7 +1484,7 @@ use("{package_name}", version="{version}", hashes={hashes!r}, modes=use.auto_ins
                     raise RuntimeWarning(
                         f"""Please specify version and hash for auto-installation of '{package_name}'.
 To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
-If you want to auto-install the latest version: use("{name}", version="{version}", hashes={hashes!r}, modes=use.auto_install)
+If you want to auto-install the latest version: use("{name}", version="{version}", hashes="{hashes!r}", modes=use.auto_install)
 """
                     )
 
