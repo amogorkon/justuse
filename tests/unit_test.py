@@ -198,38 +198,40 @@ def test_pure_python_package(reuse):
 
 
 def suggested_artifact(*args, **kwargs):
-    import use
-    reuse = use
-    rw = None
-    try:
-        mod = reuse(*args, modes=reuse.auto_install | reuse.fatal_exceptions, **kwargs)
-    except RuntimeWarning as r:
-        rw = r
-    except BaseException as e:
-        raise AssertionError(
-            f"suggested_artifact failed for use("
-            f"{', '.join(map(repr, args))}, "
-            f"{', '.join(map(repr, kwargs.items()))}"
-            f"): {e}"
-        ) from e
-    assert rw
-    assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
-    assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
-    assert isinstance(rw.args[0], str)
-    match = re.search(
-        'version="?(?P<version>[^"]+)".*'
-        'hashes=?(?P<hashes>[^()]+), ',
-        str(rw),
-    )
-    assert match
-    hashes_evalstr = match.group("hashes")
-    log.debug("eval'ing the following string from rw message: %r",
-        hashes_evalstr)
-    hashes = eval(hashes_evalstr)
-    log.debug("eval'ed to the following value: %r", hashes)
-    assert isinstance(hashes, set), f"The wrong type of object is given in the warning message: {str(rw)}"
-    version = match.group("version")
-    return (version, hashes)
+  import use
+  reuse = use
+  rw = None
+  try:
+      mod = reuse(*args, modes=reuse.auto_install | reuse.fatal_exceptions, **kwargs)
+  except RuntimeWarning as r:
+      rw = r
+  except BaseException as e:
+      raise AssertionError(
+          f"suggested_artifact failed for use("
+          f"{', '.join(map(repr, args))}, "
+          f"{', '.join(map(repr, kwargs.items()))}"
+          f"): {e}"
+      ) from e
+  assert rw
+  assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
+  assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
+  assert isinstance(rw.args[0], str)
+  match = re.search(
+      'version="?(?P<version>[^"]+)".*'
+      'hashes=?(?P<hashes>[^()]+), ',
+      str(rw),
+  )
+  assert match
+  hashes_evalstr = match.group("hashes")
+  log.debug("eval'ing the following string from rw message: %r",
+      hashes_evalstr)
+  hashes = eval(hashes_evalstr)
+  log.debug("eval'ed to the following value: %r", hashes)
+  assert isinstance(
+      hashes,
+      set), f'The wrong type of object is given in the warning message: {rw}'
+  version = match.group("version")
+  return (version, hashes)
 
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="windows Auto-installing numpy")

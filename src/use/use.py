@@ -810,15 +810,15 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         for one_platform_tag in platform_tag.split("."):
             if one_platform_tag in platform_srs and our_python_tag == python_tag:
                 log.debug(
-                    f"_is_platform_compatible:"
-                    f"  - %30r in platform_srs?  %s",
+                    '_is_platform_compatible:  - %30r in platform_srs?  %s',
                     one_platform_tag,
-                    one_platform_tag in platform_srs
+                    one_platform_tag in platform_srs,
                 )
+
                 return True
         return include_sdist and any(
             info["filename"].endswith(ext) for ext in ("egg", "zip")
-        ) and not "py2" in info["filename"]
+        ) and "py2" not in info["filename"]
 
     @staticmethod
     def _find_matching_artifact(
