@@ -806,14 +806,13 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         python_tag = info.get("python_tag", "")
         platform_tag = info.get("platform_tag", "")
         platform_srs = {*map(str, platform_tags)}
-        log.debug(f"_is_platform_compatible: {platform_srs=!r}")
+        log.debug("_is_platform_compatible: %s", platform_srs)
         for one_platform_tag in platform_tag.split("."):
             if one_platform_tag in platform_srs and our_python_tag == python_tag:
                 log.debug(
                     f"_is_platform_compatible:"
                     f"  - %30r in platform_srs?  %s",
                     one_platform_tag,
-                    platform_srs,
                     one_platform_tag in platform_srs
                 )
                 return True
