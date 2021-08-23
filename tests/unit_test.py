@@ -1,7 +1,6 @@
 import functools
 import inspect
 import json
-import logging as log
 import os
 import re
 import sys
@@ -20,17 +19,28 @@ from furl import furl as URL
 
 from tests.simple_funcs import three
 
-if Path("use").is_dir():
-    os.chdir("..")
+if Path("src").is_dir():
+  sys.path.insert(0, "") if "" not in sys.path else None
+  lpath, rpath = (
+    sys.path[0:sys.path.index("")+1 ],
+    sys.path[  sys.path.index("")+2:])
+  try:
+    sys.path.clear()
+    sys.path.__iadd__(lpath + [os.path.join(os.getcwd(), "src")] + rpath)
+    import use
+  finally:
+    sys.path.clear()
+    sys.path.__iadd__(lpath + rpath)
 import_base = Path(__file__).parent.parent / "src"
-sys.path.insert(0, str(import_base))
 import use
 
 __package__ = "tests"
 
 import logging
-
-logging.root.setLevel(logging.DEBUG)
+log = logging.getLogger(".".join((__package__, __name__)))
+log.setLevel(
+  logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET
+)
 
 
 @pytest.fixture()

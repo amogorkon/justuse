@@ -61,10 +61,12 @@ from __future__ import annotations
 import asyncio
 import atexit
 import codecs
+import functools
 import hashlib
 import importlib.util
 import inspect
 import linecache
+import operator
 import os
 import re
 import shlex
@@ -76,12 +78,14 @@ import threading
 import time
 import traceback
 import zipimport
+import operator
+
 from collections import defaultdict, namedtuple
 from enum import Enum
 from functools import singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
-from logging import DEBUG, StreamHandler, getLogger, root
+from logging import DEBUG, NOTSET, WARN, StreamHandler, getLogger, root
 from pathlib import Path
 from pkgutil import zipimporter
 from subprocess import check_output, run
@@ -175,8 +179,11 @@ class Version(PkgVersion):
 mode = Enum("Mode", "fastfail")
 
 root.addHandler(StreamHandler(sys.stderr))
+root.setLevel(NOTSET)
 if "DEBUG" in os.environ:
     root.setLevel(DEBUG)
+else:
+    root.setLevel(WARN)
 
 # TODO: log to file
 log = getLogger(__name__)
@@ -629,45 +636,100 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         )
         current_path = os.environ.get("PATH")
         venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
+        pkg_path = Use._venv_pkg_path(package, version)
         if Use._venv_is_win():
-            pkg_path = venv_root / Use._venv_windows_path()
             output = run(
-                ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
+                [
+                  "cmd.exe", "/C",
+                  "set", f"PATH={venv_path_var}", "&",
+                  *pip_args
+                ],
                 encoding="UTF-8",
                 stderr=sys.stderr
             )
         else:
-            pkg_path = venv_root / Use._venv_unix_path()
             output = run(
-                ["env", f"PATH={venv_path_var}", *pip_args], encoding="UTF-8",
+                ["env", f"PATH={venv_path_var}", *pip_args],
+                encoding="UTF-8",
                 stderr=sys.stderr
             )
         log.debug("pip subprocess output=%r", output)
         orig_cwd = Path.cwd()
         try:
             os.chdir(pkg_path)
-            for path in (Path(f"{package}.py"),
-                         Path(f"{package}/__init__.py")):
-                if not path.exists():
-                    continue
-                path = path.absolute()
-                code = None
-                with open(path, "rb") as f:
-                    code = f.read()
+            pkg_prefix, entry_module_path = Use._find_entry_point(
+                package, version
+            )
+            path = entry_module_path.absolute()
+            with open(path, "rb") as f:
+                code = f.read()
                 Use._clean_sys_modules(package)
+                Use._clean_sys_modules(pkg_prefix)
+                Use._clean_sys_modules(f"{pkg_prefix}.{package}")
                 mod = use._build_mod(
                     name=package,
                     code=code,
                     module_path=path,
                     initial_globals={},
                     aspectize={},
-                    package=package
+                    package=(pkg_prefix or package)
                 )
-                log.debug(f"module returned from {Use._load_venv_mod.__name__}: {mod}")
+                log.debug(
+                  f"module returned from _load_venv_mod: {mod}"
+                )
                 return mod
         finally:
             os.chdir(orig_cwd)
-    
+
+    @staticmethod
+    def _venv_pkg_path(package, version):
+        venv_root = Use._venv_root(package, version)
+        if Use._venv_is_win():
+            return venv_root / Use._venv_windows_path()
+        else:
+            return venv_root / Use._venv_unix_path()
+
+    @staticmethod
+    def _find_entry_point(package, version):
+        pkg_path = Use._venv_pkg_path(package, version)
+        rec_path = (pkg_path
+            / f'{package}-{version}.dist-info'
+            / 'RECORD')
+        contents = list(
+          map(
+            operator.itemgetter(0),
+            map(
+              functools.partialmethod(
+                str.partition, ',')._make_unbound_method(),
+              rec_path.read_text(
+                  encoding='UTF-8'
+              ).strip().splitlines()
+            )
+          )
+        )
+        contents_abs = list(map(pkg_path.__truediv__, contents))
+        pkg_prefix = next(iter([
+          c for c in contents_abs if c.name == 'top_level.txt'
+        ])).read_text().strip()
+        if pkg_prefix != package:
+            entry_suffixes = (
+              Path(pkg_prefix)/package/'__init__.py',
+              Path(pkg_prefix)/f'{package}.py',
+            )
+        else:
+            entry_suffixes = (
+              Path(package)/'__init__.py',
+              Path(f'{package}.py'),
+            )
+        entry_path = next(iter(
+          filter(None, map(
+            lambda c: c if any(str(c).rfind(str(e)) != -1 \
+                            for e in entry_suffixes) else None,
+            contents_abs
+          ))
+        ))
+        return (pkg_prefix, entry_path)
+
     @staticmethod
     def _clean_sys_modules(package):
         del_mods = dict([(k, v.__spec__.loader) for k,v in sys.modules.items() if getattr(v, "__spec__", None) and isinstance(v.__spec__.loader, SourceFileLoader) and (k.startswith(f"{package}.") or k == package)])
@@ -744,13 +806,15 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         python_tag = info.get("python_tag", "")
         platform_tag = info.get("platform_tag", "")
         platform_srs = {*map(str, platform_tags)}
+        log.debug(f"_is_platform_compatible: {platform_srs=!r}")
         for one_platform_tag in platform_tag.split("."):
             if one_platform_tag in platform_srs and our_python_tag == python_tag:
-                log.info(
-                    f"[Y] %s in {platform_srs=!r}, %s == %s",
+                log.debug(
+                    f"_is_platform_compatible:"
+                    f"  - %30r in platform_srs?  %s",
                     one_platform_tag,
-                    python_tag,
-                    our_python_tag,
+                    platform_srs,
+                    one_platform_tag in platform_srs
                 )
                 return True
         return include_sdist and info["filename"].endswith(".egg")
@@ -771,10 +835,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         `(version, hash_value)`
         pair from the best-fitting artifact,
         preferring bdist over sdist distribution archives."""
-        if not sys_version:
-            sys_version = Version(".".join(map(str, sys.version_info[0:3])))
-        if not platform_tags:
-            platform_tags = get_supported()
         info_s = sorted(urls, key=lambda i: i.get("packagetype", ""))
         for include_sdist in (False, True):  # prefer non-source
             results = [
@@ -803,13 +863,15 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         """Return true if the artifact described by 'info'
         is compatible with the current or specified system."""
         assert isinstance(info, dict)
+        if not sys_version:
+            sys_version = Version(".".join(map(str, sys.version_info[0:3])))
+        if not platform_tags:
+            platform_tags = get_supported()
         if "platform_tag" not in info:
             info.update(Use._parse_filename(info["filename"]))
-        sys_version = sys_version or Version(".".join(map(str, sys.version_info[0:3])))
         assert isinstance(sys_version, Version)
-        platform_tags = platform_tags or get_supported()
         return ".egg" not in info["filename"] and (
-            include_sdist
+            (include_sdist and info["filename"][-4:] in (".zip",))
             or (
                 Use._is_version_satisfied(info, sys_version)
                 and Use._is_platform_compatible(info, platform_tags, include_sdist)
@@ -1305,6 +1367,39 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     Use._parse_filename(info["filename"]) or {}
                 )
         return data
+
+    @staticmethod
+    def _get_filtered_data(data):
+        filtered = { "urls": [], "releases": {} }
+        for ver, infos in data["releases"].items():
+            filtered["releases"][ver] = []
+            for info in infos:
+                info["version"] = ver
+                info.update(
+                    Use._parse_filename(info["filename"]) or {}
+                )
+                if not Use._is_compatible(
+                    info,
+                    hash_algo=Use.Hash.sha256.name,
+                    sys_version=None,
+                    platform_tags=None,
+                    include_sdist=False
+                ):
+                    continue
+                filtered["urls"].append(info)
+                filtered["releases"][ver].append(info)
+        if not filtered["urls"]:
+            for ver, infos in data["releases"].items():
+                for info in infos:
+                    if (info["packagetype"] == "sdist" and
+                        info["python_version"] == "source"
+                    ):
+                        filtered["urls"].append(info)
+                        filtered["releases"][ver].append(info)
+        for ver in data["releases"].keys():
+            if not filtered["releases"][ver]:
+                del filtered["releases"][ver]
+        return filtered
 
     @__call__.register(str)
     def _use_str(
