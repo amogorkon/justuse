@@ -76,10 +76,25 @@ def test_is_platform_compatible_win(reuse):
     assert reuse._is_platform_compatible(info, platform_tags, include_sdist=False)
 
 
-def test_load_venv_mod(reuse):
-    mod = reuse._load_venv_mod("numpy", "1.19.3")
-    log.warning(f"test_load_venv_mod: {mod=})")
-    assert mod.__version__ == "1.19.3"
+
+def _do_load_venv_mod(reuse, package):
+    data = reuse._get_filtered_data(reuse._get_package_data(package)) 
+    versions = list(data["releases"].keys())
+    version = versions[0]
+    mod = reuse._load_venv_mod(package, version)
+    log.info("_load_venv_mod(%r, %r): %s", package, version, mod)
+    assert mod
+    assert mod.__version__ == version
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows venv package metadata")
+def test_load_venv_mod_protobuf(reuse):
+    _do_load_venv_mod(reuse, "protobuf")
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows venv package metadata")
+def test_load_venv_mod_numpy(reuse):
+    _do_load_venv_mod(reuse, "numpy")
 
 
 def test_db_setup(reuse):
