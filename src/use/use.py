@@ -817,7 +817,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     one_platform_tag in platform_srs
                 )
                 return True
-        return include_sdist and info["filename"].endswith(".egg")
+        return include_sdist and any(
+            info["filename"].endswith(ext) for ext in ("egg", "zip")
+        ) and not "py2" in info["filename"]
 
     @staticmethod
     def _find_matching_artifact(
@@ -870,7 +872,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if "platform_tag" not in info:
             info.update(Use._parse_filename(info["filename"]))
         assert isinstance(sys_version, Version)
-        return ".egg" not in info["filename"] and (
+        return (
             (include_sdist and info["filename"][-4:] in (".zip",))
             or (
                 Use._is_version_satisfied(info, sys_version)
