@@ -61,10 +61,12 @@ from __future__ import annotations
 import asyncio
 import atexit
 import codecs
+import functools
 import hashlib
 import importlib.util
 import inspect
 import linecache
+import operator
 import os
 import re
 import shlex
@@ -76,13 +78,17 @@ import threading
 import time
 import traceback
 import zipimport
+import operator
+
 from collections import defaultdict, namedtuple
 from enum import Enum
 from functools import singledispatch, update_wrapper
 from importlib import metadata
-from logging import DEBUG, StreamHandler, getLogger, root
+from importlib.machinery import SourceFileLoader
+from logging import DEBUG, NOTSET, WARN, StreamHandler, getLogger, root
 from pathlib import Path
-from subprocess import check_output
+from pkgutil import zipimporter
+from subprocess import check_output, run
 from types import FrameType, ModuleType, TracebackType
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, Union
 from warnings import warn
@@ -173,8 +179,11 @@ class Version(PkgVersion):
 mode = Enum("Mode", "fastfail")
 
 root.addHandler(StreamHandler(sys.stderr))
+root.setLevel(NOTSET)
 if "DEBUG" in os.environ:
     root.setLevel(DEBUG)
+else:
+    root.setLevel(WARN)
 
 # TODO: log to file
 log = getLogger(__name__)
@@ -600,50 +609,150 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         python_exe = Path(sys.executable).stem
         if not venv_bin.exists():
              check_output(
-                [python_exe, "-m", "venv", venv_root],
+                [
+                    python_exe, "-m", "venv",
+                    "--system-site-packages",
+                    venv_root
+                ],
                 encoding="UTF-8"
              )
         pip_args = (
-            python_exe, "-m", "pip", "install",
-            "--progress-bar", "ascii", "--prefer-binary",
+            python_exe, "-m", "pip",
+            "--no-python-version-warning",
+            "--disable-pip-version-check",
+            "--no-color",
+            "install",
+            "--progress-bar",
+            "ascii",
+            "--prefer-binary",
+            "--exists-action", "b",
+            "--only-binary", ":all:",
+            "--no-build-isolation",
+            "--no-use-pep517",
+            "--no-compile",
+            "--no-warn-script-location",
+            "--no-warn-conflicts",
             f"{package}=={version}",
         )
         current_path = os.environ.get("PATH")
         venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
+        pkg_path = Use._venv_pkg_path(package, version)
         if Use._venv_is_win():
-            pkg_path = venv_root / Use._venv_windows_path()
-            output = check_output(
-                ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
+            output = run(
+                [
+                  "cmd.exe", "/C",
+                  "set", f"PATH={venv_path_var}", "&",
+                  *pip_args
+                ],
                 encoding="UTF-8",
+                stderr=sys.stderr
             )
         else:
-            pkg_path = venv_root / Use._venv_unix_path()
-            output = check_output(
-                ["env", f"PATH={venv_path_var}", *pip_args], encoding="UTF-8"
+            output = run(
+                ["env", f"PATH={venv_path_var}", *pip_args],
+                encoding="UTF-8",
+                stderr=sys.stderr
             )
         log.debug("pip subprocess output=%r", output)
         orig_cwd = Path.cwd()
         try:
-            sys.path.insert(0, pkg_path)
             os.chdir(pkg_path)
-            return importlib.import_module(package)
+            pkg_prefix, entry_module_path = Use._find_entry_point(
+                package, version
+            )
+            path = entry_module_path.absolute()
+            with open(path, "rb") as f:
+                code = f.read()
+                Use._clean_sys_modules(package)
+                Use._clean_sys_modules(pkg_prefix)
+                Use._clean_sys_modules(f"{pkg_prefix}.{package}")
+                mod = use._build_mod(
+                    name=package,
+                    code=code,
+                    module_path=path,
+                    initial_globals={},
+                    aspectize={},
+                    package=(pkg_prefix or package)
+                )
+                log.debug(
+                  f"module returned from _load_venv_mod: {mod}"
+                )
+                return mod
         finally:
             os.chdir(orig_cwd)
-            sys.path.remove(pkg_path)
 
+    @staticmethod
+    def _venv_pkg_path(package, version):
+        venv_root = Use._venv_root(package, version)
+        if Use._venv_is_win():
+            return venv_root / Use._venv_windows_path()
+        else:
+            return venv_root / Use._venv_unix_path()
+
+    @staticmethod
+    def _find_entry_point(package, version):
+        pkg_path = Use._venv_pkg_path(package, version)
+        rec_path = (pkg_path
+            / f'{package}-{version}.dist-info'
+            / 'RECORD')
+        contents = list(
+          map(
+            operator.itemgetter(0),
+            map(
+              functools.partialmethod(
+                str.partition, ',')._make_unbound_method(),
+              rec_path.read_text(
+                  encoding='UTF-8'
+              ).strip().splitlines()
+            )
+          )
+        )
+        contents_abs = list(map(pkg_path.__truediv__, contents))
+        pkg_prefix = next(iter([
+          c for c in contents_abs if c.name == 'top_level.txt'
+        ])).read_text().strip()
+        if pkg_prefix != package:
+            entry_suffixes = (
+              Path(pkg_prefix)/package/'__init__.py',
+              Path(pkg_prefix)/f'{package}.py',
+            )
+        else:
+            entry_suffixes = (
+              Path(package)/'__init__.py',
+              Path(f'{package}.py'),
+            )
+        entry_path = next(iter(
+          filter(None, map(
+            lambda c: c if any(str(c).rfind(str(e)) != -1 \
+                            for e in entry_suffixes) else None,
+            contents_abs
+          ))
+        ))
+        return (pkg_prefix, entry_path)
+
+    @staticmethod
+    def _clean_sys_modules(package):
+        del_mods = dict([(k, v.__spec__.loader) for k,v in sys.modules.items() if getattr(v, "__spec__", None) and isinstance(v.__spec__.loader, SourceFileLoader) and (k.startswith(f"{package}.") or k == package)])
+        for k in del_mods:
+            del sys.modules[k]
+
+    @staticmethod
     def _venv_root(package, version):
         venv_root = Path.home() / ".justuse-python" / "venv" / package / version
         if not venv_root.exists():
             venv_root.mkdir(parents=True)
         return venv_root
 
+    @staticmethod
     def _venv_is_win():
         return sys.platform.lower().startswith("win")
 
+    @staticmethod
     def _venv_unix_path():
         ver = ".".join(map(str, sys.version_info[0:2]))
         return Path("lib") / f"python{ver}" / "site-packages"
 
+    @staticmethod
     def _venv_windows_path():
         return Path("Lib") / "site-packages"
 
@@ -697,16 +806,19 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         python_tag = info.get("python_tag", "")
         platform_tag = info.get("platform_tag", "")
         platform_srs = {*map(str, platform_tags)}
+        log.debug("_is_platform_compatible: %s", platform_srs)
         for one_platform_tag in platform_tag.split("."):
             if one_platform_tag in platform_srs and our_python_tag == python_tag:
-                log.info(
-                    f"[Y] %s in {platform_srs=!r}, %s == %s",
+                log.debug(
+                    '_is_platform_compatible:  - %30r in platform_srs?  %s',
                     one_platform_tag,
-                    python_tag,
-                    our_python_tag,
+                    one_platform_tag in platform_srs,
                 )
+
                 return True
-        return include_sdist and info["filename"].endswith(".egg")
+        return include_sdist and any(
+            info["filename"].endswith(ext) for ext in ("egg", "zip")
+        ) and "py2" not in info["filename"]
 
     @staticmethod
     def _find_matching_artifact(
@@ -718,7 +830,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         platform_tags=frozenset(),
         interpreter_tag=None,
         include_sdist=False,
-    ) -> VerHash:
+        return_info=False,
+    ) -> Union[VerHash|Dict[str,dict]]:
         """Pick from a list of possible urls and return the
         `(version, hash_value)`
         pair from the best-fitting artifact,
@@ -726,7 +839,11 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         info_s = sorted(urls, key=lambda i: i.get("packagetype", ""))
         for include_sdist in (False, True):  # prefer non-source
             results = [
-                VerHash(info["version"], info["digests"][hash_algo])
+                (
+                 VerHash(info["version"], info["digests"][hash_algo])
+                 if not return_info
+                 else info
+                )
                 for info in info_s
                 if Use._is_compatible(
                     info, hash_algo, sys_version, platform_tags, include_sdist
@@ -747,13 +864,15 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         """Return true if the artifact described by 'info'
         is compatible with the current or specified system."""
         assert isinstance(info, dict)
+        if not sys_version:
+            sys_version = Version(".".join(map(str, sys.version_info[0:3])))
+        if not platform_tags:
+            platform_tags = get_supported()
         if "platform_tag" not in info:
             info.update(Use._parse_filename(info["filename"]))
-        sys_version = sys_version or Version(".".join(map(str, sys.version_info[0:3])))
         assert isinstance(sys_version, Version)
-        platform_tags = platform_tags or get_supported()
-        return ".egg" not in info["filename"] and (
-            include_sdist
+        return (
+            (include_sdist and info["filename"][-4:] in (".zip",))
             or (
                 Use._is_version_satisfied(info, sys_version)
                 and Use._is_platform_compatible(info, platform_tags, include_sdist)
@@ -773,28 +892,25 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         platform_tags=frozenset(),
         interpreter_tag=None,
         version=None,
-    ) -> VerHash:
+        return_info=False,
+    ) -> Union[VerHash|Dict[str,dict]]:
         assert isinstance(releases, dict)
         assert isinstance(hash_algo, str)
         # update the release dicts to hold all info canonically
         # be aware, the json returned from pypi ["releases"] can
         # contain empty lists as dists :/
-        for ver, dists in releases.items():
-            if not dists:
-                continue
-            for d in dists:
-                d["version"] = ver  # Add version info
-                d.update(Use._parse_filename(d["filename"]))
-        for include_sdist in (False, True):  # prefer non-source
-            for ver, infos in sorted(
-                releases.items(), key=lambda item: Version(item[0]), reverse=True
-            ):
-                for info in dists:
-                    if Use._is_compatible(
-                        info, hash_algo, sys_version, platform_tags, include_sdist
-                    ):
-                        return VerHash(info["version"], info["digests"][hash_algo])
-        return VerHash.empty()
+        for ver, infos in reversed(releases.items()):
+            for info in infos:
+                info["version"] = ver
+            result = use._find_matching_artifact(
+                infos,
+                hash_algo=hash_algo,
+                sys_version=sys_version,
+                platform_tags=platform_tags,
+                return_info=return_info
+            )
+            if result:
+                return result
 
     @staticmethod
     def _varint_encode(number):
@@ -1157,7 +1273,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
     @staticmethod
     def _get_version(name=None, package_name=None, /, mod=None) -> Optional[Version]:
         assert name is None or isinstance(name, str)
-        version = None
+        version: Optional[Union[Callable[...],Version]|Version|str] = None
         for lookup_name in (name, package_name):
             if not lookup_name:
                 continue
@@ -1174,7 +1290,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             return Version(version)
         version = getattr(mod, "version", version)
         if callable(version):
-            vevsion = version()
+            version = version.__call__()
         if isinstance(version, str):
             return Version(version)
         return version
@@ -1240,6 +1356,51 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
         return self._ensure_proxy(mod)
+        
+    @staticmethod
+    def _get_package_data(package_name):
+        response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
+        data = response.json()
+        for v, infos in data["releases"].items():
+            for info in infos:
+                info["version"] = v
+                info.update(
+                    Use._parse_filename(info["filename"]) or {}
+                )
+        return data
+
+    @staticmethod
+    def _get_filtered_data(data):
+        filtered = { "urls": [], "releases": {} }
+        for ver, infos in data["releases"].items():
+            filtered["releases"][ver] = []
+            for info in infos:
+                info["version"] = ver
+                info.update(
+                    Use._parse_filename(info["filename"]) or {}
+                )
+                if not Use._is_compatible(
+                    info,
+                    hash_algo=Use.Hash.sha256.name,
+                    sys_version=None,
+                    platform_tags=None,
+                    include_sdist=False
+                ):
+                    continue
+                filtered["urls"].append(info)
+                filtered["releases"][ver].append(info)
+        if not filtered["urls"]:
+            for ver, infos in data["releases"].items():
+                for info in infos:
+                    if (info["packagetype"] == "sdist" and
+                        info["python_version"] == "source"
+                    ):
+                        filtered["urls"].append(info)
+                        filtered["releases"][ver].append(info)
+        for ver in data["releases"].keys():
+            if not filtered["releases"][ver]:
+                del filtered["releases"][ver]
+        return filtered
 
     @__call__.register(str)
     def _use_str(
@@ -1613,7 +1774,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 
             # trying to import directly from zip
             try:
-                importer = zipimport.zipimporter(path)
+                importer = zipimporter(path)
                 mod = importer.load_module(module_name)
                 print("Direct zipimport of", name, "successful.")
             except:

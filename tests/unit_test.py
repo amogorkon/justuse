@@ -1,7 +1,6 @@
 import functools
 import inspect
 import json
-import logging as log
 import os
 import re
 import sys
@@ -20,17 +19,28 @@ from furl import furl as URL
 
 from tests.simple_funcs import three
 
-if Path("use").is_dir():
-    os.chdir("..")
+if Path("src").is_dir():
+  sys.path.insert(0, "") if "" not in sys.path else None
+  lpath, rpath = (
+    sys.path[0:sys.path.index("")+1 ],
+    sys.path[  sys.path.index("")+2:])
+  try:
+    sys.path.clear()
+    sys.path.__iadd__(lpath + [os.path.join(os.getcwd(), "src")] + rpath)
+    import use
+  finally:
+    sys.path.clear()
+    sys.path.__iadd__(lpath + rpath)
 import_base = Path(__file__).parent.parent / "src"
-sys.path.insert(0, str(import_base))
 import use
 
 __package__ = "tests"
 
 import logging
-
-logging.root.setLevel(logging.DEBUG)
+log = logging.getLogger(".".join((__package__, __name__)))
+log.setLevel(
+  logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET
+)
 
 
 @pytest.fixture()
@@ -188,38 +198,40 @@ def test_pure_python_package(reuse):
 
 
 def suggested_artifact(*args, **kwargs):
-    import use
-    reuse = use
-    rw = None
-    try:
-        mod = reuse(*args, modes=reuse.auto_install | reuse.fatal_exceptions, **kwargs)
-    except RuntimeWarning as r:
-        rw = r
-    except BaseException as e:
-        raise AssertionError(
-            f"suggested_artifact failed for use("
-            f"{', '.join(map(repr, args))}, "
-            f"{', '.join(map(repr, kwargs.items()))}"
-            f"): {e}"
-        ) from e
-    assert rw
-    assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
-    assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
-    assert isinstance(rw.args[0], str)
-    match = re.search(
-        'version="?(?P<version>[^"]+)".*'
-        'hashes=?(?P<hashes>[^()]+), ',
-        str(rw),
-    )
-    assert match
-    hashes_evalstr = match.group("hashes")
-    log.debug("eval'ing the following string from rw message: %r",
-        hashes_evalstr)
-    hashes = eval(hashes_evalstr)
-    log.debug("eval'ed to the following value: %r", hashes)
-    assert isinstance(hashes, set), f"The wrong type of object is given in the warning message: {str(rw)}"
-    version = match.group("version")
-    return (version, hashes)
+  import use
+  reuse = use
+  rw = None
+  try:
+      mod = reuse(*args, modes=reuse.auto_install | reuse.fatal_exceptions, **kwargs)
+  except RuntimeWarning as r:
+      rw = r
+  except BaseException as e:
+      raise AssertionError(
+          f"suggested_artifact failed for use("
+          f"{', '.join(map(repr, args))}, "
+          f"{', '.join(map(repr, kwargs.items()))}"
+          f"): {e}"
+      ) from e
+  assert rw
+  assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
+  assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
+  assert isinstance(rw.args[0], str)
+  match = re.search(
+      'version="?(?P<version>[^"]+)".*'
+      'hashes=?(?P<hashes>[^()]+), ',
+      str(rw),
+  )
+  assert match
+  hashes_evalstr = match.group("hashes")
+  log.debug("eval'ing the following string from rw message: %r",
+      hashes_evalstr)
+  hashes = eval(hashes_evalstr)
+  log.debug("eval'ed to the following value: %r", hashes)
+  assert isinstance(
+      hashes,
+      set), f'The wrong type of object is given in the warning message: {rw}'
+  version = match.group("version")
+  return (version, hashes)
 
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="windows Auto-installing numpy")
