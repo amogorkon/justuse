@@ -86,6 +86,7 @@ from functools import singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from logging import DEBUG, NOTSET, WARN, StreamHandler, getLogger, root
+from packaging import tags
 from pathlib import Path
 from pkgutil import zipimporter
 from subprocess import check_output, run
@@ -126,7 +127,7 @@ def get_supported() -> FrozenSet[PlatformTag]:
             pass
         for tag in packaging.tags._platform_tags():
             items.append(PlatformTag(platform=str(tag)))
-        _supported = tags = frozenset(items)
+        _supported = tags = frozenset(items + ["any"])
         log.error(str(tags))
     return _supported
 
@@ -770,7 +771,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "(?P<python_tag>.*)-"
             "(?P<abi_tag>.*)-"
             "(?P<platform_tag>.*)\\."
-            "(?P<ext>whl|zip|egg)",
+            "(?P<ext>whl|zip|egg|tar|tar\\.gz)",
             filename,
         )
         return match.groupdict() if match else {}
@@ -778,12 +779,12 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     @staticmethod
     def _is_version_satisfied(info, sys_version):
         """
+        SpecifierSet("") matches anything, no need to artificially lock down versions at this point
+        
         @see https://warehouse.readthedocs.io/api-reference/json.html
         @see https://packaging.pypa.io/en/latest/specifiers.html
         """
-        specifier = info.get(
-            "requires_python", ""
-        )  # SpecifierSet("") matches anything, no need to artificially lock down versions at this point
+        specifier = info.get("requires_python", "")
         # f.. you PyPI
         return sys_version in SpecifierSet(specifier or "")
 
@@ -800,58 +801,28 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         assert isinstance(platform_tags, frozenset)
         if "platform_tag" not in info:
             info.update(Use._parse_filename(info["filename"]))
-        our_python_tag = "".join(
-            (packaging.tags.interpreter_name(), packaging.tags.interpreter_version())
-        )
+        our_python_tag = (
+            tags.interpreter_name() + tags.interpreter_version())
         python_tag = info.get("python_tag", "")
+        if python_tag == "py3": python_tag = our_python_tag
         platform_tag = info.get("platform_tag", "")
         platform_srs = {*map(str, platform_tags)}
-        log.debug("_is_platform_compatible: %s", platform_srs)
+        is_sdist = (info["packagetype"] == "sdist"
+                 or info["python_version"] == "source"
+                 or info.get("abi_tag", "") == "none")
+        reject = "py2" in info["filename"] or ".tar" in info["filename"]
+        if not platform_tag: platform_tag = "any"
+        if not python_tag:
+            python_tag = "cp"+ info["python_version"].replace(".","")
         for one_platform_tag in platform_tag.split("."):
-            if one_platform_tag in platform_srs and our_python_tag == python_tag:
-                log.debug(
-                    '_is_platform_compatible:  - %30r in platform_srs?  %s',
-                    one_platform_tag,
-                    one_platform_tag in platform_srs,
-                )
-
+            matches_platform = one_platform_tag in platform_srs
+            matches_python = our_python_tag == python_tag
+            if "VERBOSE" in os.environ: log.debug(
+                f"({matches_platform=} from {one_platform_tag=} and {matches_python=} from {python_tag=}) or ({include_sdist=} and {is_sdist=}) and not {reject=}:  {info['filename']}"
+            )
+            if (matches_platform and matches_python) or (include_sdist and is_sdist) and not reject:
                 return True
-        return include_sdist and any(
-            info["filename"].endswith(ext) for ext in ("egg", "zip")
-        ) and "py2" not in info["filename"]
-
-    @staticmethod
-    def _find_matching_artifact(
-        urls: List[Dict[str, Any]],
-        hash_algo=Hash.sha256.name,
-        *,
-        # for testability
-        sys_version=None,
-        platform_tags=frozenset(),
-        interpreter_tag=None,
-        include_sdist=False,
-        return_info=False,
-    ) -> Union[VerHash|Dict[str,dict]]:
-        """Pick from a list of possible urls and return the
-        `(version, hash_value)`
-        pair from the best-fitting artifact,
-        preferring bdist over sdist distribution archives."""
-        info_s = sorted(urls, key=lambda i: i.get("packagetype", ""))
-        for include_sdist in (False, True):  # prefer non-source
-            results = [
-                (
-                 VerHash(info["version"], info["digests"][hash_algo])
-                 if not return_info
-                 else info
-                )
-                for info in info_s
-                if Use._is_compatible(
-                    info, hash_algo, sys_version, platform_tags, include_sdist
-                )
-            ]
-            if results:
-                return results[0]
-        return VerHash.empty()
+        return False
 
     @staticmethod
     def _is_compatible(
@@ -872,45 +843,10 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             info.update(Use._parse_filename(info["filename"]))
         assert isinstance(sys_version, Version)
         return (
-            (include_sdist and info["filename"][-4:] in (".zip",))
-            or (
                 Use._is_version_satisfied(info, sys_version)
                 and Use._is_platform_compatible(info, platform_tags, include_sdist)
                 and not info["yanked"]
-            )
         )
-
-    @staticmethod
-    def _find_latest_working_version(
-        releases: Dict[
-            str, List[Dict[str, Any]]
-        ],  # {version: [{comment_text, filename, url, version, hash, build_tag, python_tag, abi_tag, platform_tag: str}]}
-        *,
-        hash_algo,
-        # testing
-        sys_version=None,
-        platform_tags=frozenset(),
-        interpreter_tag=None,
-        version=None,
-        return_info=False,
-    ) -> Union[VerHash|Dict[str,dict]]:
-        assert isinstance(releases, dict)
-        assert isinstance(hash_algo, str)
-        # update the release dicts to hold all info canonically
-        # be aware, the json returned from pypi ["releases"] can
-        # contain empty lists as dists :/
-        for ver, infos in reversed(releases.items()):
-            for info in infos:
-                info["version"] = ver
-            result = use._find_matching_artifact(
-                infos,
-                hash_algo=hash_algo,
-                sys_version=sys_version,
-                platform_tags=platform_tags,
-                return_info=return_info
-            )
-            if result:
-                return result
 
     @staticmethod
     def _varint_encode(number):
@@ -1360,6 +1296,10 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
     @staticmethod
     def _get_package_data(package_name):
         response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
+        if response.status_code == 404:
+            raise ImportError(f"Package {package_name!r} is not available on pypi; are you sure it exists?")
+        elif response.status_code != 200:
+            raise RuntimeWarning(f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hashes for the auto-installation was missing.")
         data = response.json()
         for v, infos in data["releases"].items():
             for info in infos:
@@ -1376,27 +1316,14 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             filtered["releases"][ver] = []
             for info in infos:
                 info["version"] = ver
-                info.update(
-                    Use._parse_filename(info["filename"]) or {}
-                )
                 if not Use._is_compatible(
                     info,
                     hash_algo=Use.Hash.sha256.name,
-                    sys_version=None,
-                    platform_tags=None,
                     include_sdist=False
                 ):
                     continue
                 filtered["urls"].append(info)
                 filtered["releases"][ver].append(info)
-        if not filtered["urls"]:
-            for ver, infos in data["releases"].items():
-                for info in infos:
-                    if (info["packagetype"] == "sdist" and
-                        info["python_version"] == "source"
-                    ):
-                        filtered["urls"].append(info)
-                        filtered["releases"][ver].append(info)
         for ver in data["releases"].keys():
             if not filtered["releases"][ver]:
                 del filtered["releases"][ver]
@@ -1577,22 +1504,11 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             # PEBKAC
             hit: VerHash = VerHash.empty()
             if target_version and not hashes:  # let's try to be helpful
-                response = requests.get(
-                    f"https://pypi.org/pypi/{package_name}/{target_version}/json"
-                )
-                if response.status_code == 404:
-                    raise RuntimeWarning(
-                        f"Are you sure {package_name} with version {version} exists?"
-                    )
-                elif response.status_code != 200:
-                    raise RuntimeWarning(
-                        f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hashes for the auto-installation was missing."
-                    )
-                data = response.json()
-
-                version, that_hash = hit = Use._find_matching_artifact(
-                    data["urls"], hash_algo=hash_algo.name
-                )
+                data = Use._get_filtered_data(Use._get_package_data(package_name))
+                version = target_version
+                entry = data["releases"][str(target_version)][-1]
+                that_hash = entry["digests"][hash_algo.name]
+                hit = (version, that_hash)
                 log.info(f"{hit=} from  Use._find_matching_artifact")
                 if that_hash:
                     if that_hash is not None:
@@ -1611,27 +1527,14 @@ use("{package_name}", version="{version}", hashes={hashes!r}, modes=use.auto_ins
                 )
             elif not target_version:
                 # let's try to make an educated guess and give a useful suggestion
-                response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
-                if response.status_code == 404:
-                    # possibly typo - PEBKAC
-                    raise RuntimeWarning(
-                        f"Are you sure package '{package_name}' "
-                        "exists? Could not find any package with "
-                        "that name on PyPI."
-                    )
-                elif response.status_code != 200:
-                    # possibly server problems
-                    return Use._fail_or_default(
-                        default,
-                        Use.AutoInstallationError,
-                        f"Tried to look up '{package_name}', but "
-                        "got a {response.status_code} from PyPI.",
-                    )
-
-                data = response.json()
-                version, hash_value = hit = Use._find_latest_working_version(
-                    data["releases"], hash_algo=hash_algo.name
-                )
+                data = Use._get_filtered_data(Use._get_package_data(package_name))
+                for ver, infos in reversed(data["releases"].items()):
+                    entry = infos[-1]
+                    if not hashes or entry["digests"][hash_algo.name] in hashes:
+                        
+                        hash_value = entry["digests"][hash_algo.name]
+                        version = ver
+                        hit = (version, hash_value)
 
                 if not hash_value:
                     raise RuntimeWarning(
@@ -1669,26 +1572,10 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             if path and not url:
                 url = URL(f"file:/{path.absolute()}")
             if not path:
-                response = requests.get(
-                    f"https://pypi.org/pypi/{package_name}/{target_version}/json"
-                )
-                if response.status_code != 200:
-                    return Use._fail_or_default(
-                        default,
-                        ImportError,
-                        f"Tried to auto-install '{package_name}' {target_version} but failed with {response} while trying to pull info from PyPI.",
-                    )
                 try:
-                    data = response.json()
-                    if "urls" not in data:
-                        return Use._fail_or_default(
-                            default,
-                            Use.AutoInstallationError,
-                            f"Tried to auto-install {package_name} {target_version} but failed because no valid URLs to download could be found.",
-                        )
-                    for entry in data["urls"]:
-                        if not entry["url"] or ":" not in entry["url"]:
-                            continue
+                    data = Use._get_filtered_data(Use._get_package_data(package_name))
+                    infos = data["releases"][str(target_version)]
+                    for entry in infos:
                         url = URL(entry["url"])
                         path = (
                             self.home
@@ -1701,6 +1588,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         assert isinstance(all_that_hash, set)
                         all_that_hash.add(that_hash := entry["digests"].get(hash_algo.name))
                         if hashes.intersection(all_that_hash):
+                            
                             found = (entry, that_hash)
                             hit = VerHash(version, that_hash)
                             log.info(f"Matches user hash: {entry=} {hit=}")
@@ -1709,7 +1597,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         return Use._fail_or_default(
                             default,
                             Use.AutoInstallationError,
-                            f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hash_value=!r} or {hashes=!r}).",
+                            f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hashes=!r}).",
                         )
                     entry, that_hash = found
                     hash_value = that_hash
@@ -1718,7 +1606,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         hashes.add(that_hash)
                 except KeyError as be:  # json issues
                     msg = f"request to https://pypi.org/pypi/{package_name}/{target_version}/json lead to an error: {be}"
-                    raise RuntimeError(msg, response) from be
+                    raise RuntimeError(msg) from be
                 if exc:
                     return Use._fail_or_default(
                         default,
