@@ -146,11 +146,19 @@ echo "Found an image to publish: [$file]" 1>&2
 
 
 orig_file="$file"
-BADGE_FILENAME="$( ( git remote -v | cut -f2 | sed -r -e 's~[\t ].*$~~; s~^.*\.(net|edu|com|org)[:/]~~; s~\.git$~~; s~/~-~g; ' | head -1; git branch -v -a | grep -Fe "*" | cut -d " " -f2; ) | tr -s $'\n ' '.' | sed -r -e 's~\.*$~~; s~^~coverage_~; '; echo -n ".svg"; )";
+
+IFS=$'\n'; remotes=($( git remote -v  | cut -f2 | cut -d: -f2 | cut -d/ -f1 | sort | uniq ))
+
+branch="$( git branch -v | grep -Fe "*" | head -1 | cut -d " " -f2; )"
+badge_filenames=( )
+for remote in "${remotes[@]}"; do
+  badge_filename="coverage_${remote}-${branch}.svg"
+  badge_filenames+=( "$badge_filename" )
+done
  
 if [ $( python3 -m coverage_badge | wc -c ) -gt 800 ]; then
   python3 -c "import coverage_badge" >/dev/null 2>&1 || python3 -m pip install --force-reinstall coverage-badge
-  for filename in "$orig_file" "$BADGE_FILENAME"; do
+  for filename in "$orig_file" "${badge_filenames[@]}"; do
       f="$file"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"; _dir="$dir"; f="$filename"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"; _fn="$fn"; f="$file"; fn="${f##*/}"
       fn="${filename##*/}"
       rm -vf -- "$file" || rmdir "$file"; python3 -m coverage_badge | cat -v | tee "$_dir/$_fn" | tee "$file"; 

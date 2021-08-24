@@ -190,7 +190,7 @@ def test_pure_python_package(reuse):
     test = reuse(
         "example-pypi-package.examplepy",
         version="0.1.0",
-        hashes="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77",
+        hashes={'3c1b4ddf718d85bde796a20cf3fdea254a33a4dc89129dff5bfc5b7cd760c86b', 'ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77',},
         modes=reuse.auto_install,
     )
     assert str(test.Number(2)) == "2"
@@ -378,18 +378,9 @@ def test_is_version_satisfied(reuse):
     assert reuse._is_version_satisfied(info, sys_version)
 
 
-@pytest.mark.skipif(
-    list(sys.version_info)[0:2] >= [3, 10],
-    reason="no binary distribution of google.protobuf is available for python >= 3.10 on Windows",
-)
 def test_find_windows_artifact(reuse):
-    package_name = "protobuf"
-    target_version = "3.17.3"
-    response = requests.get(
-        f"https://pypi.org/pypi/{package_name}/{target_version}/json"
-    ).json()
-    assert reuse._find_matching_artifact(response["urls"])
-
+    data = reuse._get_package_data("protobuf")
+    assert "3.17.3" in data["releases"]
 
 def test_parse_filename(reuse):
     assert reuse._parse_filename("protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl") == {
