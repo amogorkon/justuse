@@ -1,7 +1,7 @@
 # Snyk (https://snyk.io) policy file, patches or ignores known vulnerabilities.
 version: v1.14.0
 ignore:
-  'CWE-23':
-    - '* > src/use/use.py':
+  CWE-23:
+    - src > use > use.py:
       reason: 'The path stored in the database is not from user input'
       expires: '2030-01-01T00:00:00.000Z'
