@@ -1,0 +1,6 @@
+version: v0.4.1
+ignore:
+  'CWE-23':
+    - '* > src/use/use.py':
+      reason: 'The path stored in the database is not from user input'
+      expires: '2030-01-01T00:00:00.000Z'
