@@ -58,6 +58,7 @@ File-Hashing inspired by
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import atexit
 import codecs
@@ -69,7 +70,6 @@ import linecache
 import operator
 import os
 import re
-import shlex
 import signal
 import sqlite3
 import sys
@@ -77,20 +77,19 @@ import tempfile
 import threading
 import time
 import traceback
-import zipimport
-import operator
-
-from collections import defaultdict, namedtuple
+from collections import namedtuple
 from enum import Enum
 from functools import singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
+from inspect import getsource, isclass, stack
+from itertools import takewhile
 from logging import DEBUG, NOTSET, WARN, StreamHandler, getLogger, root
-from packaging import tags
 from pathlib import Path
 from pkgutil import zipimporter
 from subprocess import check_output, run
-from types import FrameType, ModuleType, TracebackType
+from textwrap import dedent
+from types import ModuleType
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, Union
 from warnings import warn
 
@@ -99,8 +98,69 @@ import packaging
 import requests
 import toml
 from furl import furl as URL
+from packaging import tags
 from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import Version as PkgVersion
+
+
+# Since we have a lot of functional code that black would turn into a sort of arrow antipattern with lots of ((())),
+# we use @pipe to basically enable polish notation which allows us to avoid most parentheses.
+# source >> func(args) is equivalent to func(source, args) and
+# source << func(args) is equivalent to func(args, source), which can be chained arbitrarily.
+# See https://github.com/robinhilliard/pipes/blob/master/pipeop/__init__.py for details.
+class _PipeTransformer(ast.NodeTransformer):
+    def visit_BinOp(self, node):
+        if not isinstance(node.op, (ast.LShift, ast.RShift)):
+            return node
+        if not isinstance(node.right, ast.Call):
+            return self.visit(
+                ast.Call(
+                    func=node.right,
+                    args=[node.left],
+                    keywords=[],
+                    starargs=None,
+                    kwargs=None,
+                    lineno=node.right.lineno,
+                    col_offset=node.right.col_offset,
+                )
+            )
+        node.right.args.insert(
+            0 if isinstance(node.op, ast.RShift) else len(node.right.args), node.left
+        )
+        return self.visit(node.right)
+
+
+def pipes(func_or_class):
+    if isclass(func_or_class):
+        decorator_frame = stack()[1]
+        ctx = decorator_frame[0].f_locals
+        first_line_number = decorator_frame[2]
+    else:
+        ctx = func_or_class.__globals__
+        first_line_number = func_or_class.__code__.co_firstlineno
+    source = getsource(func_or_class)
+    tree = ast.parse(dedent(source))
+    ast.increment_lineno(tree, first_line_number - 1)
+    source_indent = sum(1 for _ in takewhile(str.isspace, source)) + 1
+
+    for node in ast.walk(tree):
+        if hasattr(node, "col_offset"):
+            node.col_offset += source_indent
+    tree.body[0].decorator_list = [
+        d
+        for d in tree.body[0].decorator_list
+        if isinstance(d, ast.Call)
+        and d.func.id != "pipes"
+        or isinstance(d, ast.Name)
+        and d.id != "pipes"
+    ]
+
+    tree = _PipeTransformer().visit(tree)
+    code = compile(
+        tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec"
+    )
+    exec(code, ctx)
+    return ctx[tree.body[0].name]
 
 
 class PlatformTag(namedtuple("PlatformTag", ["platform"])):
@@ -132,6 +192,44 @@ def get_supported() -> FrozenSet[PlatformTag]:
     return _supported
 
 
+@pipes
+def _find_entry_point(package, version):
+    pkg_path = Use._venv_pkg_path(package, version)
+    rec_path = pkg_path / f"{package}-{version}.dist-info" / "RECORD"
+    contents = (
+        rec_path.read_text(encoding="UTF-8").strip().splitlines()
+        << map(functools.partialmethod(str.partition, ",")._make_unbound_method())
+        << map(operator.itemgetter(0))
+        >> list
+    )
+    contents_abs = contents << map(pkg_path.__truediv__) >> list
+    pkg_prefix = (
+        next(iter([c for c in contents_abs if c.name == "top_level.txt"]))
+        .read_text()
+        .strip()
+    )
+    if pkg_prefix != package:
+        entry_suffixes = (
+            Path(pkg_prefix) / package / "__init__.py",
+            Path(pkg_prefix) / f"{package}.py",
+        )
+    else:
+        entry_suffixes = (
+            Path(package) / "__init__.py",
+            Path(f"{package}.py"),
+        )
+    entry_path = (
+        contents_abs
+        << map(
+            lambda c: c if any(str(c).rfind(str(e)) != -1 for e in entry_suffixes) else None
+        )
+        << filter(None)
+        >> iter
+        >> next
+    )
+    return (pkg_prefix, entry_path)
+
+
 class VerHash(namedtuple("VerHash", ["version", "hash"])):
     @staticmethod
     def empty():
@@ -153,7 +251,7 @@ class VerHash(namedtuple("VerHash", ["version", "hash"])):
 
 
 # injected via initial_globals for testing, you can safely ignore this
-test_version = locals().get("test_version", None)
+test_version: str = locals().get("test_version", None)
 __version__ = test_version or "0.4.1"
 
 _reloaders: Dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
@@ -320,7 +418,6 @@ class ModuleReloader:
         atexit.unregister(self.stop)
 
 
-# an instance of types.ModuleType
 class Use(ModuleType):
     __name__ = __name__
     __file__ = __file__
@@ -358,9 +455,6 @@ class Use(ModuleType):
     class AutoInstallationError(ImportError):
         pass
 
-    class MissingHash(ValueError):
-        pass
-
     @staticmethod
     def dict_factory(cursor, row):
         return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
@@ -370,9 +464,8 @@ class Use(ModuleType):
         self._aspects = _aspects
         self._reloaders = _reloaders
         self.home: Path
-        self._hacks = (
-            {}
-        )  # {(name -> interval_tree of Version -> function} basically plugins/workarounds for specific packages/versions
+        # {(name -> interval_tree of Version -> function} basically plugins/workarounds for specific packages/versions
+        self._hacks = {}
 
         self._set_up_files_and_directories()
         # might run into issues during testing otherwise
@@ -609,16 +702,14 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         venv_bin = venv_root / "bin"
         python_exe = Path(sys.executable).stem
         if not venv_bin.exists():
-             check_output(
-                [
-                    python_exe, "-m", "venv",
-                    "--system-site-packages",
-                    venv_root
-                ],
-                encoding="UTF-8"
-             )
+            check_output(
+                [python_exe, "-m", "venv", "--system-site-packages", venv_root],
+                encoding="UTF-8",
+            )
         pip_args = (
-            python_exe, "-m", "pip",
+            python_exe,
+            "-m",
+            "pip",
             "--no-python-version-warning",
             "--disable-pip-version-check",
             "--no-color",
@@ -626,8 +717,10 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "--progress-bar",
             "ascii",
             "--prefer-binary",
-            "--exists-action", "b",
-            "--only-binary", ":all:",
+            "--exists-action",
+            "b",
+            "--only-binary",
+            ":all:",
             "--no-build-isolation",
             "--no-use-pep517",
             "--no-compile",
@@ -640,27 +733,21 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         pkg_path = Use._venv_pkg_path(package, version)
         if Use._venv_is_win():
             output = run(
-                [
-                  "cmd.exe", "/C",
-                  "set", f"PATH={venv_path_var}", "&",
-                  *pip_args
-                ],
+                ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
                 encoding="UTF-8",
-                stderr=sys.stderr
+                stderr=sys.stderr,
             )
         else:
             output = run(
                 ["env", f"PATH={venv_path_var}", *pip_args],
                 encoding="UTF-8",
-                stderr=sys.stderr
+                stderr=sys.stderr,
             )
         log.debug("pip subprocess output=%r", output)
         orig_cwd = Path.cwd()
         try:
             os.chdir(pkg_path)
-            pkg_prefix, entry_module_path = Use._find_entry_point(
-                package, version
-            )
+            pkg_prefix, entry_module_path = Use._find_entry_point(package, version)
             path = entry_module_path.absolute()
             with open(path, "rb") as f:
                 code = f.read()
@@ -673,11 +760,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     module_path=path,
                     initial_globals={},
                     aspectize={},
-                    package=(pkg_prefix or package)
+                    package=(pkg_prefix or package),
                 )
-                log.debug(
-                  f"module returned from _load_venv_mod: {mod}"
-                )
+                log.debug(f"module returned from _load_venv_mod: {mod}")
                 return mod
         finally:
             os.chdir(orig_cwd)
@@ -691,49 +776,16 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             return venv_root / Use._venv_unix_path()
 
     @staticmethod
-    def _find_entry_point(package, version):
-        pkg_path = Use._venv_pkg_path(package, version)
-        rec_path = (pkg_path
-            / f'{package}-{version}.dist-info'
-            / 'RECORD')
-        contents = list(
-          map(
-            operator.itemgetter(0),
-            map(
-              functools.partialmethod(
-                str.partition, ',')._make_unbound_method(),
-              rec_path.read_text(
-                  encoding='UTF-8'
-              ).strip().splitlines()
-            )
-          )
-        )
-        contents_abs = list(map(pkg_path.__truediv__, contents))
-        pkg_prefix = next(iter([
-          c for c in contents_abs if c.name == 'top_level.txt'
-        ])).read_text().strip()
-        if pkg_prefix != package:
-            entry_suffixes = (
-              Path(pkg_prefix)/package/'__init__.py',
-              Path(pkg_prefix)/f'{package}.py',
-            )
-        else:
-            entry_suffixes = (
-              Path(package)/'__init__.py',
-              Path(f'{package}.py'),
-            )
-        entry_path = next(iter(
-          filter(None, map(
-            lambda c: c if any(str(c).rfind(str(e)) != -1 \
-                            for e in entry_suffixes) else None,
-            contents_abs
-          ))
-        ))
-        return (pkg_prefix, entry_path)
-
-    @staticmethod
     def _clean_sys_modules(package):
-        del_mods = dict([(k, v.__spec__.loader) for k,v in sys.modules.items() if getattr(v, "__spec__", None) and isinstance(v.__spec__.loader, SourceFileLoader) and (k.startswith(f"{package}.") or k == package)])
+        del_mods = dict(
+            [
+                (k, v.__spec__.loader)
+                for k, v in sys.modules.items()
+                if getattr(v, "__spec__", None)
+                and isinstance(v.__spec__.loader, SourceFileLoader)
+                and (k.startswith(f"{package}.") or k == package)
+            ]
+        )
         for k in del_mods:
             del sys.modules[k]
 
@@ -763,6 +815,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
         {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
         """
+        # Filename as API, seriously WTF...
         assert isinstance(filename, str)
         match = re.match(
             "(?P<distribution>.*)-"
@@ -780,7 +833,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     def _is_version_satisfied(info, sys_version):
         """
         SpecifierSet("") matches anything, no need to artificially lock down versions at this point
-        
+
         @see https://warehouse.readthedocs.io/api-reference/json.html
         @see https://packaging.pypa.io/en/latest/specifiers.html
         """
@@ -794,33 +847,38 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         platform_tags,
         include_sdist=False,
     ):
-        """
-        Filename as API, seriously WTF...
-        """
         assert isinstance(info, dict)
         assert isinstance(platform_tags, frozenset)
         if "platform_tag" not in info:
             info.update(Use._parse_filename(info["filename"]))
-        our_python_tag = (
-            tags.interpreter_name() + tags.interpreter_version())
+        our_python_tag = tags.interpreter_name() + tags.interpreter_version()
         python_tag = info.get("python_tag", "")
-        if python_tag == "py3": python_tag = our_python_tag
+        if python_tag == "py3":
+            python_tag = our_python_tag
         platform_tag = info.get("platform_tag", "")
         platform_srs = {*map(str, platform_tags)}
-        is_sdist = (info["packagetype"] == "sdist"
-                 or info["python_version"] == "source"
-                 or info.get("abi_tag", "") == "none")
+        is_sdist = (
+            info["packagetype"] == "sdist"
+            or info["python_version"] == "source"
+            or info.get("abi_tag", "") == "none"
+        )
         reject = "py2" in info["filename"] or ".tar" in info["filename"]
-        if not platform_tag: platform_tag = "any"
+        if not platform_tag:
+            platform_tag = "any"
         if not python_tag:
-            python_tag = "cp"+ info["python_version"].replace(".","")
+            python_tag = "cp" + info["python_version"].replace(".", "")
         for one_platform_tag in platform_tag.split("."):
             matches_platform = one_platform_tag in platform_srs
             matches_python = our_python_tag == python_tag
-            if "VERBOSE" in os.environ: log.debug(
-                f"({matches_platform=} from {one_platform_tag=} and {matches_python=} from {python_tag=}) or ({include_sdist=} and {is_sdist=}) and not {reject=}:  {info['filename']}"
-            )
-            if (matches_platform and matches_python) or (include_sdist and is_sdist) and not reject:
+            if "VERBOSE" in os.environ:
+                log.debug(
+                    f"({matches_platform=} from {one_platform_tag=} and {matches_python=} from {python_tag=}) or ({include_sdist=} and {is_sdist=}) and not {reject=}:  {info['filename']}"
+                )
+            if (
+                (matches_platform and matches_python)
+                or (include_sdist and is_sdist)
+                and not reject
+            ):
                 return True
         return False
 
@@ -843,9 +901,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             info.update(Use._parse_filename(info["filename"]))
         assert isinstance(sys_version, Version)
         return (
-                Use._is_version_satisfied(info, sys_version)
-                and Use._is_platform_compatible(info, platform_tags, include_sdist)
-                and not info["yanked"]
+            Use._is_version_satisfied(info, sys_version)
+            and Use._is_platform_compatible(info, platform_tags, include_sdist)
+            and not info["yanked"]
         )
 
     @staticmethod
@@ -883,7 +941,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         aspectize_dunders=aspectize_dunders,
         package=None,
     ) -> ModuleType:
-        default
         mod = ModuleType(name)
         mod.__dict__.update(initial_globals or {})
         mod.__file__ = str(module_path)
@@ -1209,7 +1266,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
     @staticmethod
     def _get_version(name=None, package_name=None, /, mod=None) -> Optional[Version]:
         assert name is None or isinstance(name, str)
-        version: Optional[Union[Callable[...],Version]|Version|str] = None
+        version: Optional[Union[Callable[...], Version] | Version | str] = None
         for lookup_name in (name, package_name):
             if not lookup_name:
                 continue
@@ -1292,34 +1349,34 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
         return self._ensure_proxy(mod)
-        
+
     @staticmethod
     def _get_package_data(package_name):
         response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
         if response.status_code == 404:
-            raise ImportError(f"Package {package_name!r} is not available on pypi; are you sure it exists?")
+            raise ImportError(
+                f"Package {package_name!r} is not available on pypi; are you sure it exists?"
+            )
         elif response.status_code != 200:
-            raise RuntimeWarning(f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hashes for the auto-installation was missing.")
+            raise RuntimeWarning(
+                f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hashes for the auto-installation was missing."
+            )
         data = response.json()
         for v, infos in data["releases"].items():
             for info in infos:
                 info["version"] = v
-                info.update(
-                    Use._parse_filename(info["filename"]) or {}
-                )
+                info.update(Use._parse_filename(info["filename"]) or {})
         return data
 
     @staticmethod
     def _get_filtered_data(data):
-        filtered = { "urls": [], "releases": {} }
+        filtered = {"urls": [], "releases": {}}
         for ver, infos in data["releases"].items():
             filtered["releases"][ver] = []
             for info in infos:
                 info["version"] = ver
                 if not Use._is_compatible(
-                    info,
-                    hash_algo=Use.Hash.sha256.name,
-                    include_sdist=False
+                    info, hash_algo=Use.Hash.sha256.name, include_sdist=False
                 ):
                     continue
                 filtered["urls"].append(info)
@@ -1531,7 +1588,7 @@ use("{package_name}", version="{version}", hashes={hashes!r}, modes=use.auto_ins
                 for ver, infos in reversed(data["releases"].items()):
                     entry = infos[-1]
                     if not hashes or entry["digests"][hash_algo.name] in hashes:
-                        
+
                         hash_value = entry["digests"][hash_algo.name]
                         version = ver
                         hit = (version, hash_value)
@@ -1588,7 +1645,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                         assert isinstance(all_that_hash, set)
                         all_that_hash.add(that_hash := entry["digests"].get(hash_algo.name))
                         if hashes.intersection(all_that_hash):
-                            
+
                             found = (entry, that_hash)
                             hit = VerHash(version, that_hash)
                             log.info(f"Matches user hash: {entry=} {hit=}")
@@ -1710,7 +1767,7 @@ Use.Path = Path
 Use.URL = URL
 Use.__path__ = str(Path(__file__).resolve().parent)
 Use.__name__ = __name__
-
+Use._find_entry_point = _find_entry_point
 
 use = Use()
 if not test_version:

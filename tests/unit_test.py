@@ -1,46 +1,39 @@
 import functools
-import inspect
-import json
 import os
 import re
 import sys
 import tempfile
 import warnings
-from collections import defaultdict
 from pathlib import Path
 from threading import _shutdown_locks
-from types import MethodType
 
 import packaging.tags
 import packaging.version
 import pytest
-import requests
 from furl import furl as URL
 
+# this is actually a test!
 from tests.simple_funcs import three
 
 if Path("src").is_dir():
-  sys.path.insert(0, "") if "" not in sys.path else None
-  lpath, rpath = (
-    sys.path[0:sys.path.index("")+1 ],
-    sys.path[  sys.path.index("")+2:])
-  try:
-    sys.path.clear()
-    sys.path.__iadd__(lpath + [os.path.join(os.getcwd(), "src")] + rpath)
-    import use
-  finally:
-    sys.path.clear()
-    sys.path.__iadd__(lpath + rpath)
+    sys.path.insert(0, "") if "" not in sys.path else None
+    lpath, rpath = (sys.path[0 : sys.path.index("") + 1], sys.path[sys.path.index("") + 2 :])
+    try:
+        sys.path.clear()
+        sys.path.__iadd__(lpath + [os.path.join(os.getcwd(), "src")] + rpath)
+        import use
+    finally:
+        sys.path.clear()
+        sys.path.__iadd__(lpath + rpath)
 import_base = Path(__file__).parent.parent / "src"
 import use
 
 __package__ = "tests"
 
 import logging
+
 log = logging.getLogger(".".join((__package__, __name__)))
-log.setLevel(
-  logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET
-)
+log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)
 
 
 @pytest.fixture()
@@ -190,7 +183,10 @@ def test_pure_python_package(reuse):
     test = reuse(
         "example-pypi-package.examplepy",
         version="0.1.0",
-        hashes={'3c1b4ddf718d85bde796a20cf3fdea254a33a4dc89129dff5bfc5b7cd760c86b', 'ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77',},
+        hashes={
+            "3c1b4ddf718d85bde796a20cf3fdea254a33a4dc89129dff5bfc5b7cd760c86b",
+            "ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77",
+        },
         modes=reuse.auto_install,
     )
     assert str(test.Number(2)) == "2"
@@ -198,40 +194,39 @@ def test_pure_python_package(reuse):
 
 
 def suggested_artifact(*args, **kwargs):
-  import use
-  reuse = use
-  rw = None
-  try:
-      mod = reuse(*args, modes=reuse.auto_install | reuse.fatal_exceptions, **kwargs)
-  except RuntimeWarning as r:
-      rw = r
-  except BaseException as e:
-      raise AssertionError(
-          f"suggested_artifact failed for use("
-          f"{', '.join(map(repr, args))}, "
-          f"{', '.join(map(repr, kwargs.items()))}"
-          f"): {e}"
-      ) from e
-  assert rw
-  assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
-  assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
-  assert isinstance(rw.args[0], str)
-  match = re.search(
-      'version="?(?P<version>[^"]+)".*'
-      'hashes=?(?P<hashes>[^()]+), ',
-      str(rw),
-  )
-  assert match
-  hashes_evalstr = match.group("hashes")
-  log.debug("eval'ing the following string from rw message: %r",
-      hashes_evalstr)
-  hashes = eval(hashes_evalstr)
-  log.debug("eval'ed to the following value: %r", hashes)
-  assert isinstance(
-      hashes,
-      set), f'The wrong type of object is given in the warning message: {rw}'
-  version = match.group("version")
-  return (version, hashes)
+    import use
+
+    reuse = use
+    rw = None
+    try:
+        mod = reuse(*args, modes=reuse.auto_install | reuse.fatal_exceptions, **kwargs)
+    except RuntimeWarning as r:
+        rw = r
+    except BaseException as e:
+        raise AssertionError(
+            f"suggested_artifact failed for use("
+            f"{', '.join(map(repr, args))}, "
+            f"{', '.join(map(repr, kwargs.items()))}"
+            f"): {e}"
+        ) from e
+    assert rw
+    assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
+    assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
+    assert isinstance(rw.args[0], str)
+    match = re.search(
+        'version="?(?P<version>[^"]+)".*' "hashes=?(?P<hashes>[^()]+), ",
+        str(rw),
+    )
+    assert match
+    hashes_evalstr = match.group("hashes")
+    log.debug("eval'ing the following string from rw message: %r", hashes_evalstr)
+    hashes = eval(hashes_evalstr)
+    log.debug("eval'ed to the following value: %r", hashes)
+    assert isinstance(
+        hashes, set
+    ), f"The wrong type of object is given in the warning message: {rw}"
+    version = match.group("version")
+    return (version, hashes)
 
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="windows Auto-installing numpy")
@@ -382,6 +377,7 @@ def test_find_windows_artifact(reuse):
     data = reuse._get_package_data("protobuf")
     assert "3.17.3" in data["releases"]
 
+
 def test_parse_filename(reuse):
     assert reuse._parse_filename("protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl") == {
         "distribution": "protobuf",
@@ -430,6 +426,9 @@ def test_classic_import_diff_version(reuse):
         assert reuse.Version(mod.__version__) == version
 
 
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="code lines can't be looked up? # TODO"
+)
 def test_use_ugrade_version_warning(reuse):
     version = "0.0.0"
     with warnings.catch_warnings(record=True) as w:
@@ -489,7 +488,7 @@ def double_function(func):
     return wrapper
 
 
-def test_aspectize(reuse):
+def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     # baseline
     mod = reuse(reuse.Path("simple_funcs.py"))
     assert mod.two() == 2
