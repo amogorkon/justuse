@@ -274,6 +274,20 @@ def _venv_windows_path():
     return Path("Lib") / "site-packages"
 
 
+def isfunction(x):
+    return inspect.isfunction(x)
+
+
+def ismethod(x):
+    return inspect.ismethod(x)
+
+
+# decorators for callable classes require a completely different approach i'm afraid.. removing the check should discourage users from trying
+# @staticmethod
+# def isclass(x):
+#     return inspect.isclass(x) and hasattr(x, "__call__")
+
+
 def _load_venv_mod(package, version):
     venv_root = _venv_root(package, version)
     venv_bin = venv_root / "bin"
@@ -429,6 +443,42 @@ def methdispatch(func):
     wrapper.register = dispatcher.register
     update_wrapper(wrapper, func)
     return wrapper
+
+
+def _get_package_data(package_name):
+    response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
+    if response.status_code == 404:
+        raise ImportError(
+            f"Package {package_name!r} is not available on pypi; are you sure it exists?"
+        )
+    elif response.status_code != 200:
+        raise RuntimeWarning(
+            f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hashes for the auto-installation was missing."
+        )
+    data = response.json()
+    for v, infos in data["releases"].items():
+        for info in infos:
+            info["version"] = v
+            info.update(Use._parse_filename(info["filename"]) or {})
+    return data
+
+
+def _get_filtered_data(data):
+    filtered = {"urls": [], "releases": {}}
+    for ver, infos in data["releases"].items():
+        filtered["releases"][ver] = []
+        for info in infos:
+            info["version"] = ver
+            if not Use._is_compatible(
+                info, hash_algo=Use.Hash.sha256.name, include_sdist=False
+            ):
+                continue
+            filtered["urls"].append(info)
+            filtered["releases"][ver].append(info)
+    for ver in data["releases"].keys():
+        if not filtered["releases"][ver]:
+            del filtered["releases"][ver]
+    return filtered
 
 
 class ProxyModule(ModuleType):
@@ -799,22 +849,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         """Helper to get the order right."""
         self._using[name] = Use.ModInUse(name, mod, path, spec, frame)
 
-    # hoisted functions - formerly module globals
-    # staticmethods because module globals aren't reachable in tests while there should be no temptation for side effects via self
-
-    @staticmethod
-    def isfunction(x):
-        return inspect.isfunction(x)
-
-    @staticmethod
-    def ismethod(x):
-        return inspect.ismethod(x)
-
-    # decorators for callable classes require a completely different approach i'm afraid.. removing the check should discourage users from trying
-    # @staticmethod
-    # def isclass(x):
-    #     return inspect.isclass(x) and hasattr(x, "__call__")
-
     @staticmethod
     def _parse_filename(filename) -> dict:
         """Match the filename and return a dict of parts.
@@ -978,7 +1012,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
     @staticmethod
     def _fail_or_default(default, exception, msg):
-        if default is not Use.mode.fastfail:
+        if default is not mode.fastfail:
             return default
         else:
             raise exception(msg)
@@ -1356,42 +1390,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         self._set_mod(name=name, mod=mod, frame=frame)
         return self._ensure_proxy(mod)
 
-    @staticmethod
-    def _get_package_data(package_name):
-        response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
-        if response.status_code == 404:
-            raise ImportError(
-                f"Package {package_name!r} is not available on pypi; are you sure it exists?"
-            )
-        elif response.status_code != 200:
-            raise RuntimeWarning(
-                f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hashes for the auto-installation was missing."
-            )
-        data = response.json()
-        for v, infos in data["releases"].items():
-            for info in infos:
-                info["version"] = v
-                info.update(Use._parse_filename(info["filename"]) or {})
-        return data
-
-    @staticmethod
-    def _get_filtered_data(data):
-        filtered = {"urls": [], "releases": {}}
-        for ver, infos in data["releases"].items():
-            filtered["releases"][ver] = []
-            for info in infos:
-                info["version"] = ver
-                if not Use._is_compatible(
-                    info, hash_algo=Use.Hash.sha256.name, include_sdist=False
-                ):
-                    continue
-                filtered["urls"].append(info)
-                filtered["releases"][ver].append(info)
-        for ver in data["releases"].keys():
-            if not filtered["releases"][ver]:
-                del filtered["releases"][ver]
-        return filtered
-
     @__call__.register(str)
     def _use_str(
         self,
@@ -1567,7 +1565,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             # PEBKAC
             hit: VerHash = VerHash.empty()
             if target_version and not hashes:  # let's try to be helpful
-                data = Use._get_filtered_data(Use._get_package_data(package_name))
+                data = _get_filtered_data(_get_package_data(package_name))
                 version = target_version
                 entry = data["releases"][str(target_version)][-1]
                 that_hash = entry["digests"][hash_algo.name]
@@ -1590,7 +1588,7 @@ use("{package_name}", version="{version}", hashes={hashes!r}, modes=use.auto_ins
                 )
             elif not target_version:
                 # let's try to make an educated guess and give a useful suggestion
-                data = Use._get_filtered_data(Use._get_package_data(package_name))
+                data = _get_filtered_data(_get_package_data(package_name))
                 for ver, infos in reversed(data["releases"].items()):
                     entry = infos[-1]
                     if not hashes or entry["digests"][hash_algo.name] in hashes:
@@ -1636,7 +1634,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 url = URL(f"file:/{path.absolute()}")
             if not path:
                 try:
-                    data = Use._get_filtered_data(Use._get_package_data(package_name))
+                    data = _get_filtered_data(_get_package_data(package_name))
                     infos = data["releases"][str(target_version)]
                     for entry in infos:
                         url = URL(entry["url"])
