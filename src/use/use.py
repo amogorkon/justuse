@@ -325,7 +325,7 @@ def _load_venv_mod(package, version):
     orig_cwd = Path.cwd()
     try:
         os.chdir(pkg_path)
-        pkg_prefix, entry_module_path = Use._find_entry_point(package, version)
+        pkg_prefix, entry_module_path = _find_entry_point(package, version)
         path = entry_module_path.absolute()
         with open(path, "rb") as f:
             code = f.read()
@@ -1767,7 +1767,6 @@ Use.Path = Path
 Use.URL = URL
 Use.__path__ = str(Path(__file__).resolve().parent)
 Use.__name__ = __name__
-Use._find_entry_point = _find_entry_point
 Use._load_venv_mod = staticmethod(_load_venv_mod)
 
 use = Use()
