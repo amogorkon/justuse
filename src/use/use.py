@@ -79,12 +79,13 @@ import time
 import traceback
 from collections import namedtuple
 from enum import Enum
-from functools import singledispatch, update_wrapper
+from functools import partialmethod, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
 from itertools import takewhile
 from logging import DEBUG, NOTSET, WARN, StreamHandler, getLogger, root
+from operator import itemgetter
 from pathlib import Path
 from pkgutil import zipimporter
 from subprocess import check_output, run
@@ -192,22 +193,28 @@ def get_supported() -> FrozenSet[PlatformTag]:
     return _supported
 
 
+def partial(method: Callable[[...],Any], *args) -> functools.partial[Any]:
+    return partialmethod(method, *args)._make_unbound_method()
+
+
+def lines_from(path: Path) -> List[str]:
+    return path.read_text(encoding="UTF-8").strip().splitlines()
+
 @pipes
 def _find_entry_point(package, version):
-    pkg_path = Use._venv_pkg_path(package, version)
+    pkg_path = _venv_pkg_path(package, version)
     rec_path = pkg_path / f"{package}-{version}.dist-info" / "RECORD"
-    contents = (
-        rec_path.read_text(encoding="UTF-8").strip().splitlines()
-        << map(functools.partialmethod(str.partition, ",")._make_unbound_method())
-        << map(operator.itemgetter(0))
-        >> list
+    contents = list(
+        lines_from(rec_path)
+        << map(partial(str.partition, ","))
+        << map(itemgetter(0))
     )
-    contents_abs = contents << map(pkg_path.__truediv__) >> list
-    pkg_prefix = (
-        next(iter([c for c in contents_abs if c.name == "top_level.txt"]))
-        .read_text()
-        .strip()
-    )
+    contents_abs = list(contents << map(pkg_path.__truediv__))
+    pkg_prefix: str
+    for c in contents_abs:
+        if c.name == "top_level.txt":
+            pkg_prefix = lines_from(c)[0]
+            break
     if pkg_prefix != package:
         entry_suffixes = (
             Path(pkg_prefix) / package / "__init__.py",
@@ -218,26 +225,133 @@ def _find_entry_point(package, version):
             Path(package) / "__init__.py",
             Path(f"{package}.py"),
         )
-    entry_path = (
-        contents_abs
-        << map(
-            lambda c: c if any(str(c).rfind(str(e)) != -1 for e in entry_suffixes) else None
-        )
-        << filter(None)
-        >> iter
-        >> next
-    )
+    entry_path: str
+    for c in contents_abs:
+        if any(str(c).rfind(str(e)) != -1 for e in entry_suffixes):
+            entry_path = c
+            break
     return (pkg_prefix, entry_path)
+    
+    
+def _venv_pkg_path(package, version):
+    venv_root = _venv_root(package, version)
+    if _venv_is_win():
+        return venv_root / _venv_windows_path()
+    else:
+        return venv_root / _venv_unix_path()
+
+
+def _clean_sys_modules(package):
+    del_mods = dict(
+        [
+            (k, v.__spec__.loader)
+            for k, v in sys.modules.items()
+            if getattr(v, "__spec__", None)
+            and isinstance(v.__spec__.loader, SourceFileLoader)
+            and (k.startswith(f"{package}.") or k == package)
+        ]
+    )
+    for k in del_mods:
+        del sys.modules[k]
+
+
+def _venv_root(package, version):
+    venv_root = Path.home() / ".justuse-python" / "venv" / package / version
+    if not venv_root.exists():
+        venv_root.mkdir(parents=True)
+    return venv_root
+
+
+def _venv_is_win():
+    return sys.platform.lower().startswith("win")
+
+
+def _venv_unix_path():
+    ver = ".".join(map(str, sys.version_info[0:2]))
+    return Path("lib") / f"python{ver}" / "site-packages"
+
+
+def _venv_windows_path():
+    return Path("Lib") / "site-packages"
+
+
+def _load_venv_mod(package, version):
+    venv_root = _venv_root(package, version)
+    venv_bin = venv_root / "bin"
+    python_exe = Path(sys.executable).stem
+    if not venv_bin.exists():
+        check_output(
+            [python_exe, "-m", "venv", "--system-site-packages", venv_root],
+            encoding="UTF-8",
+        )
+    pip_args = (
+        python_exe,
+        "-m",
+        "pip",
+        "--no-python-version-warning",
+        "--disable-pip-version-check",
+        "--no-color",
+        "install",
+        "--progress-bar",
+        "ascii",
+        "--prefer-binary",
+        "--exists-action",
+        "b",
+        "--only-binary",
+        ":all:",
+        "--no-build-isolation",
+        "--no-use-pep517",
+        "--no-compile",
+        "--no-warn-script-location",
+        "--no-warn-conflicts",
+        f"{package}=={version}",
+    )
+    current_path = os.environ.get("PATH")
+    venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
+    pkg_path = _venv_pkg_path(package, version)
+    if _venv_is_win():
+        output = run(
+            ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
+            encoding="UTF-8",
+            stderr=sys.stderr,
+        )
+    else:
+        output = run(
+            ["env", f"PATH={venv_path_var}", *pip_args],
+            encoding="UTF-8",
+            stderr=sys.stderr,
+        )
+    log.debug("pip subprocess output=%r", output)
+    orig_cwd = Path.cwd()
+    try:
+        os.chdir(pkg_path)
+        pkg_prefix, entry_module_path = Use._find_entry_point(package, version)
+        path = entry_module_path.absolute()
+        with open(path, "rb") as f:
+            code = f.read()
+            _clean_sys_modules(package)
+            _clean_sys_modules(pkg_prefix)
+            _clean_sys_modules(f"{pkg_prefix}.{package}")
+            mod = use._build_mod(
+                name=package,
+                code=code,
+                module_path=path,
+                initial_globals={},
+                aspectize={},
+                package=(pkg_prefix or package),
+            )
+            log.debug(f"module returned from _load_venv_mod: {mod}")
+            return mod
+    finally:
+        os.chdir(orig_cwd)
 
 
 class VerHash(namedtuple("VerHash", ["version", "hash"])):
     @staticmethod
     def empty():
         return VerHash("", "")
-
     def __bool__(self):
         return bool(self.version and self.hash)
-
     def __eq__(self, other):
         if other is None or not hasattr(other, "__len__") or len(other) != len(self):
             return False
@@ -245,7 +359,6 @@ class VerHash(namedtuple("VerHash", ["version", "hash"])):
             Version(str(self.version)) == Version(str([*other][0]))
             and self.hash == [*other][1]
         )
-
     def __ne__(self, other):
         return not self.__eq__(other)
 
@@ -695,119 +808,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     # @staticmethod
     # def isclass(x):
     #     return inspect.isclass(x) and hasattr(x, "__call__")
-
-    @staticmethod
-    def _load_venv_mod(package, version):
-        venv_root = Use._venv_root(package, version)
-        venv_bin = venv_root / "bin"
-        python_exe = Path(sys.executable).stem
-        if not venv_bin.exists():
-            check_output(
-                [python_exe, "-m", "venv", "--system-site-packages", venv_root],
-                encoding="UTF-8",
-            )
-        pip_args = (
-            python_exe,
-            "-m",
-            "pip",
-            "--no-python-version-warning",
-            "--disable-pip-version-check",
-            "--no-color",
-            "install",
-            "--progress-bar",
-            "ascii",
-            "--prefer-binary",
-            "--exists-action",
-            "b",
-            "--only-binary",
-            ":all:",
-            "--no-build-isolation",
-            "--no-use-pep517",
-            "--no-compile",
-            "--no-warn-script-location",
-            "--no-warn-conflicts",
-            f"{package}=={version}",
-        )
-        current_path = os.environ.get("PATH")
-        venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
-        pkg_path = Use._venv_pkg_path(package, version)
-        if Use._venv_is_win():
-            output = run(
-                ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
-                encoding="UTF-8",
-                stderr=sys.stderr,
-            )
-        else:
-            output = run(
-                ["env", f"PATH={venv_path_var}", *pip_args],
-                encoding="UTF-8",
-                stderr=sys.stderr,
-            )
-        log.debug("pip subprocess output=%r", output)
-        orig_cwd = Path.cwd()
-        try:
-            os.chdir(pkg_path)
-            pkg_prefix, entry_module_path = Use._find_entry_point(package, version)
-            path = entry_module_path.absolute()
-            with open(path, "rb") as f:
-                code = f.read()
-                Use._clean_sys_modules(package)
-                Use._clean_sys_modules(pkg_prefix)
-                Use._clean_sys_modules(f"{pkg_prefix}.{package}")
-                mod = use._build_mod(
-                    name=package,
-                    code=code,
-                    module_path=path,
-                    initial_globals={},
-                    aspectize={},
-                    package=(pkg_prefix or package),
-                )
-                log.debug(f"module returned from _load_venv_mod: {mod}")
-                return mod
-        finally:
-            os.chdir(orig_cwd)
-
-    @staticmethod
-    def _venv_pkg_path(package, version):
-        venv_root = Use._venv_root(package, version)
-        if Use._venv_is_win():
-            return venv_root / Use._venv_windows_path()
-        else:
-            return venv_root / Use._venv_unix_path()
-
-    @staticmethod
-    def _clean_sys_modules(package):
-        del_mods = dict(
-            [
-                (k, v.__spec__.loader)
-                for k, v in sys.modules.items()
-                if getattr(v, "__spec__", None)
-                and isinstance(v.__spec__.loader, SourceFileLoader)
-                and (k.startswith(f"{package}.") or k == package)
-            ]
-        )
-        for k in del_mods:
-            del sys.modules[k]
-
-    @staticmethod
-    def _venv_root(package, version):
-        venv_root = Path.home() / ".justuse-python" / "venv" / package / version
-        if not venv_root.exists():
-            venv_root.mkdir(parents=True)
-        return venv_root
-
-    @staticmethod
-    def _venv_is_win():
-        return sys.platform.lower().startswith("win")
-
-    @staticmethod
-    def _venv_unix_path():
-        ver = ".".join(map(str, sys.version_info[0:2]))
-        return Path("lib") / f"python{ver}" / "site-packages"
-
-    @staticmethod
-    def _venv_windows_path():
-        return Path("Lib") / "site-packages"
 
     @staticmethod
     def _parse_filename(filename) -> dict:
@@ -1768,6 +1768,7 @@ Use.URL = URL
 Use.__path__ = str(Path(__file__).resolve().parent)
 Use.__name__ = __name__
 Use._find_entry_point = _find_entry_point
+Use._load_venv_mod = staticmethod(_load_venv_mod)
 
 use = Use()
 if not test_version:
