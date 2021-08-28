@@ -193,21 +193,20 @@ def get_supported() -> FrozenSet[PlatformTag]:
     return _supported
 
 
-def partial(method: Callable[[...],Any], *args) -> functools.partial[Any]:
+def partial(method: Callable[[Any], Any], *args) -> functools.partial[Any]:
     return partialmethod(method, *args)._make_unbound_method()
 
 
 def lines_from(path: Path) -> List[str]:
     return path.read_text(encoding="UTF-8").strip().splitlines()
 
+
 @pipes
 def _find_entry_point(package, version):
     pkg_path = _venv_pkg_path(package, version)
     rec_path = pkg_path / f"{package}-{version}.dist-info" / "RECORD"
     contents = list(
-        lines_from(rec_path)
-        << map(partial(str.partition, ","))
-        << map(itemgetter(0))
+        lines_from(rec_path) << map(partial(str.partition, ",")) << map(itemgetter(0))
     )
     contents_abs = list(contents << map(pkg_path.__truediv__))
     pkg_prefix: str
@@ -231,8 +230,8 @@ def _find_entry_point(package, version):
             entry_path = c
             break
     return (pkg_prefix, entry_path)
-    
-    
+
+
 def _venv_pkg_path(package, version):
     venv_root = _venv_root(package, version)
     if _venv_is_win():
@@ -328,30 +327,36 @@ def _load_venv_mod(package, version):
         pkg_prefix, entry_module_path = _find_entry_point(package, version)
         path = entry_module_path.absolute()
         with open(path, "rb") as f:
-            code = f.read()
-            _clean_sys_modules(package)
-            _clean_sys_modules(pkg_prefix)
-            _clean_sys_modules(f"{pkg_prefix}.{package}")
-            mod = use._build_mod(
-                name=package,
-                code=code,
-                module_path=path,
-                initial_globals={},
-                aspectize={},
-                package=(pkg_prefix or package),
-            )
-            log.debug(f"module returned from _load_venv_mod: {mod}")
-            return mod
+            return _extracted_from__load_venv_mod_54(f, package, pkg_prefix, path)
     finally:
         os.chdir(orig_cwd)
+
+
+def _extracted_from__load_venv_mod_54(f, package, pkg_prefix, path):
+    code = f.read()
+    _clean_sys_modules(package)
+    _clean_sys_modules(pkg_prefix)
+    _clean_sys_modules(f"{pkg_prefix}.{package}")
+    mod = use._build_mod(
+        name=package,
+        code=code,
+        module_path=path,
+        initial_globals={},
+        aspectize={},
+        package=(pkg_prefix or package),
+    )
+    log.debug(f"module returned from _load_venv_mod: {mod}")
+    return mod
 
 
 class VerHash(namedtuple("VerHash", ["version", "hash"])):
     @staticmethod
     def empty():
         return VerHash("", "")
+
     def __bool__(self):
         return bool(self.version and self.hash)
+
     def __eq__(self, other):
         if other is None or not hasattr(other, "__len__") or len(other) != len(self):
             return False
@@ -359,6 +364,7 @@ class VerHash(namedtuple("VerHash", ["version", "hash"])):
             Version(str(self.version)) == Version(str([*other][0]))
             and self.hash == [*other][1]
         )
+
     def __ne__(self, other):
         return not self.__eq__(other)
 
@@ -1759,17 +1765,14 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 
 # we should avoid side-effects during testing, specifically for the version-upgrade-warning
 
-# ALIASES
-Use.Version = Version
-Use.config = config
-Use.mode = mode
-Use.Path = Path
-Use.URL = URL
-Use.__path__ = str(Path(__file__).resolve().parent)
-Use.__name__ = __name__
-Use._load_venv_mod = staticmethod(_load_venv_mod)
 
 use = Use()
+
+# ALIASES
+for k, v in dict(globals()).items():
+    use.__dict__[k] = v
+use.__path__ = str(Path(__file__).resolve().parent)
+
 if not test_version:
     sys.modules["use"] = use
 
