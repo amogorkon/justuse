@@ -67,7 +67,6 @@ import hashlib
 import importlib.util
 import inspect
 import linecache
-import operator
 import os
 import re
 import signal
@@ -105,6 +104,56 @@ from packaging.version import Version as PkgVersion
 
 ModInUse = namedtuple("ModInUse", "name mod path spec frame")
 
+# injected via initial_globals for testing, you can safely ignore this
+test_version: str = locals().get("test_version", None)
+__version__ = test_version or "0.4.1"
+
+_reloaders: Dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
+_aspects = {}
+_using = {}
+
+# Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
+# # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
+class Version(PkgVersion):
+    def __init__(self, versionstr=None, *, major=0, minor=0, patch=0):
+        if major or minor or patch:
+            # string as only argument, no way to construct a Version otherwise - WTF
+            return super().__init__(".".join((str(major), str(minor), str(patch))))
+        if isinstance(versionstr, str):
+            return super().__init__(versionstr)
+        else:
+            return super().__init__(str(versionstr))  # this is just wrong :|
+
+    def __iter__(self):
+        yield from self.release
+
+
+# Really looking forward to actual builtin sentinel values..
+mode = Enum("Mode", "fastfail")
+
+root.addHandler(StreamHandler(sys.stderr))
+root.setLevel(NOTSET)
+if "DEBUG" in os.environ:
+    root.setLevel(DEBUG)
+else:
+    root.setLevel(WARN)
+
+# TODO: log to file
+log = getLogger(__name__)
+
+# defaults
+config = {"version_warning": True, "debugging": False, "use_db": False}
+
+# sometimes all you need is a sledge hammer..
+def signal_handler(sig, frame):
+    for reloader in _reloaders.values():
+        reloader.stop()
+    sig, frame
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, signal_handler)
+
 
 class Hash(Enum):
     sha256 = hashlib.sha256
@@ -135,10 +184,10 @@ class AutoInstallationError(ImportError):
 
 
 # Since we have a lot of functional code that black would turn into a sort of arrow antipattern with lots of ((())),
-# we use @pipe to basically enable polish notation which allows us to avoid most parentheses.
+# we use @pipes to basically enable polish notation which allows us to avoid most parentheses.
 # source >> func(args) is equivalent to func(source, args) and
 # source << func(args) is equivalent to func(args, source), which can be chained arbitrarily.
-# See https://github.com/robinhilliard/pipes/blob/master/pipeop/__init__.py for details.
+# See https://github.com/robinhilliard/pipes/blob/master/pipeop/__init__.py for details and credit.
 class _PipeTransformer(ast.NodeTransformer):
     def visit_BinOp(self, node):
         if not isinstance(node.op, (ast.LShift, ast.RShift)):
@@ -235,10 +284,14 @@ def lines_from(path: Path) -> List[str]:
 def _find_entry_point(package, version):
     pkg_path = _venv_pkg_path(package, version)
     rec_path = pkg_path / f"{package}-{version}.dist-info" / "RECORD"
-    contents = list(
-        lines_from(rec_path) << map(partial(str.partition, ",")) << map(itemgetter(0))
+    contents = (
+        lines_from(rec_path)
+        << map(partial(str.partition, ","))
+        << map(itemgetter(0))
+        >> list
     )
-    contents_abs = list(contents << map(pkg_path.__truediv__))
+
+    contents_abs = contents << map(pkg_path.__truediv__) >> list
     pkg_prefix: str
     for c in contents_abs:
         if c.name == "top_level.txt":
@@ -295,8 +348,9 @@ def _venv_is_win():
     return sys.platform.lower().startswith("win")
 
 
+@pipes
 def _venv_unix_path():
-    ver = ".".join(map(str, sys.version_info[0:2]))
+    ver = sys.version_info[0:2] << map(str) >> ".".join
     return Path("lib") / f"python{ver}" / "site-packages"
 
 
@@ -313,7 +367,6 @@ def ismethod(x):
 
 
 # decorators for callable classes require a completely different approach i'm afraid.. removing the check should discourage users from trying
-# @staticmethod
 # def isclass(x):
 #     return inspect.isclass(x) and hasattr(x, "__call__")
 
@@ -456,56 +509,6 @@ class VerHash(namedtuple("VerHash", ["version", "hash"])):
         return not self.__eq__(other)
 
 
-# injected via initial_globals for testing, you can safely ignore this
-test_version: str = locals().get("test_version", None)
-__version__ = test_version or "0.4.1"
-
-_reloaders: Dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
-_aspects = {}
-_using = {}
-
-# Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
-# # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
-class Version(PkgVersion):
-    def __init__(self, versionstr=None, *, major=0, minor=0, patch=0):
-        if major or minor or patch:
-            # string as only argument, no way to construct a Version otherwise - WTF
-            return super().__init__(".".join((str(major), str(minor), str(patch))))
-        if isinstance(versionstr, str):
-            return super().__init__(versionstr)
-        else:
-            return super().__init__(str(versionstr))  # this is just wrong :|
-
-    def __iter__(self):
-        yield from self.release
-
-
-# Really looking forward to actual builtin sentinel values..
-mode = Enum("Mode", "fastfail")
-
-root.addHandler(StreamHandler(sys.stderr))
-root.setLevel(NOTSET)
-if "DEBUG" in os.environ:
-    root.setLevel(DEBUG)
-else:
-    root.setLevel(WARN)
-
-# TODO: log to file
-log = getLogger(__name__)
-
-# defaults
-config = {"version_warning": True, "debugging": False, "use_db": False}
-
-# sometimes all you need is a sledge hammer..
-def signal_handler(sig, frame):
-    for reloader in _reloaders.values():
-        reloader.stop()
-    sig, frame
-    sys.exit(0)
-
-
-signal.signal(signal.SIGINT, signal_handler)
-
 # singledispatch for methods
 def methdispatch(func):
     dispatcher = singledispatch(func)
@@ -518,6 +521,7 @@ def methdispatch(func):
     return wrapper
 
 
+@pipes
 def _get_package_data(package_name):
     response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
     if response.status_code == 404:
@@ -532,7 +536,7 @@ def _get_package_data(package_name):
     for v, infos in data["releases"].items():
         for info in infos:
             info["version"] = v
-            info.update(_parse_filename(info["filename"]) or {})
+            info["filename"] >> _parse_filename >> info.update
     return data
 
 
@@ -835,18 +839,16 @@ class ModuleReloader:
 
 class Use(ModuleType):
     # MODES to reduce signature complexity
-    # enum.Flag wasn't viable, but this is actually pretty cool
+    # enum.Flag wasn't viable, but this alternative is actually pretty cool
     auto_install = 2 ** 0
     fatal_exceptions = 2 ** 1
     reloading = 2 ** 2
     aspectize_dunders = 2 ** 3
 
     def __init__(self):
+        # TODO for some reason removing self._using isn't as straight forward..
         self._using = _using
-        self._aspects = _aspects
-        self._reloaders = _reloaders
         self.home: Path
-        # {(name -> interval_tree of Version -> function} basically plugins/workarounds for specific packages/versions
         self._hacks = {}
 
         self._set_up_files_and_directories()
