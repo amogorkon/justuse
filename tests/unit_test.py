@@ -190,7 +190,8 @@ def test_pure_python_package(reuse):
         modes=reuse.auto_install,
     )
     assert str(test.Number(2)) == "2"
-    file.unlink()
+    if file.exists():
+      file.unlink()
 
 
 def suggested_artifact(*args, **kwargs):
