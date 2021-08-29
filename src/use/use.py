@@ -295,9 +295,9 @@ def lines_from(path: Path) -> List[str]:
 
 
 @pipes
-def _find_entry_point(package, version):
-    pkg_path = _venv_pkg_path(package, version)
-    rec_path = pkg_path / f"{package}-{version}.dist-info" / "RECORD"
+def _find_entry_point(package_name, version):
+    pkg_path = _venv_pkg_path(package_name, version)
+    rec_path = pkg_path / f"{package_name}-{version}.dist-info" / "RECORD"
     contents = (
         rec_path.read_text(encoding="UTF-8")
         >> str.strip
@@ -313,15 +313,15 @@ def _find_entry_point(package, version):
         if c.name == "top_level.txt":
             pkg_prefix = lines_from(c)[0]
             break
-    if pkg_prefix != package:
+    if pkg_prefix != package_name:
         entry_suffixes = (
-            Path(pkg_prefix) / package / "__init__.py",
-            Path(pkg_prefix) / f"{package}.py",
+            Path(pkg_prefix) / package_name / "__init__.py",
+            Path(pkg_prefix) / f"{package_name}.py",
         )
     else:
         entry_suffixes = (
-            Path(package) / "__init__.py",
-            Path(f"{package}.py"),
+            Path(package_name) / "__init__.py",
+            Path(f"{package_name}.py"),
         )
     entry_path: str
     for c in contents_abs:
@@ -331,30 +331,30 @@ def _find_entry_point(package, version):
     return (pkg_prefix, entry_path)
 
 
-def _venv_pkg_path(package, version):
-    venv_root = _venv_root(package, version)
+def _venv_pkg_path(package_name, version):
+    venv_root = _venv_root(package_name, version)
     if _venv_is_win():
         return venv_root / _venv_windows_path()
     else:
         return venv_root / _venv_unix_path()
 
 
-def _clean_sys_modules(package):
+def _clean_sys_modules(package_name):
     del_mods = dict(
         [
             (k, v.__spec__.loader)
             for k, v in sys.modules.items()
             if getattr(v, "__spec__", None)
             and isinstance(v.__spec__.loader, SourceFileLoader)
-            and (k.startswith(f"{package}.") or k == package)
+            and (k.startswith(f"{package_name}.") or k == package_name)
         ]
     )
     for k in del_mods:
         del sys.modules[k]
 
 
-def _venv_root(package, version):
-    venv_root = Path.home() / ".justuse-python" / "venv" / package / version
+def _venv_root(package_name, version):
+    venv_root = Path.home() / ".justuse-python" / "venv" / package_name / version
     if not venv_root.exists():
         venv_root.mkdir(parents=True)
     return venv_root
@@ -407,8 +407,8 @@ def _parse_filename(filename) -> dict:
     return match.groupdict() if match else {}
 
 
-def _load_venv_mod(package, version):
-    venv_root = _venv_root(package, version)
+def _load_venv_mod(package_name, version):
+    venv_root = _venv_root(package_name, version)
     venv_bin = venv_root / "bin"
     python_exe = Path(sys.executable).stem
     if not venv_bin.exists():
@@ -436,11 +436,11 @@ def _load_venv_mod(package, version):
         "--no-compile",
         "--no-warn-script-location",
         "--no-warn-conflicts",
-        f"{package}=={version}",
+        f"{package_name}=={version}",
     )
     current_path = os.environ.get("PATH")
     venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
-    pkg_path = _venv_pkg_path(package, version)
+    pkg_path = _venv_pkg_path(package_name, version)
     if _venv_is_win():
         output = run(
             ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
@@ -457,26 +457,26 @@ def _load_venv_mod(package, version):
     orig_cwd = Path.cwd()
     try:
         os.chdir(pkg_path)
-        pkg_prefix, entry_module_path = _find_entry_point(package, version)
+        pkg_prefix, entry_module_path = _find_entry_point(package_name, version)
         path = entry_module_path.absolute()
         with open(path, "rb") as f:
-            return _extracted_from__load_venv_mod_54(f, package, pkg_prefix, path)
+            return _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path)
     finally:
         os.chdir(orig_cwd)
 
 
-def _extracted_from__load_venv_mod_54(f, package, pkg_prefix, path):
+def _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path):
     code = f.read()
-    _clean_sys_modules(package)
+    _clean_sys_modules(package_name)
     _clean_sys_modules(pkg_prefix)
-    _clean_sys_modules(f"{pkg_prefix}.{package}")
+    _clean_sys_modules(f"{pkg_prefix}.{package_name}")
     mod = _build_mod(
-        name=package,
+        name=package_name,
         code=code,
         module_path=path,
         initial_globals={},
         aspectize={},
-        package=(pkg_prefix or package),
+        package_name=(pkg_prefix or package_name),
     )
     log.debug(f"module returned from _load_venv_mod: {mod}")
     return mod
@@ -691,7 +691,7 @@ def _build_mod(
     aspectize,
     aspectize_dunders=False,
     default=mode.fastfail,
-    package=None,
+    package_name=None,
 ) -> ModuleType:
     mod = ModuleType(name)
     mod.__dict__.update(initial_globals or {})
@@ -710,8 +710,8 @@ def _build_mod(
             mod.__file__,  # file name, e.g. "<mymodule>" or the actual path to the file
         )
     # not catching this causes the most irritating bugs ever!
-    if package:
-        mod.__package__ = package
+    if package_name:
+        mod.__package__ = package_name
     try:
         exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
     except:  # reraise anything without handling - clean and simple.
