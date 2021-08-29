@@ -229,66 +229,6 @@ def suggested_artifact(*args, **kwargs):
     return (version, hashes)
 
 
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows Auto-installing numpy")
-def test_autoinstall_protobuf(reuse):
-    kws = {"package_name": "protobuf", "module_name": "google.protobuf"}
-    ver, hash = suggested_artifact("protobuf", **kws)
-    mod = reuse(
-        "protobuf",
-        **kws,
-        modes=reuse.auto_install | reuse.fatal_exceptions,
-        version=ver,
-        hashes=hash,
-    )
-    assert mod.__version__ == ver
-
-
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows Auto-installing numpy")
-def test_autoinstall_numpy_dual_version(reuse):
-    ver1, hash1 = suggested_artifact("numpy", version="1.19.3")
-    mod1 = reuse(
-        "numpy",
-        modes=use.auto_install,
-        version=ver1,
-        hashes=hash1,
-    )
-    mod2 = ver2 = None
-    assert mod1.__version__ == ver1
-
-    ver2, hash2 = suggested_artifact("numpy", version="1.21.0rc2")
-    for attempt in (1, 2, 3):
-        log.warning("attempt %s", attempt)
-        try:
-            mod2 = reuse(
-                "numpy",
-                modes=use.auto_install,
-                version=ver2,
-                hashes=hash2,
-            )
-            break
-        except (AttributeError, KeyError):
-            log.warning("attempt %s: set _reload_guard", attempt)
-            for k in filter(lambda k: "_multiarray_umath" in k, sys.modules):
-                log.warning("attempt %s: set _reload_guard on %s", attempt, k)
-                setattr(sys.modules[k], "_reload_guard", lambda: log.info("_reload_guard()"))
-                log.warning("attempt %s: did _reload_guard on %s", attempt, k)
-
-    assert mod2.__version__ == ver2
-    assert mod1.__version__ == ver1
-
-
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows Auto-installing numpy")
-def test_autoinstall_numpy(reuse):
-    ver, hash = suggested_artifact("numpy", version="1.19.3")
-    mod = reuse(
-        "numpy",
-        modes=reuse.auto_install | reuse.fatal_exceptions,
-        version=ver,
-        hashes=hash,
-    )
-    assert mod.__version__ == ver
-
-
 def test_use_global_install(reuse):
     from . import foo
 
