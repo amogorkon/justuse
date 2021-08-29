@@ -51,7 +51,8 @@ requires=(
     "mmh3(>= 2.2.0)",
     "requests(>= 2.24.0)",
     "yarl(>= 1.6.3)",
-    "packaging(>= 1.0.0)"
+    "packaging(>= 1.0.0)",
+    "setuptools(>= 57.1.0)",
 )
 
 

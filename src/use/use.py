@@ -1474,6 +1474,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             version if target_version else version is target_version
         ), "Version must be None if target_version is None; otherwise, they must both have a value."
 
+        exc = None
         mod = None
 
         # The "try and guess" behaviour is due to how classical imports work,
@@ -1683,18 +1684,17 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 except KeyError as be:  # json issues
                     msg = f"request to https://pypi.org/pypi/{package_name}/{target_version}/json lead to an error: {be}"
                     raise RuntimeError(msg) from be
-                exc = None
                 if exc:
                     return _fail_or_default(
                         default,
                         AutoInstallationError,
                         f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.",
                     )
-                        # we've got a complete JSON with a matching entry, let's download
+                # we've got a complete JSON with a matching entry, let's download
         if not mod:
             mod = _load_venv_mod(package_name, version)
             path = folder = _venv_pkg_path(package_name, version)
-
+        
         for (check, pattern), decorator in aspectize.items():
             if mod is not None:
                 _apply_aspect(
