@@ -55,6 +55,19 @@ File-Hashing inspired by
 :license: MIT
 """
 
+# Structure of this module:
+# 1) imports
+# 2) setup of config, logging
+# 3) global functions
+# 4) ProxyModule and Use
+# 5) initialization
+
+# Read in this order:
+# 1) initialization (instance of Use() is set as module on import)
+# 2) use() dispatches to one of three __call__ methods, depending on first argument
+# 3) from there, various global functions are called
+# 4) a ProxyModule is always returned, wrapping the module that was imported
+
 
 from __future__ import annotations
 
@@ -276,6 +289,7 @@ def partial(method: Callable[[Any], Any], *args) -> functools.partial[Any]:
     return partialmethod(method, *args)._make_unbound_method()
 
 
+# TODO: kill this
 def lines_from(path: Path) -> List[str]:
     return path.read_text(encoding="UTF-8").strip().splitlines()
 
@@ -285,8 +299,10 @@ def _find_entry_point(package, version):
     pkg_path = _venv_pkg_path(package, version)
     rec_path = pkg_path / f"{package}-{version}.dist-info" / "RECORD"
     contents = (
-        lines_from(rec_path)
-        << map(partial(str.partition, ","))
+        rec_path.read_text(encoding="UTF-8")
+        >> str.strip
+        >> str.splitlines
+        << map(lambda s: s.partition(","))
         << map(itemgetter(0))
         >> list
     )
