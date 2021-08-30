@@ -141,6 +141,38 @@ class Version(PkgVersion):
         yield from self.release
 
 
+class VerHash(namedtuple("VerHash", ["version", "hash"])):
+    @staticmethod
+    def empty():
+        return VerHash("", "")
+
+    def __bool__(self):
+        return bool(self.version and self.hash)
+
+    def __eq__(self, other):
+        if other is None or not hasattr(other, "__len__") or len(other) != len(self):
+            return False
+        return (
+            Version(str(self.version)) == Version(str([*other][0]))
+            and self.hash == [*other][1]
+        )
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+
+# singledispatch for methods
+def methdispatch(func):
+    dispatcher = singledispatch(func)
+
+    def wrapper(*args, **kw):
+        return dispatcher.dispatch(args[1].__class__)(*args, **kw)
+
+    wrapper.register = dispatcher.register
+    update_wrapper(wrapper, func)
+    return wrapper
+
+
 # Really looking forward to actual builtin sentinel values..
 mode = Enum("Mode", "fastfail")
 
@@ -196,10 +228,14 @@ class AutoInstallationError(ImportError):
     pass
 
 
-# Since we have a lot of functional code that black would turn into a sort of arrow antipattern with lots of ((())),
+# Since we have quite a bit of functional code that black would turn into a sort of arrow antipattern with lots of ((())),
 # we use @pipes to basically enable polish notation which allows us to avoid most parentheses.
 # source >> func(args) is equivalent to func(source, args) and
 # source << func(args) is equivalent to func(args, source), which can be chained arbitrarily.
+# Rules:
+# 1) apply pipes only to 3 or more nested function calls
+# 2) no pipes on single lines, since mixing << and >> is just confusing (also, having pipes on different lines has other benefits beside better readability)
+# 3) don't mix pipes with regular parenthesized function calls, that's just confusing
 # See https://github.com/robinhilliard/pipes/blob/master/pipeop/__init__.py for details and credit.
 class _PipeTransformer(ast.NodeTransformer):
     def visit_BinOp(self, node):
@@ -307,7 +343,7 @@ def _find_entry_point(package_name, version):
         >> list
     )
 
-    contents_abs = contents << map(pkg_path.__truediv__) >> list
+    contents_abs = list(map(pkg_path.__truediv__, contents))
     pkg_prefix: str
     for c in contents_abs:
         if c.name == "top_level.txt":
@@ -325,8 +361,8 @@ def _find_entry_point(package_name, version):
                 entry_path = c
                 break
     return (pkg_prefix, entry_path)
-    
-    
+
+
 def _entry_suffixes(pkg_prefix, package_name):
     return (
         Path(pkg_prefix) / package_name / "__init__.py",
@@ -370,9 +406,8 @@ def _venv_is_win():
     return sys.platform.lower().startswith("win")
 
 
-@pipes
 def _venv_unix_path():
-    ver = sys.version_info[0:2] << map(str) >> ".".join
+    ver = ".".join(map(str, sys.version_info[0:2]))
     return Path("lib") / f"python{ver}" / "site-packages"
 
 
@@ -511,39 +546,6 @@ def _hashfileobject(code, sample_threshhold=128 * 1024, sample_size=16 * 1024):
     return enc_size + hash_[len(enc_size) :]
 
 
-class VerHash(namedtuple("VerHash", ["version", "hash"])):
-    @staticmethod
-    def empty():
-        return VerHash("", "")
-
-    def __bool__(self):
-        return bool(self.version and self.hash)
-
-    def __eq__(self, other):
-        if other is None or not hasattr(other, "__len__") or len(other) != len(self):
-            return False
-        return (
-            Version(str(self.version)) == Version(str([*other][0]))
-            and self.hash == [*other][1]
-        )
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-
-# singledispatch for methods
-def methdispatch(func):
-    dispatcher = singledispatch(func)
-
-    def wrapper(*args, **kw):
-        return dispatcher.dispatch(args[1].__class__)(*args, **kw)
-
-    wrapper.register = dispatcher.register
-    update_wrapper(wrapper, func)
-    return wrapper
-
-
-@pipes
 def _get_package_data(package_name):
     response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
     if response.status_code == 404:
@@ -558,7 +560,7 @@ def _get_package_data(package_name):
     for v, infos in data["releases"].items():
         for info in infos:
             info["version"] = v
-            info["filename"] >> _parse_filename >> info.update
+            info.update(_parse_filename(info["filename"]))
     return data
 
 
@@ -1349,6 +1351,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
 
     def _import_classical_install(
         self,
+        *,
         name,
         module_name,
         spec,
@@ -1512,13 +1515,13 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             # it seems to be installed in some way, for instance via pip
             if not auto_install:
                 return self._import_classical_install(
-                    name,
-                    module_name,
-                    spec,
-                    target_version,
-                    default,
-                    aspectize,
-                    fatal_exceptions,
+                    name=name,
+                    module_name=module_name,
+                    spec=spec,
+                    target_version=target_version,
+                    default=default,
+                    aspectize=aspectize,
+                    fatal_exceptions=fatal_exceptions,
                 )
 
             this_version = _get_version(name, package_name)
@@ -1531,14 +1534,14 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                         )
                     )
                 mod = self._import_classical_install(
-                    name,
-                    module_name,
-                    spec,
-                    target_version,
-                    default,
-                    aspectize,
-                    fatal_exceptions,
-                    package_name,
+                    name=name,
+                    module_name=module_name,
+                    spec=spec,
+                    target_version=target_version,
+                    default=default,
+                    aspectize=aspectize,
+                    fatal_exceptions=fatal_exceptions,
+                    package_name=package_name,
                 )
                 warn(
                     f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
@@ -1552,14 +1555,14 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     )
                 )
                 mod = self._import_classical_install(
-                    name,
-                    module_name,
-                    spec,
-                    target_version,
-                    default,
-                    aspectize,
-                    fatal_exceptions,
-                    package_name,
+                    name=name,
+                    module_name=module_name,
+                    spec=spec,
+                    target_version=target_version,
+                    default=default,
+                    aspectize=aspectize,
+                    fatal_exceptions=fatal_exceptions,
+                    package_name=package_name,
                 )
                 warn(
                     f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
@@ -1724,13 +1727,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 
 
 use = Use()
-for k, v in dict(globals()).items():
-    use.__dict__[k] = v
-
+use.__dict__.update(globals())
 if not test_version:
     sys.modules["use"] = use
-
-# no circular import this way
-	
-	
-	
