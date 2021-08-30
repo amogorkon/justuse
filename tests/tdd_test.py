@@ -144,3 +144,40 @@ def test_unsupported_artifact(reuse):
         modes=reuse.auto_install,
     )
     assert False, np.__version__
+
+
+def test_ver_hash(reuse):
+    VerHash = reuse.VerHash
+    h = (
+    "5de64950137f3a50b76ce93556db392e8f1f954c2d8207f78a92d1f79aa9f737"
+    )
+    vh1, vh2 = (
+        VerHash("1.0.1", h),
+        VerHash("1.0.2", h)
+    )
+    vh1u, vh2u, vh3u = (
+        VerHash("1.0.1", None),
+        VerHash(None, h),
+        VerHash(None, None)
+    )
+    vh1b = VerHash("1.0.1", h)
+    assert vh1 and vh2
+    assert vh1.hash == vh2.hash
+    assert vh1u.version
+    assert vh2u.hash
+    assert not vh3u
+    assert vh1 == vh1b
+    assert vh1 == vh1
+    assert vh1 != ("1.0.1", None)
+    assert vh1 != ("1.0.1", None, None)
+    assert vh1 == ("1.0.1", h)
+    assert vh1 != ("1.0.1", h, None)
+    assert vh1 != object()
+    assert ("1.0.1", h, None) != vh1
+    assert "1.0.1" in vh1
+    assert h in vh1
+    assert "1.0.1" not in vh2
+    assert h in vh2
+    assert h in vh2u
+    assert h not in vh3u
+    

@@ -96,7 +96,7 @@ from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
 from itertools import takewhile
-from logging import DEBUG, NOTSET, WARN, StreamHandler, getLogger, root
+from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
 from operator import itemgetter
 from pathlib import Path
 from pkgutil import zipimporter
@@ -137,10 +137,7 @@ class Version(PkgVersion):
         if major or minor or patch:
             # string as only argument, no way to construct a Version otherwise - WTF
             return super().__init__(".".join((str(major), str(minor), str(patch))))
-        if isinstance(versionstr, str):
-            return super().__init__(versionstr)
-        else:
-            return super().__init__(str(versionstr))  # this is just wrong :|
+        return super().__init__(versionstr)
 
     def __iter__(self):
         yield from self.release
@@ -194,24 +191,13 @@ root.setLevel(NOTSET)
 if "DEBUG" in os.environ:
     root.setLevel(DEBUG)
 else:
-    root.setLevel(WARN)
+    root.setLevel(INFO)
 
 # TODO: log to file
 log = getLogger(__name__)
 
 # defaults
 config = {"version_warning": True, "debugging": False, "use_db": False}
-
-# sometimes all you need is a sledge hammer..
-def signal_handler(sig, frame):
-    for reloader in _reloaders.values():
-        reloader.stop()
-    sig, frame
-    sys.exit(0)
-
-
-signal.signal(signal.SIGINT, signal_handler)
-
 
 class Hash(Enum):
     sha256 = hashlib.sha256
@@ -322,10 +308,6 @@ def get_supported() -> FrozenSet[PlatformTag]:
     return tags
 
 
-def partial(method: Callable[[Any], Any], *args) -> functools.partial[Any]:
-    return partialmethod(method, *args)._make_unbound_method()
-
-
 # TODO: kill this
 def lines_from(path: Path) -> List[str]:
     return path.read_text(encoding="UTF-8").strip().splitlines()
@@ -354,14 +336,9 @@ def _find_entry_point(package_name, version):
     entry_path: str = None
     for c in contents_abs:
         if any(str(c).rfind(str(e)) != -1 for e in entry_suffixes):
-            entry_path = c
-            break
-    else:
-        for c in contents_abs:
-            if c.exists():
-                entry_path = c
-                break
-    return (pkg_prefix, entry_path)
+            return (pkg_prefix, c)
+    return None
+    
 
 
 def _entry_suffixes(pkg_prefix, package_name):
@@ -418,10 +395,6 @@ def _venv_windows_path():
 
 def isfunction(x):
     return inspect.isfunction(x)
-
-
-def ismethod(x):
-    return inspect.ismethod(x)
 
 
 # decorators for callable classes require a completely different approach i'm afraid.. removing the check should discourage users from trying
