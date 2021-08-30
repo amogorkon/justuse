@@ -146,7 +146,7 @@ def test_unsupported_artifact(reuse):
     assert False, np.__version__
 
 
-def test_ver_hash(reuse):
+def _get_test_ver_hash_data(reuse):
     VerHash = reuse.VerHash
     h = (
     "5de64950137f3a50b76ce93556db392e8f1f954c2d8207f78a92d1f79aa9f737"
@@ -161,6 +161,10 @@ def test_ver_hash(reuse):
         VerHash(None, None)
     )
     vh1b = VerHash("1.0.1", h)
+    return (VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b)
+
+def test_ver_hash_1(reuse):
+    VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b = _get_test_ver_hash_data(reuse)
     assert vh1 and vh2
     assert vh1.hash == vh2.hash
     assert vh1u.version
@@ -170,6 +174,9 @@ def test_ver_hash(reuse):
     assert vh1 == vh1
     assert vh1 != ("1.0.1", None)
     assert vh1 != ("1.0.1", None, None)
+    
+def test_ver_hash_2(reuse):
+    VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b = _get_test_ver_hash_data(reuse)
     assert vh1 == ("1.0.1", h)
     assert vh1 != ("1.0.1", h, None)
     assert vh1 != object()
