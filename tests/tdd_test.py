@@ -11,11 +11,11 @@ from unittest import skip
 import pytest
 import requests
 from setuptools import _find_all_simple
-
 from .unit_test import log, reuse
 
 not_local = "GITHUB_REF" in os.environ
-
+is_win = sys.platform.lower().startswith("win")
+not_win = not is_win
 
 # Add in-progress tests here
 
@@ -74,7 +74,29 @@ def test_is_platform_compatible_win(reuse):
         "yanked_reason": None,
     }
     assert reuse._is_platform_compatible(info, platform_tags, include_sdist=False)
+    
 
+@pytest.mark.skipif(reason="is_win", run=not_win, condition=is_win)
+def test_pure_python_package(reuse):
+    # https://pypi.org/project/example-pypi-package/
+    file = (
+        reuse.Path.home()
+        / ".justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl"
+    )
+
+    file.unlink(missing_ok=True)
+    test = reuse(
+        "example-pypi-package.examplepy",
+        version="0.1.0",
+        hashes={
+            "3c1b4ddf718d85bde796a20cf3fdea254a33a4dc89129dff5bfc5b7cd760c86b",
+            "ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77",
+        },
+        modes=reuse.auto_install,
+    )
+    assert str(test.Number(2)) == "2"
+    if file.exists():
+      file.unlink()
 
 
 def _do_load_venv_mod(reuse, package, version=None):
@@ -88,12 +110,11 @@ def _do_load_venv_mod(reuse, package, version=None):
     assert mod.__version__ == version
 
 
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows venv package metadata")
 def test_load_venv_mod_protobuf(reuse):
     _do_load_venv_mod(reuse, "protobuf")
 
 
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows venv package metadata")
+@pytest.mark.skipif(reason="is_win", run=not_win, condition=is_win)
 def test_load_venv_mod_numpy(reuse):
     _do_load_venv_mod(reuse, "numpy", "1.19.3")
 
@@ -102,7 +123,7 @@ def test_db_setup(reuse):
     assert reuse.registry
 
 
-@pytest.mark.skipif(True, reason="in development")
+@pytest.mark.skipif(reason="True", run=True)
 def test_unsupported_artifact(reuse):
     hashes = {
         "win": "1fdae7d980a2fa617d119d0dc13ecb5c23cc63a8b04ffcb5298f2c59d86851e9",

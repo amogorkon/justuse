@@ -172,28 +172,6 @@ def test_version_warning(reuse):
         assert issubclass(w[-1].category, (use.AmbiguityWarning, use.VersionWarning))
 
 
-def test_pure_python_package(reuse):
-    # https://pypi.org/project/example-pypi-package/
-    file = (
-        reuse.Path.home()
-        / ".justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl"
-    )
-
-    file.unlink(missing_ok=True)
-    test = reuse(
-        "example-pypi-package.examplepy",
-        version="0.1.0",
-        hashes={
-            "3c1b4ddf718d85bde796a20cf3fdea254a33a4dc89129dff5bfc5b7cd760c86b",
-            "ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77",
-        },
-        modes=reuse.auto_install,
-    )
-    assert str(test.Number(2)) == "2"
-    if file.exists():
-      file.unlink()
-
-
 def suggested_artifact(*args, **kwargs):
     import use
 
