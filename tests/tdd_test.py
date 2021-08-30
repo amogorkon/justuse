@@ -110,6 +110,7 @@ def _do_load_venv_mod(reuse, package, version=None):
     assert mod.__version__ == version
 
 
+@pytest.mark.skipif(reason="is_win", run=not_win, condition=is_win)
 def test_load_venv_mod_protobuf(reuse):
     _do_load_venv_mod(reuse, "protobuf")
 
