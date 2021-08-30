@@ -297,7 +297,7 @@ def lines_from(path: Path) -> List[str]:
 @pipes
 def _find_entry_point(package_name, version):
     pkg_path = _venv_pkg_path(package_name, version)
-    rec_path = pkg_path / f"{package_name}-{version}.dist-info" / "RECORD"
+    rec_path = pkg_path / f"{package_name.replace('-', '_')}-{version}.dist-info" / "RECORD"
     contents = (
         rec_path.read_text(encoding="UTF-8")
         >> str.strip
@@ -313,22 +313,28 @@ def _find_entry_point(package_name, version):
         if c.name == "top_level.txt":
             pkg_prefix = lines_from(c)[0]
             break
-    if pkg_prefix != package_name:
-        entry_suffixes = (
-            Path(pkg_prefix) / package_name / "__init__.py",
-            Path(pkg_prefix) / f"{package_name}.py",
-        )
-    else:
-        entry_suffixes = (
-            Path(package_name) / "__init__.py",
-            Path(f"{package_name}.py"),
-        )
-    entry_path: str
+    entry_suffixes = _entry_suffixes(pkg_prefix, package_name)
+    entry_path: str = None
     for c in contents_abs:
         if any(str(c).rfind(str(e)) != -1 for e in entry_suffixes):
             entry_path = c
             break
+    else:
+        for c in contents_abs:
+            if c.exists():
+                entry_path = c
+                break
     return (pkg_prefix, entry_path)
+    
+    
+def _entry_suffixes(pkg_prefix, package_name):
+    return (
+        Path(pkg_prefix) / package_name / "__init__.py",
+        Path(pkg_prefix) / "__init__.py",
+        Path(pkg_prefix) / f"{package_name}.py",
+        Path(package_name) / "__init__.py",
+        Path(f"{package_name}.py"),
+    )
 
 
 def _venv_pkg_path(package_name, version):
@@ -1471,7 +1477,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             version if target_version else version is target_version
         ), "Version must be None if target_version is None; otherwise, they must both have a value."
 
-        exc = None
         mod = None
 
         # The "try and guess" behaviour is due to how classical imports work,
@@ -1681,72 +1686,18 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 except KeyError as be:  # json issues
                     msg = f"request to https://pypi.org/pypi/{package_name}/{target_version}/json lead to an error: {be}"
                     raise RuntimeError(msg) from be
+                exc = None
                 if exc:
                     return _fail_or_default(
                         default,
                         AutoInstallationError,
                         f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.",
                     )
-                # we've got a complete JSON with a matching entry, let's download
-                if not path:
-                    path = (
-                        self.home
-                        / "packages"
-                        / Path(url.asdict()["path"]["segments"][-1]).name
-                    )
 
-                if not path.exists():
-                    print("Downloading", url, "...")
-                    download_response = requests.get(str(url), allow_redirects=True)
-                    this_hash = hash_algo.value(download_response.content).hexdigest()
-                    if this_hash != hash_value:
-                        return _fail_or_default(
-                            default,
-                            Use.UnexpectedHash,
-                            f"The downloaded content of package {package_name} has a different hash than expected, aborting.",
-                        )
-                    try:
-                        with open(path, "wb") as file:
-                            file.write(download_response.content)
-                        print("Downloaded", path)
-                    except:
-                        if fatal_exceptions:
-                            raise
-                        exc = traceback.format_exc()
-                    if exc:
+        if not mod:
+            mod = _load_venv_mod(package_name, version)
+            path = folder = _venv_pkg_path(package_name, version)
 
-                        return _fail_or_default(default, AutoInstallationError, exc)
-
-            # now that we can be sure we got a valid package downloaded and ready, let's try to install it
-            folder = path.parent / path.stem
-
-            if name in self._hacks:
-                # if version in self._hacks[name]:
-                mod = self._hacks[name](
-                    package_name=package_name,
-                    version=_get_version(mod=mod),
-                    url=url,
-                    path=path,
-                    that_hash=hash_value,
-                    folder=folder,
-                    fatal_exceptions=fatal_exceptions,
-                    module_name=module_name,
-                )
-                return _ensure_proxy(mod)
-
-            # trying to import directly from zip
-            try:
-                importer = zipimporter(path)
-                mod = importer.load_module(module_name)
-                print("Direct zipimport of", name, "successful.")
-            except:
-                if config["debugging"]:
-                    log.debug(traceback.format_exc())
-                return self._fail_or_default(
-                    default,
-                    AutoInstallationError,
-                    f"Direct zipimport of {name} {version} failed and the package was not registered with known hacks.. we're sorry, but that means you will need to resort to using pip/conda for now.",
-                )
         for (check, pattern), decorator in aspectize.items():
             if mod is not None:
                 _apply_aspect(
