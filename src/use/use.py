@@ -115,8 +115,6 @@ from packaging import tags
 from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import Version as PkgVersion
 
-ModInUse = namedtuple("ModInUse", "name mod path spec frame")
-
 # injected via initial_globals for testing, you can safely ignore this
 test_version: str = locals().get("test_version", None)
 __version__ = test_version or "0.4.1"
@@ -125,10 +123,17 @@ _reloaders: Dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
 _aspects = {}
 _using = {}
 
+ModInUse = namedtuple("ModInUse", "name mod path spec frame")
+
+
 # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
 # # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
 class Version(PkgVersion):
     def __init__(self, versionstr=None, *, major=0, minor=0, patch=0):
+        if not (versionstr or major or minor or patch):
+            raise ValueError(
+                "Version must be initialized with either a string or major, minor and patch"
+            )
         if major or minor or patch:
             # string as only argument, no way to construct a Version otherwise - WTF
             return super().__init__(".".join((str(major), str(minor), str(patch))))
@@ -159,6 +164,14 @@ class VerHash(namedtuple("VerHash", ["version", "hash"])):
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+
+class PlatformTag(namedtuple("PlatformTag", ["platform"])):
+    def __str__(self):
+        return self.platform
+
+    def __repr__(self):
+        return self.platform
 
 
 # singledispatch for methods
@@ -292,33 +305,21 @@ def pipes(func_or_class):
     return ctx[tree.body[0].name]
 
 
-class PlatformTag(namedtuple("PlatformTag", ["platform"])):
-    def __str__(self):
-        return self.platform
-
-    def __repr__(self):
-        return self.platform
-
-
-_supported = None
-
-
 def get_supported() -> FrozenSet[PlatformTag]:
-    global _supported
-    if _supported is None:
-        items: List[PlatformTag] = []
-        try:
-            from pip._internal.utils import compatibility_tags  # type: ignore
+    items: List[PlatformTag] = []
+    try:
+        from pip._internal.utils import compatibility_tags  # type: ignore
 
-            for tag in compatibility_tags.get_supported():
-                items.append(PlatformTag(platform=tag.platform))
-        except ImportError:
-            pass
-        for tag in packaging.tags._platform_tags():
-            items.append(PlatformTag(platform=str(tag)))
-        _supported = tags = frozenset(items + ["any"])
-        log.error(str(tags))
-    return _supported
+        for tag in compatibility_tags.get_supported():
+            items.append(PlatformTag(platform=tag.platform))
+    except ImportError:
+        pass
+    for tag in packaging.tags._platform_tags():
+        items.append(PlatformTag(platform=str(tag)))
+
+    tags = frozenset(items + ["any"])
+    log.error(str(tags))
+    return tags
 
 
 def partial(method: Callable[[Any], Any], *args) -> functools.partial[Any]:
@@ -661,74 +662,6 @@ def dict_factory(cursor, row):
     return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
 
 
-class ProxyModule(ModuleType):
-    def __init__(self, mod):
-        self.__implementation = mod
-        self.__condition = threading.RLock()
-
-    def __getattribute__(self, name):
-        if name in (
-            "_ProxyModule__implementation",
-            "_ProxyModule__condition",
-            "",
-            "__class__",
-            "__metaclass__",
-            "__instancecheck__",
-        ):
-            return object.__getattribute__(self, name)
-        with self.__condition:
-            return getattr(self.__implementation, name)
-
-    def __setattr__(self, name, value):
-        if name in (
-            "_ProxyModule__implementation",
-            "_ProxyModule__condition",
-        ):
-            object.__setattr__(self, name, value)
-            return
-        with self.__condition:
-            setattr(self.__implementation, name, value)
-
-
-def _build_mod(
-    *,
-    name,
-    code,
-    initial_globals: Optional[Dict[str, Any]],
-    module_path,
-    aspectize,
-    aspectize_dunders=False,
-    default=mode.fastfail,
-    package_name=None,
-) -> ModuleType:
-    mod = ModuleType(name)
-    mod.__dict__.update(initial_globals or {})
-    mod.__file__ = str(module_path)
-    code_text = codecs.decode(code)
-    # module file "<", ">" chars are specially handled by inspect
-    if not sys.platform.startswith("win"):
-        getattr(linecache, "cache")[f"<{name}>"] = (
-            len(code),  # size of source code
-            None,  # last modified time; None means there is no physical file
-            [
-                *map(  # a list of lines, including trailing newline on each
-                    lambda ln: ln + "\x0a", code_text.splitlines()
-                )
-            ],
-            mod.__file__,  # file name, e.g. "<mymodule>" or the actual path to the file
-        )
-    # not catching this causes the most irritating bugs ever!
-    if package_name:
-        mod.__package__ = package_name
-    try:
-        exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
-    except:  # reraise anything without handling - clean and simple.
-        raise
-    for (check, pattern), decorator in aspectize.items():
-        _apply_aspect(mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders)
-    return mod
-
-
 def _apply_aspect(
     thing,
     check,
@@ -771,6 +704,45 @@ def _get_version(name=None, package_name=None, /, mod=None) -> Optional[Version]
     return version
 
 
+def _build_mod(
+    *,
+    name,
+    code,
+    initial_globals: Optional[Dict[str, Any]],
+    module_path,
+    aspectize,
+    aspectize_dunders=False,
+    default=mode.fastfail,
+    package_name=None,
+) -> ModuleType:
+    mod = ModuleType(name)
+    mod.__dict__.update(initial_globals or {})
+    mod.__file__ = str(module_path)
+    code_text = codecs.decode(code)
+    # module file "<", ">" chars are specially handled by inspect
+    if not sys.platform.startswith("win"):
+        getattr(linecache, "cache")[f"<{name}>"] = (
+            len(code),  # size of source code
+            None,  # last modified time; None means there is no physical file
+            [
+                *map(  # a list of lines, including trailing newline on each
+                    lambda ln: ln + "\x0a", code_text.splitlines()
+                )
+            ],
+            mod.__file__,  # file name, e.g. "<mymodule>" or the actual path to the file
+        )
+    # not catching this causes the most irritating bugs ever!
+    if package_name:
+        mod.__package__ = package_name
+    try:
+        exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
+    except:  # reraise anything without handling - clean and simple.
+        raise
+    for (check, pattern), decorator in aspectize.items():
+        _apply_aspect(mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders)
+    return mod
+
+
 def _ensure_proxy(mod):
     if mod.__class__ is not ModuleType:
         return mod
@@ -782,6 +754,35 @@ def _fail_or_default(default, exception, msg):
         return default
     else:
         raise exception(msg)
+
+
+class ProxyModule(ModuleType):
+    def __init__(self, mod):
+        self.__implementation = mod
+        self.__condition = threading.RLock()
+
+    def __getattribute__(self, name):
+        if name in (
+            "_ProxyModule__implementation",
+            "_ProxyModule__condition",
+            "",
+            "__class__",
+            "__metaclass__",
+            "__instancecheck__",
+        ):
+            return object.__getattribute__(self, name)
+        with self.__condition:
+            return getattr(self.__implementation, name)
+
+    def __setattr__(self, name, value):
+        if name in (
+            "_ProxyModule__implementation",
+            "_ProxyModule__condition",
+        ):
+            object.__setattr__(self, name, value)
+            return
+        with self.__condition:
+            setattr(self.__implementation, name, value)
 
 
 class ModuleReloader:
@@ -1057,10 +1058,10 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         name: str,
         hash_algo=Hash.sha256,
     ):
-        """Update the registry to contain the package's metadata.
-        Does not call Use.persist_registry() on its own."""
-        version = str(version) if version else "0.0.0"
-        assert version not in ("None", "null", "")
+        """Update the registry to contain the package's metadata."""
+        # version = str(version) if version else "0.0.0"
+        # assert version not in ("None", "null", "")
+        assert isinstance(version, Version)
 
         if not self.registry.execute(
             f"SELECT * FROM distributions WHERE name='{name}' AND version='{version}'"
@@ -1457,10 +1458,9 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         self.modes = modes
         aspectize = aspectize or {}
 
-        if not hashes:
-            hashes = set()
         if isinstance(hashes, str):
             hashes = set([hashes])
+        hashes = set(hashes) if hashes else set()
 
         # we use boolean flags to reduce the complexity of the call signature
         fatal_exceptions = bool(Use.fatal_exceptions & modes) or "ERRORS" in os.environ
