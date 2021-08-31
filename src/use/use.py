@@ -929,9 +929,8 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         if isinstance(__builtins__, dict):
             __builtins__["use"] = self
     def uninstall(self):
-        if isinstance(__builtins__, dict):
-            if "use" in __builtins__:
-                del __builtins__["use"]
+        if isinstance(__builtins__, dict) and "use" in __builtins__:
+            del __builtins__["use"]
 
     def del_entry(self, name, version):
 	       pass
@@ -1100,53 +1099,51 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         path = source_dir.joinpath(path).resolve()
         os.chdir(path.parent)
         name = path.stem
+        with open(path, "rb") as file:
+            code = file.read()
         if reloading:
-                with open(path, "rb") as file:
-                    code = file.read()
-                # initial instance, if this doesn't work, just throw the towel
-                mod = _build_mod(
-                        name=name,
-                        code=code,
-                        initial_globals=initial_globals,
-                        module_path=str(path.resolve()),
-                        aspectize=aspectize,
-                )
-                mod = ProxyModule(mod)
-                reloader = ModuleReloader(
-                    proxy=mod,
+            # initial instance, if this doesn't work, just throw the towel
+            mod = _build_mod(
                     name=name,
-                    path=path,
+                    code=code,
                     initial_globals=initial_globals,
+                    module_path=str(path.resolve()),
                     aspectize=aspectize,
-                )
-                _reloaders[mod] = reloader
+            )
+            mod = ProxyModule(mod)
+            reloader = ModuleReloader(
+                proxy=mod,
+                name=name,
+                path=path,
+                initial_globals=initial_globals,
+                aspectize=aspectize,
+            )
+            _reloaders[mod] = reloader
 
-                threaded = False
-                # this looks like a hack, but isn't one -
-                # jupyter is running an async loop internally, which works better async than threaded!
-                try:
-                    asyncio.get_running_loop()
-                # we're dealing with non-async code, we need threading
-                except RuntimeError:
-                    # can't have the code inside the handler because of "during handling of X, another exception Y happened"
-                    threaded = True
-                if threaded:
-                    reloader.start_threaded()
+            threaded = False
+            # this looks like a hack, but isn't one -
+            # jupyter is running an async loop internally, which works better async than threaded!
+            try:
+                asyncio.get_running_loop()
+            # we're dealing with non-async code, we need threading
+            except RuntimeError:
+                # can't have the code inside the handler because of "during handling of X, another exception Y happened"
+                threaded = True
+            if threaded:
+                reloader.start_threaded()
 
         else:  # NOT reloading
-                with open(path, "rb") as file:
-                    code = file.read()
-                # the path needs to be set before attempting to load the new module - recursion confusing ftw!
-                frame = inspect.getframeinfo(inspect.currentframe())
-                self._set_mod(name=name, mod=mod, frame=frame)
-                mod = _build_mod(
-                        name=name,
-                        code=code,
-                        initial_globals=initial_globals,
-                        module_path=str(path),
-                        aspectize=aspectize,
-                    )
-                # let's not confuse the user and restore the cwd to the original in any case
+            # the path needs to be set before attempting to load the new module - recursion confusing ftw!
+            frame = inspect.getframeinfo(inspect.currentframe())
+            self._set_mod(name=name, mod=mod, frame=frame)
+            mod = _build_mod(
+                    name=name,
+                    code=code,
+                    initial_globals=initial_globals,
+                    module_path=str(path),
+                    aspectize=aspectize,
+                )
+                    # let's not confuse the user and restore the cwd to the original in any case
         os.chdir(original_cwd)
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
@@ -1282,7 +1279,6 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         entry = None
         found = None
         that_hash = None
-        all_that_hash = set()
         if name in self._using:
             spec = self._using[name].spec
         elif not auto_install:
@@ -1358,6 +1354,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 (name, version),
             ).fetchone()
             if not path:
+                all_that_hash = set()
                 try:
                     data = _get_filtered_data(_get_package_data(package_name))
                     infos = data["releases"][str(target_version)]
