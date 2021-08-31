@@ -385,18 +385,15 @@ def test_reloading(reuse):
                 pass
 
 
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows Auto-installing numpy")
 def test_suggestion_works(reuse):
-    try:
-        mod = reuse("xdis", modes=use.auto_install)
-    except RuntimeWarning as rw:
-        match = re.search(r"(use\(.*\))", str(rw))
-        assert match
-        log.info("eval(match[1]!r)")
-        mod = eval(match[1])
-        assert mod
-        return
-    assert False, "Missed expected RuntimeWarning"
+    sugg = suggested_artifact("xdis")
+    mod = reuse(
+        "xdis",
+        version=sugg[0],
+        hashes=sugg[1],
+        modes=use.auto_install
+    )
+    assert mod
 
 
 def double_function(func):
@@ -432,3 +429,4 @@ def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     )
     assert mod.two() == 4
     assert mod.three() == 3
+    assert reuse.ismethod

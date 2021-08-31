@@ -91,12 +91,12 @@ import time
 import traceback
 from collections import namedtuple
 from enum import Enum
-from functools import partialmethod, singledispatch, update_wrapper
+from functools import cache, partialmethod, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
 from itertools import takewhile
-from logging import DEBUG, NOTSET, WARN, StreamHandler, getLogger, root
+from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
 from operator import itemgetter
 from pathlib import Path
 from pkgutil import zipimporter
@@ -125,6 +125,15 @@ _using = {}
 
 ModInUse = namedtuple("ModInUse", "name mod path spec frame")
 
+# sometimes all you need is a sledge hammer..
+def signal_handler(sig, frame):
+    for reloader in _reloaders.values():
+        reloader.stop()
+    sig, frame
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+
 
 # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
 # # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
@@ -137,10 +146,7 @@ class Version(PkgVersion):
         if major or minor or patch:
             # string as only argument, no way to construct a Version otherwise - WTF
             return super().__init__(".".join((str(major), str(minor), str(patch))))
-        if isinstance(versionstr, str):
-            return super().__init__(versionstr)
-        else:
-            return super().__init__(str(versionstr))  # this is just wrong :|
+        return super().__init__(versionstr)
 
     def __iter__(self):
         yield from self.release
@@ -194,24 +200,13 @@ root.setLevel(NOTSET)
 if "DEBUG" in os.environ:
     root.setLevel(DEBUG)
 else:
-    root.setLevel(WARN)
+    root.setLevel(INFO)
 
 # TODO: log to file
 log = getLogger(__name__)
 
 # defaults
 config = {"version_warning": True, "debugging": False, "use_db": False}
-
-# sometimes all you need is a sledge hammer..
-def signal_handler(sig, frame):
-    for reloader in _reloaders.values():
-        reloader.stop()
-    sig, frame
-    sys.exit(0)
-
-
-signal.signal(signal.SIGINT, signal_handler)
-
 
 class Hash(Enum):
     sha256 = hashlib.sha256
@@ -305,30 +300,27 @@ def pipes(func_or_class):
     return ctx[tree.body[0].name]
 
 
+@cache
 def get_supported() -> FrozenSet[PlatformTag]:
+    """
+    Results of this function are cached. They are expensive to 
+    compute, thanks to some heavyweight usual players
+    (*ahem* pip, pkg_resources, packaging.tags *cough*)
+    whose modules are notoriously resource-hungry.
+    
+    Returns a set containing all platform _platform_tags
+    supported on the current system.
+    """
     items: List[PlatformTag] = []
-    try:
-        from pip._internal.utils import compatibility_tags  # type: ignore
-
-        for tag in compatibility_tags.get_supported():
-            items.append(PlatformTag(platform=tag.platform))
-    except ImportError:
-        pass
+    from pip._internal.utils import compatibility_tags # type: ignore
+    for tag in compatibility_tags.get_supported():
+        items.append(PlatformTag(platform=tag.platform))
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
-
+    
     tags = frozenset(items + ["any"])
     log.error(str(tags))
     return tags
-
-
-def partial(method: Callable[[Any], Any], *args) -> functools.partial[Any]:
-    return partialmethod(method, *args)._make_unbound_method()
-
-
-# TODO: kill this
-def lines_from(path: Path) -> List[str]:
-    return path.read_text(encoding="UTF-8").strip().splitlines()
 
 
 @pipes
@@ -348,20 +340,15 @@ def _find_entry_point(package_name, version):
     pkg_prefix: str
     for c in contents_abs:
         if c.name == "top_level.txt":
-            pkg_prefix = lines_from(c)[0]
+            pkg_prefix = c.read_text(encoding="UTF-8").strip().splitlines()[0]
             break
     entry_suffixes = _entry_suffixes(pkg_prefix, package_name)
     entry_path: str = None
     for c in contents_abs:
         if any(str(c).rfind(str(e)) != -1 for e in entry_suffixes):
-            entry_path = c
-            break
-    else:
-        for c in contents_abs:
-            if c.exists():
-                entry_path = c
-                break
-    return (pkg_prefix, entry_path)
+            return (pkg_prefix, c)
+    return None
+    
 
 
 def _entry_suffixes(pkg_prefix, package_name):
@@ -416,12 +403,11 @@ def _venv_windows_path():
     return Path("Lib") / "site-packages"
 
 
-def isfunction(x):
+def isfunction(x: Any) -> bool:
     return inspect.isfunction(x)
 
-
-def ismethod(x):
-    return inspect.ismethod(x)
+def ismethod(x: Any) -> bool:
+    return inspect.isfunction(x)
 
 
 # decorators for callable classes require a completely different approach i'm afraid.. removing the check should discourage users from trying
