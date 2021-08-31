@@ -561,16 +561,6 @@ def _get_filtered_data(data):
                 continue
             filtered["urls"].append(info)
             filtered["releases"][ver].append(info)
-        
-    for ver, infos in data["releases"].items():
-        for info in infos:
-            if filtered["releases"][ver]:
-                continue
-            if not _is_compatible(info, hash_algo=Hash.sha256.name, include_sdist=True):
-                continue
-            filtered["urls"].append(info)
-            filtered["releases"][ver].append(info)
-        
     for ver in data["releases"].keys():
         if not filtered["releases"][ver]:
             del filtered["releases"][ver]
