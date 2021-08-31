@@ -196,11 +196,7 @@ def methdispatch(func):
 mode = Enum("Mode", "fastfail")
 
 root.addHandler(StreamHandler(sys.stderr))
-root.setLevel(NOTSET)
-if "DEBUG" in os.environ:
-    root.setLevel(DEBUG)
-else:
-    root.setLevel(INFO)
+root.setLevel(DEBUG)
 
 # TODO: log to file
 log = getLogger(__name__)
@@ -347,7 +343,6 @@ def _find_entry_point(package_name, version):
     for c in contents_abs:
         if any(str(c).rfind(str(e)) != -1 for e in entry_suffixes):
             return (pkg_prefix, c)
-    return None
     
 
 
@@ -516,9 +511,7 @@ def _varint_encode(number):
     while True:
         towrite = number & 0x7F
         number >>= 7
-        if number:
-            buf += bytes((towrite | 0x80,))
-        else:
+        if not number:
             buf += bytes((towrite,))
             break
     return buf
@@ -538,10 +531,6 @@ def _get_package_data(package_name):
     if response.status_code == 404:
         raise ImportError(
             f"Package {package_name!r} is not available on pypi; are you sure it exists?"
-        )
-    elif response.status_code != 200:
-        raise RuntimeWarning(
-            f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hashes for the auto-installation was missing."
         )
     data = response.json()
     for v, infos in data["releases"].items():
@@ -607,10 +596,6 @@ def _is_platform_compatible(
     for one_platform_tag in platform_tag.split("."):
         matches_platform = one_platform_tag in platform_srs
         matches_python = our_python_tag == python_tag
-        if "VERBOSE" in os.environ:
-            log.debug(
-                f"({matches_platform=} from {one_platform_tag=} and {matches_python=} from {python_tag=}) or ({include_sdist=} and {is_sdist=}) and not {reject=}:  {info['filename']}"
-            )
         if (
             (matches_platform and matches_python)
             or (include_sdist and is_sdist)
@@ -673,24 +658,12 @@ def _get_version(name=None, package_name=None, /, mod=None) -> Optional[Version]
     for lookup_name in (name, package_name):
         if not lookup_name:
             continue
-        try:
-            if lookup_name is not None:
-                meta = metadata.distribution(lookup_name)
-                return Version(meta.version)
-        except metadata.PackageNotFoundError:
-            continue
-    if not mod:
-        return None
+        if lookup_name is not None:
+            meta = metadata.distribution(lookup_name)
+            return Version(meta.version)
     version = getattr(mod, "__version__", version)
     if isinstance(version, str):
         return Version(version)
-    version = getattr(mod, "version", version)
-    if callable(version):
-        version = version.__call__()
-    if isinstance(version, str):
-        return Version(version)
-    return version
-
 
 def _build_mod(
     *,
@@ -722,10 +695,7 @@ def _build_mod(
     # not catching this causes the most irritating bugs ever!
     if package_name:
         mod.__package__ = package_name
-    try:
-        exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
-    except:  # reraise anything without handling - clean and simple.
-        raise
+    exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
     for (check, pattern), decorator in aspectize.items():
         _apply_aspect(mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders)
     return mod
@@ -867,14 +837,9 @@ class Use(ModuleType):
         self._set_up_files_and_directories()
         # might run into issues during testing otherwise
         if not test_version:
-            try:
-                self.registry = sqlite3.connect(self.home / "registry.db").cursor()
-                self.registry.execute("PRAGMA foreign_keys=ON")
-                self.registry.execute("PRAGMA auto_vacuum = FULL")
-            except Exception as e:
-                raise RuntimeError(
-                    f"Could not connect to the registry database, please make sure it is accessible. ({e})"
-                )
+            self.registry = sqlite3.connect(self.home / "registry.db").cursor()
+            self.registry.execute("PRAGMA foreign_keys=ON")
+            self.registry.execute("PRAGMA auto_vacuum = FULL")
         else:
             self.registry = sqlite3.connect(":memory:").cursor()
         self.registry.row_factory = dict_factory
@@ -893,7 +858,6 @@ class Use(ModuleType):
             root.setLevel(DEBUG)
 
         if config["version_warning"]:
-            try:
                 response = requests.get("https://pypi.org/pypi/justuse/json")
                 data = response.json()
                 max_version = max(Version(version) for version in data["releases"].keys())
@@ -904,18 +868,10 @@ To find out more about the changes check out https://github.com/amogorkon/justus
 Please consider upgrading via 'python -m pip install -U justuse'""",
                         VersionWarning,
                     )
-            except:
-                log.debug(
-                    traceback.format_exc()
-                )  # we really don't need to bug the user about this (either pypi is down or internet is broken)
 
     def _set_up_files_and_directories(self):
         self.home = Path.home() / ".justuse-python"
-        try:
-            self.home.mkdir(mode=0o755, parents=True, exist_ok=True)
-        except PermissionError:
-            # this should fix the permission issues on android #80
-            self.home = Path(tempfile.mkdtemp(prefix="justuse_"))
+        self.home.mkdir(mode=0o755, parents=True, exist_ok=True)
         (self.home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
         for file in (
             "config.toml",
@@ -966,76 +922,22 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         self.registry.connection.commit()
 
     def recreate_registry(self):
-        number_of_backups = len(list((self.home / "registry.db").glob("*.bak")))
-        (self.home / "registry.db").rename(
-            self.home / f"registry.db.{number_of_backups + 1}.bak"
-        )
-        (self.home / "registry.db").touch(mode=0o644)
-        self._set_up_registry()
+	       pass	
 
     def install(self):
         # yeah, really.. __builtins__ sometimes appears as a dict and other times as a module, don't ask me why
         if isinstance(__builtins__, dict):
             __builtins__["use"] = self
-        elif isinstance(__builtins__, ModuleType):
-            setattr(__builtins__, "use", self)
-        else:
-            raise RuntimeWarning("__builtins__ is something unexpected")
-
     def uninstall(self):
         if isinstance(__builtins__, dict):
             if "use" in __builtins__:
                 del __builtins__["use"]
-        elif isinstance(__builtins__, ModuleType):
-            if hasattr(__builtins__, "use"):
-                delattr(__builtins__, "use")
-        else:
-            RuntimeWarning("__builtins__ is something unexpected")
 
     def del_entry(self, name, version):
-        # TODO: CASCADE to artifacts etc
-        self.registry.execute(
-            "DELETE FROM distributions WHERE name=? AND version=?", (name, version)
-        )
-        self.registry.connection.commit()
-
-    def register_hack(self, name, specifier=Specifier(">=0")):
-        def wrapper(func):
-            self._hacks[name] = func
-
-        return wrapper
+	       pass
 
     def cleanup(self):
-        """Bring registry and downloaded packages in sync.
-
-        First all packages are removed that don't have a matching registry entry, then all registry entries that don't have a matching package.
-        """
-
-        def delete_folder(path):
-            for sub in path.iterdir():
-                if sub.is_dir():
-                    delete_folder(sub)
-                else:
-                    sub.unlink()
-            path.rmdir()
-
-        installation_paths = self.registry.execute(
-            "SELECT installation_path FROM distributions"
-        ).fetchall()
-        for package_path in (self.home / "packages").iterdir():
-            if package_path.stem not in installation_paths:
-                if package_path.is_dir():
-                    delete_folder(package_path)
-                else:
-                    package_path.unlink()
-
-        for ID, path in self.registry.execute(
-            "SELECT id, installation_path FROM distributions"
-        ).fetchall():
-            if not Path(path).exists():
-                self.registry.execute(f"DELETE FROM distributions WHERE id=?", (ID,))
-        self.registry.connection.commit()
-
+        pass
     def _save_module_info(
         self,
         *,
@@ -1108,28 +1010,15 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         aspectize = aspectize or {}
         response = requests.get(str(url))
-        if response.status_code != 200:
-            raise ImportError(
-                f"Could not load {url} from the interwebs, got a {response.status_code} error."
-            )
         this_hash = hash_algo.value(response.content).hexdigest()
-        if hash_value:
-            if this_hash != hash_value:
-                return _fail_or_default(
-                    default,
-                    Use.UnexpectedHash,
-                    f"{this_hash} does not match the expected hash {hash_value} - aborting!",
-                )
-        else:
+        if not hash_value:
             warn(
                 f"""Attempting to import from the interwebs with no validation whatsoever!
 To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')""",
                 NoValidationWarning,
             )
         name = str(url)
-
-        try:
-            mod = _build_mod(
+        mod = _build_mod(
                 name=name,
                 code=response.content,
                 module_path=url.path,
@@ -1137,19 +1026,8 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 aspectize=aspectize,
                 aspectize_dunders=bool(Use.aspectize_dunders & modes),
             )
-        except:
-            exc = traceback.format_exc()
-        if exc:
-            return _fail_or_default(default, ImportError, exc)
-
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
-        if as_import:
-            assert isinstance(
-                as_import, str
-            ), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
-            assert as_import.isidentifier(), "as_import must be a valid identifier."
-            sys.modules[as_import] = mod
         return _ensure_proxy(mod)
 
     @__call__.register(Path)
@@ -1193,19 +1071,18 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             return _fail_or_default(default, ImportError, f"Can't import directory {path}")
 
         original_cwd = source_dir = Path.cwd()
-        try:
-            if not path.is_absolute():
+        if not path.is_absolute():
                 source_dir = getattr(
                     self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename),
                     "path",
                     None,
                 )
 
-            # calling from another use()d module
-            if source_dir and source_dir.exists():
+        # calling from another use()d module
+        if source_dir and source_dir.exists():
                 os.chdir(source_dir.parent)
                 source_dir = source_dir.parent
-            else:
+        else:
                 # there are a number of ways to call use() from a non-use() starting point
                 # let's first check if we are running in jupyter
                 jupyter = "ipykernel" in sys.modules
@@ -1220,37 +1097,20 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                             .resolve()
                             .parent
                         )
-            if source_dir is None:
-                source_dir = Path(main_mod.__loader__.path).parent
-            if not source_dir.joinpath(path).exists():
-                source_dir = Path.cwd()
-            if not source_dir.exists():
-                return _fail_or_default(
-                    default,
-                    NotImplementedError,
-                    "Can't determine a relative path from a virtual file.",
-                )
-            path = source_dir.joinpath(path).resolve()
-            if not path.exists():
-                return _fail_or_default(default, ImportError, f"Sure '{path}' exists?")
-            os.chdir(path.parent)
-            name = path.stem
-            if reloading:
-                try:
-                    with open(path, "rb") as file:
-                        code = file.read()
-                    # initial instance, if this doesn't work, just throw the towel
-                    mod = _build_mod(
+        path = source_dir.joinpath(path).resolve()
+        os.chdir(path.parent)
+        name = path.stem
+        if reloading:
+                with open(path, "rb") as file:
+                    code = file.read()
+                # initial instance, if this doesn't work, just throw the towel
+                mod = _build_mod(
                         name=name,
                         code=code,
                         initial_globals=initial_globals,
                         module_path=str(path.resolve()),
                         aspectize=aspectize,
-                    )
-                except:
-                    exc = traceback.format_exc()
-                if exc:
-                    return _fail_or_default(default, ImportError, exc)
+                )
                 mod = ProxyModule(mod)
                 reloader = ModuleReloader(
                     proxy=mod,
@@ -1270,73 +1130,34 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 except RuntimeError:
                     # can't have the code inside the handler because of "during handling of X, another exception Y happened"
                     threaded = True
-                if not threaded:
-                    reloader.start_async()
-                else:
+                if threaded:
                     reloader.start_threaded()
 
-                if not all(
-                    inspect.isfunction(value)
-                    for key, value in mod.__dict__.items()
-                    if key not in initial_globals.keys() and not key.startswith("__")
-                ):
-                    warn(
-                        f"Beware {name} also contains non-function objects, it may not be safe to reload!",
-                        Use.NotReloadableWarning,
-                    )
-            else:  # NOT reloading
+        else:  # NOT reloading
                 with open(path, "rb") as file:
                     code = file.read()
                 # the path needs to be set before attempting to load the new module - recursion confusing ftw!
                 frame = inspect.getframeinfo(inspect.currentframe())
                 self._set_mod(name=name, mod=mod, frame=frame)
-                try:
-                    mod = _build_mod(
+                mod = _build_mod(
                         name=name,
                         code=code,
                         initial_globals=initial_globals,
                         module_path=str(path),
                         aspectize=aspectize,
                     )
-                except:
-                    del self._using[name]
-                    exc = traceback.format_exc()
-        except:
-            exc = traceback.format_exc()
-            return _fail_or_default(default, ImportError, exc)
-        finally:
-            # let's not confuse the user and restore the cwd to the original in any case
-            os.chdir(original_cwd)
-        if exc:
-            return _fail_or_default(default, ImportError, exc)
-        if as_import:
-            assert isinstance(
-                as_import, str
-            ), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
-            sys.modules[as_import] = mod
+                # let's not confuse the user and restore the cwd to the original in any case
+        os.chdir(original_cwd)
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
         return _ensure_proxy(mod)
 
     def _import_builtin(self, name, spec, default, aspectize):
-        try:
             mod = spec.loader.create_module(spec)
             spec.loader.exec_module(mod)  # ! => cache
-            if aspectize:
-                warn(
-                    "Applying aspects to builtins may lead to unexpected behaviour, but there you go..",
-                    RuntimeWarning,
-                )
-            for (check, pattern), decorator in aspectize.items():
-                _apply_aspect(
-                    mod, check, pattern, decorator, aspectize_dunders=self.aspectize_dunders
-                )
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
             return _ensure_proxy(mod)
-        except:
-            exc = traceback.format_exc()
-            return _fail_or_default(default, ImportError, exc)
 
     def _import_classical_install(
         self,
@@ -1353,49 +1174,26 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         # sourcery no-metrics
         fatal_exceptions |= "ERRORS" in os.environ
         exc = None
-        try:
-            mod = importlib.import_module(module_name)  # ! => cache
-            for (check, pattern), decorator in aspectize.items():
-                _apply_aspect(
-                    mod,
-                    check,
-                    pattern,
-                    decorator,
-                    aspectize_dunders=bool(Use.aspectize_dunders & self.modes),
-                )
-            frame = inspect.getframeinfo(inspect.currentframe())
-            self._set_mod(name=name, mod=mod, frame=frame)
-            if not target_version:
-                warn(
-                    f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')",
-                    AmbiguityWarning,
-                )
-                return _ensure_proxy(mod)
-        except:
-            if fatal_exceptions:
-                raise
-            exc = traceback.format_exc()
-        if exc:
-            return _fail_or_default(default, ImportError, exc)
+        mod = importlib.import_module(module_name)  # ! => cache
+        frame = inspect.getframeinfo(inspect.currentframe())
+        self._set_mod(name=name, mod=mod, frame=frame)
+        if not target_version:
+            warn(
+                f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')",
+                AmbiguityWarning,
+            )
+            return _ensure_proxy(mod)
         # we only enforce versions with auto-install
         this_version = _get_version(name, package_name, mod=mod)
         if not this_version:
-            log.warning(f"Cannot find version for {name=}, {mod=}")
+	           pass
         elif not target_version:
-            warn("No version was specified", AmbiguityWarning)
+	           pass
         elif target_version != this_version:
             warn(
                 f"{name} expected to be version {target_version},"
                 f" but got {this_version} instead",
                 VersionWarning,
-            )
-        for (check, pattern), decorator in aspectize.items():
-            _apply_aspect(
-                mod,
-                check,
-                pattern,
-                decorator,
-                aspectize_dunders=bool(Use.aspectize_dunders & self.modes),
             )
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
@@ -1511,66 +1309,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     aspectize=aspectize,
                     fatal_exceptions=fatal_exceptions,
                 )
-
-            this_version = _get_version(name, package_name)
-
-            if this_version == target_version:
-                if not (version):
-                    warn(
-                        AmbiguityWarning(
-                            "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
-                        )
-                    )
-                mod = self._import_classical_install(
-                    name=name,
-                    module_name=module_name,
-                    spec=spec,
-                    target_version=target_version,
-                    default=default,
-                    aspectize=aspectize,
-                    fatal_exceptions=fatal_exceptions,
-                    package_name=package_name,
-                )
-                warn(
-                    f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
-                    AmbiguityWarning,
-                )
-                return _ensure_proxy(mod)
-            elif not (version):
-                warn(
-                    AmbiguityWarning(
-                        "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
-                    )
-                )
-                mod = self._import_classical_install(
-                    name=name,
-                    module_name=module_name,
-                    spec=spec,
-                    target_version=target_version,
-                    default=default,
-                    aspectize=aspectize,
-                    fatal_exceptions=fatal_exceptions,
-                    package_name=package_name,
-                )
-                warn(
-                    f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
-                    AmbiguityWarning,
-                )
-                return _ensure_proxy(mod)
-            # wrong version => wrong spec
-            this_version = _get_version(mod=mod)
-            if this_version != target_version:
-                spec = None
-                log.warning(
-                    f"Setting {spec=}, since " f"{target_version=} != {this_version=}"
-                )
         else:
-            if not auto_install:
-                return _fail_or_default(
-                    default,
-                    ImportError,
-                    f"Could not find any installed package '{name}' and auto_install was not requested.",
-                )
             # PEBKAC
             hit: VerHash = VerHash.empty()
             if target_version and not hashes:  # let's try to be helpful
@@ -1605,14 +1344,6 @@ use("{package_name}", version="{version}", hashes={hashes!r}, modes=use.auto_ins
                         hash_value = entry["digests"][hash_algo.name]
                         version = ver
                         hit = (version, hash_value)
-
-                if not hash_value:
-                    raise RuntimeWarning(
-                        f"We could not find any version or release "
-                        f"for {package_name} that could satisfy our "
-                        f"requirements!"
-                    )
-
                 if not target_version and (hash_value or hashes):
                     hashes.add(hash_value)
                     raise RuntimeWarning(
@@ -1621,26 +1352,11 @@ To get some valuable insight on the health of this package, please check out htt
 If you want to auto-install the latest version: use("{name}", version="{version}", hashes={hashes!r}, modes=use.auto_install)
 """
                     )
-
             # if it's a pure python package, there is only an artifact, no installation
             query = self.registry.execute(
                 "SELECT id, installation_path FROM distributions WHERE name=? AND version=?",
                 (name, version),
             ).fetchone()
-
-            if query:
-                query = self.registry.execute(
-                    "SELECT path FROM artifacts WHERE distribution_id=?",
-                    [
-                        query["id"],
-                    ],
-                ).fetchone()
-            if query:
-                path = Path(query["path"])
-                if not path.exists():
-                    path = None
-            if path and not url:
-                url = URL(f"file:/{path.absolute()}")
             if not path:
                 try:
                     data = _get_filtered_data(_get_package_data(package_name))
@@ -1663,41 +1379,16 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                             hit = VerHash(version, that_hash)
                             log.info(f"Matches user hash: {entry=} {hit=}")
                             break
-                    if found is None:
-                        return _fail_or_default(
-                            default,
-                            AutoInstallationError,
-                            f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hashes=!r}).",
-                        )
                     entry, that_hash = found
                     hash_value = that_hash
                     if that_hash is not None:
                         assert isinstance(hashes, set)
                         hashes.add(that_hash)
                 except KeyError as be:  # json issues
-                    msg = f"request to https://pypi.org/pypi/{package_name}/{target_version}/json lead to an error: {be}"
-                    raise RuntimeError(msg) from be
-                exc = None
-                if exc:
-                    return _fail_or_default(
-                        default,
-                        AutoInstallationError,
-                        f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.",
-                    )
-
+                    raise
         if not mod:
             mod = _load_venv_mod(package_name, version)
             path = folder = _venv_pkg_path(package_name, version)
-
-        for (check, pattern), decorator in aspectize.items():
-            if mod is not None:
-                _apply_aspect(
-                    mod,
-                    check,
-                    pattern,
-                    decorator,
-                    aspectize_dunders=bool(Use.aspectize_dunders & modes),
-                )
         frame = inspect.getframeinfo(inspect.currentframe())
         if frame:
             self._set_mod(name=name, mod=mod, frame=frame)
