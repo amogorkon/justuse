@@ -91,7 +91,7 @@ import time
 import traceback
 from collections import namedtuple
 from enum import Enum
-from functools import cache, partialmethod, singledispatch, update_wrapper
+from functools import lru_cache, partialmethod, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
@@ -300,7 +300,7 @@ def pipes(func_or_class):
     return ctx[tree.body[0].name]
 
 
-@cache
+@lru_cache
 def get_supported() -> FrozenSet[PlatformTag]:
     """
     Results of this function are cached. They are expensive to 
