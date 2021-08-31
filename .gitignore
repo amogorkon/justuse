@@ -138,3 +138,10 @@ local_switch
 .vscode/settings.json
 tests/.tests/.test3.py
 tests/.tests/asdf.py
+
+# misc backup
+*.1*.bak
+*.1*.mod
+*.orig
+*.rej
+

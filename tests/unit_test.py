@@ -386,14 +386,16 @@ def test_reloading(reuse):
 
 
 def test_suggestion_works(reuse):
-    sugg = suggested_artifact("xdis")
+    sugg = suggested_artifact("xdis", version="5.0.5")
+    log.info("test_suggestion_works: sugg=%s", sugg)
     mod = reuse(
         "xdis",
-        version=sugg[0],
+        version="5.0.5",
         hashes=sugg[1],
-        modes=use.auto_install
+        hash_algo=reuse.Hash.sha256,
+        modes=(use.auto_install | use.fatal_exceptions)
     )
-    assert mod
+    log.info("test_suggestion_works: mod=%s", mod)
 
 
 def double_function(func):
