@@ -91,7 +91,7 @@ import time
 import traceback
 from collections import namedtuple
 from enum import Enum
-from functools import lru_cache, partialmethod, singledispatch, update_wrapper
+from functools import cache, partialmethod, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
@@ -300,7 +300,7 @@ def pipes(func_or_class):
     return ctx[tree.body[0].name]
 
 
-@lru_cache
+@cache
 def get_supported() -> FrozenSet[PlatformTag]:
     """
     Results of this function are cached. They are expensive to 
@@ -561,6 +561,16 @@ def _get_filtered_data(data):
                 continue
             filtered["urls"].append(info)
             filtered["releases"][ver].append(info)
+        
+    for ver, infos in data["releases"].items():
+        for info in infos:
+            if filtered["releases"][ver]:
+                continue
+            if not _is_compatible(info, hash_algo=Hash.sha256.name, include_sdist=True):
+                continue
+            filtered["urls"].append(info)
+            filtered["releases"][ver].append(info)
+        
     for ver in data["releases"].keys():
         if not filtered["releases"][ver]:
             del filtered["releases"][ver]
@@ -641,6 +651,8 @@ def _is_compatible(
         _is_version_satisfied(info, sys_version)
         and _is_platform_compatible(info, platform_tags, include_sdist)
         and not info["yanked"]
+        and not info["filename"].endswith(".tar")
+        and not info["filename"].endswith(".tar.gz")
     )
 
 
