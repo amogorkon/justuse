@@ -46,10 +46,6 @@ True
 # to auto-install a certain version (within a virtual env and pip in secure hash-check mode) of a package you can do
 >>> np = use("numpy", version="1.1.1", modes=use.auto_install, hash_value=["9879de676"])
 
-File-Hashing inspired by
-- https://github.com/kalafut/py-imohash
-- https://github.com/fmoo/python-varint/blob/master/varint.py
-
 :author: Anselm Kiefner (amogorkon)
 :author: David Reilly
 :license: MIT
@@ -75,7 +71,6 @@ import ast
 import asyncio
 import atexit
 import codecs
-import functools
 import hashlib
 import importlib.util
 import inspect
@@ -91,7 +86,7 @@ import time
 import traceback
 from collections import namedtuple
 from enum import Enum
-from functools import lru_cache, partialmethod, singledispatch, update_wrapper
+from functools import lru_cache, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
@@ -106,7 +101,6 @@ from types import ModuleType
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, Union
 from warnings import warn
 
-import mmh3
 import packaging
 import requests
 import toml
@@ -131,6 +125,7 @@ def signal_handler(sig, frame):
         reloader.stop()
     sig, frame
     sys.exit(0)
+
 
 signal.signal(signal.SIGINT, signal_handler)
 
@@ -207,6 +202,7 @@ log = getLogger(__name__)
 
 # defaults
 config = {"version_warning": True, "debugging": False, "use_db": False}
+
 
 class Hash(Enum):
     sha256 = hashlib.sha256
@@ -303,21 +299,22 @@ def pipes(func_or_class):
 @lru_cache
 def get_supported() -> FrozenSet[PlatformTag]:
     """
-    Results of this function are cached. They are expensive to 
+    Results of this function are cached. They are expensive to
     compute, thanks to some heavyweight usual players
     (*ahem* pip, pkg_resources, packaging.tags *cough*)
     whose modules are notoriously resource-hungry.
-    
+
     Returns a set containing all platform _platform_tags
     supported on the current system.
     """
     items: List[PlatformTag] = []
-    from pip._internal.utils import compatibility_tags # type: ignore
+    from pip._internal.utils import compatibility_tags  # type: ignore
+
     for tag in compatibility_tags.get_supported():
         items.append(PlatformTag(platform=tag.platform))
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
-    
+
     tags = frozenset(items + ["any"])
     log.error(str(tags))
     return tags
@@ -348,7 +345,6 @@ def _find_entry_point(package_name, version):
         if any(str(c).rfind(str(e)) != -1 for e in entry_suffixes):
             return (pkg_prefix, c)
     return None
-    
 
 
 def _entry_suffixes(pkg_prefix, package_name):
@@ -405,6 +401,7 @@ def _venv_windows_path():
 
 def isfunction(x: Any) -> bool:
     return inspect.isfunction(x)
+
 
 def ismethod(x: Any) -> bool:
     return inspect.isfunction(x)
@@ -508,29 +505,6 @@ def _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path):
     )
     log.debug(f"module returned from _load_venv_mod: {mod}")
     return mod
-
-
-def _varint_encode(number):
-    """Pack `number` into varint bytes"""
-    buf = b""
-    while True:
-        towrite = number & 0x7F
-        number >>= 7
-        if number:
-            buf += bytes((towrite | 0x80,))
-        else:
-            buf += bytes((towrite,))
-            break
-    return buf
-
-
-def _hashfileobject(code, sample_threshhold=128 * 1024, sample_size=16 * 1024):
-    sample_threshhold, sample_size
-    size = len(code)
-    hash_tmp = mmh3.hash_bytes(code)
-    hash_ = hash_tmp[7::-1] + hash_tmp[16:7:-1]
-    enc_size = _varint_encode(size)
-    return enc_size + hash_[len(enc_size) :]
 
 
 def _get_package_data(package_name):
@@ -804,7 +778,7 @@ class ModuleReloader:
         while not self._stopped:
             with open(self.path, "rb") as file:
                 code = file.read()
-            current_filehash = _hashfileobject(code)
+            current_filehash = hashlib.blake2b(code).hexdigest()
             if current_filehash != last_filehash:
                 try:
                     mod = _build_mod(
@@ -826,7 +800,7 @@ class ModuleReloader:
             with self._condition:
                 with open(self.path, "rb") as file:
                     code = file.read()
-                current_filehash = _hashfileobject(code)
+                current_filehash = hashlib.blake2b(code).hexdigest()
                 if current_filehash != last_filehash:
                     try:
                         mod = _build_mod(
