@@ -149,3 +149,4 @@ coverage/
 /coverage
 coverage/**
 
+coverage/*
