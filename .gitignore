@@ -145,3 +145,4 @@ tests/.tests/asdf.py
 *.orig
 *.rej
 
+coverage/*
