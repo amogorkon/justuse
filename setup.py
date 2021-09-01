@@ -47,13 +47,9 @@ meta={
 }
 
 requires=(
-    "anyio(>=3.1.0)",
-    "mmh3(>= 2.2.0)",
     "requests(>= 2.24.0)",
     "yarl(>= 1.6.3)",
     "packaging(>= 1.0.0)",
-    "distlib(>= 0.3.2)",
-    "wheel(>= 0.36.2)",
 )
 
 
