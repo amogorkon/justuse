@@ -145,8 +145,4 @@ tests/.tests/asdf.py
 *.orig
 *.rej
 .gdb_history
-coverage/
-/coverage
-coverage/**
-
 coverage/*
