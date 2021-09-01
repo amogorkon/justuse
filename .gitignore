@@ -144,4 +144,5 @@ tests/.tests/asdf.py
 *.1*.mod
 *.orig
 *.rej
-
+.gdb_history
+coverage/*
