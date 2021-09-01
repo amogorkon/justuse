@@ -148,4 +148,6 @@ tests/.tests/asdf.py
 coverage/
 /coverage
 coverage/**
+coverage/*
+
 
