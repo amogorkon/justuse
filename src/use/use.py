@@ -323,7 +323,7 @@ def get_supported() -> FrozenSet[PlatformTag]:
 @pipes
 def _find_entry_point(package_name, version):
     pkg_path = _venv_pkg_path(package_name, version)
-    files = findall(pkg_path)
+    files = [*map(Path, findall(pkg_path))]
     recs = [f for f in files if f.name == "RECORD"]
     assert recs
     rec_paths = [
