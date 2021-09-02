@@ -314,7 +314,7 @@ def test_classic_import_no_version(reuse):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         try:
-            reuse("mmh3", modes=reuse.auto_install)
+            reuse("furl", modes=reuse.auto_install)
             assert issubclass(w[-1].category, reuse.AmbiguityWarning)
             return
         except RuntimeWarning as w:
@@ -323,21 +323,21 @@ def test_classic_import_no_version(reuse):
 
 
 def test_classic_import_same_version(reuse):
-    version = reuse.Version(__import__("mmh3").__version__)
+    version = reuse.Version(__import__("furl").__version__)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        mod = reuse("mmh3", version=version, modes=reuse.fatal_exceptions)
+        mod = reuse("furl", version=version, modes=reuse.fatal_exceptions)
         assert not w
         assert reuse.Version(mod.__version__) == version
 
 
 def test_classic_import_diff_version(reuse):
-    version = reuse.Version(__import__("mmh3").__version__)
+    version = reuse.Version(__import__("furl").__version__)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         major, minor, patch = version
         mod = reuse(
-            "mmh3",
+            "furl",
             version=reuse.Version(major=major, minor=minor, patch=patch + 1),
             modes=reuse.fatal_exceptions,
         )
