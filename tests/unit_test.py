@@ -318,7 +318,7 @@ def test_classic_import_no_version(reuse):
             return
         except RuntimeWarning as w:
             rw = w
-            assert issubclass(w[-1].category, reuse.AmbiguityWarning)
+            assert issubclass(rw[-1].category, reuse.AmbiguityWarning)
     log.warning(f"from try/catch: {rw=}")
 
 
