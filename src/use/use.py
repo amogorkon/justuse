@@ -86,7 +86,7 @@ import time
 import traceback
 from collections import namedtuple
 from enum import Enum
-from functools import lru_cache, singledispatch, update_wrapper
+from functools import lru_cache, partialmethod, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
@@ -308,16 +308,18 @@ def get_supported() -> FrozenSet[PlatformTag]:
     supported on the current system.
     """
     items: List[PlatformTag] = []
-    from pip._internal.utils import compatibility_tags  # type: ignore
-
+    from pip._internal.utils import compatibility_tags # type: ignore
     for tag in compatibility_tags.get_supported():
         items.append(PlatformTag(platform=tag.platform))
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
-
-    tags = frozenset(items + ["any"])
-    log.error(str(tags))
+    
+    tags = frozenset(items + ["any"])    log.error(str(tags))
     return tags
+
+
+def partial(method: Callable[[Any], Any], *args) -> functools.partial[Any]:
+    return partialmethod(method, *args)._make_unbound_method()
 
 
 @pipes
@@ -402,6 +404,8 @@ def _venv_windows_path():
 def isfunction(x: Any) -> bool:
     return inspect.isfunction(x)
 
+def ismethod(x: Any) -> bool:
+    return inspect.isfunction(x)
 
 def ismethod(x: Any) -> bool:
     return inspect.isfunction(x)

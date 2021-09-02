@@ -387,17 +387,14 @@ def test_reloading(reuse):
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="windows reloading")
 def test_suggestion_works(reuse):
-    sugg = suggested_artifact("xdis", version="5.0.5")
-    log.info("test_suggestion_works: sugg=%s", sugg)
+    sugg = suggested_artifact("xdis")
     mod = reuse(
         "xdis",
-        version="5.0.5",
+        version=sugg[0],
         hashes=sugg[1],
-        hash_algo=reuse.Hash.sha256,
-        modes=(use.auto_install | use.fatal_exceptions)
+        modes=use.auto_install
     )
-    log.info("test_suggestion_works: mod=%s", mod)
-
+    assert mod
 
 def double_function(func):
     @functools.wraps(func)
