@@ -315,10 +315,10 @@ def test_classic_import_no_version(reuse):
         warnings.simplefilter("always")
         try:
             reuse("furl", modes=reuse.auto_install)
-            assert issubclass(w[-1].category, reuse.AmbiguityWarning)
             return
         except RuntimeWarning as w:
             rw = w
+            assert issubclass(w[-1].category, reuse.AmbiguityWarning)
     log.warning(f"from try/catch: {rw=}")
 
 
@@ -385,11 +385,10 @@ def test_reloading(reuse):
                 pass
 
 
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows reloading")
 def test_suggestion_works(reuse):
-    sugg = suggested_artifact("xdis")
+    sugg = suggested_artifact("example-pypi-package.examplepy")
     mod = reuse(
-        "xdis",
+        "example-pypi-package.examplepy",
         version=sugg[0],
         hashes=sugg[1],
         modes=use.auto_install
