@@ -86,7 +86,7 @@ import time
 import traceback
 from collections import namedtuple
 from enum import Enum
-from functools import lru_cache, partialmethod, singledispatch, update_wrapper
+from functools import singledispatch, update_wrapper, lru_cache as cache
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
@@ -296,7 +296,7 @@ def pipes(func_or_class):
     return ctx[tree.body[0].name]
 
 
-@lru_cache
+@cache
 def get_supported() -> FrozenSet[PlatformTag]:
     """
     Results of this function are cached. They are expensive to
@@ -317,10 +317,6 @@ def get_supported() -> FrozenSet[PlatformTag]:
     tags = frozenset(items + ["any"])
     log.error(str(tags))
     return tags
-
-
-def partial(method: Callable[[Any], Any], *args) -> functools.partial[Any]:
-    return partialmethod(method, *args)._make_unbound_method()
 
 
 @pipes
@@ -1696,4 +1692,4 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 use = Use()
 use.__dict__.update(globals())
 if not test_version:
-    sys.modules["use"] = use
+    sys.modules["use"] = us-e
