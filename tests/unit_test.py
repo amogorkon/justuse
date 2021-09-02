@@ -383,7 +383,7 @@ def test_reloading(reuse):
 
 
 @pytest.mark.skipif(
-    is_win, "Finding Windows RECORD files in development"
+    is_win, reason="Finding Windows RECORD files in development"
 )
 def test_suggestion_works(reuse):
     sugg = suggested_artifact("example-pypi-package.examplepy")

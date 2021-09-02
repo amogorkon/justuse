@@ -77,7 +77,7 @@ def test_is_platform_compatible_win(reuse):
     
 
 @pytest.mark.skipif(
-    is_win, "Finding Windows RECORD files in development"
+    is_win, reason="Finding Windows RECORD files in development"
 )
 def test_pure_python_package(reuse):
     # https://pypi.org/project/example-pypi-package/
@@ -113,14 +113,14 @@ def _do_load_venv_mod(reuse, package, version=None):
 
 
 @pytest.mark.skipif(
-    is_win, "Finding Windows RECORD files in development"
+    is_win, reason="Finding Windows RECORD files in development"
 )
 def test_load_venv_mod_protobuf(reuse):
     _do_load_venv_mod(reuse, "protobuf")
 
 
 @pytest.mark.skipif(
-    is_win, "Finding Windows RECORD files in development"
+    is_win, reason="Finding Windows RECORD files in development"
 )
 def test_load_venv_mod_numpy(reuse):
     _do_load_venv_mod(reuse, "numpy", "1.19.3")
