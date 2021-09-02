@@ -314,7 +314,8 @@ def get_supported() -> FrozenSet[PlatformTag]:
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
     
-    tags = frozenset(items + ["any"])    log.error(str(tags))
+    tags = frozenset(items + ["any"])
+    log.error(str(tags))
     return tags
 
 
@@ -587,7 +588,7 @@ def _is_platform_compatible(
         matches_python = our_python_tag == python_tag
         if "VERBOSE" in os.environ:
             log.debug(
-                f"({matches_platform=} from {one_platform_tag=} and {matches_python=} from {python_tag=}) or ({include_sdist=} and {is_sdist=}) and not {reject=}:  {info['filename']}"
+                f"({matches_platform=} from {one_platform_tag=} and {matches_python=} from {python_tag=}) or ({include_sdist=} and {is_sdist=}) and not {reject=}: {info['filename']}"
             )
         if (
             (matches_platform and matches_python)
@@ -1557,7 +1558,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 entry = data["releases"][str(target_version)][-1]
                 that_hash = entry["digests"][hash_algo.name]
                 hit = (version, that_hash)
-                log.info(f"{hit=} from  Use._find_matching_artifact")
+                log.info(f"{hit=} from Use._find_matching_artifact")
                 if that_hash:
                     if that_hash is not None:
                         hashes.add(that_hash)
