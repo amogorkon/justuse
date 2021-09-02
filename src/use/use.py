@@ -86,7 +86,8 @@ import time
 import traceback
 from collections import namedtuple
 from enum import Enum
-from functools import singledispatch, update_wrapper, lru_cache as cache
+from functools import singledispatch, update_wrapper
+from functools import lru_cache as cache
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
@@ -1692,4 +1693,4 @@ If you want to auto-install the latest version: use("{name}", version="{version}
 use = Use()
 use.__dict__.update(globals())
 if not test_version:
-    sys.modules["use"] = us-e
+    sys.modules["use"] = use
