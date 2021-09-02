@@ -309,19 +309,6 @@ def test_parse_filename(reuse):
     }
 
 
-def test_classic_import_no_version(reuse):
-    rw = None
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        try:
-            reuse("furl", modes=reuse.auto_install)
-            return
-        except RuntimeWarning as w:
-            rw = w
-            assert issubclass(w[-1].category, reuse.AmbiguityWarning)
-    log.warning(f"from try/catch: {rw=}")
-
-
 def test_classic_import_same_version(reuse):
     version = reuse.Version(__import__("furl").__version__)
     with warnings.catch_warnings(record=True) as w:
