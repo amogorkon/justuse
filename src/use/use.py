@@ -86,7 +86,7 @@ import time
 import traceback
 from collections import namedtuple
 from enum import Enum
-from functools import singledispatch, update_wrapper
+from functools import partial, singledispatch, update_wrapper
 from functools import lru_cache as cache
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
