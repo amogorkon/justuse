@@ -238,7 +238,37 @@ class AutoInstallationError(ImportError):
 # Fun fact: f-strings are firmly rooted in the AST.
 class Message(Enum):
     not_reloadable = (
-        lambda: f"Beware {name} also contains non-function objects, it may not be safe to reload!"
+        lambda name: f"Beware {name} also contains non-function objects, it may not be safe to reload!"
+    )
+    couldnt_connect_to_db = (
+        lambda e: f"Could not connect to the registry database, please make sure it is accessible. ({e})"
+    )
+    version_warning = (
+        lambda max_version: f"""Justuse is version {Version(__version__)}, but there is a newer version {max_version} available on PyPI.
+To find out more about the changes check out https://github.com/amogorkon/justuse/wiki/What's-new
+Please consider upgrading via 'python -m pip install -U justuse'"""
+    )
+    cant_use = (
+        lambda thing: f"Only pathlib.Path, yarl.URL and str are valid sources of things to import, but got {type(thing)}."
+    )
+    web_error = (
+        lambda url, response: f"Could not load {url} from the interwebs, got a {response.status_code} error."
+    )
+    no_validation = (
+        lambda url, hash_algo, this_hash: f"""Attempting to import from the interwebs with no validation whatsoever!
+To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
+    )
+    aspectize_builtins_warning = (
+        lambda: "Applying aspects to builtins may lead to unexpected behaviour, but there you go.."
+    )
+    version_warning = (
+        lambda name, target_version, this_version: f"{name} expected to be version {target_version}, but got {this_version} instead"
+    )
+    ambiguous_name_warning = (
+        lambda name: f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))"
+    )
+    ambiguous_version_warning = (
+        lambda name, this_version: f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")'
     )
 
 
@@ -888,9 +918,7 @@ class Use(ModuleType):
                 self.registry.execute("PRAGMA foreign_keys=ON")
                 self.registry.execute("PRAGMA auto_vacuum = FULL")
             except Exception as e:
-                raise RuntimeError(
-                    f"Could not connect to the registry database, please make sure it is accessible. ({e})"
-                )
+                raise RuntimeError(Message.couldnt_connect_to_db())
         else:
             self.registry = sqlite3.connect(":memory:").cursor()
         self.registry.row_factory = dict_factory
@@ -915,9 +943,7 @@ class Use(ModuleType):
                 max_version = max(Version(version) for version in data["releases"].keys())
                 if Version(__version__) < max_version:
                     warn(
-                        f"""Justuse is version {Version(__version__)}, but there is a newer version {max_version} available on PyPI.
-To find out more about the changes check out https://github.com/amogorkon/justuse/wiki/What's-new
-Please consider upgrading via 'python -m pip install -U justuse'""",
+                        Message.version_warning(),
                         VersionWarning,
                     )
             except:
@@ -1095,9 +1121,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
-        raise NotImplementedError(
-            f"Only pathlib.Path, yarl.URL and str are valid sources of things to import, but got {type(thing)}."
-        )
+        raise NotImplementedError(Message.cant_use())
 
     @__call__.register(URL)
     def _use_url(
@@ -1125,9 +1149,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         aspectize = aspectize or {}
         response = requests.get(str(url))
         if response.status_code != 200:
-            raise ImportError(
-                f"Could not load {url} from the interwebs, got a {response.status_code} error."
-            )
+            raise ImportError(Message.web_error())
         this_hash = hash_algo.value(response.content).hexdigest()
         if hash_value:
             if this_hash != hash_value:
@@ -1137,11 +1159,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     f"{this_hash} does not match the expected hash {hash_value} - aborting!",
                 )
         else:
-            warn(
-                f"""Attempting to import from the interwebs with no validation whatsoever!
-To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')""",
-                NoValidationWarning,
-            )
+            warn(Message.no_validation_warning(), NoValidationWarning)
         name = str(url)
 
         try:
@@ -1336,10 +1354,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
             mod = spec.loader.create_module(spec)
             spec.loader.exec_module(mod)  # ! => cache
             if aspectize:
-                warn(
-                    "Applying aspects to builtins may lead to unexpected behaviour, but there you go..",
-                    RuntimeWarning,
-                )
+                warn(Message.aspectize_builtins_warning(), RuntimeWarning)
             for (check, pattern), decorator in aspectize.items():
                 _apply_aspect(
                     mod, check, pattern, decorator, aspectize_dunders=self.aspectize_dunders
@@ -1397,11 +1412,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         elif not target_version:
             warn("No version was specified", AmbiguityWarning)
         elif target_version != this_version:
-            warn(
-                f"{name} expected to be version {target_version},"
-                f" but got {this_version} instead",
-                VersionWarning,
-            )
+            warn(Message.version_warning(), VersionWarning)
         for (check, pattern), decorator in aspectize.items():
             _apply_aspect(
                 mod,
@@ -1487,10 +1498,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         # which is inherently ambiguous, but can't really be avoided for packages.
         # let's first see if the user might mean something else entirely
         if any(Path(".").glob(f"{name}.py")):
-            warn(
-                f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))",
-                AmbiguityWarning,
-            )
+            warn(Message.ambiguous_name_warning(name), AmbiguityWarning)
         hit: VerHash = VerHash.empty()
         data = None
         spec = None
@@ -1565,10 +1573,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     fatal_exceptions=fatal_exceptions,
                     package_name=package_name,
                 )
-                warn(
-                    f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
-                    AmbiguityWarning,
-                )
+                warn(Message.ambiguous_version_warning(name, this_version), AmbiguityWarning)
                 return _ensure_proxy(mod)
             # wrong version => wrong spec
             this_version = _get_version(mod=mod)
