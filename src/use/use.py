@@ -425,7 +425,7 @@ def findall(topdir:Path,  followlinks=True):
     dir = Path(str(topdir)) if topdir else Path.cwd()
     files = _find_all_simple(dir, followlinks)
     if dir == Path.cwd():
-        make_rel = partial(Path.relpath, start=dir)
+        make_rel = partial(os.path.relpath, start=dir)
         files = map(make_rel, files)
     return list(files)
 
