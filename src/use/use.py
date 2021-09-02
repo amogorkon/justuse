@@ -409,25 +409,21 @@ def _venv_windows_path():
     return Path("Lib") / "site-packages"
     
     
-def _find_all_simple(path: Path, followlinks: bool):
-    results = (
-        Path(base) / file
-        for base, dirs, files in os.walk(path, followlinks)
-        for file in files
-    )
+def _find_all_simple(path: Path):
+
     return filter(Path.is_file, results)
 
-def findall(topdir:Path,  followlinks=True):
+def findall(topdir:Path):
     """
     Find all files under 'topdir' and return the list of full files.
     Unless totdir is '.', return full filenames with dir prepended.
     """
-    dir = Path(str(topdir)) if topdir else Path.cwd()
-    files = _find_all_simple(dir, followlinks)
-    if dir == Path.cwd():
-        make_rel = partial(os.path.relpath, start=dir)
-        files = map(make_rel, files)
-    return list(files)
+    return [
+        # note that on Windows, base is not absolute, but is on *nix
+        (topdir/base if not Path(base).is_absolute() else Path(base)) / file
+        for base, dirs, files in os.walk(topdir.absolute(), followlinks=True)
+        for file in files
+    ]
 
 
 def isfunction(x: Any) -> bool:
