@@ -15,6 +15,7 @@ from furl import furl as URL
 # this is actually a test!
 from tests.simple_funcs import three
 
+
 if Path("src").is_dir():
     sys.path.insert(0, "") if "" not in sys.path else None
     lpath, rpath = (sys.path[0 : sys.path.index("") + 1], sys.path[sys.path.index("") + 2 :])
@@ -26,6 +27,7 @@ if Path("src").is_dir():
         sys.path.clear()
         sys.path.__iadd__(lpath + rpath)
 import_base = Path(__file__).parent.parent / "src"
+is_win = sys.platform.startswith("win")
 import use
 
 __package__ = "tests"
@@ -123,9 +125,17 @@ def test_builtin():
 def test_classical_install(reuse):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
+        mod = reuse("pytest", version=pytest.__version__, modes=reuse.fatal_exceptions)
+        assert mod is pytest or mod._ProxyModule__implementation is pytest
+        assert not w
+
+
+def test_classical_install_no_version(reuse):
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
         mod = reuse("pytest", modes=reuse.fatal_exceptions)
         assert mod is pytest or mod._ProxyModule__implementation is pytest
-        assert issubclass(w[-1].category, use.AmbiguityWarning)
+        assert w and issubclass(w[-1].category, use.AmbiguityWarning)
 
 
 def test_autoinstall_PEBKAC(reuse):
@@ -309,35 +319,22 @@ def test_parse_filename(reuse):
     }
 
 
-def test_classic_import_no_version(reuse):
-    rw = None
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        try:
-            reuse("mmh3", modes=reuse.auto_install)
-            assert issubclass(w[-1].category, reuse.AmbiguityWarning)
-            return
-        except RuntimeWarning as w:
-            rw = w
-    log.warning(f"from try/catch: {rw=}")
-
-
 def test_classic_import_same_version(reuse):
-    version = reuse.Version(__import__("mmh3").__version__)
+    version = reuse.Version(__import__("furl").__version__)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        mod = reuse("mmh3", version=version, modes=reuse.fatal_exceptions)
+        mod = reuse("furl", version=version, modes=reuse.fatal_exceptions)
         assert not w
         assert reuse.Version(mod.__version__) == version
 
 
 def test_classic_import_diff_version(reuse):
-    version = reuse.Version(__import__("mmh3").__version__)
+    version = reuse.Version(__import__("furl").__version__)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         major, minor, patch = version
         mod = reuse(
-            "mmh3",
+            "furl",
             version=reuse.Version(major=major, minor=minor, patch=patch + 1),
             modes=reuse.fatal_exceptions,
         )
@@ -346,7 +343,7 @@ def test_classic_import_diff_version(reuse):
 
 
 @pytest.mark.skipif(
-    sys.platform.startswith("win"), reason="code lines can't be looked up? # TODO"
+    is_win, reason="code lines can't be looked up? # TODO"
 )
 def test_use_ugrade_version_warning(reuse):
     version = "0.0.0"
@@ -369,7 +366,7 @@ class Restorer:
             lock.release()
 
 
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows reloading")
+@pytest.mark.skipif(is_win, reason="windows reloading")
 def test_reloading(reuse):
     fd, file = tempfile.mkstemp(".py", "test_module")
     with Restorer():
@@ -385,19 +382,15 @@ def test_reloading(reuse):
                 pass
 
 
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows reloading")
 def test_suggestion_works(reuse):
-    sugg = suggested_artifact("xdis", version="5.0.5")
-    log.info("test_suggestion_works: sugg=%s", sugg)
+    sugg = suggested_artifact("example-pypi-package.examplepy")
     mod = reuse(
-        "xdis",
-        version="5.0.5",
+        "example-pypi-package.examplepy",
+        version=sugg[0],
         hashes=sugg[1],
-        hash_algo=reuse.Hash.sha256,
-        modes=(use.auto_install | use.fatal_exceptions)
+        modes=use.auto_install
     )
-    log.info("test_suggestion_works: mod=%s", mod)
-
+    assert mod
 
 def double_function(func):
     @functools.wraps(func)
@@ -433,3 +426,34 @@ def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     assert mod.two() == 4
     assert mod.three() == 3
     assert reuse.ismethod
+    
+
+def _get_test_ver_hash_data(reuse):
+    VerHash = reuse.VerHash
+    h = "5de64950137f3a50b76ce93556db392e8f1f954c2d8207f78a92d1f79aa9f737"
+    vh1, vh2 = (VerHash("1.0.1", h), VerHash("1.0.2", h))
+    vh1u, vh2u, vh3u = (
+        VerHash("1.0.1", None), VerHash(None, h), VerHash(None, None)
+     )
+    vh1b = VerHash("1.0.1", h)
+    return (VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b)
+
+def test_ver_hash_1(reuse):
+    VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b = _get_test_ver_hash_data(reuse)
+    assert vh1 and vh2 and not vh3u
+    assert vh1.hash == vh2.hash
+    assert vh1u.version and vh2u.hash
+    assert vh1 == vh1b
+    assert vh1 != ("1.0.1", None)
+    assert vh1 != ("1.0.1", None, None)
+
+def test_ver_hash_2(reuse):
+    VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b = _get_test_ver_hash_data(reuse)
+    assert vh1 == ("1.0.1", h)
+    assert vh1 != ("1.0.1", h, None)
+    assert vh1 != object()
+    assert ("1.0.1", h, None) != vh1
+    assert "1.0.1" in vh1 and h not in vh3u
+    assert h in vh1
+    assert "1.0.1" not in vh2
+    assert h in vh2 and h in vh2u

@@ -86,7 +86,8 @@ import time
 import traceback
 from collections import namedtuple
 from enum import Enum
-from functools import lru_cache, singledispatch, update_wrapper
+from functools import partial, singledispatch, update_wrapper
+from functools import lru_cache as cache
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
@@ -296,7 +297,7 @@ def pipes(func_or_class):
     return ctx[tree.body[0].name]
 
 
-@lru_cache
+@cache
 def get_supported() -> FrozenSet[PlatformTag]:
     """
     Results of this function are cached. They are expensive to
@@ -308,13 +309,12 @@ def get_supported() -> FrozenSet[PlatformTag]:
     supported on the current system.
     """
     items: List[PlatformTag] = []
-    from pip._internal.utils import compatibility_tags  # type: ignore
-
+    from pip._internal.utils import compatibility_tags # type: ignore
     for tag in compatibility_tags.get_supported():
         items.append(PlatformTag(platform=tag.platform))
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
-
+    
     tags = frozenset(items + ["any"])
     log.error(str(tags))
     return tags
@@ -323,7 +323,18 @@ def get_supported() -> FrozenSet[PlatformTag]:
 @pipes
 def _find_entry_point(package_name, version):
     pkg_path = _venv_pkg_path(package_name, version)
-    rec_path = pkg_path / f"{package_name.replace('-', '_')}-{version}.dist-info" / "RECORD"
+    files = [*map(Path, findall(pkg_path))]
+    recs = [f for f in files if f.name == "RECORD"]
+    assert recs
+    rec_paths = [
+        f for f in recs
+        if f.parent.stem.replace("_", "-")[0:f.parent.stem.find("-")]
+            == package_name
+        and f.parent.stem[f.parent.stem.find("-")+1:]
+            == version
+    ]
+    assert rec_paths
+    rec_path = rec_paths[0]
     contents = (
         rec_path.read_text(encoding="UTF-8")
         >> str.strip
@@ -332,7 +343,6 @@ def _find_entry_point(package_name, version):
         << map(itemgetter(0))
         >> list
     )
-
     contents_abs = list(map(pkg_path.__truediv__, contents))
     pkg_prefix: str
     for c in contents_abs:
@@ -397,11 +407,30 @@ def _venv_unix_path():
 
 def _venv_windows_path():
     return Path("Lib") / "site-packages"
+    
+    
+def _find_all_simple(path: Path):
+
+    return filter(Path.is_file, results)
+
+def findall(topdir:Path):
+    """
+    Find all files under 'topdir' and return the list of full files.
+    Unless totdir is '.', return full filenames with dir prepended.
+    """
+    return [
+        # note that on Windows, base is not absolute, but is on *nix
+        (topdir/base if not Path(base).is_absolute() else Path(base)) / file
+        for base, dirs, files in os.walk(topdir.absolute(), followlinks=True)
+        for file in files
+    ]
 
 
 def isfunction(x: Any) -> bool:
     return inspect.isfunction(x)
 
+def ismethod(x: Any) -> bool:
+    return inspect.isfunction(x)
 
 def ismethod(x: Any) -> bool:
     return inspect.isfunction(x)
@@ -434,11 +463,14 @@ def _parse_filename(filename) -> dict:
 
 def _load_venv_mod(package_name, version):
     venv_root = _venv_root(package_name, version)
+    pkg_path = _venv_pkg_path(package_name, version)
     venv_bin = venv_root / "bin"
     python_exe = Path(sys.executable).stem
-    if not venv_bin.exists():
+    current_path = os.environ.get("PATH")
+    venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
+    if not venv_bin.exists() or not pkg_path.exists():
         check_output(
-            [python_exe, "-m", "venv", "--system-site-packages", venv_root],
+            [python_exe, "-m", "venv", venv_root],
             encoding="UTF-8",
         )
     pip_args = (
@@ -452,6 +484,7 @@ def _load_venv_mod(package_name, version):
         "--progress-bar",
         "ascii",
         "--prefer-binary",
+        "--force-reinstall",
         "--exists-action",
         "b",
         "--only-binary",
@@ -463,9 +496,6 @@ def _load_venv_mod(package_name, version):
         "--no-warn-conflicts",
         f"{package_name}=={version}",
     )
-    current_path = os.environ.get("PATH")
-    venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
-    pkg_path = _venv_pkg_path(package_name, version)
     if _venv_is_win():
         output = run(
             ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
@@ -507,6 +537,7 @@ def _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path):
     return mod
 
 
+@cache
 def _get_package_data(package_name):
     response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
     if response.status_code == 404:
@@ -583,7 +614,7 @@ def _is_platform_compatible(
         matches_python = our_python_tag == python_tag
         if "VERBOSE" in os.environ:
             log.debug(
-                f"({matches_platform=} from {one_platform_tag=} and {matches_python=} from {python_tag=}) or ({include_sdist=} and {is_sdist=}) and not {reject=}:  {info['filename']}"
+                f"({matches_platform=} from {one_platform_tag=} and {matches_python=} from {python_tag=}) or ({include_sdist=} and {is_sdist=}) and not {reject=}: {info['filename']}"
             )
         if (
             (matches_platform and matches_python)
@@ -1553,7 +1584,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                 entry = data["releases"][str(target_version)][-1]
                 that_hash = entry["digests"][hash_algo.name]
                 hit = (version, that_hash)
-                log.info(f"{hit=} from  Use._find_matching_artifact")
+                log.info(f"{hit=} from Use._find_matching_artifact")
                 if that_hash:
                     if that_hash is not None:
                         hashes.add(that_hash)
