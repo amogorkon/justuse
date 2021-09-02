@@ -323,7 +323,18 @@ def get_supported() -> FrozenSet[PlatformTag]:
 @pipes
 def _find_entry_point(package_name, version):
     pkg_path = _venv_pkg_path(package_name, version)
-    rec_path = pkg_path / f"{package_name.replace('-', '_')}-{version}.dist-info" / "RECORD"
+    files = findall(pkg_path)
+    recs = [f for f in files if f.name == "RECORD"]
+    assert recs
+    rec_paths = [
+        f for f in recs
+        if f.parent.stem.replace("_", "-")[0:f.parent.stem.find("-")]
+            == package_name
+        and f.parent.stem[f.parent.stem.find("-")+1:]
+            == version
+    ]
+    assert rec_paths
+    rec_path = rec_paths[0]
     contents = (
         rec_path.read_text(encoding="UTF-8")
         >> str.strip
@@ -332,7 +343,6 @@ def _find_entry_point(package_name, version):
         << map(itemgetter(0))
         >> list
     )
-
     contents_abs = list(map(pkg_path.__truediv__, contents))
     pkg_prefix: str
     for c in contents_abs:
@@ -397,6 +407,27 @@ def _venv_unix_path():
 
 def _venv_windows_path():
     return Path("Lib") / "site-packages"
+    
+    
+def _find_all_simple(path: Path, followlinks: bool):
+    results = (
+        Path(base) / file
+        for base, dirs, files in os.walk(path, followlinks)
+        for file in files
+    )
+    return filter(Path.is_file, results)
+
+def findall(topdir:Path,  followlinks=True):
+    """
+    Find all files under 'topdir' and return the list of full files.
+    Unless totdir is '.', return full filenames with dir prepended.
+    """
+    dir = Path(str(topdir)) if topdir else Path.cwd()
+    files = _find_all_simple(dir, followlinks)
+    if dir == Path.cwd():
+        make_rel = partial(Path.relpath, start=dir)
+        files = map(make_rel, files)
+    return list(files)
 
 
 def isfunction(x: Any) -> bool:
@@ -436,11 +467,14 @@ def _parse_filename(filename) -> dict:
 
 def _load_venv_mod(package_name, version):
     venv_root = _venv_root(package_name, version)
+    pkg_path = _venv_pkg_path(package_name, version)
     venv_bin = venv_root / "bin"
     python_exe = Path(sys.executable).stem
-    if not venv_bin.exists():
+    current_path = os.environ.get("PATH")
+    venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
+    if not venv_bin.exists() or not pkg_path.exists():
         check_output(
-            [python_exe, "-m", "venv", "--system-site-packages", venv_root],
+            [python_exe, "-m", "venv", venv_root],
             encoding="UTF-8",
         )
     pip_args = (
@@ -454,6 +488,7 @@ def _load_venv_mod(package_name, version):
         "--progress-bar",
         "ascii",
         "--prefer-binary",
+        "--force-reinstall",
         "--exists-action",
         "b",
         "--only-binary",
@@ -465,9 +500,6 @@ def _load_venv_mod(package_name, version):
         "--no-warn-conflicts",
         f"{package_name}=={version}",
     )
-    current_path = os.environ.get("PATH")
-    venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
-    pkg_path = _venv_pkg_path(package_name, version)
     if _venv_is_win():
         output = run(
             ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
@@ -509,6 +541,7 @@ def _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path):
     return mod
 
 
+@cache
 def _get_package_data(package_name):
     response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
     if response.status_code == 404:

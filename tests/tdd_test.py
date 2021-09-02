@@ -124,7 +124,6 @@ def test_db_setup(reuse):
     assert reuse.registry
 
 
-@pytest.mark.skipif(reason="True", run=True)
 def test_unsupported_artifact(reuse):
     hashes = {
         "win": "1fdae7d980a2fa617d119d0dc13ecb5c23cc63a8b04ffcb5298f2c59d86851e9",
@@ -137,13 +136,17 @@ def test_unsupported_artifact(reuse):
         del hashes["macos"]
     else:
         del hashes["linux"]
-    np = reuse(
-        "sqlalchemy",
-        version="1.4.22",
-        hashes="5de64950137f3a50b76ce93556db392e8f1f954c2d8207f78a92d1f79aa9f737",
-        modes=reuse.auto_install,
-    )
-    assert False, np.__version__
+    try:
+        mod = reuse(
+            "sqlalchemy",
+            version="1.4.22",
+            hashes="5de64950137f3a50b76ce93556db392e8f1f954c2d8207f78a92d1f79aa9f737",
+            modes=reuse.auto_install,
+        )
+    except reuse.AutoInstallationError:
+        pass
+    else:
+        assert False, f"Expected use to fail but it returned {mod}"
 
 
 def _get_test_ver_hash_data(reuse):
