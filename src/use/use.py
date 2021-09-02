@@ -86,8 +86,8 @@ import time
 import traceback
 from collections import namedtuple
 from enum import Enum
-from functools import partial, singledispatch, update_wrapper
 from functools import lru_cache as cache
+from functools import partial, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
@@ -233,6 +233,15 @@ class AutoInstallationError(ImportError):
     pass
 
 
+# This is a collection of most of the messages directed to the user.
+# How it works is quite magical - the lambdas prevent the f-strings from being prematuraly evaluated, and are only evaluated once returned.
+# Fun fact: f-strings are firmly rooted in the AST.
+class Message(Enum):
+    not_reloadable = (
+        lambda: f"Beware {name} also contains non-function objects, it may not be safe to reload!"
+    )
+
+
 # Since we have quite a bit of functional code that black would turn into a sort of arrow antipattern with lots of ((())),
 # we use @pipes to basically enable polish notation which allows us to avoid most parentheses.
 # source >> func(args) is equivalent to func(source, args) and
@@ -309,12 +318,13 @@ def get_supported() -> FrozenSet[PlatformTag]:
     supported on the current system.
     """
     items: List[PlatformTag] = []
-    from pip._internal.utils import compatibility_tags # type: ignore
+    from pip._internal.utils import compatibility_tags  # type: ignore
+
     for tag in compatibility_tags.get_supported():
         items.append(PlatformTag(platform=tag.platform))
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
-    
+
     tags = frozenset(items + ["any"])
     log.error(str(tags))
     return tags
@@ -327,11 +337,10 @@ def _find_entry_point(package_name, version):
     recs = [f for f in files if f.name == "RECORD"]
     assert recs
     rec_paths = [
-        f for f in recs
-        if f.parent.stem.replace("_", "-")[0:f.parent.stem.find("-")]
-            == package_name
-        and f.parent.stem[f.parent.stem.find("-")+1:]
-            == version
+        f
+        for f in recs
+        if f.parent.stem.replace("_", "-")[0 : f.parent.stem.find("-")] == package_name
+        and f.parent.stem[f.parent.stem.find("-") + 1 :] == version
     ]
     assert rec_paths
     rec_path = rec_paths[0]
@@ -407,20 +416,20 @@ def _venv_unix_path():
 
 def _venv_windows_path():
     return Path("Lib") / "site-packages"
-    
-    
-def _find_all_simple(path: Path):
 
+
+def _find_all_simple(path: Path):
     return filter(Path.is_file, results)
 
-def findall(topdir:Path):
+
+def findall(topdir: Path):
     """
     Find all files under 'topdir' and return the list of full files.
     Unless totdir is '.', return full filenames with dir prepended.
     """
     return [
         # note that on Windows, base is not absolute, but is on *nix
-        (topdir/base if not Path(base).is_absolute() else Path(base)) / file
+        (topdir / base if not Path(base).is_absolute() else Path(base)) / file
         for base, dirs, files in os.walk(topdir.absolute(), followlinks=True)
         for file in files
     ]
@@ -429,8 +438,10 @@ def findall(topdir:Path):
 def isfunction(x: Any) -> bool:
     return inspect.isfunction(x)
 
+
 def ismethod(x: Any) -> bool:
     return inspect.isfunction(x)
+
 
 def ismethod(x: Any) -> bool:
     return inspect.isfunction(x)
@@ -1285,10 +1296,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
                     for key, value in mod.__dict__.items()
                     if key not in initial_globals.keys() and not key.startswith("__")
                 ):
-                    warn(
-                        f"Beware {name} also contains non-function objects, it may not be safe to reload!",
-                        Use.NotReloadableWarning,
-                    )
+                    warn(Message.not_reloadable(), NotReloadableWarning)
             else:  # NOT reloading
                 with open(path, "rb") as file:
                     code = file.read()
