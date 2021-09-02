@@ -372,6 +372,7 @@ def test_reloading(reuse):
                 pass
 
 
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="windows RECORD file in development")
 def test_suggestion_works(reuse):
     sugg = suggested_artifact("example-pypi-package.examplepy")
     mod = reuse(
