@@ -88,7 +88,6 @@ from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
 from functools import partial, singledispatch, update_wrapper
-from glob import glob
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
@@ -411,23 +410,9 @@ def _find_entry_point(package_name, version) -> List[Tuple[str, str]]:
                     locations.append((pkg_prefix, c))
     if not locations:
         files = (
-            [
-                *glob(
-                    os.path.join(str(venv_root), "**", package_name, "__init__.py"),
-                    recursive=True,
-                )
-            ]
-            + [
-                *glob(
-                    os.path.join(str(venv_root), "**", package_name, "**", "__init__.py"),
-                    recursive=True,
-                )
-            ]
-            + [
-                *glob(
-                    os.path.join(str(venv_root), "**", f"{package_name}.py"), recursive=True
-                )
-            ]
+            venv_root.rglob(f"**/{package_name}/__init__.py")
+            + venv_root.rglob(f"**/{package_name}/**/__init__.py")
+            + venv_root.rglob(f"**/{package_name}.py")
         )
         for file in files:
             locations.append((venv_root, file))
@@ -535,7 +520,7 @@ def _load_venv_mod(package_name, version) -> ModuleType:
             [python_exe, "-m", "venv", "--system-site-packages", venv_root],
             encoding="UTF-8",
         )
-    for p in glob(os.path.join(venv_root, "**", "python.exe"), recursive=True):
+    for p in venv_root.rglob("**/python.exe"):
         venv_bin = Path(p).parent
         python_exe = "python.exe"
     pip_args = (
