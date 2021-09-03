@@ -30,12 +30,13 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Run a multi-line script
-        uses: actions/checkout@v2
+      - name: Run setup python
         uses: actions/setup-python@v2
           with:
             python-version: '3.x' # Version range or exact version of a Python version to use, using SemVer's version range syntax
             architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified
+      - name: Run a multi-line script
+        uses: actions/checkout@v2
       - run: |
           echo "Setting TLS security properties ..."
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
