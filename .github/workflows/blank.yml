@@ -32,32 +32,19 @@ jobs:
     steps:
       - name: Run a multi-line script
         uses: actions/checkout@v2
+        uses: actions/setup-python@v2
+          with:
+            python-version: '3.x' # Version range or exact version of a Python version to use, using SemVer's version range syntax
+            architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified
       - run: |
           echo "Setting TLS security properties ..."
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          echo "Downloading recent Python 3 ..."
-          Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.9.0/python-3.9.0.exe" -OutFile "c:/temp/python-3.9.0.exe"
-          echo "Installing Python 3 ..."
-          & "c:/temp/python-3.9.0.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
-          echo "Waiting for setup to complete ..."
-          $env:PATH = "$env:LOCALAPPDATA\Programs\Python\Python39-32;$env:LOCALAPPDATA\Programs\Python\Python39-32\lib;$env:PATH"
-          env
-          while (!(Test-Path "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe")) {
-            Write-Host "Waiting for installation"
-            [System.Threading.Thread]::Sleep(1000)
-          }
-          $pyver = ""
-          while (!($pyver.Contains(" 3.9"))) {
-            $pyver = $(
-              & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip --version || & { $global:LASTEXITCODE = 0; }
-            ) -join "`n"
-          }
           echo "Windows-Tests: Preloading package dependencies ..."
-          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip install --force-reinstall --upgrade -r requirements.txt
+          & "python.exe" -m pip install --force-reinstall --upgrade -r requirements.txt
           echo "Windows-Tests: Running tests ..."
           $env:DEBUG = 1
           $env:ERRORS = 1
-          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pytest
+          & "python.exe" -m pytest
 
   test-macos:
     runs-on: macos-latest
