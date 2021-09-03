@@ -514,10 +514,7 @@ def _load_venv_mod(package_name, version):
     venv_root = _venv_root(package_name, version)
     pkg_path = _venv_pkg_path(package_name, version)
     venv_bin = venv_root / "bin"
-    python_exe = Path(sys.executable).stem
-    for p in glob(os.path.join(venv_root, "**", "python.exe"), recursive=True):
-        venv_bin = Path(p).parent
-        python_exe = "python.exe"
+    python_exe = Path(sys.executable).name
     current_path = os.environ.get("PATH")
     venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
     if not venv_bin.exists() or not pkg_path.exists():
@@ -525,6 +522,9 @@ def _load_venv_mod(package_name, version):
             [python_exe, "-m", "venv", "--system-site-packages", venv_root],
             encoding="UTF-8",
         )
+    for p in glob(os.path.join(venv_root, "**", "python.exe"), recursive=True):
+        venv_bin = Path(p).parent
+        python_exe = "python.exe"
     pip_args = (
         venv_bin / python_exe,
         "-m",
@@ -946,7 +946,7 @@ class Use(ModuleType):
 
         with open(self.home / "config.toml") as file:
             config.update(toml.load(file))
-
+        
         config.update(test_config)
 
         if config["debugging"]:
@@ -960,7 +960,7 @@ class Use(ModuleType):
                 max_version = max(Version(version) for version in data["releases"].keys())
                 target_version = max_version
                 this_version = __version__
-                if Version(this_version) < target_version:
+                if Version(__version__) < max_version:
                     warn(
                         Message.version_warning(name, target_version, this_version),
                         VersionWarning,
