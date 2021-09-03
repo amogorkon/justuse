@@ -371,7 +371,6 @@ def get_supported() -> FrozenSet[PlatformTag]:
 def _find_entry_point(package_name, version) -> List[Tuple[str,str]]:
     venv_root = _venv_root(package_name, version)
     recs = [*map(Path, glob(os.path.join(str(venv_root), "**", "*RECORD*"), recursive=True))]
-    assert recs
     log.debug("recs=%s", pformat(recs, indent=2, width=70, compact=False))
     rec_paths = [
         f
@@ -380,9 +379,9 @@ def _find_entry_point(package_name, version) -> List[Tuple[str,str]]:
         in f.parent.stem.lower().replace("_", "-")
         and version in f.parent.stem
     ]
-    assert rec_paths
     log.debug("recs_paths=%s", pformat(rec_paths, indent=2, width=70, compact=False))
     locations = []
+    
     for rec_path in rec_paths:
         pkg_path = rec_path.parent.parent
         contents = (
@@ -407,9 +406,18 @@ def _find_entry_point(package_name, version) -> List[Tuple[str,str]]:
             entry_path: str = None
             for c in contents_abs:
                 if any(
-                    str(c).rfind(str(e))!=-1 for e in entry_suffixes
+                    str(c).lower().replace("/", "").replace("\\", "").rfind(str(e).lower().replace("/", "").replace("\\", "")) !=-1 for e in entry_suffixes
                 ):
                     locations.append((pkg_prefix, c))
+    if not locations:
+        files = (
+            [*glob(os.path.join(str(venv_root), "**", package_name, "__init__.py"), recursive=True)] +
+            [*glob(os.path.join(str(venv_root), "**", package_name, "**", "__init__.py"), recursive=True)] +
+            [*glob(os.path.join(str(venv_root), "**", f"{package_name}.py"), recursive=True)]
+        )
+        for file in files:
+            locations.append((venv_root, file))    
+    
     return locations
 
 
@@ -935,7 +943,7 @@ class Use(ModuleType):
 
         with open(self.home / "config.toml") as file:
             config.update(toml.load(file))
-
+        
         config.update(test_config)
 
         if config["debugging"]:
@@ -949,7 +957,7 @@ class Use(ModuleType):
                 max_version = max(Version(version) for version in data["releases"].keys())
                 target_version = max_version
                 this_version = __version__
-                if Version(this_version) < target_version:
+                if Version(__version__) < max_version:
                     warn(
                         Message.version_warning(name, target_version, this_version),
                         VersionWarning,
