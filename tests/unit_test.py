@@ -351,7 +351,7 @@ def test_use_ugrade_version_warning(reuse):
         warnings.simplefilter("always")
         # no other way to change __version__ before the actual import while the version check happens on import
         test_use = reuse(
-            reuse.Path(r"../src/use/use.py"), initial_globals={"test_version": version}
+            reuse.Path(reuse.__file__).absolute(), initial_globals={"test_version": version, "test_config": {"version_warning": True}}
         )
         assert test_use.test_version == test_use.__version__ == version
         assert w[0].category.__name__ == reuse.VersionWarning.__name__

@@ -111,6 +111,7 @@ from packaging.specifiers import Specifier, SpecifierSet
 from packaging.version import Version as PkgVersion
 
 # injected via initial_globals for testing, you can safely ignore this
+test_config: str = locals().get("test_config", {})
 test_version: str = locals().get("test_version", None)
 __version__ = test_version or "0.4.1"
 
@@ -191,18 +192,22 @@ def methdispatch(func):
 # Really looking forward to actual builtin sentinel values..
 mode = Enum("Mode", "fastfail")
 
+# defaults
+config = {"version_warning": True, "debugging": False, "use_db": False}
+
+# initialize logging
 root.addHandler(StreamHandler(sys.stderr))
 root.setLevel(NOTSET)
-if "DEBUG" in os.environ:
+if ("DEBUG" in os.environ
+or "pytest" in getattr(sys.modules.get("__init__",""),"__file__","")
+):
     root.setLevel(DEBUG)
+    test_config["debugging"] = True
 else:
     root.setLevel(INFO)
 
 # TODO: log to file
 log = getLogger(__name__)
-
-# defaults
-config = {"version_warning": True, "debugging": False, "use_db": False}
 
 
 class Hash(Enum):
@@ -932,21 +937,28 @@ class Use(ModuleType):
 
         with open(self.home / "config.toml") as file:
             config.update(toml.load(file))
+        
+        config.update(test_config)
 
         if config["debugging"]:
             root.setLevel(DEBUG)
 
         if config["version_warning"]:
             try:
-                response = requests.get("https://pypi.org/pypi/justuse/json")
+                name = "justuse"
+                response = requests.get(f"https://pypi.org/pypi/{name}/json")
                 data = response.json()
                 max_version = max(Version(version) for version in data["releases"].keys())
+                target_version = max_version
+                this_version = __version__
                 if Version(__version__) < max_version:
                     warn(
-                        Message.version_warning(),
+                        Message.version_warning(name, target_version, this_version),
                         VersionWarning,
                     )
             except:
+                if test_version:
+                    raise
                 log.debug(
                     traceback.format_exc()
                 )  # we really don't need to bug the user about this (either pypi is down or internet is broken)
@@ -1121,7 +1133,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
-        raise NotImplementedError(Message.cant_use())
+        raise NotImplementedError(Message.cant_use(thing))
 
     @__call__.register(URL)
     def _use_url(
@@ -1159,7 +1171,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     f"{this_hash} does not match the expected hash {hash_value} - aborting!",
                 )
         else:
-            warn(Message.no_validation_warning(), NoValidationWarning)
+            warn(Message.no_validation(url, hash_algo, this_hash), NoValidationWarning)
         name = str(url)
 
         try:
@@ -1412,7 +1424,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         elif not target_version:
             warn("No version was specified", AmbiguityWarning)
         elif target_version != this_version:
-            warn(Message.version_warning(), VersionWarning)
+            warn(Message.version_warning(name, target_version, this_version), VersionWarning)
         for (check, pattern), decorator in aspectize.items():
             _apply_aspect(
                 mod,
@@ -1534,6 +1546,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 )
 
             this_version = _get_version(name, package_name)
+            log.error("this_version=%s, target_version=%s",
+                this_version, target_version)
 
             if this_version == target_version:
                 if not (version):
