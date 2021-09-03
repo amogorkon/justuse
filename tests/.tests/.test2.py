@@ -1,4 +1,7 @@
-from enum import Enum
-
-class Message(Enum):
-    problem_at_the_foo= lambda: f"{foo} is bar!"
+def foo():
+    try:
+        return 34
+    finally:
+        print(345)
+        
+print(foo())

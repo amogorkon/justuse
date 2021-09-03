@@ -96,12 +96,12 @@ from itertools import takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
 from operator import itemgetter
 from pathlib import Path
-from pprint import pformat
 from pkgutil import zipimporter
+from pprint import pformat
 from subprocess import check_output, run
 from textwrap import dedent
 from types import ModuleType
-from typing import Any, Callable, Dict, FrozenSet, List, Optional, Union
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Union
 from warnings import warn
 
 import packaging
@@ -115,7 +115,7 @@ from packaging.version import Version as PkgVersion
 # injected via initial_globals for testing, you can safely ignore this
 test_config: str = locals().get("test_config", {})
 test_version: str = locals().get("test_version", None)
-__version__ = test_version or "0.4.1"
+__version__ = test_version or "0.4.2"
 
 _reloaders: Dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
 _aspects = {}
@@ -124,7 +124,7 @@ _using = {}
 ModInUse = namedtuple("ModInUse", "name mod path spec frame")
 
 # sometimes all you need is a sledge hammer..
-def signal_handler(sig, frame):
+def signal_handler(sig, frame) -> None:
     for reloader in _reloaders.values():
         reloader.stop()
     sig, frame
@@ -180,7 +180,7 @@ class PlatformTag(namedtuple("PlatformTag", ["platform"])):
 
 
 # singledispatch for methods
-def methdispatch(func):
+def methdispatch(func) -> Callable:
     dispatcher = singledispatch(func)
 
     def wrapper(*args, **kw):
@@ -200,8 +200,8 @@ config = {"version_warning": True, "debugging": False, "use_db": False}
 # initialize logging
 root.addHandler(StreamHandler(sys.stderr))
 root.setLevel(NOTSET)
-if ("DEBUG" in os.environ
-or "pytest" in getattr(sys.modules.get("__init__",""),"__file__","")
+if "DEBUG" in os.environ or "pytest" in getattr(
+    sys.modules.get("__init__", ""), "__file__", ""
 ):
     root.setLevel(DEBUG)
     test_config["debugging"] = True
@@ -240,7 +240,7 @@ class AutoInstallationError(ImportError):
     pass
 
 
-# This is a collection of most of the messages directed to the user.
+# This is a collection of the messages directed to the user.
 # How it works is quite magical - the lambdas prevent the f-strings from being prematuraly evaluated, and are only evaluated once returned.
 # Fun fact: f-strings are firmly rooted in the AST.
 class Message(Enum):
@@ -368,20 +368,19 @@ def get_supported() -> FrozenSet[PlatformTag]:
 
 
 @pipes
-def _find_entry_point(package_name, version) -> List[Tuple[str,str]]:
+def _find_entry_point(package_name, version) -> List[Tuple[str, str]]:
     venv_root = _venv_root(package_name, version)
-    recs = [*map(Path, glob(os.path.join(str(venv_root), "**", "*RECORD*"), recursive=True))]
+    recs = venv_root.rglob("**/RECORD*")
     log.debug("recs=%s", pformat(recs, indent=2, width=70, compact=False))
     rec_paths = [
         f
         for f in recs
-        if package_name.lower().replace("_", "-")
-        in f.parent.stem.lower().replace("_", "-")
+        if package_name.lower().replace("_", "-") in f.parent.stem.lower().replace("_", "-")
         and version in f.parent.stem
     ]
     log.debug("recs_paths=%s", pformat(rec_paths, indent=2, width=70, compact=False))
     locations = []
-    
+
     for rec_path in rec_paths:
         pkg_path = rec_path.parent.parent
         contents = (
@@ -397,31 +396,45 @@ def _find_entry_point(package_name, version) -> List[Tuple[str,str]]:
         for c in contents_abs:
             if c.name != "top_level.txt":
                 continue
-            pkg_prefix = (
-                c.read_text(encoding="UTF-8").strip().splitlines()[0]
-            )
-            entry_suffixes = _entry_suffixes(
-                pkg_prefix, package_name
-            )
-            entry_path: str = None
+            pkg_prefix = c.read_text(encoding="UTF-8").strip().splitlines()[0]
+            entry_suffixes = _entry_suffixes(pkg_prefix, package_name)
             for c in contents_abs:
                 if any(
-                    str(c).lower().replace("/", "").replace("\\", "").rfind(str(e).lower().replace("/", "").replace("\\", "")) !=-1 for e in entry_suffixes
+                    str(c)
+                    .lower()
+                    .replace("/", "")
+                    .replace("\\", "")
+                    .rfind(str(e).lower().replace("/", "").replace("\\", ""))
+                    != -1
+                    for e in entry_suffixes
                 ):
                     locations.append((pkg_prefix, c))
     if not locations:
         files = (
-            [*glob(os.path.join(str(venv_root), "**", package_name, "__init__.py"), recursive=True)] +
-            [*glob(os.path.join(str(venv_root), "**", package_name, "**", "__init__.py"), recursive=True)] +
-            [*glob(os.path.join(str(venv_root), "**", f"{package_name}.py"), recursive=True)]
+            [
+                *glob(
+                    os.path.join(str(venv_root), "**", package_name, "__init__.py"),
+                    recursive=True,
+                )
+            ]
+            + [
+                *glob(
+                    os.path.join(str(venv_root), "**", package_name, "**", "__init__.py"),
+                    recursive=True,
+                )
+            ]
+            + [
+                *glob(
+                    os.path.join(str(venv_root), "**", f"{package_name}.py"), recursive=True
+                )
+            ]
         )
         for file in files:
-            locations.append((venv_root, file))    
-    
+            locations.append((venv_root, file))
     return locations
 
 
-def _entry_suffixes(pkg_prefix, package_name):
+def _entry_suffixes(pkg_prefix, package_name) -> Tuple[Path]:
     return (
         Path(pkg_prefix) / package_name / "__init__.py",
         Path(pkg_prefix) / "__init__.py",
@@ -431,7 +444,7 @@ def _entry_suffixes(pkg_prefix, package_name):
     )
 
 
-def _venv_pkg_path(package_name, version):
+def _venv_pkg_path(package_name, version) -> Path:
     venv_root = _venv_root(package_name, version)
     if _venv_is_win():
         return venv_root / _venv_windows_path()
@@ -439,7 +452,7 @@ def _venv_pkg_path(package_name, version):
         return venv_root / _venv_unix_path()
 
 
-def _clean_sys_modules(package_name):
+def _clean_sys_modules(package_name) -> None:
     del_mods = dict(
         [
             (k, v.__spec__.loader)
@@ -453,23 +466,23 @@ def _clean_sys_modules(package_name):
         del sys.modules[k]
 
 
-def _venv_root(package_name, version):
+def _venv_root(package_name, version) -> Path:
     venv_root = Path.home() / ".justuse-python" / "venv" / package_name / version
     if not venv_root.exists():
         venv_root.mkdir(parents=True)
     return venv_root
 
 
-def _venv_is_win():
+def _venv_is_win() -> bool:
     return sys.platform.lower().startswith("win")
 
 
-def _venv_unix_path():
+def _venv_unix_path() -> Path:
     ver = ".".join(map(str, sys.version_info[0:2]))
     return Path("lib") / f"python{ver}" / "site-packages"
 
 
-def _venv_windows_path():
+def _venv_windows_path() -> Path:
     return Path("Lib") / "site-packages"
 
 
@@ -510,7 +523,7 @@ def _parse_filename(filename) -> dict:
     return match.groupdict() if match else {}
 
 
-def _load_venv_mod(package_name, version):
+def _load_venv_mod(package_name, version) -> ModuleType:
     venv_root = _venv_root(package_name, version)
     pkg_path = _venv_pkg_path(package_name, version)
     venv_bin = venv_root / "bin"
@@ -568,14 +581,12 @@ def _load_venv_mod(package_name, version):
         for pkg_prefix, entry_module_path in entry_points:
             path = entry_module_path.absolute()
             with open(path, "rb") as f:
-                return _extracted_from__load_venv_mod_54(
-                    f, package_name, pkg_prefix, path
-                )
+                return _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path)
     finally:
         os.chdir(orig_cwd)
 
 
-def _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path):
+def _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path) -> ModuleType:
     code = f.read()
     _clean_sys_modules(package_name)
     _clean_sys_modules(pkg_prefix)
@@ -593,7 +604,7 @@ def _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path):
 
 
 @cache
-def _get_package_data(package_name):
+def _get_package_data(package_name) -> Dict[str, str]:
     response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
     if response.status_code == 404:
         raise ImportError(
@@ -603,7 +614,7 @@ def _get_package_data(package_name):
         raise RuntimeWarning(
             f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hashes for the auto-installation was missing."
         )
-    data = response.json()
+    data: dict = response.json()
     for v, infos in data["releases"].items():
         for info in infos:
             info["version"] = v
@@ -611,7 +622,7 @@ def _get_package_data(package_name):
     return data
 
 
-def _get_filtered_data(data):
+def _get_filtered_data(data) -> Dict[str, str]:
     filtered = {"urls": [], "releases": {}}
     for ver, infos in data["releases"].items():
         filtered["releases"][ver] = []
@@ -627,7 +638,7 @@ def _get_filtered_data(data):
     return filtered
 
 
-def _is_version_satisfied(info, sys_version):
+def _is_version_satisfied(info, sys_version) -> bool:
     """
     SpecifierSet("") matches anything, no need to artificially lock down versions at this point
 
@@ -643,7 +654,7 @@ def _is_platform_compatible(
     info,
     platform_tags,
     include_sdist=False,
-):
+) -> bool:
     assert isinstance(info, dict)
     assert isinstance(platform_tags, frozenset)
     if "platform_tag" not in info:
@@ -686,7 +697,7 @@ def _is_compatible(
     sys_version=None,
     platform_tags=frozenset(),
     include_sdist=False,
-):
+) -> bool:
     """Return true if the artifact described by 'info'
     is compatible with the current or specified system."""
     assert isinstance(info, dict)
@@ -706,7 +717,7 @@ def _is_compatible(
     )
 
 
-def dict_factory(cursor, row):
+def dict_factory(cursor, row) -> Dict[str, Any]:
     return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
 
 
@@ -716,7 +727,7 @@ def _apply_aspect(
     pattern,
     decorator: Callable[[Callable[..., Any]], Any],
     aspectize_dunders=False,
-):
+) -> Any:
     """Apply the aspect as a side-effect, no copy is created."""
     for name, obj in thing.__dict__.items():
         if not aspectize_dunders and name.startswith("__") and name.endswith("__"):
@@ -791,7 +802,7 @@ def _build_mod(
     return mod
 
 
-def _ensure_proxy(mod):
+def _ensure_proxy(mod) -> ProxyModule:
     if mod.__class__ is not ModuleType:
         return mod
     return ProxyModule(mod)
@@ -1555,8 +1566,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 )
 
             this_version = _get_version(name, package_name)
-            log.error("this_version=%s, target_version=%s",
-                this_version, target_version)
+            log.error("this_version=%s, target_version=%s", this_version, target_version)
 
             if this_version == target_version:
                 if not (version):
