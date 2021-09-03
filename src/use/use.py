@@ -515,15 +515,18 @@ def _load_venv_mod(package_name, version):
     pkg_path = _venv_pkg_path(package_name, version)
     venv_bin = venv_root / "bin"
     python_exe = Path(sys.executable).stem
+    for p in glob(os.path.join(venv_root, "**", "python.exe"), recursive=True):
+        venv_bin = Path(p).parent
+        python_exe = "python.exe"
     current_path = os.environ.get("PATH")
     venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
     if not venv_bin.exists() or not pkg_path.exists():
         check_output(
-            [python_exe, "-m", "venv", venv_root],
+            [python_exe, "-m", "venv", "--system-site-packages", venv_root],
             encoding="UTF-8",
         )
     pip_args = (
-        python_exe,
+        venv_bin / python_exe,
         "-m",
         "pip",
         "--no-python-version-warning",
