@@ -88,6 +88,7 @@ from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
 from functools import partial, singledispatch, update_wrapper
+from glob import glob
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
@@ -95,6 +96,7 @@ from itertools import takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
 from operator import itemgetter
 from pathlib import Path
+from pprint import pformat
 from pkgutil import zipimporter
 from subprocess import check_output, run
 from textwrap import dedent
@@ -366,39 +368,57 @@ def get_supported() -> FrozenSet[PlatformTag]:
 
 
 @pipes
-def _find_entry_point(package_name, version):
-    pkg_path = _venv_pkg_path(package_name, version)
-    files = [*map(Path, findall(pkg_path))]
-    recs = [f for f in files if f.name == "RECORD"]
-    assert recs
+def _find_entry_point(package_name, version) -> List[Tuple[str,str]]:
+    venv_root = _venv_root(package_name, version)
+    recs = [*map(Path, glob(os.path.join(str(venv_root), "**", "*RECORD*"), recursive=True))]
+    log.debug("recs=%s", pformat(recs, indent=2, width=70, compact=False))
     rec_paths = [
         f
         for f in recs
-        if f.parent.stem.replace("_", "-")[0 : f.parent.stem.find("-")] == package_name
-        and f.parent.stem[f.parent.stem.find("-") + 1 :] == version
+        if package_name.lower().replace("_", "-")
+        in f.parent.stem.lower().replace("_", "-")
+        and version in f.parent.stem
     ]
-    assert rec_paths
-    rec_path = rec_paths[0]
-    contents = (
-        rec_path.read_text(encoding="UTF-8")
-        >> str.strip
-        >> str.splitlines
-        << map(lambda s: s.partition(","))
-        << map(itemgetter(0))
-        >> list
-    )
-    contents_abs = list(map(pkg_path.__truediv__, contents))
-    pkg_prefix: str
-    for c in contents_abs:
-        if c.name == "top_level.txt":
-            pkg_prefix = c.read_text(encoding="UTF-8").strip().splitlines()[0]
-            break
-    entry_suffixes = _entry_suffixes(pkg_prefix, package_name)
-    entry_path: str = None
-    for c in contents_abs:
-        if any(str(c).rfind(str(e)) != -1 for e in entry_suffixes):
-            return (pkg_prefix, c)
-    return None
+    log.debug("recs_paths=%s", pformat(rec_paths, indent=2, width=70, compact=False))
+    locations = []
+    
+    for rec_path in rec_paths:
+        pkg_path = rec_path.parent.parent
+        contents = (
+            rec_path.read_text(encoding="UTF-8")
+            >> str.strip
+            >> str.splitlines
+            << map(lambda s: s.partition(","))
+            << map(itemgetter(0))
+            >> list
+        )
+        contents_abs = list(map(pkg_path.__truediv__, contents))
+        pkg_prefix: str
+        for c in contents_abs:
+            if c.name != "top_level.txt":
+                continue
+            pkg_prefix = (
+                c.read_text(encoding="UTF-8").strip().splitlines()[0]
+            )
+            entry_suffixes = _entry_suffixes(
+                pkg_prefix, package_name
+            )
+            entry_path: str = None
+            for c in contents_abs:
+                if any(
+                    str(c).lower().replace("/", "").replace("\\", "").rfind(str(e).lower().replace("/", "").replace("\\", "")) !=-1 for e in entry_suffixes
+                ):
+                    locations.append((pkg_prefix, c))
+    if not locations:
+        files = (
+            [*glob(os.path.join(str(venv_root), "**", package_name, "__init__.py"), recursive=True)] +
+            [*glob(os.path.join(str(venv_root), "**", package_name, "**", "__init__.py"), recursive=True)] +
+            [*glob(os.path.join(str(venv_root), "**", f"{package_name}.py"), recursive=True)]
+        )
+        for file in files:
+            locations.append((venv_root, file))    
+    
+    return locations
 
 
 def _entry_suffixes(pkg_prefix, package_name):
@@ -453,23 +473,6 @@ def _venv_windows_path():
     return Path("Lib") / "site-packages"
 
 
-def _find_all_simple(path: Path):
-    return filter(Path.is_file, results)
-
-
-def findall(topdir: Path):
-    """
-    Find all files under 'topdir' and return the list of full files.
-    Unless totdir is '.', return full filenames with dir prepended.
-    """
-    return [
-        # note that on Windows, base is not absolute, but is on *nix
-        (topdir / base if not Path(base).is_absolute() else Path(base)) / file
-        for base, dirs, files in os.walk(topdir.absolute(), followlinks=True)
-        for file in files
-    ]
-
-
 def isfunction(x: Any) -> bool:
     return inspect.isfunction(x)
 
@@ -511,16 +514,19 @@ def _load_venv_mod(package_name, version):
     venv_root = _venv_root(package_name, version)
     pkg_path = _venv_pkg_path(package_name, version)
     venv_bin = venv_root / "bin"
-    python_exe = Path(sys.executable).stem
+    python_exe = Path(sys.executable).name
     current_path = os.environ.get("PATH")
     venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
     if not venv_bin.exists() or not pkg_path.exists():
         check_output(
-            [python_exe, "-m", "venv", venv_root],
+            [python_exe, "-m", "venv", "--system-site-packages", venv_root],
             encoding="UTF-8",
         )
+    for p in glob(os.path.join(venv_root, "**", "python.exe"), recursive=True):
+        venv_bin = Path(p).parent
+        python_exe = "python.exe"
     pip_args = (
-        python_exe,
+        venv_bin / python_exe,
         "-m",
         "pip",
         "--no-python-version-warning",
@@ -558,10 +564,13 @@ def _load_venv_mod(package_name, version):
     orig_cwd = Path.cwd()
     try:
         os.chdir(pkg_path)
-        pkg_prefix, entry_module_path = _find_entry_point(package_name, version)
-        path = entry_module_path.absolute()
-        with open(path, "rb") as f:
-            return _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path)
+        entry_points = _find_entry_point(package_name, version)
+        for pkg_prefix, entry_module_path in entry_points:
+            path = entry_module_path.absolute()
+            with open(path, "rb") as f:
+                return _extracted_from__load_venv_mod_54(
+                    f, package_name, pkg_prefix, path
+                )
     finally:
         os.chdir(orig_cwd)
 
@@ -937,7 +946,7 @@ class Use(ModuleType):
 
         with open(self.home / "config.toml") as file:
             config.update(toml.load(file))
-        
+
         config.update(test_config)
 
         if config["debugging"]:
@@ -951,7 +960,7 @@ class Use(ModuleType):
                 max_version = max(Version(version) for version in data["releases"].keys())
                 target_version = max_version
                 this_version = __version__
-                if Version(__version__) < max_version:
+                if Version(this_version) < target_version:
                     warn(
                         Message.version_warning(name, target_version, this_version),
                         VersionWarning,

@@ -382,9 +382,6 @@ def test_reloading(reuse):
                 pass
 
 
-@pytest.mark.skipif(
-    is_win, reason="Finding Windows RECORD files in development"
-)
 def test_suggestion_works(reuse):
     sugg = suggested_artifact("example-pypi-package.examplepy")
     mod = reuse(
