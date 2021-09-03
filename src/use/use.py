@@ -943,7 +943,7 @@ class Use(ModuleType):
 
         with open(self.home / "config.toml") as file:
             config.update(toml.load(file))
-        
+
         config.update(test_config)
 
         if config["debugging"]:
@@ -957,7 +957,7 @@ class Use(ModuleType):
                 max_version = max(Version(version) for version in data["releases"].keys())
                 target_version = max_version
                 this_version = __version__
-                if Version(__version__) < max_version:
+                if Version(this_version) < target_version:
                     warn(
                         Message.version_warning(name, target_version, this_version),
                         VersionWarning,
