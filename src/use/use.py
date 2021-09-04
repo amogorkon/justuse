@@ -85,6 +85,7 @@ import threading
 import time
 import traceback
 import zipfile
+import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
@@ -632,51 +633,19 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
     python_exe = Path(sys.executable).name
     current_path = os.environ.get("PATH")
     venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
-    if not venv_bin.exists():
-        output = run(
-            [python_exe, "-m", "venv", venv_root],
-            encoding="UTF-8",
-            stdout=PIPE,
-            stderr=PIPE,
-            shell=False,
-        )
-        output.check_returncode()
-
+    run([python_exe, "-m", "venv", venv_root])
     install_item = name_prefix or name
     package_name = name_prefix or name
-    if name and ("/" in name or "\x5C" in name):
-        artifact_path = name
-        package_name = (Path(name).name.split("-")[0]
-            .replace("_", "-"))
-
-    if artifact_path and artifact_path.exists():
-        install_item = str(artifact_path.absolute())
-        package_name = (Path(str(artifact_path)).stem.split("-")[0]
-                .replace("_", "-"))
-    else:
+    if not (artifact_path and artifact_path.exists()):
         install_item = install_item or package_name or name
-        if version:
-            install_item += f"=={version}"
-
-
-    if isinstance(url, str):
-        url = URL(url)
+        if version: install_item += f"=={version}"
+    if isinstance(url, str): url = URL(url)
     filename = artifact_path.name if artifact_path else None
     if url:
         filename = url.asdict()["path"]["segments"][-1]
     if filename and not artifact_path:
         artifact_path = sys.modules["use"].home / "packages" / filename
-    if artifact_path and url and not artifact_path.exists():
-        with open(artifact_path,"wb") as f:
-            f.write(requests.get(str(url)).content)
-            f.flush()
-        install_iten = str(artifact_path)
-
-    if artifact_path and artifact_path.exists() and not url:
-        url = URL(f"file:/{artifact_path.absolute()}")
-
     log.info("Installing %s using pip", install_item)
-
     for p in venv_root.rglob("**/bin/python"):
         venv_bin = Path(p).parent
         python_exe = p.name
@@ -684,56 +653,39 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
         venv_bin = Path(p).parent
         python_exe = p.name
 
-    pip_args = (
+    pip_args = [
         str(venv_bin / python_exe),
-        "-m",
-        "pip",
-        "--no-python-version-warning",
-        "--disable-pip-version-check",
-        "--no-color",
-        "install",
-        "--progress-bar",
-        "ascii",
-        "--pre",
-        "--ignore-requires-python",
+        "-m", "pip",
+        "--disable-pip-version-check", "--no-color",
+        "install", "--pre", "-v", "-v",
         "--prefer-binary",
-        "--force-reinstall",
-        # "--no-cache", "--no-cache-dir",
-        "-v", "-v", "-v",
-        "--exists-action",
-        "b",
-        "--only-binary", ":all:",
+        "--exists-action", "b",
         "--no-build-isolation",
-        # "--no-use-pep517",
+        "--no-cache-dir",
         "--no-compile",
         "--no-warn-script-location",
         "--no-warn-conflicts",
-        install_item
-    )
-    if _venv_is_win():
+    ]
+    for extra_args in ([], ["--force-reinstall"]):
         output = run(
-            ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
-            encoding="UTF-8",
-            stdout=PIPE,
-            stderr=PIPE,
-            shell=False,
+            (
+                [
+                    "cmd.exe", "/C",
+                    "set", f"PATH={venv_path_var}", "&"
+                ] if _venv_is_win() else [
+                    "env", f"PATH={venv_path_var}"
+                ]
+            ) + pip_args + extra_args + [install_item],
+            encoding="UTF-8", stdout=PIPE, stderr=PIPE,
         )
-    else:
-        output = run(
-            ["env", f"PATH={venv_path_var}", *pip_args],
-            encoding="UTF-8",
-            stdout=PIPE,
-            stderr=PIPE,
-            shell=False,
-        )
-    output.check_returncode()
-    match = re.compile(
-        'Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))(?:#(\\S*)|)(?=\\s)',
-        re.DOTALL,
-    ).search(str(output.stdout) + "\n\n" + str(output.stderr))
-
-    assert match or artifact_path.exists()
-
+        output.check_returncode()
+        match = re.compile(
+            'Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))(?:#(\\S*)|)(?=\\s)',
+            re.DOTALL,
+        ).search(output.stdout)
+        if match or (artifact_path and artifact_path.exists()):
+            break
+    assert match or (artifact_path and artifact_path.exists())
     info = match.groupdict() if match else {}
     filename = filename or info["filename"] or Path(artifact_path).name
     if info:
@@ -743,25 +695,20 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
         version = info["version"] or version
         if out_info:
             out_info.update(info)
-
-
     if filename and not artifact_path:
             artifact_path = sys.modules["use"].home / "packages" / filename
     if not artifact_path.exists():
         artifact_path.write_bytes(requests.get(url).content)
         assert artifact_path.exists()
-
     orig_cwd = Path.cwd()
     meta = archive_meta(artifact_path)
     meta.update(info)
-
     relp = meta["import_relpath"]
     module_path = [*venv_root.rglob(f"**/{relp}")][0]
     name_segments = (
        ".".join(relp.split(".")[0:-1]).split("-")[0].replace("/",".")
     )
     name_prefix, _, name = name_segments.rpartition(".")
-
     installation_path = module_path
     for _ in range(len(name_segments.split("."))):
         installation_path = installation_path.parent
@@ -789,8 +736,6 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
             )
     finally:
         os.chdir(orig_cwd)
-
-
 
 
 def _load_venv_entry(package_name, name, module_path) -> ModuleType:
@@ -1867,9 +1812,22 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     hash_algo,
                     hashes,
                     all_hashes,
-		    self.home
+                    self.home
                 )
 
+        if path:
+            # trying to import directly from zip
+            try:
+                importer = zipimport.zipimporter(path)
+                mod = importer.load_module(module_name)
+                print("Direct zipimport of", name, "successful.")
+            except:
+                if config["debugging"]:
+                    log.debug(traceback.format_exc())
+                print("Direct zipimport failed, attempting to extract and load manually...")
+        
+        installation_path = (path.parent / path.stem) if path else None
+        
         if not mod:
             out_info = {}
             mod = _load_venv_mod(
