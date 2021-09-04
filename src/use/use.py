@@ -1719,7 +1719,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     hash_algo,
                     hashes,
                     all_that_hash,
-		    home
+		    self.home
                 )
 
         if not mod:
