@@ -273,8 +273,21 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
     ambiguous_name_warning = (
         lambda name: f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))"
     )
-    ambiguous_version_warning = (
+    no_version_provided = (
+        lambda: "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
+    )
+    classically_imported = (
         lambda name, this_version: f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")'
+    )
+    pebkac_missing_hash = (
+        lambda package_name, version, hashes: f"""Failed to auto-install '{package_name}' because hash_value is missing. This may work:
+use("{package_name}", version="{version}", hashes={hashes!r}, modes=use.auto_install)"""
+    )
+    pebkac_unsupported = (
+        lambda package_name: f"We could not find any version or release for {package_name} that could satisfy our requirements!"
+    )
+    pip_json_mess = (
+        lambda package_name, target_version: f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI."
     )
 
 
@@ -369,15 +382,12 @@ def get_supported() -> FrozenSet[PlatformTag]:
 @pipes
 def _find_entry_point(package_name, version) -> List[Tuple[str, str]]:
     venv_root = _venv_root(package_name, version)
-    recs = venv_root.rglob("**/RECORD*")
-    log.debug("recs=%s", pformat(recs, indent=2, width=70, compact=False))
-    rec_paths = [
-        f
-        for f in recs
-        if package_name.lower().replace("_", "-") in f.parent.stem.lower().replace("_", "-")
-        and version in f.parent.stem
-    ]
-    log.debug("recs_paths=%s", pformat(rec_paths, indent=2, width=70, compact=False))
+    rec_paths = filter(
+        lambda rec: package_name.lower().replace("_", "-")
+        in rec.parent.stem.lower().replace("_", "-")
+        and version in rec.parent.stem,
+        venv_root.rglob("**/RECORD*"),
+    )
     locations = []
 
     for rec_path in rec_paths:
@@ -1412,7 +1422,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             self._set_mod(name=name, mod=mod, frame=frame)
             if not target_version:
                 warn(
-                    f"Classically imported '{name}'. To pin this version use('{name}', version='{metadata.version(name)}')",
+                    Message.classically_imported(name, metadata.version(name)),
                     AmbiguityWarning,
                 )
                 return _ensure_proxy(mod)
@@ -1554,12 +1564,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             log.error("this_version=%s, target_version=%s", this_version, target_version)
 
             if this_version == target_version:
+                assert False, "we need a test for this or remove the code block"
                 if not (version):
-                    warn(
-                        AmbiguityWarning(
-                            "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
-                        )
-                    )
+                    warn(Message.no_version_provided(), AmbiguityWarning)
                 mod = self._import_classical_install(
                     name=name,
                     module_name=module_name,
@@ -1571,27 +1578,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     package_name=package_name,
                 )
                 warn(
-                    f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")',
+                    Message.classically_imported(),
                     AmbiguityWarning,
                 )
-                return _ensure_proxy(mod)
-            elif not (version):
-                warn(
-                    AmbiguityWarning(
-                        "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
-                    )
-                )
-                mod = self._import_classical_install(
-                    name=name,
-                    module_name=module_name,
-                    spec=spec,
-                    target_version=target_version,
-                    default=default,
-                    aspectize=aspectize,
-                    fatal_exceptions=fatal_exceptions,
-                    package_name=package_name,
-                )
-                warn(Message.ambiguous_version_warning(name, this_version), AmbiguityWarning)
                 return _ensure_proxy(mod)
             # wrong version => wrong spec
             this_version = _get_version(mod=mod)
@@ -1621,8 +1610,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                         hashes.add(that_hash)
 
                     raise RuntimeWarning(
-                        f"""Failed to auto-install '{package_name}' because hash_value is missing. This may work:
-use("{package_name}", version="{version}", hashes={hashes!r}, modes=use.auto_install)"""
+                        Message.pebkac_missing_hash(package_name, version, hashes)
                     )
                 raise RuntimeWarning(
                     f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
@@ -1643,11 +1631,7 @@ use("{package_name}", version="{version}", hashes={hashes!r}, modes=use.auto_ins
                         hit = (version, hash_value)
 
                 if not hash_value:
-                    raise RuntimeWarning(
-                        f"We could not find any version or release "
-                        f"for {package_name} that could satisfy our "
-                        f"requirements!"
-                    )
+                    raise RuntimeWarning(Message.pebkac_unsupported(package_name))
 
                 if not target_version and (hash_value or hashes):
                     hashes.add(hash_value)
@@ -1710,7 +1694,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     if that_hash is not None:
                         assert isinstance(hashes, set)
                         hashes.add(that_hash)
-                except KeyError as be:  # json issues
+                except KeyError as be:  # json issuesa
                     msg = f"request to https://pypi.org/pypi/{package_name}/{target_version}/json lead to an error: {be}"
                     raise RuntimeError(msg) from be
                 exc = None
@@ -1718,7 +1702,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     return _fail_or_default(
                         default,
                         AutoInstallationError,
-                        f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI.",
+                        Message.pip_json_mess(package_name, target_version),
                     )
 
         if not mod:
