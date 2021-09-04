@@ -531,6 +531,7 @@ def _no_pebkac(name, package_name, target_version, hash_algo, hashes) -> bool:
 def _update_hashes(
     name, package_name, target_version, version, default, hash_algo, hashes, all_that_hash, home
 ) -> None:
+    found = None
     try:
         data = _get_filtered_data(_get_package_data(package_name))
         infos = data["releases"][str(target_version)]
