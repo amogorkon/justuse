@@ -487,7 +487,7 @@ def _venv_windows_path() -> Path:
     return Path("Lib") / "site-packages"
 
 
-def _pebkac(name, package_name, target_version, hash_algo, hashes) -> bool:
+def _no_pebkac(name, package_name, target_version, hash_algo, hashes) -> bool:
     if target_version and not hashes:  # let's try to be helpful
         data = _get_filtered_data(_get_package_data(package_name))
         version = target_version
@@ -525,7 +525,7 @@ def _pebkac(name, package_name, target_version, hash_algo, hashes) -> bool:
             raise RuntimeWarning(
                 Message.no_version_or_hash_provided(name, package_name, version, hashes)
             )
-    return False
+    return True
 
 
 def isfunction(x: Any) -> bool:
@@ -1644,7 +1644,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     f"Could not find any installed package '{name}' and auto_install was not requested.",
                 )
             hit: VerHash = VerHash.empty()
-            if not _pebkac(name, package_name, target_version, hash_algo, hashes):
+            if _no_pebkac(name, package_name, target_version, hash_algo, hashes):
                 pass
 
             # if it's a pure python package, there is only an artifact, no installation
