@@ -529,7 +529,14 @@ def _no_pebkac(name, package_name, target_version, hash_algo, hashes) -> bool:
 
 
 def _update_hashes(
-    name, package_name, target_version, version, default, hash_algo, hashes, all_that_hash, home
+    package_name,
+    target_version,
+    version,
+    default,
+    hash_algo,
+    hashes,
+    all_that_hash,
+    home,
 ) -> None:
     found = None
     try:
@@ -553,7 +560,7 @@ def _update_hashes(
             return _fail_or_default(
                 default,
                 AutoInstallationError,
-                f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hashes=!r}).",
+                f"Tried to auto-install ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hashes=!r}).",
             )
         entry, that_hash = found
         if that_hash is not None:
@@ -895,7 +902,7 @@ def _ensure_proxy(mod) -> ProxyModule:
 
 def _fail_or_default(default, exception, msg):
     if default is not mode.fastfail:
-        return default
+        return default  # TODO: write test for default
     else:
         raise exception(msg)
 
@@ -1028,7 +1035,7 @@ class Use(ModuleType):
                 self.registry.execute("PRAGMA foreign_keys=ON")
                 self.registry.execute("PRAGMA auto_vacuum = FULL")
             except Exception as e:
-                raise RuntimeError(Message.couldnt_connect_to_db())
+                raise RuntimeError(Message.couldnt_connect_to_db(e))
         else:
             self.registry = sqlite3.connect(":memory:").cursor()
         self.registry.row_factory = dict_factory
@@ -1157,12 +1164,6 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
             "DELETE FROM distributions WHERE name=? AND version=?", (name, version)
         )
         self.registry.connection.commit()
-
-    def register_hack(self, name, specifier=Specifier(">=0")):
-        def wrapper(func):
-            self._hacks[name] = func
-
-        return wrapper
 
     def cleanup(self):
         """Bring registry and downloaded packages in sync.
@@ -1451,7 +1452,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     exc = traceback.format_exc()
         except:
             exc = traceback.format_exc()
-            return _fail_or_default(default, ImportError, exc)
         finally:
             # let's not confuse the user and restore the cwd to the original in any case
             os.chdir(original_cwd)
@@ -1481,7 +1481,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             return _ensure_proxy(mod)
         except:
             exc = traceback.format_exc()
-            return _fail_or_default(default, ImportError, exc)
+        return _fail_or_default(default, ImportError, exc)
 
     def _import_classical_install(
         self,
@@ -1712,7 +1712,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 url = URL(f"file:/{path.absolute()}")
             if not path:
                 _update_hashes(
-                    name,
                     package_name,
                     target_version,
                     version,
@@ -1720,26 +1719,26 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     hash_algo,
                     hashes,
                     all_that_hash,
-		    self.home
+                    self.home,
                 )
 
         if not mod:
             mod = _load_venv_mod(package_name, version)
             path = folder = _venv_pkg_path(package_name, version)
 
+        assert mod, f"Well. Shit. No module. ( {path} )"
+
         for (check, pattern), decorator in aspectize.items():
-            if mod is not None:
-                _apply_aspect(
-                    mod,
-                    check,
-                    pattern,
-                    decorator,
-                    aspectize_dunders=bool(Use.aspectize_dunders & modes),
-                )
+            _apply_aspect(
+                mod,
+                check,
+                pattern,
+                decorator,
+                aspectize_dunders=bool(Use.aspectize_dunders & modes),
+            )
         frame = inspect.getframeinfo(inspect.currentframe())
         if frame:
             self._set_mod(name=name, mod=mod, frame=frame)
-        assert mod, f"Well. Shit. No module. ( {path} )"
         this_version = _get_version(mod=mod) or version
         assert this_version, f"Well. Shit, no version. ( {path} )"
         self._save_module_info(
