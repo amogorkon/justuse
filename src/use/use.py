@@ -520,7 +520,7 @@ def _no_pebkac(name, package_name, target_version, hash_algo, hashes) -> bool:
         if not hash_value:
             raise RuntimeWarning(Message.pebkac_unsupported(package_name))
 
-        if not target_version and (hash_value or hashes):
+        if not target_version:
             hashes.add(hash_value)
             raise RuntimeWarning(
                 Message.no_version_or_hash_provided(name, package_name, version, hashes)
