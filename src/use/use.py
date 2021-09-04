@@ -528,6 +528,48 @@ def _no_pebkac(name, package_name, target_version, hash_algo, hashes) -> bool:
     return True
 
 
+def _update_hashes(
+    name, package_name, target_version, version, default, hash_algo, hashes, all_that_hash
+) -> None:
+    try:
+        data = _get_filtered_data(_get_package_data(package_name))
+        infos = data["releases"][str(target_version)]
+        for entry in infos:
+            url = URL(entry["url"])
+            path = self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
+            log.error("url = %s", url)
+            entry["version"] = str(target_version)
+            log.debug(f"looking at {entry=}")
+            assert isinstance(all_that_hash, set)
+            all_that_hash.add(that_hash := entry["digests"].get(hash_algo.name))
+            if hashes.intersection(all_that_hash):
+
+                found = (entry, that_hash)
+                hit = VerHash(version, that_hash)
+                log.info(f"Matches user hash: {entry=} {hit=}")
+                break
+        if found is None:
+            return _fail_or_default(
+                default,
+                AutoInstallationError,
+                f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hashes=!r}).",
+            )
+        entry, that_hash = found
+        if that_hash is not None:
+            assert isinstance(hashes, set)
+            hashes.add(that_hash)
+    except KeyError as be:  # json issuesa
+        msg = f"request to https://pypi.org/pypi/{package_name}/{target_version}/json lead to an error: {be}"
+        raise RuntimeError(msg) from be
+    exc = None
+    if exc:
+        return _fail_or_default(
+            default,
+            AutoInstallationError,
+            Message.pip_json_mess(package_name, target_version),
+        )
+
+
 def isfunction(x: Any) -> bool:
     return inspect.isfunction(x)
 
@@ -1643,7 +1685,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     ImportError,
                     f"Could not find any installed package '{name}' and auto_install was not requested.",
                 )
-            hit: VerHash = VerHash.empty()
+
             if _no_pebkac(name, package_name, target_version, hash_algo, hashes):
                 pass
 
@@ -1653,6 +1695,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 (name, version),
             ).fetchone()
 
+            # TODO: looks like a good place for a JOIN
             if query:
                 query = self.registry.execute(
                     "SELECT path FROM artifacts WHERE distribution_id=?",
@@ -1667,48 +1710,16 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             if path and not url:
                 url = URL(f"file:/{path.absolute()}")
             if not path:
-                try:
-                    data = _get_filtered_data(_get_package_data(package_name))
-                    infos = data["releases"][str(target_version)]
-                    for entry in infos:
-                        url = URL(entry["url"])
-                        path = (
-                            self.home
-                            / "packages"
-                            / Path(url.asdict()["path"]["segments"][-1]).name
-                        )
-                        log.error("url = %s", url)
-                        entry["version"] = str(target_version)
-                        log.debug(f"looking at {entry=}")
-                        assert isinstance(all_that_hash, set)
-                        all_that_hash.add(that_hash := entry["digests"].get(hash_algo.name))
-                        if hashes.intersection(all_that_hash):
-
-                            found = (entry, that_hash)
-                            hit = VerHash(version, that_hash)
-                            log.info(f"Matches user hash: {entry=} {hit=}")
-                            break
-                    if found is None:
-                        return _fail_or_default(
-                            default,
-                            AutoInstallationError,
-                            f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hashes=!r}).",
-                        )
-                    entry, that_hash = found
-                    hash_value = that_hash
-                    if that_hash is not None:
-                        assert isinstance(hashes, set)
-                        hashes.add(that_hash)
-                except KeyError as be:  # json issuesa
-                    msg = f"request to https://pypi.org/pypi/{package_name}/{target_version}/json lead to an error: {be}"
-                    raise RuntimeError(msg) from be
-                exc = None
-                if exc:
-                    return _fail_or_default(
-                        default,
-                        AutoInstallationError,
-                        Message.pip_json_mess(package_name, target_version),
-                    )
+                _update_hashes(
+                    name,
+                    package_name,
+                    target_version,
+                    version,
+                    default,
+                    hash_algo,
+                    hashes,
+                    all_that_hash,
+                )
 
         if not mod:
             mod = _load_venv_mod(package_name, version)
