@@ -84,6 +84,7 @@ import tempfile
 import threading
 import time
 import traceback
+import zipfile
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
@@ -91,13 +92,13 @@ from functools import partial, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
-from itertools import takewhile
+from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
 from operator import itemgetter
 from pathlib import Path
 from pkgutil import zipimporter
 from pprint import pformat
-from subprocess import check_output, run
+from subprocess import PIPE, check_output, run
 from textwrap import dedent
 from types import ModuleType
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Union
@@ -385,72 +386,96 @@ def get_supported() -> FrozenSet[PlatformTag]:
     return tags
 
 
-@pipes
-def _find_entry_point(package_name, version) -> List[Tuple[str, str]]:
-    venv_root = _venv_root(package_name, version)
-    rec_paths = filter(
-        lambda rec: package_name.lower().replace("_", "-")
-        in rec.parent.stem.lower().replace("_", "-")
-        and version in rec.parent.stem,
-        venv_root.rglob("**/RECORD*"),
-    )
-    locations = []
 
-    for rec_path in rec_paths:
-        pkg_path = rec_path.parent.parent
-        contents = (
-            rec_path.read_text(encoding="UTF-8")
-            >> str.strip
-            >> str.splitlines
-            << map(lambda s: s.partition(","))
-            << map(itemgetter(0))
-            >> list
+def archive_meta(artifact_path):
+    with zipfile.ZipFile(artifact_path) as archive:
+        names = [*sorted(
+          map(
+              zipfile.ZipInfo.filename.__get__,
+              archive.filelist
+          )
+        )]
+        names = [n for n in names if not n.endswith("pyi")]
+        meta = dict(map(lambda n: 
+            (
+                Path(n).stem,
+                (
+                    m:=archive.open(n),
+                    str(m.read(), "UTF-8").splitlines(),
+                    m.close()
+                )[1]
+           ),
+           (
+               n for n in names
+               if re.search(
+                   "(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$", n
+               )
+           )
+        ))
+        name = next(
+            l.partition(": ")[-1] for l in meta[
+                "METADATA" if "METADATA" in meta else "PKG-INFO"
+            ]
+            if l.startswith("Name: ")
         )
-        contents_abs = list(map(pkg_path.__truediv__, contents))
-        pkg_prefix: str
-        for c in contents_abs:
-            if c.name != "top_level.txt":
-                continue
-            pkg_prefix = c.read_text(encoding="UTF-8").strip().splitlines()[0]
-            entry_suffixes = _entry_suffixes(pkg_prefix, package_name)
-            for c in contents_abs:
-                if any(
-                    str(c)
-                    .lower()
-                    .replace("/", "")
-                    .replace("\\", "")
-                    .rfind(str(e).lower().replace("/", "").replace("\\", ""))
-                    != -1
-                    for e in entry_suffixes
-                ):
-                    locations.append((pkg_prefix, c))
-    if not locations:
-        files = (
-            venv_root.rglob(f"**/{package_name}/__init__.py")
-            + venv_root.rglob(f"**/{package_name}/**/__init__.py")
-            + venv_root.rglob(f"**/{package_name}.py")
+        md_lines = next(
+            i for i in meta.values() if "Metadata-Version" in str(i)
         )
-        for file in files:
-            locations.append((venv_root, file))
-    return locations
+        info = {
+            p[0].lower().replace("-", "_"): p[2]
+            for p in (l.partition(": ") for l in md_lines)
+        }
+        meta.update(info)
+        meta["names"] = names
+        if "top_level" not in meta:
+            relpath = sorted(
+                [
+                    *(
+                        n
+                        for n in names
+                        if re.search('[^/]+([.][^/]+|[-][^/]+)$', n)
+                    )
+                ],
+                key=lambda n: ("__init__.py" not in n, len(n)),
+            )[0]
 
+            rel2 = relpath.replace("-", "!").split("!")[0]
+            rel3 = Path(rel2)
+            rel4 = rel3.parts
+            if rel3.stem == "__init__":
+                import_name = rel4[0:-1]
+            else:
+                import_name = rel4[0:-1] + [rel3.stem]
+            meta["top_level"] = [import_name]
+            meta["import_name"] = import_name
+        else:
+            top_level, name, version = (
+              meta["top_level"][0],
+              meta["name"],
+              meta["version"]
+            )
+            import_name = (
+                (name,) if (top_level == name) else (top_level,name)
+            )
+            meta["import_name"] = import_name
+            relpath = sorted(
+                [
+                    *(
+                        n
+                        for n in names
+                        if re.search('[^/]+([.][^/]+|[-][^/]+)$', n)
+                    )
+                ],
+                key=lambda n: (
+                    not n.startswith(import_name),
+                    not n.endswith("__init__.py"),
+                    len(n),
+                ),
+            )[0]
 
-def _entry_suffixes(pkg_prefix, package_name) -> Tuple[Path]:
-    return (
-        Path(pkg_prefix) / package_name / "__init__.py",
-        Path(pkg_prefix) / "__init__.py",
-        Path(pkg_prefix) / f"{package_name}.py",
-        Path(package_name) / "__init__.py",
-        Path(f"{package_name}.py"),
-    )
+        meta["import_relpath"] = relpath
+        return meta
 
-
-def _venv_pkg_path(package_name, version) -> Path:
-    venv_root = _venv_root(package_name, version)
-    if _venv_is_win():
-        return venv_root / _venv_windows_path()
-    else:
-        return venv_root / _venv_unix_path()
 
 
 def _clean_sys_modules(package_name) -> None:
@@ -468,7 +493,7 @@ def _clean_sys_modules(package_name) -> None:
 
 
 def _venv_root(package_name, version) -> Path:
-    venv_root = Path.home() / ".justuse-python" / "venv" / package_name / version
+    venv_root = Path.home() / ".justuse-python" / "venv" / package_name / (version or "0.0.0")
     if not venv_root.exists():
         venv_root.mkdir(parents=True)
     return venv_root
@@ -535,7 +560,7 @@ def _update_hashes(
     default,
     hash_algo,
     hashes,
-    all_that_hash,
+    all_hashes,
     home,
 ) -> None:
     found = None
@@ -548,9 +573,9 @@ def _update_hashes(
             log.error("url = %s", url)
             entry["version"] = str(target_version)
             log.debug(f"looking at {entry=}")
-            assert isinstance(all_that_hash, set)
-            all_that_hash.add(that_hash := entry["digests"].get(hash_algo.name))
-            if hashes.intersection(all_that_hash):
+            assert isinstance(all_hashes, set)
+            all_hashes.add(that_hash := entry["digests"].get(hash_algo.name))
+            if hashes.intersection(all_hashes):
 
                 found = (entry, that_hash)
                 hit = VerHash(version, that_hash)
@@ -560,7 +585,7 @@ def _update_hashes(
             return _fail_or_default(
                 default,
                 AutoInstallationError,
-                f"Tried to auto-install ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hashes=!r}).",
+                f"Tried to auto-install ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_hashes=!r}) match the expected hash ({hashes=!r}).",
             )
         entry, that_hash = found
         if that_hash is not None:
@@ -579,59 +604,95 @@ def _update_hashes(
 
 
 def isfunction(x: Any) -> bool:
-    return inspect.isfunction(x)
-
-
+     return inspect.isfunction(x)
 def ismethod(x: Any) -> bool:
-    return inspect.isfunction(x)
-
-
+     return inspect.isfunction(x)
 def ismethod(x: Any) -> bool:
-    return inspect.isfunction(x)
-
-
-# decorators for callable classes require a completely different approach i'm afraid.. removing the check should discourage users from trying
-# def isclass(x):
-#     return inspect.isclass(x) and hasattr(x, "__call__")
-
-
+     return inspect.isfunction(x)
+ # decorators for callable classes require a completely different approach i'm afraid.. removing the check should discourage users from trying
+ # def isclass(x):
+ #     return inspect.isclass(x) and hasattr(x, "__call__")
 def _parse_filename(filename) -> dict:
-    """Match the filename and return a dict of parts.
-    >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
-    {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
-    """
-    # Filename as API, seriously WTF...
-    assert isinstance(filename, str)
-    match = re.match(
-        "(?P<distribution>.*)-"
-        "(?P<version>.*)"
-        "(?:-(?P<build_tag>.*))?-"
-        "(?P<python_tag>.*)-"
-        "(?P<abi_tag>.*)-"
-        "(?P<platform_tag>.*)\\."
-        "(?P<ext>whl|zip|egg|tar|tar\\.gz)",
-        filename,
-    )
-    return match.groupdict() if match else {}
+     """Match the filename and return a dict of parts.
+     >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
+     {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
+     """
+     # Filename as API, seriously WTF...
+     assert isinstance(filename, str)
+     match = re.match(
+         "(?P<distribution>.*)-"
+         "(?P<version>.*)"
+         "(?:-(?P<build_tag>.*))?-"
+         "(?P<python_tag>.*)-"
+         "(?P<abi_tag>.*)-"
+         "(?P<platform_tag>.*)\\."
+         "(?P<ext>whl|zip|egg|tar|tar\\.gz)",
+         filename,
+     )
+     return match.groupdict() if match else {}
 
 
-def _load_venv_mod(package_name, version) -> ModuleType:
-    venv_root = _venv_root(package_name, version)
-    pkg_path = _venv_pkg_path(package_name, version)
+
+def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None, out_info=None) -> ModuleType:
+    venv_root = _venv_root(name_prefix or name, version or "0.0.0")
     venv_bin = venv_root / "bin"
     python_exe = Path(sys.executable).name
     current_path = os.environ.get("PATH")
     venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
-    if not venv_bin.exists() or not pkg_path.exists():
-        check_output(
-            [python_exe, "-m", "venv", "--system-site-packages", venv_root],
+    if not venv_bin.exists():
+        output = run(
+            [python_exe, "-m", "venv", venv_root],
             encoding="UTF-8",
+            stdout=PIPE,
+            stderr=PIPE,
+            shell=False,
         )
+        output.check_returncode()
+
+    install_item = name_prefix or name
+    package_name = name_prefix or name
+    if name and ("/" in name or "\x5C" in name):
+        artifact_path = name
+        package_name = (Path(name).name.split("-")[0]
+            .replace("_", "-"))
+
+    if artifact_path and artifact_path.exists():
+        install_item = str(artifact_path.absolute())
+        package_name = (Path(str(artifact_path)).stem.split("-")[0]
+                .replace("_", "-"))
+    else:
+        install_item = install_item or package_name or name
+        if version:
+            install_item += f"=={version}"
+
+
+    if isinstance(url, str):
+        url = URL(url)
+    filename = artifact_path.name if artifact_path else None
+    if url:
+        filename = url.asdict()["path"]["segments"][-1]
+    if filename and not artifact_path:
+        artifact_path = sys.modules["use"].home / "packages" / filename
+    if artifact_path and url and not artifact_path.exists():
+        with open(artifact_path,"wb") as f:
+            f.write(requests.get(str(url)).content)
+            f.flush()
+        install_iten = str(artifact_path)
+
+    if artifact_path and artifact_path.exists() and not url:
+        url = URL(f"file:/{artifact_path.absolute()}")
+
+    log.info("Installing %s using pip", install_item)
+
+    for p in venv_root.rglob("**/bin/python"):
+        venv_bin = Path(p).parent
+        python_exe = p.name
     for p in venv_root.rglob("**/python.exe"):
         venv_bin = Path(p).parent
-        python_exe = "python.exe"
+        python_exe = p.name
+
     pip_args = (
-        venv_bin / python_exe,
+        str(venv_bin / python_exe),
         "-m",
         "pip",
         "--no-python-version-warning",
@@ -640,59 +701,127 @@ def _load_venv_mod(package_name, version) -> ModuleType:
         "install",
         "--progress-bar",
         "ascii",
+        "--pre",
+        "--ignore-requires-python",
         "--prefer-binary",
         "--force-reinstall",
+        # "--no-cache", "--no-cache-dir",
+        "-v", "-v", "-v",
         "--exists-action",
         "b",
-        "--only-binary",
-        ":all:",
+        "--only-binary", ":all:",
         "--no-build-isolation",
-        "--no-use-pep517",
+        # "--no-use-pep517",
         "--no-compile",
         "--no-warn-script-location",
         "--no-warn-conflicts",
-        f"{package_name}=={version}",
+        install_item
     )
     if _venv_is_win():
         output = run(
             ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&", *pip_args],
             encoding="UTF-8",
-            stderr=sys.stderr,
+            stdout=PIPE,
+            stderr=PIPE,
+            shell=False,
         )
     else:
         output = run(
             ["env", f"PATH={venv_path_var}", *pip_args],
             encoding="UTF-8",
-            stderr=sys.stderr,
+            stdout=PIPE,
+            stderr=PIPE,
+            shell=False,
         )
-    log.debug("pip subprocess output=%r", output)
+    output.check_returncode()
+    match = re.compile(
+        'Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))(?:#(\\S*)|)(?=\\s)',
+        re.DOTALL,
+    ).search(str(output.stdout) + "\n\n" + str(output.stderr))
+
+    assert match or artifact_path.exists()
+
+    info = match.groupdict() if match else {}
+    filename = filename or info["filename"] or Path(artifact_path).name
+    if info:
+        url = url or URL(info["url"])
+        filename = filename or info["filename"]
+        package_name = package_name or info["package_name"]
+        version = info["version"] or version
+        if out_info:
+            out_info.update(info)
+
+
+    if filename and not artifact_path:
+            artifact_path = sys.modules["use"].home / "packages" / filename
+    if not artifact_path.exists():
+        artifact_path.write_bytes(requests.get(url).content)
+        assert artifact_path.exists()
+
     orig_cwd = Path.cwd()
+    meta = archive_meta(artifact_path)
+    meta.update(info)
+
+    relp = meta["import_relpath"]
+    module_path = [*venv_root.rglob(f"**/{relp}")][0]
+    name_segments = (
+       ".".join(relp.split(".")[0:-1]).split("-")[0].replace("/",".")
+    )
+    name_prefix, _, name = name_segments.rpartition(".")
+
+    installation_path = module_path
+    for _ in range(len(name_segments.split("."))):
+        installation_path = installation_path.parent
     try:
-        os.chdir(pkg_path)
-        entry_points = _find_entry_point(package_name, version)
-        for pkg_prefix, entry_module_path in entry_points:
-            path = entry_module_path.absolute()
-            with open(path, "rb") as f:
-                return _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path)
+        log.error("installation_path = %s", installation_path)
+        os.chdir(str(installation_path))
+        with open(module_path, "rb") as f:
+            if out_info is not None: out_info.update({
+                "artifact_path": artifact_path,
+                "installation_path": installation_path,
+                "module_path": module_path,
+                "package": package_name,
+                "package_name": package_name,
+                "name_prefix": name_prefix,
+                "name": name,
+                "url": url,
+                "version": version,
+                "info": info,
+                **meta
+            })
+            return _load_venv_entry(
+                package_name=name_prefix,
+                name=name,
+                module_path=module_path
+            )
     finally:
         os.chdir(orig_cwd)
 
 
-def _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path) -> ModuleType:
-    code = f.read()
-    _clean_sys_modules(package_name)
-    _clean_sys_modules(pkg_prefix)
-    _clean_sys_modules(f"{pkg_prefix}.{package_name}")
-    mod = _build_mod(
-        name=package_name,
-        code=code,
-        module_path=path,
-        initial_globals={},
-        aspectize={},
-        package_name=(pkg_prefix or package_name),
-    )
-    log.debug(f"module returned from _load_venv_mod: {mod}")
-    return mod
+
+
+def _load_venv_entry(package_name, name, module_path) -> ModuleType:
+    mod = None
+    try:
+        _clean_sys_modules(name)
+        _clean_sys_modules(package_name)
+        log.info(
+            "load_venv_entry package_name=%s name=%s module_path=%s",
+            package_name, name, module_path,
+        )
+        with open(module_path, "rb") as code_file:
+            return (mod := _build_mod(
+                name=name,
+                code=code_file.read(),
+                module_path=Path(module_path),
+                initial_globals={},
+                aspectize={},
+                package_name=package_name,
+            ))
+    finally:
+        log.info("load_venv_entry returning mod=%s", mod)
+        _clean_sys_modules(name)
+        _clean_sys_modules(package_name)
 
 
 @cache
@@ -700,7 +829,7 @@ def _get_package_data(package_name) -> Dict[str, str]:
     response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
     if response.status_code == 404:
         raise ImportError(
-            f"Package {package_name!r} is not available on pypi; are you sure it exists?"
+            "Package {package_name!r} is not available on pypi; are you sure it exists?"
         )
     elif response.status_code != 200:
         raise RuntimeWarning(
@@ -866,9 +995,24 @@ def _build_mod(
     default=mode.fastfail,
     package_name=None,
 ) -> ModuleType:
-    mod = ModuleType(name)
+    name_qual = (
+            package_name + "." + name 
+            if (package_name and name and package_name != name)
+            else name
+    ).replace(".__init__", "")
+    from pathlib import Path
+    module_path = Path("%s" % module_path) if not isinstance(module_path,Path) else module_path
+    
+    if "__init__" in module_path.stem:
+        mod = ModuleType(name_qual + ".__init__")
+    else:
+        mod = ModuleType(name_qual)
+    
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = str(module_path)
+    mod.__package__ = package_name
+    mod.__name__ = name
+    
     code_text = codecs.decode(code)
     # module file "<", ">" chars are specially handled by inspect
     if not sys.platform.startswith("win"):
@@ -883,12 +1027,13 @@ def _build_mod(
             mod.__file__,  # file name, e.g. "<mymodule>" or the actual path to the file
         )
     # not catching this causes the most irritating bugs ever!
-    if package_name:
-        mod.__package__ = package_name
     try:
-        exec(compile(code, f"<{name}>", "exec"), mod.__dict__)
-    except:  # reraise anything without handling - clean and simple.
-        raise
+        exec(compile(code, f"<{name}>", "exec"), vars(mod))
+    except:
+        try:
+            exec(compile(code, module_path, "exec"), vars(mod))
+        except:  # reraise anything without handling - clean and simple.
+            raise
     for (check, pattern), decorator in aspectize.items():
         _apply_aspect(mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders)
     return mod
@@ -1622,7 +1767,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         entry = None
         found = None
         that_hash = None
-        all_that_hash = set()
+        all_hashes = set()
+        
         if name in self._using:
             spec = self._using[name].spec
         elif not auto_install:
@@ -1698,6 +1844,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
             # TODO: looks like a good place for a JOIN
             if query:
+                installation_path = query["installation_path"]
                 query = self.registry.execute(
                     "SELECT path FROM artifacts WHERE distribution_id=?",
                     [
@@ -1718,38 +1865,50 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     default,
                     hash_algo,
                     hashes,
-                    all_that_hash,
-                    self.home,
+                    all_hashes,
+		    self.home
                 )
 
         if not mod:
-            mod = _load_venv_mod(package_name, version)
-            path = folder = _venv_pkg_path(package_name, version)
-
-        assert mod, f"Well. Shit. No module. ( {path} )"
-
-        for (check, pattern), decorator in aspectize.items():
-            _apply_aspect(
-                mod,
-                check,
-                pattern,
-                decorator,
-                aspectize_dunders=bool(Use.aspectize_dunders & modes),
+            out_info = {}
+            mod = _load_venv_mod(
+                name_prefix=package_name,
+                name=name,
+                version=version,
+                artifact_path=path,
+                url=url,
+                out_info=out_info,
             )
-        frame = inspect.getframeinfo(inspect.currentframe())
-        if frame:
-            self._set_mod(name=name, mod=mod, frame=frame)
-        this_version = _get_version(mod=mod) or version
-        assert this_version, f"Well. Shit, no version. ( {path} )"
+            path = out_info["artifact_path"]
+            installation_path = out_info["installation_path"]
+            module_path = out_info["module_path"]
+            package_name = out_info["package_name"]
+            name = out_info["name"]
+            url = out_info["url"]
+            this_version = Version(out_info["version"])
         self._save_module_info(
-            name=name,
-            version=this_version,
-            artifact_path=path,
-            hash_value=that_hash,
-            installation_path=folder,
+                name=name,
+                version=this_version,
+                artifact_path=path,
+                hash_value=that_hash,
+                installation_path=installation_path,
         )
-        return _ensure_proxy(mod)
-
+        for (check, pattern), decorator in aspectize.items():
+            if mod is not None:
+                _apply_aspect(
+                    mod,
+                    check,
+                    pattern,
+                    decorator,
+                    aspectize_dunders=bool(Use.aspectize_dunders & modes),
+                )
+        log.error("_use_str: mod=%s", mod)
+        try:
+            return mod
+        finally:
+            frame = inspect.getframeinfo(inspect.currentframe())
+            if frame:
+                self._set_mod(name=name, mod=mod, frame=frame)
 
 use = Use()
 use.__dict__.update(globals())

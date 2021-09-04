@@ -98,23 +98,33 @@ def test_pure_python_package(reuse):
       file.unlink()
 
 
-def _do_load_venv_mod(reuse, package, version=None):
-    if not version:
-        data = reuse._get_filtered_data(reuse._get_package_data(package)) 
-        versions = list(data["releases"].keys())
-        version = versions[-1]
-    mod = reuse._load_venv_mod(package, version)
-    log.info("_load_venv_mod(%r, %r): %s", package, version, mod)
-    assert mod
-    assert mod.__version__ == version
+def _do_load_venv_mod(reuse, name):
+    data = reuse._get_filtered_data(
+        reuse._get_package_data(name)
+    )
+    versions = sorted(list(data["releases"].keys()))
+    version = versions[-1]
+    items = data["releases"][version]
+    mod = None
+    for item in items:
+        if item["filename"].endswith(".whl"):
+            mod = reuse._load_venv_mod(
+                name_prefix="",
+                name=name,
+                version=item["version"],
+                url=item["url"]
+            )
+            if mod: return
+    assert False
 
+    
 
 def test_load_venv_mod_protobuf(reuse):
     _do_load_venv_mod(reuse, "protobuf")
 
 
 def test_load_venv_mod_numpy(reuse):
-    _do_load_venv_mod(reuse, "numpy", "1.19.3")
+    _do_load_venv_mod(reuse, "numpy")
 
 
 def test_db_setup(reuse):
