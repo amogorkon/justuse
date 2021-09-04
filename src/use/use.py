@@ -289,6 +289,12 @@ use("{package_name}", version="{version}", hashes={hashes!r}, modes=use.auto_ins
     pip_json_mess = (
         lambda package_name, target_version: f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI."
     )
+    no_version_or_hash_provided = (
+        lambda name, package_name, version, hashes: f"""Please specify version and hash for auto-installation of '{package_name}'.
+To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
+If you want to auto-install the latest version: use("{name}", version="{version}", hashes={hashes!r}, modes=use.auto_install)
+"""
+    )
 
 
 # Since we have quite a bit of functional code that black would turn into a sort of arrow antipattern with lots of ((())),
@@ -479,6 +485,90 @@ def _venv_unix_path() -> Path:
 
 def _venv_windows_path() -> Path:
     return Path("Lib") / "site-packages"
+
+
+def _no_pebkac(name, package_name, target_version, hash_algo, hashes) -> bool:
+    if target_version and not hashes:  # let's try to be helpful
+        data = _get_filtered_data(_get_package_data(package_name))
+        version = target_version
+        entry = data["releases"][str(target_version)][-1]
+        that_hash = entry["digests"][hash_algo.name]
+        hit = (version, that_hash)
+        log.info(f"{hit=} from Use._find_matching_artifact")
+        if that_hash:
+            if that_hash is not None:
+                hashes.add(that_hash)
+            raise RuntimeWarning(Message.pebkac_missing_hash(package_name, version, hashes))
+        raise RuntimeWarning(
+            f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
+        )
+    elif not target_version and hashes:
+        raise RuntimeWarning(
+            f"Failed to auto-install '{package_name}' because no version was specified."
+        )
+    elif not target_version:
+        # let's try to make an educated guess and give a useful suggestion
+        data = _get_filtered_data(_get_package_data(package_name))
+        for ver, infos in reversed(data["releases"].items()):
+            entry = infos[-1]
+            if not hashes or entry["digests"][hash_algo.name] in hashes:
+
+                hash_value = entry["digests"][hash_algo.name]
+                version = ver
+                hit = (version, hash_value)
+
+        if not hash_value:
+            raise RuntimeWarning(Message.pebkac_unsupported(package_name))
+
+        if not target_version:
+            hashes.add(hash_value)
+            raise RuntimeWarning(
+                Message.no_version_or_hash_provided(name, package_name, version, hashes)
+            )
+    return True
+
+
+def _update_hashes(
+    name, package_name, target_version, version, default, hash_algo, hashes, all_that_hash, home
+) -> None:
+    found = None
+    try:
+        data = _get_filtered_data(_get_package_data(package_name))
+        infos = data["releases"][str(target_version)]
+        for entry in infos:
+            url = URL(entry["url"])
+            path = home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
+            log.error("url = %s", url)
+            entry["version"] = str(target_version)
+            log.debug(f"looking at {entry=}")
+            assert isinstance(all_that_hash, set)
+            all_that_hash.add(that_hash := entry["digests"].get(hash_algo.name))
+            if hashes.intersection(all_that_hash):
+
+                found = (entry, that_hash)
+                hit = VerHash(version, that_hash)
+                log.info(f"Matches user hash: {entry=} {hit=}")
+                break
+        if found is None:
+            return _fail_or_default(
+                default,
+                AutoInstallationError,
+                f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hashes=!r}).",
+            )
+        entry, that_hash = found
+        if that_hash is not None:
+            assert isinstance(hashes, set)
+            hashes.add(that_hash)
+    except KeyError as be:  # json issuesa
+        msg = f"request to https://pypi.org/pypi/{package_name}/{target_version}/json lead to an error: {be}"
+        raise RuntimeError(msg) from be
+    exc = None
+    if exc:
+        return _fail_or_default(
+            default,
+            AutoInstallationError,
+            Message.pip_json_mess(package_name, target_version),
+        )
 
 
 def isfunction(x: Any) -> bool:
@@ -1236,7 +1326,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             initial_globals ([type], optional): Dict that should be globally available to the module before executing it. Defaults to None.
             default ([type], optional): Return instead if an exception is encountered.
             aspectize ([type], optional): Aspectize callables. Defaults to None.
-            modes (int, optional): [description]. Defaults to 0.
+            modes (int, optional): [description]. Defaults to 0; Acceptable mode for this variant: use.reloading.
 
         Returns:
             Optional[ModuleType]: The module if it was imported, otherwise whatever was specified as default.
@@ -1596,51 +1686,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     ImportError,
                     f"Could not find any installed package '{name}' and auto_install was not requested.",
                 )
-            # PEBKAC
-            hit: VerHash = VerHash.empty()
-            if target_version and not hashes:  # let's try to be helpful
-                data = _get_filtered_data(_get_package_data(package_name))
-                version = target_version
-                entry = data["releases"][str(target_version)][-1]
-                that_hash = entry["digests"][hash_algo.name]
-                hit = (version, that_hash)
-                log.info(f"{hit=} from Use._find_matching_artifact")
-                if that_hash:
-                    if that_hash is not None:
-                        hashes.add(that_hash)
 
-                    raise RuntimeWarning(
-                        Message.pebkac_missing_hash(package_name, version, hashes)
-                    )
-                raise RuntimeWarning(
-                    f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
-                )
-            elif not target_version and hashes:
-                raise RuntimeWarning(
-                    f"Failed to auto-install '{package_name}' because no version was specified."
-                )
-            elif not target_version:
-                # let's try to make an educated guess and give a useful suggestion
-                data = _get_filtered_data(_get_package_data(package_name))
-                for ver, infos in reversed(data["releases"].items()):
-                    entry = infos[-1]
-                    if not hashes or entry["digests"][hash_algo.name] in hashes:
-
-                        hash_value = entry["digests"][hash_algo.name]
-                        version = ver
-                        hit = (version, hash_value)
-
-                if not hash_value:
-                    raise RuntimeWarning(Message.pebkac_unsupported(package_name))
-
-                if not target_version and (hash_value or hashes):
-                    hashes.add(hash_value)
-                    raise RuntimeWarning(
-                        f"""Please specify version and hash for auto-installation of '{package_name}'.
-To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
-If you want to auto-install the latest version: use("{name}", version="{version}", hashes={hashes!r}, modes=use.auto_install)
-"""
-                    )
+            if _no_pebkac(name, package_name, target_version, hash_algo, hashes):
+                pass
 
             # if it's a pure python package, there is only an artifact, no installation
             query = self.registry.execute(
@@ -1648,6 +1696,7 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                 (name, version),
             ).fetchone()
 
+            # TODO: looks like a good place for a JOIN
             if query:
                 query = self.registry.execute(
                     "SELECT path FROM artifacts WHERE distribution_id=?",
@@ -1662,48 +1711,17 @@ If you want to auto-install the latest version: use("{name}", version="{version}
             if path and not url:
                 url = URL(f"file:/{path.absolute()}")
             if not path:
-                try:
-                    data = _get_filtered_data(_get_package_data(package_name))
-                    infos = data["releases"][str(target_version)]
-                    for entry in infos:
-                        url = URL(entry["url"])
-                        path = (
-                            self.home
-                            / "packages"
-                            / Path(url.asdict()["path"]["segments"][-1]).name
-                        )
-                        log.error("url = %s", url)
-                        entry["version"] = str(target_version)
-                        log.debug(f"looking at {entry=}")
-                        assert isinstance(all_that_hash, set)
-                        all_that_hash.add(that_hash := entry["digests"].get(hash_algo.name))
-                        if hashes.intersection(all_that_hash):
-
-                            found = (entry, that_hash)
-                            hit = VerHash(version, that_hash)
-                            log.info(f"Matches user hash: {entry=} {hit=}")
-                            break
-                    if found is None:
-                        return _fail_or_default(
-                            default,
-                            AutoInstallationError,
-                            f"Tried to auto-install {name!r} ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_that_hash=!r}) match the expected hash ({hashes=!r}).",
-                        )
-                    entry, that_hash = found
-                    hash_value = that_hash
-                    if that_hash is not None:
-                        assert isinstance(hashes, set)
-                        hashes.add(that_hash)
-                except KeyError as be:  # json issuesa
-                    msg = f"request to https://pypi.org/pypi/{package_name}/{target_version}/json lead to an error: {be}"
-                    raise RuntimeError(msg) from be
-                exc = None
-                if exc:
-                    return _fail_or_default(
-                        default,
-                        AutoInstallationError,
-                        Message.pip_json_mess(package_name, target_version),
-                    )
+                _update_hashes(
+                    name,
+                    package_name,
+                    target_version,
+                    version,
+                    default,
+                    hash_algo,
+                    hashes,
+                    all_that_hash,
+		    self.home
+                )
 
         if not mod:
             mod = _load_venv_mod(package_name, version)
