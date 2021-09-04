@@ -529,14 +529,14 @@ def _no_pebkac(name, package_name, target_version, hash_algo, hashes) -> bool:
 
 
 def _update_hashes(
-    name, package_name, target_version, version, default, hash_algo, hashes, all_that_hash
+    name, package_name, target_version, version, default, hash_algo, hashes, all_that_hash, home
 ) -> None:
     try:
         data = _get_filtered_data(_get_package_data(package_name))
         infos = data["releases"][str(target_version)]
         for entry in infos:
             url = URL(entry["url"])
-            path = self.home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
+            path = home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
             log.error("url = %s", url)
             entry["version"] = str(target_version)
             log.debug(f"looking at {entry=}")
@@ -1719,6 +1719,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     hash_algo,
                     hashes,
                     all_that_hash,
+		    home
                 )
 
         if not mod:
