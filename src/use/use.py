@@ -426,9 +426,9 @@ def _find_entry_point(package_name, version) -> List[Tuple[str, str]]:
                     locations.append((pkg_prefix, c))
     if not locations:
         files = (
-            venv_root.rglob(f"**/{package_name}/__init__.py")
-            + venv_root.rglob(f"**/{package_name}/**/__init__.py")
-            + venv_root.rglob(f"**/{package_name}.py")
+            [*venv_root.rglob(f"**/{package_name}/__init__.py")]
+            + [*venv_root.rglob(f"**/{package_name}/**/__init__.py")]
+            + [*venv_root.rglob(f"**/{package_name}.py")]
         )
         for file in files:
             locations.append((venv_root, file))
@@ -626,7 +626,7 @@ def _load_venv_mod(package_name, version, archive_path=None) -> ModuleType:
     if archive_path:
         install_item = archive_path
     else:
-        install_item = "{package_name}=={version}"
+        install_item = f"{package_name}=={version}"
     pip_args = (
         venv_bin / python_exe,
         "-m",
