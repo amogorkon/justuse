@@ -634,16 +634,14 @@ def _load_venv_mod(package_name, version) -> ModuleType:
         "--progress-bar",
         "ascii",
         "--prefer-binary",
-        "--force-reinstall",
         "--exists-action",
         "b",
-        "--only-binary",
-        ":all:",
         "--no-build-isolation",
         "--no-use-pep517",
         "--no-compile",
         "--no-warn-script-location",
         "--no-warn-conflicts",
+        "--no-cache-dir",
         f"{package_name}=={version}",
     )
     if _venv_is_win():
