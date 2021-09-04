@@ -427,8 +427,18 @@ def archive_meta(artifact_path):
         }
         meta.update(info)
         meta["names"] = names
-        if not "top_level" in meta:
-            relpath = sorted([*(n for n in names if re.search(f"[^/]+([.][^/]+|[-][^/]+)$", n))], key=lambda n: ("__init__.py" not in n, len(n)))[0]
+        if "top_level" not in meta:
+            relpath = sorted(
+                [
+                    *(
+                        n
+                        for n in names
+                        if re.search('[^/]+([.][^/]+|[-][^/]+)$', n)
+                    )
+                ],
+                key=lambda n: ("__init__.py" not in n, len(n)),
+            )[0]
+
             rel2 = relpath.replace("-", "!").split("!")[0]
             rel3 = Path(rel2)
             rel4 = rel3.parts
@@ -438,7 +448,6 @@ def archive_meta(artifact_path):
                 import_name = rel4[0:-1] + [rel3.stem]
             meta["top_level"] = [import_name]
             meta["import_name"] = import_name
-            meta["import_relpath"] = relpath
         else:
             top_level, name, version = (
               meta["top_level"][0],
@@ -450,16 +459,21 @@ def archive_meta(artifact_path):
             )
             meta["import_name"] = import_name
             relpath = sorted(
-                [*(
-                    n for n in names
-                    if re.search(
-                        f"[^/]+([.][^/]+|[-][^/]+)$", n
+                [
+                    *(
+                        n
+                        for n in names
+                        if re.search('[^/]+([.][^/]+|[-][^/]+)$', n)
                     )
-                )],
-                key=lambda n: (not n.startswith(import_name), not n.endswith("__init__.py"), len(n))
+                ],
+                key=lambda n: (
+                    not n.startswith(import_name),
+                    not n.endswith("__init__.py"),
+                    len(n),
+                ),
             )[0]
-            meta["import_relpath"] = relpath
-            
+
+        meta["import_relpath"] = relpath
         return meta
 
 
@@ -627,15 +641,14 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
             shell=False,
         )
         output.check_returncode()
-    
+
     install_item = name_prefix or name
     package_name = name_prefix or name
-    if name:
-        if "/" in name or "\x5C" in name:
-            artifact_path = name
-            package_name = (Path(name).name.split("-")[0]
-                .replace("_", "-"))
-    
+    if name and ("/" in name or "\x5C" in name):
+        artifact_path = name
+        package_name = (Path(name).name.split("-")[0]
+            .replace("_", "-"))
+
     if artifact_path and artifact_path.exists():
         install_item = str(artifact_path.absolute())
         package_name = (Path(str(artifact_path)).stem.split("-")[0]
@@ -645,7 +658,7 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
         if version:
             install_item += f"=={version}"
 
-    
+
     if isinstance(url, str):
         url = URL(url)
     filename = artifact_path.name if artifact_path else None
@@ -658,19 +671,19 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
             f.write(requests.get(str(url)).content)
             f.flush()
         install_iten = str(artifact_path)
-    
+
     if artifact_path and artifact_path.exists() and not url:
         url = URL(f"file:/{artifact_path.absolute()}")
-    
+
     log.info("Installing %s using pip", install_item)
-    
+
     for p in venv_root.rglob("**/bin/python"):
         venv_bin = Path(p).parent
         python_exe = p.name
     for p in venv_root.rglob("**/python.exe"):
         venv_bin = Path(p).parent
         python_exe = p.name
-    
+
     pip_args = (
         str(venv_bin / python_exe),
         "-m",
@@ -705,7 +718,6 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
             stderr=PIPE,
             shell=False,
         )
-        output.check_returncode()
     else:
         output = run(
             ["env", f"PATH={venv_path_var}", *pip_args],
@@ -714,17 +726,14 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
             stderr=PIPE,
             shell=False,
         )
-        output.check_returncode()
+    output.check_returncode()
     match = re.compile(
-        f"Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) "
-        "from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))"
-        "(?:#(\\S*)|)(?=\\s)",
-        re.DOTALL
-    ).search(
-        str(output.stdout) + "\n\n" + str(output.stderr)
-    )
+        'Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))(?:#(\\S*)|)(?=\\s)',
+        re.DOTALL,
+    ).search(str(output.stdout) + "\n\n" + str(output.stderr))
+
     assert match or artifact_path.exists()
-    
+
     info = match.groupdict() if match else {}
     filename = filename or info["filename"] or Path(artifact_path).name
     if info:
@@ -734,27 +743,27 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
         version = info["version"] or version
         if out_info:
             out_info.update(info)
-    
+
 
     if filename and not artifact_path:
             artifact_path = sys.modules["use"].home / "packages" / filename
     if not artifact_path.exists():
         artifact_path.write_bytes(requests.get(url).content)
         assert artifact_path.exists()
-    
+
     orig_cwd = Path.cwd()
     meta = archive_meta(artifact_path)
     meta.update(info)
-    
+
     relp = meta["import_relpath"]
     module_path = [*venv_root.rglob(f"**/{relp}")][0]
     name_segments = (
        ".".join(relp.split(".")[0:-1]).split("-")[0].replace("/",".")
     )
     name_prefix, _, name = name_segments.rpartition(".")
-    
+
     installation_path = module_path
-    for _ in range(0, len(name_segments.split("."))):
+    for _ in range(len(name_segments.split("."))):
         installation_path = installation_path.parent
     try:
         log.error("installation_path = %s", installation_path)
