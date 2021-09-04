@@ -508,7 +508,7 @@ def _parse_filename(filename) -> dict:
     return match.groupdict() if match else {}
 
 
-def _load_venv_mod(package_name, version) -> ModuleType:
+def _load_venv_mod(package_name, version, archive_path=None) -> ModuleType:
     venv_root = _venv_root(package_name, version)
     pkg_path = _venv_pkg_path(package_name, version)
     venv_bin = venv_root / "bin"
@@ -523,6 +523,10 @@ def _load_venv_mod(package_name, version) -> ModuleType:
     for p in venv_root.rglob("**/python.exe"):
         venv_bin = Path(p).parent
         python_exe = "python.exe"
+    if archive_path:
+        install_item = archive_path
+    else:
+        install_item = "{package_name}=={version}"
     pip_args = (
         venv_bin / python_exe,
         "-m",
@@ -540,7 +544,7 @@ def _load_venv_mod(package_name, version) -> ModuleType:
         "--no-warn-script-location",
         "--no-warn-conflicts",
         "--no-cache-dir",
-        f"{package_name}=={version}",
+        install_item,
     )
     if _venv_is_win():
         output = run(
@@ -1728,9 +1732,11 @@ If you want to auto-install the latest version: use("{name}", version="{version}
                     )
 
         if not mod:
-            mod = _load_venv_mod(package_name, version)
-            path = folder = _venv_pkg_path(package_name, version)
-
+            if not path.exists():
+                path.write_bytes(requests.get(url).content)
+            mod = _load_venv_mod(package_name, version, path)
+            folder = _venv_pkg_path(package_name, version)
+        
         for (check, pattern), decorator in aspectize.items():
             if mod is not None:
                 _apply_aspect(
