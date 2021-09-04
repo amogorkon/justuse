@@ -636,8 +636,6 @@ def _load_venv_mod(package_name, version) -> ModuleType:
         "--prefer-binary",
         "--exists-action",
         "b",
-        "--no-build-isolation",
-        "--no-use-pep517",
         "--no-compile",
         "--no-warn-script-location",
         "--no-warn-conflicts",
@@ -656,34 +654,44 @@ def _load_venv_mod(package_name, version) -> ModuleType:
             encoding="UTF-8",
             stderr=sys.stderr,
         )
-    log.debug("pip subprocess output=%r", output)
     orig_cwd = Path.cwd()
     try:
         os.chdir(pkg_path)
         entry_points = _find_entry_point(package_name, version)
-        for pkg_prefix, entry_module_path in entry_points:
-            path = entry_module_path.absolute()
-            with open(path, "rb") as f:
-                return _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path)
+        for pfx, path in entry_points:
+            try:
+                return _load_ent(pfx, package_name, path.absolute())
+            except:
+                traceback.format_exc()
     finally:
         os.chdir(orig_cwd)
 
 
-def _extracted_from__load_venv_mod_54(f, package_name, pkg_prefix, path) -> ModuleType:
-    code = f.read()
+def _load_ent(pkg_prefix, package_name, path) -> ModuleType:
+    log.info(
+        "Attempting to load pkg_prefix=%s, package_name=%s, path=%s",
+        pkg_prefix, package_name, path
+    )
+    try:
+        _clean_venv_cache(pkg_prefix, package_name)
+        with open(path, "rb") as code_file:
+            return _build_mod(
+                name=package_name,
+                code=code_file.read(),
+                module_path=path,
+                initial_globals={},
+                aspectize={},
+                package_name=(pkg_prefix or package_name),
+            )
+    finally:
+        _clean_venv_cache(pkg_prefix, package_name)
+
+
+def _clean_venv_cache(pkg_prefix, package_name) -> NoneType:
     _clean_sys_modules(package_name)
     _clean_sys_modules(pkg_prefix)
     _clean_sys_modules(f"{pkg_prefix}.{package_name}")
-    mod = _build_mod(
-        name=package_name,
-        code=code,
-        module_path=path,
-        initial_globals={},
-        aspectize={},
-        package_name=(pkg_prefix or package_name),
-    )
-    log.debug(f"module returned from _load_venv_mod: {mod}")
-    return mod
+    _clean_sys_modules(f"{package_name}.{pkg_prefix}")
 
 
 @cache
