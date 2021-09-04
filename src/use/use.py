@@ -623,10 +623,7 @@ def _load_venv_mod(package_name, version, archive_path=None) -> ModuleType:
     for p in venv_root.rglob("**/python.exe"):
         venv_bin = Path(p).parent
         python_exe = "python.exe"
-    if archive_path:
-        install_item = archive_path
-    else:
-        install_item = f"{package_name}=={version}"
+    install_item = archive_path or f"{package_name}=={version}"
     pip_args = (
         venv_bin / python_exe,
         "-m",
