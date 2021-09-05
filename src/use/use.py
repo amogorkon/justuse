@@ -1692,7 +1692,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         elif not auto_install:
             spec = importlib.util.find_spec(name)
 
-        {
+        result = {
             (False, False, False, False): lambda **kwargs: None,
             (False, False, False, True): lambda **kwargs: None,
             (False, False, True, False): lambda **kwargs: None,
@@ -1712,6 +1712,12 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         }[(bool(version), bool(hashes), bool(spec), bool(auto_install))](
             name=name, version=version, hashes=hashes, spec=spec
         )
+        if isinstance(result, ModuleType):
+            return _ensure_proxy(result)
+        elif result is None:
+            print("case wasn't handled:", version, hashes, spec, auto_install)
+        else:
+            return _fail_or_default(result, default=default)
 
         if spec:
             # let's check if it's a builtin
