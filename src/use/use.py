@@ -387,41 +387,31 @@ def get_supported() -> FrozenSet[PlatformTag]:
     return tags
 
 
-
 def archive_meta(artifact_path):
     with zipfile.ZipFile(artifact_path) as archive:
-        names = [*sorted(
-          map(
-              zipfile.ZipInfo.filename.__get__,
-              archive.filelist
-          )
-        )]
+        names = [*sorted(map(zipfile.ZipInfo.filename.__get__, archive.filelist))]
         names = [n for n in names if not n.endswith("pyi")]
-        meta = dict(map(lambda n: 
-            (
-                Path(n).stem,
+        meta = dict(
+            map(
+                lambda n: (
+                    Path(n).stem,
+                    (m := archive.open(n), str(m.read(), "UTF-8").splitlines(), m.close())[
+                        1
+                    ],
+                ),
                 (
-                    m:=archive.open(n),
-                    str(m.read(), "UTF-8").splitlines(),
-                    m.close()
-                )[1]
-           ),
-           (
-               n for n in names
-               if re.search(
-                   "(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$", n
-               )
-           )
-        ))
+                    n
+                    for n in names
+                    if re.search("(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$", n)
+                ),
+            )
+        )
         name = next(
-            l.partition(": ")[-1] for l in meta[
-                "METADATA" if "METADATA" in meta else "PKG-INFO"
-            ]
+            l.partition(": ")[-1]
+            for l in meta["METADATA" if "METADATA" in meta else "PKG-INFO"]
             if l.startswith("Name: ")
         )
-        md_lines = next(
-            i for i in meta.values() if "Metadata-Version" in str(i)
-        )
+        md_lines = next(i for i in meta.values() if "Metadata-Version" in str(i))
         info = {
             p[0].lower().replace("-", "_"): p[2]
             for p in (l.partition(": ") for l in md_lines)
@@ -430,13 +420,7 @@ def archive_meta(artifact_path):
         meta["names"] = names
         if "top_level" not in meta:
             relpath = sorted(
-                [
-                    *(
-                        n
-                        for n in names
-                        if re.search('[^/]+([.][^/]+|[-][^/]+)$', n)
-                    )
-                ],
+                [*(n for n in names if re.search("[^/]+([.][^/]+|[-][^/]+)$", n))],
                 key=lambda n: ("__init__.py" not in n, len(n)),
             )[0]
 
@@ -450,23 +434,11 @@ def archive_meta(artifact_path):
             meta["top_level"] = [import_name]
             meta["import_name"] = import_name
         else:
-            top_level, name, version = (
-              meta["top_level"][0],
-              meta["name"],
-              meta["version"]
-            )
-            import_name = (
-                (name,) if (top_level == name) else (top_level,name)
-            )
+            top_level, name, version = (meta["top_level"][0], meta["name"], meta["version"])
+            import_name = (name,) if (top_level == name) else (top_level, name)
             meta["import_name"] = import_name
             relpath = sorted(
-                [
-                    *(
-                        n
-                        for n in names
-                        if re.search('[^/]+([.][^/]+|[-][^/]+)$', n)
-                    )
-                ],
+                [*(n for n in names if re.search("[^/]+([.][^/]+|[-][^/]+)$", n))],
                 key=lambda n: (
                     not n.startswith(import_name),
                     not n.endswith("__init__.py"),
@@ -476,7 +448,6 @@ def archive_meta(artifact_path):
 
         meta["import_relpath"] = relpath
         return meta
-
 
 
 def _clean_sys_modules(package_name) -> None:
@@ -494,7 +465,9 @@ def _clean_sys_modules(package_name) -> None:
 
 
 def _venv_root(package_name, version) -> Path:
-    venv_root = Path.home() / ".justuse-python" / "venv" / package_name / (version or "0.0.0")
+    venv_root = (
+        Path.home() / ".justuse-python" / "venv" / package_name / (version or "0.0.0")
+    )
     if not venv_root.exists():
         venv_root.mkdir(parents=True)
     return venv_root
@@ -605,36 +578,43 @@ def _update_hashes(
 
 
 def isfunction(x: Any) -> bool:
-     return inspect.isfunction(x)
+    return inspect.isfunction(x)
+
+
 def ismethod(x: Any) -> bool:
-     return inspect.isfunction(x)
+    return inspect.isfunction(x)
+
+
 def ismethod(x: Any) -> bool:
-     return inspect.isfunction(x)
- # decorators for callable classes require a completely different approach i'm afraid.. removing the check should discourage users from trying
- # def isclass(x):
- #     return inspect.isclass(x) and hasattr(x, "__call__")
+    return inspect.isfunction(x)
+
+
+# decorators for callable classes require a completely different approach i'm afraid.. removing the check should discourage users from trying
+# def isclass(x):
+#     return inspect.isclass(x) and hasattr(x, "__call__")
 def _parse_filename(filename) -> dict:
-     """Match the filename and return a dict of parts.
-     >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
-     {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
-     """
-     # Filename as API, seriously WTF...
-     assert isinstance(filename, str)
-     match = re.match(
-         "(?P<distribution>.*)-"
-         "(?P<version>.*)"
-         "(?:-(?P<build_tag>.*))?-"
-         "(?P<python_tag>.*)-"
-         "(?P<abi_tag>.*)-"
-         "(?P<platform_tag>.*)\\."
-         "(?P<ext>whl|zip|egg|tar|tar\\.gz)",
-         filename,
-     )
-     return match.groupdict() if match else {}
+    """Match the filename and return a dict of parts.
+    >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
+    {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
+    """
+    # Filename as API, seriously WTF...
+    assert isinstance(filename, str)
+    match = re.match(
+        "(?P<distribution>.*)-"
+        "(?P<version>.*)"
+        "(?:-(?P<build_tag>.*))?-"
+        "(?P<python_tag>.*)-"
+        "(?P<abi_tag>.*)-"
+        "(?P<platform_tag>.*)\\."
+        "(?P<ext>whl|zip|egg|tar|tar\\.gz)",
+        filename,
+    )
+    return match.groupdict() if match else {}
 
 
-
-def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None, out_info=None) -> ModuleType:
+def _load_venv_mod(
+    name_prefix, name, version=None, artifact_path=None, url=None, out_info=None
+) -> ModuleType:
     venv_root = _venv_root(name_prefix or name, version or "0.0.0")
     venv_bin = venv_root / "bin"
     python_exe = Path(sys.executable).name
@@ -645,8 +625,10 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
     package_name = name_prefix or name
     if not (artifact_path and artifact_path.exists()):
         install_item = install_item or package_name or name
-        if version: install_item += f"=={version}"
-    if isinstance(url, str): url = URL(url)
+        if version:
+            install_item += f"=={version}"
+    if isinstance(url, str):
+        url = URL(url)
     filename = artifact_path.name if artifact_path else None
     if url:
         filename = url.asdict()["path"]["segments"][-1]
@@ -662,11 +644,17 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
 
     pip_args = [
         str(venv_bin / python_exe),
-        "-m", "pip",
-        "--disable-pip-version-check", "--no-color",
-        "install", "--pre", "-v", "-v",
+        "-m",
+        "pip",
+        "--disable-pip-version-check",
+        "--no-color",
+        "install",
+        "--pre",
+        "-v",
+        "-v",
         "--prefer-binary",
-        "--exists-action", "b",
+        "--exists-action",
+        "b",
         "--no-build-isolation",
         "--no-cache-dir",
         "--no-compile",
@@ -676,18 +664,20 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
     for extra_args in ([], ["--force-reinstall"]):
         output = run(
             (
-                [
-                    "cmd.exe", "/C",
-                    "set", f"PATH={venv_path_var}", "&"
-                ] if _venv_is_win() else [
-                    "env", f"PATH={venv_path_var}"
-                ]
-            ) + pip_args + extra_args + [install_item],
-            encoding="UTF-8", stdout=PIPE, stderr=PIPE,
+                ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&"]
+                if _venv_is_win()
+                else ["env", f"PATH={venv_path_var}"]
+            )
+            + pip_args
+            + extra_args
+            + [install_item],
+            encoding="UTF-8",
+            stdout=PIPE,
+            stderr=PIPE,
         )
         output.check_returncode()
         match = re.compile(
-            'Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))(?:#(\\S*)|)(?=\\s)',
+            "Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))(?:#(\\S*)|)(?=\\s)",
             re.DOTALL,
         ).search(output.stdout)
         if match or (artifact_path and artifact_path.exists()):
@@ -703,7 +693,7 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
         if out_info:
             out_info.update(info)
     if filename and not artifact_path:
-            artifact_path = sys.modules["use"].home / "packages" / filename
+        artifact_path = sys.modules["use"].home / "packages" / filename
     if not artifact_path.exists():
         artifact_path.write_bytes(requests.get(url).content)
         assert artifact_path.exists()
@@ -712,9 +702,7 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
     meta.update(info)
     relp = meta["import_relpath"]
     module_path = [*venv_root.rglob(f"**/{relp}")][0]
-    name_segments = (
-       ".".join(relp.split(".")[0:-1]).split("-")[0].replace("/",".")
-    )
+    name_segments = ".".join(relp.split(".")[0:-1]).split("-")[0].replace("/", ".")
     name_prefix, _, name = name_segments.rpartition(".")
     installation_path = module_path
     for _ in range(len(name_segments.split("."))):
@@ -723,23 +711,24 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
         log.error("installation_path = %s", installation_path)
         os.chdir(str(installation_path))
         with open(module_path, "rb") as f:
-            if out_info is not None: out_info.update({
-                "artifact_path": artifact_path,
-                "installation_path": installation_path,
-                "module_path": module_path,
-                "package": package_name,
-                "package_name": package_name,
-                "name_prefix": name_prefix,
-                "name": name,
-                "url": url,
-                "version": version,
-                "info": info,
-                **meta
-            })
+            if out_info is not None:
+                out_info.update(
+                    {
+                        "artifact_path": artifact_path,
+                        "installation_path": installation_path,
+                        "module_path": module_path,
+                        "package": package_name,
+                        "package_name": package_name,
+                        "name_prefix": name_prefix,
+                        "name": name,
+                        "url": url,
+                        "version": version,
+                        "info": info,
+                        **meta,
+                    }
+                )
             return _load_venv_entry(
-                package_name=name_prefix,
-                name=name,
-                module_path=module_path
+                package_name=name_prefix, name=name, module_path=module_path
             )
     finally:
         os.chdir(orig_cwd)
@@ -752,17 +741,21 @@ def _load_venv_entry(package_name, name, module_path) -> ModuleType:
         _clean_sys_modules(package_name)
         log.info(
             "load_venv_entry package_name=%s name=%s module_path=%s",
-            package_name, name, module_path,
+            package_name,
+            name,
+            module_path,
         )
         with open(module_path, "rb") as code_file:
-            return (mod := _build_mod(
-                name=name,
-                code=code_file.read(),
-                module_path=Path(module_path),
-                initial_globals={},
-                aspectize={},
-                package_name=package_name,
-            ))
+            return (
+                mod := _build_mod(
+                    name=name,
+                    code=code_file.read(),
+                    module_path=Path(module_path),
+                    initial_globals={},
+                    aspectize={},
+                    package_name=package_name,
+                )
+            )
     finally:
         log.info("load_venv_entry returning mod=%s", mod)
         _clean_sys_modules(name)
@@ -941,23 +934,26 @@ def _build_mod(
     package_name=None,
 ) -> ModuleType:
     name_qual = (
-            package_name + "." + name 
-            if (package_name and name and package_name != name)
-            else name
+        package_name + "." + name
+        if (package_name and name and package_name != name)
+        else name
     ).replace(".__init__", "")
     from pathlib import Path
-    module_path = Path("%s" % module_path) if not isinstance(module_path,Path) else module_path
-    
+
+    module_path = (
+        Path("%s" % module_path) if not isinstance(module_path, Path) else module_path
+    )
+
     if "__init__" in module_path.stem:
         mod = ModuleType(name_qual + ".__init__")
     else:
         mod = ModuleType(name_qual)
-    
+
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = str(module_path)
     mod.__package__ = package_name
     mod.__name__ = name
-    
+
     code_text = codecs.decode(code)
     # module file "<", ">" chars are specially handled by inspect
     if not sys.platform.startswith("win"):
@@ -1713,7 +1709,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         found = None
         that_hash = None
         all_hashes = set()
-        
+
         if name in self._using:
             spec = self._using[name].spec
         elif not auto_install:
@@ -1811,7 +1807,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     hash_algo,
                     hashes,
                     all_hashes,
-                    self.home
+                    self.home,
                 )
 
         if path:
@@ -1824,9 +1820,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 if config["debugging"]:
                     log.debug(traceback.format_exc())
                 print("Direct zipimport failed, attempting to extract and load manually...")
-        
+
         installation_path = (path.parent / path.stem) if path else None
-        
+
         if not mod:
             out_info = {}
             mod = _load_venv_mod(
@@ -1845,11 +1841,11 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             url = out_info["url"]
             this_version = Version(out_info["version"])
         self._save_module_info(
-                name=name,
-                version=this_version,
-                artifact_path=path,
-                hash_value=that_hash,
-                installation_path=installation_path,
+            name=name,
+            version=this_version,
+            artifact_path=path,
+            hash_value=that_hash,
+            installation_path=installation_path,
         )
         for (check, pattern), decorator in aspectize.items():
             if mod is not None:
@@ -1867,6 +1863,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             frame = inspect.getframeinfo(inspect.currentframe())
             if frame:
                 self._set_mod(name=name, mod=mod, frame=frame)
+
 
 use = Use()
 use.__dict__.update(globals())
