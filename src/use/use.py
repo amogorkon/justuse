@@ -549,9 +549,10 @@ def _update_hashes(
                 break
         if found is None:
             return _fail_or_default(
+                AutoInstallationError(
+                    f"Tried to auto-install ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_hashes=!r}) match the expected hash ({hashes=!r})."
+                ),
                 default,
-                AutoInstallationError,
-                f"Tried to auto-install ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_hashes=!r}) match the expected hash ({hashes=!r}).",
             )
         entry, that_hash = found
         if that_hash is not None:
@@ -563,9 +564,8 @@ def _update_hashes(
     exc = None
     if exc:
         return _fail_or_default(
+            AutoInstallationError(Message.pip_json_mess(package_name, target_version)),
             default,
-            AutoInstallationError,
-            Message.pip_json_mess(package_name, target_version),
         )
 
 
@@ -977,11 +977,11 @@ def _ensure_proxy(mod) -> ProxyModule:
     return ProxyModule(mod)
 
 
-def _fail_or_default(default, exception, msg):
+def _fail_or_default(exception, default):
     if default is not mode.fastfail:
         return default  # TODO: write test for default
     else:
-        raise exception(msg)
+        raise exception
 
 
 class ProxyModule(ModuleType):
@@ -1347,9 +1347,10 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if hash_value:
             if this_hash != hash_value:
                 return _fail_or_default(
+                    UnexpectedHash(
+                        f"{this_hash} does not match the expected hash {hash_value} - aborting!"
+                    ),
                     default,
-                    Use.UnexpectedHash,
-                    f"{this_hash} does not match the expected hash {hash_value} - aborting!",
                 )
         else:
             warn(Message.no_validation(url, hash_algo, this_hash), NoValidationWarning)
@@ -1367,7 +1368,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         except:
             exc = traceback.format_exc()
         if exc:
-            return _fail_or_default(default, ImportError, exc)
+            return _fail_or_default(ImportError(exc), default)
 
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
@@ -1415,7 +1416,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         mod = None
 
         if path.is_dir():
-            return _fail_or_default(default, ImportError, f"Can't import directory {path}")
+            return _fail_or_default(ImportError(f"Can't import directory {path}"), default)
 
         original_cwd = source_dir = Path.cwd()
         try:
@@ -1451,13 +1452,14 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 source_dir = Path.cwd()
             if not source_dir.exists():
                 return _fail_or_default(
+                    NotImplementedError(
+                        "Can't determine a relative path from a virtual file."
+                    ),
                     default,
-                    NotImplementedError,
-                    "Can't determine a relative path from a virtual file.",
                 )
             path = source_dir.joinpath(path).resolve()
             if not path.exists():
-                return _fail_or_default(default, ImportError, f"Sure '{path}' exists?")
+                return _fail_or_default(ImportError(f"Sure '{path}' exists?"), default)
             os.chdir(path.parent)
             name = path.stem
             if reloading:
@@ -1475,7 +1477,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 except:
                     exc = traceback.format_exc()
                 if exc:
-                    return _fail_or_default(default, ImportError, exc)
+                    return _fail_or_default(ImportError(exc), default)
                 mod = ProxyModule(mod)
                 reloader = ModuleReloader(
                     proxy=mod,
@@ -1529,7 +1531,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             # let's not confuse the user and restore the cwd to the original in any case
             os.chdir(original_cwd)
         if exc:
-            return _fail_or_default(default, ImportError, exc)
+            return _fail_or_default(ImportError(exc), default)
         if as_import:
             assert isinstance(
                 as_import, str
@@ -1554,7 +1556,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             return _ensure_proxy(mod)
         except:
             exc = traceback.format_exc()
-        return _fail_or_default(default, ImportError, exc)
+        return _fail_or_default(default, ImportError(exc))
 
     def _import_classical_install(
         self,
@@ -1594,7 +1596,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 raise
             exc = traceback.format_exc()
         if exc:
-            return _fail_or_default(default, ImportError, exc)
+            return _fail_or_default(ImportError(exc), default)
         # we only enforce versions with auto-install
         this_version = _get_version(name, package_name, mod=mod)
         if not this_version:
@@ -1693,7 +1695,12 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             spec = importlib.util.find_spec(name)
 
         result = {
-            (False, False, False, False): lambda **kwargs: None,
+            (
+                False,
+                False,
+                False,
+                False,
+            ): lambda **kwargs: f"No package installed named {name} and auto-installation not requested. Aborting.",
             (False, False, False, True): lambda **kwargs: None,
             (False, False, True, False): lambda **kwargs: None,
             (False, True, False, False): lambda **kwargs: None,
@@ -1717,7 +1724,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         elif result is None:
             print("case wasn't handled:", version, hashes, spec, auto_install)
         else:
-            return _fail_or_default(result, default=default)
+            return _fail_or_default(result, default)
 
         if spec:
             # let's check if it's a builtin
@@ -1773,9 +1780,10 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         else:
             if not auto_install:
                 return _fail_or_default(
+                    ImportError(
+                        f"Could not find any installed package '{name}' and auto_install was not requested."
+                    ),
                     default,
-                    ImportError,
-                    f"Could not find any installed package '{name}' and auto_install was not requested.",
                 )
 
             if _no_pebkac(name, package_name, target_version, hash_algo, hashes):
