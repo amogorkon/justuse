@@ -77,6 +77,7 @@ import inspect
 import linecache
 import os
 import re
+import shlex
 import signal
 import sqlite3
 import sys
@@ -262,6 +263,9 @@ Please consider upgrading via 'python -m pip install -U justuse'"""
     web_error = (
         lambda url, response: f"Could not load {url} from the interwebs, got a {response.status_code} error."
     )
+    no_package_error = (
+        lambda name: f"Package {name} is not available on pypi; are you sure it exists?"
+    )
     no_validation = (
         lambda url, hash_algo, this_hash: f"""Attempting to import from the interwebs with no validation whatsoever!
 To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
@@ -397,87 +401,77 @@ def archive_meta(artifact_path):
           )
         )]
         names = [n for n in names if not n.endswith("pyi")]
-        meta = dict(map(lambda n: 
-            (
-                Path(n).stem,
-                (
-                    m:=archive.open(n),
-                    str(m.read(), "UTF-8").splitlines(),
-                    m.close()
-                )[1]
-           ),
-           (
-               n for n in names
-               if re.search(
-                   "(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$", n
-               )
-           )
-        ))
+        meta = dict(map(lambda n:
+        (
+          Path(n).stem,
+          (m:=archive.open(n),
+              str(m.read(), "UTF-8").splitlines(), m.close())[1]
+        ),
+        (n for n in names
+        if re.search("(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$",n
+        ))))
         name = next(
             l.partition(": ")[-1] for l in meta[
                 "METADATA" if "METADATA" in meta else "PKG-INFO"
-            ]
-            if l.startswith("Name: ")
+            ] if l.startswith("Name: ")
         )
         md_lines = next(
-            i for i in meta.values() if "Metadata-Version" in str(i)
-        )
+            i for i in meta.values()
+            if "Metadata-Version" in str(i))
         info = {
             p[0].lower().replace("-", "_"): p[2]
             for p in (l.partition(": ") for l in md_lines)
         }
         meta.update(info)
         meta["names"] = names
+        import_name = name
+        relpaths = sorted(
+            [
+                *(
+                    n
+                    for n in names
+                    if re.search('[^/]+([.][^/]+|[-][^/]+)$', n)
+                )
+            ],
+            key=lambda n: (
+                not n.startswith(import_name),
+                not n.endswith("__init__.py"),
+                len(n),
+            ),
+        )
+        relpath = (
+           relpaths[0] if relpaths else f"{meta['name']}/__init__.py"
+        )
         if "top_level" not in meta:
-            relpath = sorted(
-                [
-                    *(
-                        n
-                        for n in names
-                        if re.search('[^/]+([.][^/]+|[-][^/]+)$', n)
-                    )
-                ],
-                key=lambda n: ("__init__.py" not in n, len(n)),
-            )[0]
-
-            rel2 = relpath.replace("-", "!").split("!")[0]
-            rel3 = Path(rel2)
+            rel3 = Path(relpath.replace("-", "!").split("!")[0])
             rel4 = rel3.parts
-            if rel3.stem == "__init__":
-                import_name = rel4[0:-1]
-            else:
-                import_name = rel4[0:-1] + [rel3.stem]
-            meta["top_level"] = [import_name]
-            meta["import_name"] = import_name
+            if rel3.stem == "__init__": import_name = rel4[0:-1]
+            else: import_name = rel4[0:-1] + [rel3.stem]
         else:
             top_level, name, version = (
-              meta["top_level"][0],
-              meta["name"],
-              meta["version"]
+                meta["top_level"][0], meta["name"], meta["version"]
             )
             import_name = (
                 (name,) if (top_level == name) else (top_level,name)
             )
-            meta["import_name"] = import_name
-            relpath = sorted(
-                [
-                    *(
-                        n
-                        for n in names
-                        if re.search('[^/]+([.][^/]+|[-][^/]+)$', n)
-                    )
-                ],
-                key=lambda n: (
-                    not n.startswith(import_name),
-                    not n.endswith("__init__.py"),
-                    len(n),
-                ),
-            )[0]
-
-        meta["import_relpath"] = relpath
+        meta["top_level"] = meta.get("top_level","") or [import_name]
+        relpaths = sorted(
+            [
+                *(
+                    n
+                    for n in names
+                    if re.search('[.](so|dylinb|pyd|dll|py)$', n)
+                )
+            ],
+            key=lambda n: (
+                not n.startswith(import_name or package_name),
+                not n.endswith("__init__.py"),
+                len(n),
+            ),
+        )
+        meta["import_name"] = import_name
+        meta["import_relpath"] = relpaths[0]
         return meta
-
-
 
 def _clean_sys_modules(package_name) -> None:
     del_mods = dict(
@@ -499,59 +493,56 @@ def _venv_root(package_name, version) -> Path:
         venv_root.mkdir(parents=True)
     return venv_root
 
-
 def _venv_is_win() -> bool:
     return sys.platform.lower().startswith("win")
 
 
-def _venv_unix_path() -> Path:
-    ver = ".".join(map(str, sys.version_info[0:2]))
-    return Path("lib") / f"python{ver}" / "site-packages"
-
-
-def _venv_windows_path() -> Path:
-    return Path("Lib") / "site-packages"
-
-
-def _no_pebkac(name, package_name, target_version, hash_algo, hashes) -> bool:
+def _no_pebkac(name, package_name, target_version, hash_algo, hashes) -> dict:
+    assert target_version != "None"
+    target_version = str(target_version or "")
+    entry = {}
+    data = _get_filtered_data(_get_package_data(package_name))
+    version = target_version or [*data["releases"].keys()][-1]
+    target_version = target_version or version
+    
+    if not target_version:
+        target_version = data["urls"][-1]["version"]
+    assert target_version != "None"
+    version = target_version
     if target_version and not hashes:  # let's try to be helpful
-        data = _get_filtered_data(_get_package_data(package_name))
         version = target_version
-        entry = data["releases"][str(target_version)][-1]
-        that_hash = entry["digests"][hash_algo.name]
-        hit = (version, that_hash)
-        log.info(f"{hit=} from Use._find_matching_artifact")
-        if that_hash:
-            if that_hash is not None:
-                hashes.add(that_hash)
-            raise RuntimeWarning(Message.pebkac_missing_hash(package_name, version, hashes))
-        raise RuntimeWarning(
-            f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
-        )
-    elif not target_version and hashes:
-        raise RuntimeWarning(
-            f"Failed to auto-install '{package_name}' because no version was specified."
-        )
+        for info in data["releases"][target_version]:
+                entry.update(info)
+                that_hash = entry["digests"][hash_algo.name]
+                hit = (version, that_hash)
+                log.info("%s", 
+                f"{hit=} from Use._find_matching_artifact: {entry=}")
+                if that_hash:
+                    hashes.add(that_hash)
+        return entry
     elif not target_version:
         # let's try to make an educated guess and give a useful suggestion
-        data = _get_filtered_data(_get_package_data(package_name))
-        for ver, infos in reversed(data["releases"].items()):
-            entry = infos[-1]
-            if not hashes or entry["digests"][hash_algo.name] in hashes:
-
+        ahashes = set()
+        for ver, infos in data["releases"].items():
+            for info in infos:
+                entry.update(info)
                 hash_value = entry["digests"][hash_algo.name]
                 version = ver
+                
                 hit = (version, hash_value)
-
+                if hashes and hash_value in hashes:
+                    return entry
+                ahashes.add(hash_value)
+        hashes = ahashes
         if not hash_value:
             raise RuntimeWarning(Message.pebkac_unsupported(package_name))
 
-        if not target_version:
+        if not target_version :
             hashes.add(hash_value)
             raise RuntimeWarning(
                 Message.no_version_or_hash_provided(name, package_name, version, hashes)
             )
-    return True
+    return entry
 
 
 def _update_hashes(
@@ -567,17 +558,15 @@ def _update_hashes(
     found = None
     try:
         data = _get_filtered_data(_get_package_data(package_name))
-        infos = data["releases"][str(target_version)]
+        infos = data["releases"][target_version or version or ""]
         for entry in infos:
             url = URL(entry["url"])
             path = home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
-            log.error("url = %s", url)
-            entry["version"] = str(target_version)
+            entry["version"] = str(target_version or version or "")
             log.debug(f"looking at {entry=}")
             assert isinstance(all_hashes, set)
             all_hashes.add(that_hash := entry["digests"].get(hash_algo.name))
             if hashes.intersection(all_hashes):
-
                 found = (entry, that_hash)
                 hit = VerHash(version, that_hash)
                 log.info(f"Matches user hash: {entry=} {hit=}")
@@ -593,15 +582,9 @@ def _update_hashes(
             assert isinstance(hashes, set)
             hashes.add(that_hash)
     except KeyError as be:  # json issuesa
+        if "debugging" in config or "ERRORS" in os.environ: raise
         msg = f"request to https://pypi.org/pypi/{package_name}/{target_version}/json lead to an error: {be}"
         raise RuntimeError(msg) from be
-    exc = None
-    if exc:
-        return _fail_or_default(
-            default,
-            AutoInstallationError,
-            Message.pip_json_mess(package_name, target_version),
-        )
 
 
 def isfunction(x: Any) -> bool:
@@ -633,85 +616,225 @@ def _parse_filename(filename) -> dict:
      return match.groupdict() if match else {}
 
 
-
-def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None, out_info=None) -> ModuleType:
-    venv_root = _venv_root(name_prefix or name, version or "0.0.0")
-    venv_bin = venv_root / "bin"
-    python_exe = Path(sys.executable).name
-    current_path = os.environ.get("PATH")
-    venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
-    run([python_exe, "-m", "venv", venv_root])
-    install_item = name_prefix or name
-    package_name = name_prefix or name
+def _process(*argv, env={}):
+    _realenv = dict(**os.environ)
+    _realenv.update(env)
+    o = run(**(
+        setup := dict(
+            executable=(exe:=argv[0]),
+            args=[*map(str, argv)],
+            bufsize=1,
+            input="",
+            capture_output=True,
+            timeout=5000,
+            check=False,
+            preexec_fn=(lambda *a,**kw: print(a,kw)),
+            close_fds=True,
+            cwd="/tmp",
+            env={"PATH": "/usr/bin:/bin"},
+            restore_signals=True,
+            start_new_session=False,
+            encoding="UTF-8",
+            errors="ISO-8859-1",
+            text=True,
+            umask=0o022,
+            shell=False
+        )
+    ))
+    if o.returncode == 0: return o
+    raise RuntimeError(
+        "\x0a".join(
+          (
+            "\x1b[1;41;37m",
+            "Problem running--command exited with non-zero: %d",
+            "%s",
+            "---[  Errors  ]---",
+            "%s",
+            "\x1b[0;1;37m",
+            "Arguments to subprocess.run(**setup):",
+            "%s",
+            "---[  STDOUT  ]---",
+            "%s",
+            "---[  STDERR  ]---",
+            "%s\n1b[0m",
+         )
+       ) % (
+            o.returncode,
+            shlex.join(setup["args"]),
+            o.stderr or o.stdout,
+            pformat(setup, indent=2, width=70, compact=False),
+            o.stdout,
+            o.stderr,
+       ) if o.returncode != 0 else (
+            "%s\n\n%s"
+       ) % (
+           o.stdout, o.stderr
+       )
+    )
+    
+def _get_venv_bin(
+    name=None, version=None, artifact_path=None
+):
+    assert version != "None"
+    if (not name or not version) and artifact_path:
+        info = archive_meta(artifact_path)
+        name = info["package_name"]
+        version = info["version"]
+    venv_root = _venv_root(name, version or "0.0.0")
+    venv_bins = [venv_root / "bin", venv_root / "Scripts"]
+    if sys.platform.startswith("win"):
+        venv_bins = reversed(venv_bins)
+    old_cwd = Path.cwd()
+    try:
+        if not venv_root.exists():
+            venv_root.mkdir(parents=True)
+        os.chdir(venv_root)
+        o = _process(
+            sys.executable, "-m", "venv", "--system-site-packages",
+            venv_root
+        )
+        assert venv_root.exists()
+        b = venv_root / "bin"
+        if b.exists() and (b / "python").exists():
+            return b
+        b = venv_root / "Scripts"
+        if b.exists() and (b / "python.exe").exists():
+            return b
+        assert False, f"No usable venv created: {o.stderr}, {o.stdout}"
+    finally:
+        os.chdir(old_cwd)
+    
+def _get_venv_data(
+    name_prefix, name, version=None,
+    artifact_path=None, url=None,
+    info=None, disable_pip=False
+) -> ModuleType:
+    assert version != "None"
+    install_item = package_name = (name_prefix or name)
+    if (not url or (not artifact_path or not artifact_path.exists())
+        or not version):
+        dat = _get_filtered_data(_get_package_data(name_prefix or name))
+        rel = dat["releases"]
+        if not version:
+            version = [*rel.keys()][-1]
+        ents = rel[version]
+        ent = ents[0]
+        url = URL(ent["url"])
+        filename = ent["filename"]
+        artifact_path = sys.modules["use"].home/"packages"/filename
+        if artifact_path.exists():
+             install_item = str(artifact_path)
+    
+    venv_root = _venv_root(name_prefix, version)
+    venv_bins = [venv_root / "Scripts", venv_root / "bin"]
+    venv_bin = _get_venv_bin(name_prefix, version, artifact_path or url)
+    
+    python_exe = "python.exe" if _venv_is_win() else "python"
+    m_env = dict(**os.environ)
+    m_env.update({
+      "PATH": os.path.pathsep.join(map(str, (
+        venv_bin or (venv_bin:=(venv_root / "bin")),
+        *venv_bins,
+        os.environ.get("PATH")))),
+      "PYTHONDEBUGMODE": "1"
+    })
+    assert version != "None"
     if not (artifact_path and artifact_path.exists()):
         install_item = install_item or package_name or name
         if version: install_item += f"=={version}"
     if isinstance(url, str): url = URL(url)
-    filename = artifact_path.name if artifact_path else None
-    if url:
-        filename = url.asdict()["path"]["segments"][-1]
+    if url: filename = url.asdict()["path"]["segments"][-1]
+    filename = artifact_path.name if artifact_path else str(url).split("/")[-1]
     if filename and not artifact_path:
-        artifact_path = sys.modules["use"].home / "packages" / filename
-    log.info("Installing %s using pip", install_item)
-    for p in venv_root.rglob("**/bin/python"):
-        venv_bin = Path(p).parent
-        python_exe = p.name
-    for p in venv_root.rglob("**/python.exe"):
-        venv_bin = Path(p).parent
-        python_exe = p.name
-
-    pip_args = [
-        str(venv_bin / python_exe),
-        "-m", "pip",
-        "--disable-pip-version-check", "--no-color",
-        "install", "--pre", "-v", "-v",
-        "--prefer-binary",
-        "--exists-action", "b",
-        "--no-build-isolation",
-        "--no-cache-dir",
-        "--no-compile",
-        "--no-warn-script-location",
-        "--no-warn-conflicts",
-    ]
-    for extra_args in ([], ["--force-reinstall"]):
-        output = run(
-            (
-                [
-                    "cmd.exe", "/C",
-                    "set", f"PATH={venv_path_var}", "&"
-                ] if _venv_is_win() else [
-                    "env", f"PATH={venv_path_var}"
-                ]
-            ) + pip_args + extra_args + [install_item],
-            encoding="UTF-8", stdout=PIPE, stderr=PIPE,
-        )
-        output.check_returncode()
-        match = re.compile(
-            'Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))(?:#(\\S*)|)(?=\\s)',
-            re.DOTALL,
-        ).search(output.stdout)
-        if match or (artifact_path and artifact_path.exists()):
-            break
-    assert match or (artifact_path and artifact_path.exists())
-    info = match.groupdict() if match else {}
-    filename = filename or info["filename"] or Path(artifact_path).name
-    if info:
-        url = url or URL(info["url"])
-        filename = filename or info["filename"]
-        package_name = package_name or info["package_name"]
-        version = info["version"] or version
-        if out_info:
-            out_info.update(info)
+        artifact_path = sys.modules["use"].home/"packages"/filename
+    if not (disable_pip or artifact_path and artifact_path.exists()):
+        log.info("Installing %s using pip", install_item)
+        pip_args = [
+            str(venv_bin / python_exe),
+            "-m", "pip", "install",
+            "--disable-pip-version-check", "--no-color",
+            "--pre", "-v", "-v", "-v",
+            "--prefer-binary",
+            "--ignore-installed",
+            "--exists-action", "b",
+            "--no-build-isolation",
+            "--no-cache-dir",
+            "--no-compile",
+            "--no-warn-script-location",
+            "--no-warn-conflicts",
+        ]
+        output = None
+        ex = None
+        for extra_args in ([], ["--force-reinstall"]):
+            try:
+                output = _process(
+                    *pip_args, *extra_args, install_item, env=m_env
+                )
+                regex = re.compile(
+                    ' (?P<package_name>[^= ]+)==(?P<version>[^ ]+) from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))(?:#(\\S*))?($|[\\r\\n\\t ])', re.DOTALL,
+                )
+                _vers = version
+                for match in regex.findall(
+                    "%s\n\n%s" % (output.stdout, output.stderr)
+                ):
+                    for k, v in match.groupdict().items():
+                        if not k in info or not info[k] or info[k]  == "0.0.0":
+                            info[k] = v
+                            locals().__setitem__(k, v)
+                            log.info("    Read [%s]=%s", k, v)
+                
+            except BaseException as bex:
+                ex = bex
+    if not info.get("version", None) and ex:
+        raise RuntimeError("Can't get version", ex, locals()) from ex
+    
+    filename = filename or (info.get("filename", None)) or (
+        Path(artifact_path).name if artifact_path else filename
+    ) or (
+        str(url).split("#")[0].split("?")[0].split("/")[-1]
+        if url else filename
+    )
+    url = url or info.get("url", url)
+    if (not url or (not artifact_path or not artifact_path.exists())
+        or not [*venv_root.rglob(f"**/{relp}")]
+    ):
+        dat = _get_filtered_data(_get_package_data(package_name))
+        rel = dat["releases"]
+        if not version:
+            version = [*rel.keys()][-1]
+        ents = rel[version]
+        ent = ents[0]
+        url = URL(ent["url"])
+        filename = ent["filename"]
+        artifact_path = sys.modules["use"].home/"packages"/filename
+        info.update(ent)
+    
+    package_name = (
+        package_name or info.get("package_name", None)
+        or name_prefix or name
+    )
+    version = info.get("version", None) or version
     if filename and not artifact_path:
-            artifact_path = sys.modules["use"].home / "packages" / filename
+        artifact_path = (sys.modules["use"].home/"packages"/filename)
     if not artifact_path.exists():
         artifact_path.write_bytes(requests.get(url).content)
         assert artifact_path.exists()
+        info.update(archive_meta(artifact_path))
+    relp = info["import_relpath"]
     orig_cwd = Path.cwd()
-    meta = archive_meta(artifact_path)
-    meta.update(info)
-    relp = meta["import_relpath"]
-    module_path = [*venv_root.rglob(f"**/{relp}")][0]
+    module_paths = [*venv_root.rglob(f"**/{relp}")]
+    if not module_paths:
+        output = _process(
+          *pip_args, "--force-reinstall", "--exists-action", "b",
+          str(artifact_path),
+          env=m_env
+        )
+        module_paths = [*venv_root.rglob(f"**/{relp}")]
+    assert module_paths
+    module_path = module_paths[0]
+    assert module_path
+    log.error("module_paths=%s", module_paths)
+    log.error("module_path=%s", module_path)
     name_segments = (
        ".".join(relp.split(".")[0:-1]).split("-")[0].replace("/",".")
     )
@@ -719,40 +842,57 @@ def _load_venv_mod(name_prefix, name, version=None, artifact_path=None, url=None
     installation_path = module_path
     for _ in range(len(name_segments.split("."))):
         installation_path = installation_path.parent
-    try:
-        log.error("installation_path = %s", installation_path)
-        os.chdir(str(installation_path))
-        with open(module_path, "rb") as f:
-            if out_info is not None: out_info.update({
-                "artifact_path": artifact_path,
-                "installation_path": installation_path,
-                "module_path": module_path,
-                "package": package_name,
-                "package_name": package_name,
-                "name_prefix": name_prefix,
-                "name": name,
-                "url": url,
-                "version": version,
-                "info": info,
-                **meta
-            })
-            return _load_venv_entry(
-                package_name=name_prefix,
-                name=name,
-                module_path=module_path
-            )
-    finally:
-        os.chdir(orig_cwd)
+    info.update({
+       "artifact_path": artifact_path,
+       "installation_path": installation_path,
+       "module_path": module_path,
+       "package_name": package_name,
+       "name_prefix": name_prefix,
+       "name": name,
+       "url": url,
+       "version": version or info["version"],
+    })
+    
+    return info
 
 
-def _load_venv_entry(package_name, name, module_path) -> ModuleType:
+def _load_venv_mod(
+    name_prefix, name, version=None,
+    artifact_path=None, url=None, info=None,
+    disable_pip=False
+) -> ModuleType:
+    assert version != "None"
+    if info is None:
+        info = {}
+    log.error(
+        f"_load_venv_mod({name_prefix=}, {name=}, {version=}, {artifact_path=}, {url=}, {info=}, {disable_pip=})"
+    )
+    data = _get_venv_data(
+        name_prefix, name, version=version,
+        artifact_path=artifact_path,
+        url=url, info=info,
+        disable_pip=disable_pip
+    );
+    info.update(**data)
+    return _load_venv_entry(
+        package_name=(name or info["name"] or name_prefix or info["name_prefix"]),
+        name=(name or info["name"]),
+        module_path=info["module_path"],
+        installation_path=info["installation_path"],
+    )
+
+
+def _load_venv_entry(
+    package_name, name, module_path, installation_path=None
+) -> ModuleType:
     mod = None
     try:
         _clean_sys_modules(name)
         _clean_sys_modules(package_name)
         log.info(
-            "load_venv_entry package_name=%s name=%s module_path=%s",
-            package_name, name, module_path,
+            "load_venv_entry package_name=%s name=%s module_path=%s "
+            "installation_path=%s",
+            package_name, name, module_path, installation_path
         )
         with open(module_path, "rb") as code_file:
             return (mod := _build_mod(
@@ -774,7 +914,7 @@ def _get_package_data(package_name) -> Dict[str, str]:
     response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
     if response.status_code == 404:
         raise ImportError(
-            "Package {package_name!r} is not available on pypi; are you sure it exists?"
+            f"Package {package_name} is not available on pypi; are you sure it exists?"
         )
     elif response.status_code != 200:
         raise RuntimeWarning(
@@ -1069,6 +1209,8 @@ class ModuleReloader:
                     )
                     self.proxy.__implementation = mod
                 except:
+                    if ("debugging" in config
+                        or "ERRORS" in os.environ): raise
                     print(traceback.format_exc())
             last_filehash = current_filehash
             await asyncio.sleep(1)
@@ -1091,6 +1233,8 @@ class ModuleReloader:
                         )
                         self.proxy._ProxyModule__implementation = mod
                     except:
+                        if ("debugging" in config
+                            or "ERRORS" in os.environ): raise
                         print(traceback.format_exc())
                 last_filehash = current_filehash
             time.sleep(1)
@@ -1159,11 +1303,11 @@ class Use(ModuleType):
                         VersionWarning,
                     )
             except:
-                if test_version:
-                    raise
-                log.debug(
-                    traceback.format_exc()
-                )  # we really don't need to bug the user about this (either pypi is down or internet is broken)
+                if ("debugging" in config or "ERRORS" in os.environ
+                    or test_version):  raise
+                log.debug("%s", traceback.format_exc()) # we really
+                # don't need to bug the user about this (either pypi 
+                # is down or internet is broken)
 
     def _set_up_files_and_directories(self):
         self.home = Path.home() / ".justuse-python"
@@ -1380,6 +1524,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 aspectize_dunders=bool(Use.aspectize_dunders & modes),
             )
         except:
+            if "debugging" in config or "ERRORS" in os.environ: raise
             exc = traceback.format_exc()
         if exc:
             return _fail_or_default(default, ImportError, exc)
@@ -1490,6 +1635,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                         aspectize=aspectize,
                     )
                 except:
+                    if ("debugging" in config
+                        or "ERRORS" in os.environ): raise
                     exc = traceback.format_exc()
                 if exc:
                     return _fail_or_default(default, ImportError, exc)
@@ -1539,11 +1686,15 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     )
                 except:
                     del self._using[name]
+                    if ("debugging" in config
+                        or "ERRORS" in os.environ): raise
                     exc = traceback.format_exc()
         except:
+            if "debugging" in config or "ERRORS" in os.environ: raise
             exc = traceback.format_exc()
         finally:
-            # let's not confuse the user and restore the cwd to the original in any case
+            # let's not confuse the user and restore the cwd to the
+            # original in any case
             os.chdir(original_cwd)
         if exc:
             return _fail_or_default(default, ImportError, exc)
@@ -1570,6 +1721,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
             return _ensure_proxy(mod)
         except:
+            if "debugging" in config or "ERRORS" in os.environ: raise
             exc = traceback.format_exc()
         return _fail_or_default(default, ImportError, exc)
 
@@ -1607,8 +1759,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 )
                 return _ensure_proxy(mod)
         except:
-            if fatal_exceptions:
-                raise
+            if ("debugging" in config or "ERRORS" in os.environ
+                                      or fatal_exceptions): raise
             exc = traceback.format_exc()
         if exc:
             return _fail_or_default(default, ImportError, exc)
@@ -1713,7 +1865,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         found = None
         that_hash = None
         all_hashes = set()
-        
+        installation_path = None
         if name in self._using:
             spec = self._using[name].spec
         elif not auto_install:
@@ -1770,86 +1922,103 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 log.warning(
                     f"Setting {spec=}, since " f"{target_version=} != {this_version=}"
                 )
-        else:
-            if not auto_install:
-                return _fail_or_default(
+        
+        if not path and not auto_install:
+            return _fail_or_default(
                     default,
                     ImportError,
                     f"Could not find any installed package '{name}' and auto_install was not requested.",
                 )
-
-            if _no_pebkac(name, package_name, target_version, hash_algo, hashes):
-                pass
-
+        info = _no_pebkac(
+            name, package_name, target_version, hash_algo, hashes
+        )
+        assert info
             # if it's a pure python package, there is only an artifact, no installation
-            query = self.registry.execute(
+        query = self.registry.execute(
                 "SELECT id, installation_path FROM distributions WHERE name=? AND version=?",
                 (name, version),
             ).fetchone()
 
             # TODO: looks like a good place for a JOIN
-            if query:
-                installation_path = query["installation_path"]
+        if query:
+                installation_path = installation_path  or query.get("installation_path", None) or installation_path
+                info["installation_path"] = installation_path
                 query = self.registry.execute(
                     "SELECT path FROM artifacts WHERE distribution_id=?",
                     [
                         query["id"],
                     ],
                 ).fetchone()
-            if query:
-                path = Path(query["path"])
-                if not path.exists():
-                    path = None
-            if path and not url:
-                url = URL(f"file:/{path.absolute()}")
-            if not path:
-                _update_hashes(
-                    package_name,
-                    target_version,
-                    version,
-                    default,
-                    hash_algo,
-                    hashes,
-                    all_hashes,
-                    self.home
-                )
+        if query:
+            path = query["path"] or path
+            if path:
+                path = path or (Path(query.get("path", None)) if "path" in query else None)
+                info["path"] = path
+                info["artifact_path"] = path
+        if path and not url:
+            url = URL(f"file://{path.absolute()}")
+        if not path and all_hashes.intersection(hashes):
+          _update_hashes(
+            package_name,
+            target_version,
+            version,
+            default,
+            hash_algo,
+            hashes,
+            all_hashes,
+            self.home
+          )
 
+        installation_path = (
+            installation_path or
+            info.get("installation_path", None) or
+            (path.parent / path.stem) if path else installation_path
+        )
+        disable_pip = (
+             (path and path.is_file()) and _venv_root(
+                package_name or module_name,
+                version
+            ).exists() and any(chain((
+                venv_root.rglob("**/{module_name}"),
+                venv_root.rglob("**/{module_name}/__init__.py"),
+            )))
+        )
+        
         if path:
             # trying to import directly from zip
             try:
                 importer = zipimport.zipimporter(path)
                 mod = importer.load_module(module_name)
-                print("Direct zipimport of", name, "successful.")
+                log.info(
+                    "Direct zipimport of %s (module name: %s) %s OK",
+                    name, module_name, path
+                )
             except:
                 if config["debugging"]:
                     log.debug(traceback.format_exc())
-                print("Direct zipimport failed, attempting to extract and load manually...")
-        
-        installation_path = (path.parent / path.stem) if path else None
+                log.warning(
+                    "Failed to zipimport %s (module name: %s) %s",
+                    name, module_name, path
+                )
         
         if not mod:
-            out_info = {}
             mod = _load_venv_mod(
                 name_prefix=package_name,
-                name=name,
-                version=version,
+                name=module_name,
+                version=target_version or version,
                 artifact_path=path,
                 url=url,
-                out_info=out_info,
+                info=info,
+                disable_pip=False
             )
-            path = out_info["artifact_path"]
-            installation_path = out_info["installation_path"]
-            module_path = out_info["module_path"]
-            package_name = out_info["package_name"]
-            name = out_info["name"]
-            url = out_info["url"]
-            this_version = Version(out_info["version"])
+            module_path = info["module_path"]
+        
         self._save_module_info(
-                name=name,
-                version=this_version,
-                artifact_path=path,
-                hash_value=that_hash,
-                installation_path=installation_path,
+            name=name,
+            version=_get_version(mod=mod),
+            artifact_path=path,
+            hash_value=that_hash,
+            installation_path=installation_path,
         )
         for (check, pattern), decorator in aspectize.items():
             if mod is not None:

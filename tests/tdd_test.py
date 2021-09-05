@@ -147,7 +147,7 @@ def test_unsupported_artifact(reuse):
         mod = reuse(
             "sqlalchemy",
             version="1.4.22",
-            hashes="5de64950137f3a50b76ce93556db392e8f1f954c2d8207f78a92d1f79aa9f737",
+            hashes=set(hashes.values()),
             modes=reuse.auto_install,
         )
     except reuse.AutoInstallationError:

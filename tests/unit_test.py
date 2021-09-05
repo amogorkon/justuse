@@ -192,12 +192,7 @@ def suggested_artifact(*args, **kwargs):
     except RuntimeWarning as r:
         rw = r
     except BaseException as e:
-        raise AssertionError(
-            f"suggested_artifact failed for use("
-            f"{', '.join(map(repr, args))}, "
-            f"{', '.join(map(repr, kwargs.items()))}"
-            f"): {e}"
-        ) from e
+        raise
     assert rw
     assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
     assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
