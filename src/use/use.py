@@ -922,7 +922,6 @@ def _build_mod(
     module_path,
     aspectize,
     aspectize_dunders=False,
-    default=mode.fastfail,
     package_name=None,
 ) -> ModuleType:
     name_qual = (
@@ -1331,8 +1330,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         as_import=None,
         default=mode.fastfail,
         aspectize=None,
-        path_to_url=None,
-        import_to_use=None,
         modes=0,
     ) -> ModuleType:
         log.debug(f"use-url: {url}")
@@ -1392,8 +1389,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         as_import=None,
         default=mode.fastfail,
         aspectize=None,
-        path_to_url=None,
-        import_to_use=None,
         modes=0,
     ) -> Optional[ModuleType]:
         """Import a module from a path.
@@ -1576,6 +1571,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         fatal_exceptions |= "ERRORS" in os.environ
         exc = None
         try:
+            # TODO - use spec?
             mod = importlib.import_module(module_name)  # ! => cache
             for (check, pattern), decorator in aspectize.items():
                 _apply_aspect(
@@ -1695,6 +1691,27 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             spec = self._using[name].spec
         elif not auto_install:
             spec = importlib.util.find_spec(name)
+
+        {
+            (False, False, False, False): lambda **kwargs: None,
+            (False, False, False, True): lambda **kwargs: None,
+            (False, False, True, False): lambda **kwargs: None,
+            (False, True, False, False): lambda **kwargs: None,
+            (True, False, False, False): lambda **kwargs: None,
+            (False, False, True, True): lambda **kwargs: None,
+            (False, True, True, False): lambda **kwargs: None,
+            (True, True, False, False): lambda **kwargs: None,
+            (True, False, False, True): lambda **kwargs: None,
+            (True, False, True, False): lambda **kwargs: None,
+            (False, True, False, True): lambda **kwargs: None,
+            (False, True, True, True): lambda **kwargs: None,
+            (True, False, True, True): lambda **kwargs: None,
+            (True, True, False, True): lambda **kwargs: None,
+            (True, True, True, False): lambda **kwargs: None,
+            (True, True, True, True): lambda **kwargs: None,
+        }[(bool(version), bool(hashes), bool(spec), bool(auto_install))](
+            name=name, version=version, hashes=hashes, spec=spec
+        )
 
         if spec:
             # let's check if it's a builtin
