@@ -89,17 +89,14 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import partial, singledispatch, update_wrapper
+from functools import singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
-from itertools import chain, takewhile
+from itertools import takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
-from operator import itemgetter
 from pathlib import Path
-from pkgutil import zipimporter
-from pprint import pformat
-from subprocess import PIPE, check_output, run
+from subprocess import PIPE, run
 from textwrap import dedent
 from types import ModuleType
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Union
@@ -110,7 +107,7 @@ import requests
 import toml
 from furl import furl as URL
 from packaging import tags
-from packaging.specifiers import Specifier, SpecifierSet
+from packaging.specifiers import SpecifierSet
 from packaging.version import Version as PkgVersion
 
 # injected via initial_globals for testing, you can safely ignore this
@@ -389,8 +386,9 @@ def get_supported() -> FrozenSet[PlatformTag]:
 
 def archive_meta(artifact_path):
     with zipfile.ZipFile(artifact_path) as archive:
-        names = [*sorted(map(zipfile.ZipInfo.filename.__get__, archive.filelist))]
-        names = [n for n in names if not n.endswith("pyi")]
+        names = sorted(
+            file.filename for file in archive.filelist if not file.filename.endswith("pyi")
+        )
         meta = dict(
             map(
                 lambda n: (
@@ -434,7 +432,10 @@ def archive_meta(artifact_path):
             meta["top_level"] = [import_name]
             meta["import_name"] = import_name
         else:
-            top_level, name, version = (meta["top_level"][0], meta["name"], meta["version"])
+            top_level, name, = (
+                meta["top_level"][0],
+                meta["name"],
+            )
             import_name = (name,) if (top_level == name) else (top_level, name)
             meta["import_name"] = import_name
             relpath = sorted(
@@ -475,15 +476,6 @@ def _venv_root(package_name, version) -> Path:
 
 def _venv_is_win() -> bool:
     return sys.platform.lower().startswith("win")
-
-
-def _venv_unix_path() -> Path:
-    ver = ".".join(map(str, sys.version_info[0:2]))
-    return Path("lib") / f"python{ver}" / "site-packages"
-
-
-def _venv_windows_path() -> Path:
-    return Path("Lib") / "site-packages"
 
 
 def _no_pebkac(name, package_name, target_version, hash_algo, hashes) -> bool:
@@ -1581,7 +1573,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         fatal_exceptions,
         package_name=None,
     ):
-        # sourcery no-metrics
         fatal_exceptions |= "ERRORS" in os.environ
         exc = None
         try:
@@ -1642,9 +1633,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         default=mode.fastfail,
         aspectize=None,
         modes: int = 0,
-        fatal_exceptions: bool = False,
-        package_name: str = None,  # internal use
-        module_name: str = None,  # internal use
     ) -> Optional[ModuleType]:
         """
         Import a package by name.
@@ -1659,9 +1647,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
             aspectize (dict, optional): Aspectize callables. Defaults to None.
             modes (int, optional): Any combination of Use.modes . Defaults to 0.
-            fatal_exceptions (bool, optional): All exceptions are fatal. Defaults to True.
-            package_name (str, optional): internal use only. Defaults to None.
-            module_name (str, optional): internal use only. Defaults to None.
 
         Raises:
             RuntimeWarning: May be raised if the auto-installation of the package fails for some reason.
@@ -1702,11 +1687,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         # let's first see if the user might mean something else entirely
         if any(Path(".").glob(f"{name}.py")):
             warn(Message.ambiguous_name_warning(name), AmbiguityWarning)
-        hit: VerHash = VerHash.empty()
-        data = None
         spec = None
-        entry = None
-        found = None
         that_hash = None
         all_hashes = set()
 
@@ -1835,7 +1816,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             )
             path = out_info["artifact_path"]
             installation_path = out_info["installation_path"]
-            module_path = out_info["module_path"]
             package_name = out_info["package_name"]
             name = out_info["name"]
             url = out_info["url"]
