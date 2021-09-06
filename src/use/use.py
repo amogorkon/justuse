@@ -1928,6 +1928,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         all_hashes = set()
         mod = None
 
+        # welcome to the buffet table, where everything is a lie
         # fmt: off
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
         result = {
