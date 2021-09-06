@@ -672,12 +672,20 @@ def _find_version(pkg_name, version=None):
 def _find_exe(venv_root):
     for p in ((
         *venv_root.rglob("**/bin/python"),
-        *venv_root.rglob("**/Scripts/python*.exe")
+        *venv_root.rglob("**/bin/python.exe"),
+        *venv_root.rglob("**/Scripts/python"),
+        *venv_root.rglob("**/Scripts/python*.exe"),
     )):
         return Path(p).parent, Path(p).name
     o = _process(sys.executable, "-m", "venv", venv_root)
-    o2 = _process(Path(sys.executable).name, "-m", "ensurepip", "-v", "-v", env={"VIRTUAL_ENV": str(venv_root), "PATH": str(venv_root/"bin") + os.path.pathsep + str(venv_root/"Scripts") + os.path.pathsep + os.environ["PATH"]})
-    return _find_exe(venv_root)
+    for p in ((
+        *venv_root.rglob("**/bin/python"),
+        *venv_root.rglob("**/bin/python.exe"),
+        *venv_root.rglob("**/Scripts/python"),
+        *venv_root.rglob("**/Scripts/python*.exe"),
+    )):
+      o2 = _process(str(p), "-m", "ensurepip", "-v", "-v", env={"VIRTUAL_ENV": str(venv_root), "PATH": str(venv_root/"bin") + os.path.pathsep + str(venv_root/"Scripts") + os.path.pathsep + os.environ["PATH"]})
+      return Path(p).parent, Path(p).name
 
 def _load_venv_mod(
     name_prefix, name, version=None,
