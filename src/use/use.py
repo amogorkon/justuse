@@ -77,6 +77,7 @@ import inspect
 import linecache
 import os
 import re
+import shlex
 import signal
 import sqlite3
 import sys
@@ -96,6 +97,7 @@ from inspect import getsource, isclass, stack
 from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
 from pathlib import Path
+from pprint import pformat
 from subprocess import PIPE, run
 from textwrap import dedent
 from types import ModuleType
@@ -674,6 +676,7 @@ def _find_exe(venv_root):
     )):
         return Path(p).parent, Path(p).name
     o = _process(sys.executable, "-m", "venv", venv_root)
+    o2 = _process(Path(sys.executable).name, "-m", "ensurepip", "-v", "-v", env={"VIRTUAL_ENV": str(venv_root), "PATH": str(venv_root/"bin") + os.path.pathsep + str(venv_root/"Scripts") + os.path.pathsep + os.environ["PATH"]})
     return _find_exe(venv_root)
 
 def _load_venv_mod(
