@@ -93,7 +93,7 @@ from functools import singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from inspect import getsource, isclass, stack
-from itertools import takewhile
+from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
 from pathlib import Path
 from subprocess import PIPE, run
@@ -604,38 +604,105 @@ def _parse_filename(filename) -> dict:
     return match.groupdict() if match else {}
 
 
-def _load_venv_mod(
-    name_prefix, name, version=None, artifact_path=None, url=None, out_info=None
-) -> ModuleType:
-    venv_root = _venv_root(name_prefix or name, version or "0.0.0")
-    venv_bin = venv_root / "bin"
-    python_exe = Path(sys.executable).name
-    current_path = os.environ.get("PATH")
-    venv_path_var = f"{venv_bin}{os.path.pathsep}{current_path}"
-    run([python_exe, "-m", "venv", venv_root])
-    install_item = name_prefix or name
-    package_name = name_prefix or name
-    if not (artifact_path and artifact_path.exists()):
-        install_item = install_item or package_name or name
-        if version:
-            install_item += f"=={version}"
-    if isinstance(url, str):
-        url = URL(url)
-    filename = artifact_path.name if artifact_path else None
-    if url:
-        filename = url.asdict()["path"]["segments"][-1]
-    if filename and not artifact_path:
-        artifact_path = sys.modules["use"].home / "packages" / filename
-    log.info("Installing %s using pip", install_item)
-    for p in venv_root.rglob("**/bin/python"):
-        venv_bin = Path(p).parent
-        python_exe = p.name
-    for p in venv_root.rglob("**/python.exe"):
-        venv_bin = Path(p).parent
-        python_exe = p.name
+def _process(*argv, env={}):
+    _realenv = {}
+    for k,v in chain(os.environ.items(), env.items()):
+        if isinstance(k,str) and isinstance(v,str):
+             _realenv[k] = v
+    o = run(**(
+        setup := dict(
+            executable=(exe:=argv[0]),
+            args=[*map(str, argv)],
+            bufsize=1024,
+            input="",
+            capture_output=True,
+            timeout=45000,
+            check=False,
+            close_fds=True,
+            env=_realenv,
+            encoding="UTF-8",
+            errors="ISO-8859-1",
+            text=True,
+            shell=False
+        )
+    ))
+    if o.returncode == 0: return o
+    raise RuntimeError(
+        "\x0a".join(
+          (
+            "\x1b[1;41;37m",
+            "Problem running--command exited with non-zero: %d",
+            "%s",
+            "---[  Errors  ]---",
+            "%s",
+            "\x1b[0;1;37m",
+            "Arguments to subprocess.run(**setup):",
+            "%s",
+            "---[  STDOUT  ]---",
+            "%s",
+            "---[  STDERR  ]---",
+            "%s\n1b[0m",
+         )
+       ) % (
+            o.returncode,
+            shlex.join(map(str, setup["args"])),
+            o.stderr or o.stdout,
+            pformat(setup, indent=2, width=70, compact=False),
+            o.stdout,
+            o.stderr,
+       ) if o.returncode != 0 else (
+            "%s\n\n%s"
+       ) % (
+           o.stdout, o.stderr
+       )
+    )
 
+def _find_version(pkg_name, version=None):
+    data = _get_filtered_data(_get_package_data(pkg_name))
+    if not version or str(version) in ("0.0.0", "None"):
+        version, infos = [*data["releases"].items()][-1]
+        return infos[-1]
+    for version, infos in data["releases"].items():
+        if str(version) == version:
+            return infos[-1]
+    assert False, f"No match found for {pkg_name=!r}, {version=!r}"
+
+def _find_exe(venv_root):
+    for p in ((
+        *venv_root.rglob("**/bin/python"),
+        *venv_root.rglob("**/Scripts/python*.exe")
+    )):
+        return Path(p).parent, Path(p).name
+    o = _process(sys.executable, "-m", "venv", venv_root)
+    return _find_exe(venv_root)
+
+def _load_venv_mod(
+    name_prefix, name, version=None,
+    artifact_path=None, url=None, out_info=None
+) -> ModuleType:
+    if not version or str(version) in ("0.0.0", "None"):
+        version = None
+    info = (out_info := (out_info if out_info is not None else {}))
+    pkg_name = name_prefix or name
+    info.update(_find_version(pkg_name, version))
+    venv_root = _venv_root(pkg_name, version)
+    venv_bin, python_exe = _find_exe(venv_root)
+    venv_path_var = f"{venv_bin}{os.path.pathsep}{os.environ.get('PATH')}"
+    install_item = package_name = pkg_name
+    log.info("Installing %s using pip", install_item)
+    filename = info["filename"] or str(
+        url or artifact_path
+    ).replace("\x5c","/").split("/")[-1].split("#")[0]
+    url = url or URL(info["url"])
+    package_name = package_name or info["package_name"]
+    version = info["version"]
+    artifact_path = artifact_path or sys.modules["use"].home/"packages"/filename
+    if not artifact_path.exists():
+        artifact_path.write_bytes(requests.get(url).content)
+    if artifact_path.exists():
+        install_item = artifact_path
     pip_args = [
-        str(venv_bin / python_exe),
+        python_exe,
         "-m",
         "pip",
         "--disable-pip-version-check",
@@ -644,86 +711,76 @@ def _load_venv_mod(
         "--pre",
         "-v",
         "-v",
+        "-v",
         "--prefer-binary",
         "--exists-action",
-        "b",
+        "i",
         "--no-build-isolation",
         "--no-cache-dir",
         "--no-compile",
         "--no-warn-script-location",
         "--no-warn-conflicts",
     ]
-    for extra_args in ([], ["--force-reinstall"]):
-        output = run(
-            (
-                ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&"]
-                if _venv_is_win()
-                else ["env", f"PATH={venv_path_var}"]
-            )
-            + pip_args
-            + extra_args
-            + [install_item],
-            encoding="UTF-8",
-            stdout=PIPE,
-            stderr=PIPE,
+    output = _process(
+        *((
+            ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&"]
+            if _venv_is_win()
+            else ["env", f"PATH={venv_path_var}"]
         )
-        output.check_returncode()
-        match = re.compile(
-            "Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))(?:#(\\S*)|)(?=\\s)",
-            re.DOTALL,
-        ).search(output.stdout)
-        if match or (artifact_path and artifact_path.exists()):
-            break
-    assert match or (artifact_path and artifact_path.exists())
-    info = match.groupdict() if match else {}
-    filename = filename or info["filename"] or Path(artifact_path).name
-    if info:
-        url = url or URL(info["url"])
-        filename = filename or info["filename"]
-        package_name = package_name or info["package_name"]
-        version = info["version"] or version
-        if out_info:
-            out_info.update(info)
-    if filename and not artifact_path:
-        artifact_path = sys.modules["use"].home / "packages" / filename
-    if not artifact_path.exists():
-        artifact_path.write_bytes(requests.get(url).content)
-        assert artifact_path.exists()
+        + pip_args
+        + [install_item]),
+        env={ "PATH": venv_path_var, "VIRTUAL_ENV": venv_root }
+    )
+    match = re.compile(
+        "Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) "
+        "from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))"
+        "(?:#(\\S*)|)(?=\\s)", re.DOTALL,
+    ).search("%s\n\n%s" % (output.stdout, output.stderr))
+    info.update(match.groupdict() if match else {})
     orig_cwd = Path.cwd()
     meta = archive_meta(artifact_path)
     meta.update(info)
     relp = meta["import_relpath"]
-    module_path = [*venv_root.rglob(f"**/{relp}")][0]
     name_segments = ".".join(relp.split(".")[0:-1]).split("-")[0].replace("/", ".")
     name_prefix, _, name = name_segments.rpartition(".")
-    installation_path = module_path
-    for _ in range(len(name_segments.split("."))):
-        installation_path = installation_path.parent
-    try:
-        log.error("installation_path = %s", installation_path)
-        os.chdir(str(installation_path))
-        with open(module_path, "rb") as f:
-            if out_info is not None:
-                out_info.update(
-                    {
-                        "artifact_path": artifact_path,
-                        "installation_path": installation_path,
-                        "module_path": module_path,
-                        "package": package_name,
-                        "package_name": package_name,
-                        "name_prefix": name_prefix,
-                        "name": name,
-                        "url": url,
-                        "version": version,
-                        "info": info,
-                        **meta,
-                    }
-                )
-            return _load_venv_entry(
-                package_name=name_prefix, name=name, module_path=module_path
-            )
-    finally:
-        os.chdir(orig_cwd)
+    suppressed = None
+    mod = None
+    module_paths = [*venv_root.rglob(f"**/{relp}")]
+    for module_path in module_paths:
+        installation_path = module_path
+        for _ in range(len(name_segments.split("."))):
+            installation_path = installation_path.parent
+        try:
+          log.error("installation_path = %s", installation_path)
+          os.chdir(str(installation_path))
+          out_info.update({
+              "artifact_path": artifact_path,
+              "installation_path": installation_path,
+              "module_path": module_path,
+              "package": package_name,
+              "package_name": package_name,
+              "name_prefix": name_prefix,
+              "name": name,
+              "url": url,
+              "version": version,
+              "info": info,
+              **meta,
+          })
+          mod = _load_venv_entry(
+              package_name=name_prefix,
+              name=name,
+              module_path=module_path
+          )
+          return mod
+        except BaseException as ex:
+          if module_path == module_paths[-1]:
+              raise
+          if suppredssed: ex.__context__ = suppressed
+          suppressed = ex
+        finally:
+          os.chdir(orig_cwd)
+          if not mod:
+              raise suppressed
 
 
 def _load_venv_entry(package_name, name, module_path) -> ModuleType:
