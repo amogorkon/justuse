@@ -748,10 +748,12 @@ def _parse_filename(filename) -> dict:
 
 
 def _process(*argv, env={}):
-    _realenv = {}
-    for k, v in chain(os.environ.items(), env.items()):
-        if isinstance(k, str) and isinstance(v, str):
-            _realenv[k] = v
+    _realenv = {
+        k: v
+        for k, v in chain(os.environ.items(), env.items())
+        if isinstance(k, str) and isinstance(v, str)
+    }
+
     o = run(
         **(
             setup := dict(
@@ -1886,7 +1888,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         """
         log.debug(f"use-str: {name}")
         self.modes = modes
-        aspectize = aspectize or {}
         aspectize_dunders = bool(Use.aspectize_dunders & self.modes)
 
         if isinstance(hashes, str):
@@ -1926,8 +1927,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         registry = self.registry
         that_hash = None
         all_hashes = set()
-        mod = None
-
         # welcome to the buffet table, where everything is a lie
         # fmt: off
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
@@ -1951,6 +1950,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         }[case](**locals())
         # fmt: on
         if isinstance(result, ModuleType):
+            aspectize = aspectize or {}
+            mod = None
+
             for (check, pattern), decorator in aspectize.items():
                 _apply_aspect(
                     mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders
