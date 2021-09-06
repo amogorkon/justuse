@@ -670,13 +670,14 @@ def _find_version(pkg_name, version=None):
     assert False, f"No match found for {pkg_name=!r}, {version=!r}"
 
 def _find_exe(venv_root):
+    env={"VIRTUAL_ENV": str(venv_root), "PATH": str(venv_root/"bin") + os.path.pathsep + str(venv_root/"Scripts") + os.path.pathsep + os.environ["PATH"]}
     for p in ((
         *venv_root.rglob("**/bin/python"),
         *venv_root.rglob("**/bin/python.exe"),
         *venv_root.rglob("**/Scripts/python"),
         *venv_root.rglob("**/Scripts/python*.exe"),
     )):
-        return Path(p).parent, Path(p).name
+        return p, env, Path(p).parent, Path(p).name
     o = _process(sys.executable, "-m", "venv", venv_root)
     for p in ((
         *venv_root.rglob("**/bin/python"),
@@ -684,8 +685,8 @@ def _find_exe(venv_root):
         *venv_root.rglob("**/Scripts/python"),
         *venv_root.rglob("**/Scripts/python*.exe"),
     )):
-      o2 = _process(str(p), "-m", "ensurepip", "-v", "-v", env={"VIRTUAL_ENV": str(venv_root), "PATH": str(venv_root/"bin") + os.path.pathsep + str(venv_root/"Scripts") + os.path.pathsep + os.environ["PATH"]})
-      return Path(p).parent, Path(p).name
+      o2 = _process(str(p), "-m", "ensurepip", "-v", "-v", env=env)
+      return p, env, Path(p).parent, Path(p).name
 
 def _load_venv_mod(
     name_prefix, name, version=None,
@@ -697,8 +698,7 @@ def _load_venv_mod(
     pkg_name = name_prefix or name
     info.update(_find_version(pkg_name, version))
     venv_root = _venv_root(pkg_name, version)
-    venv_bin, python_exe = _find_exe(venv_root)
-    venv_path_var = f"{venv_bin}{os.path.pathsep}{os.environ.get('PATH')}"
+    p, env, venv_bin, python_exe = _find_exe(venv_root)
     install_item = package_name = pkg_name
     log.info("Installing %s using pip", install_item)
     filename = info["filename"] or str(
@@ -712,8 +712,8 @@ def _load_venv_mod(
         artifact_path.write_bytes(requests.get(url).content)
     if artifact_path.exists():
         install_item = artifact_path
-    pip_args = [
-        python_exe,
+    output = _process(
+        str(venv_bin / python_exe),
         "-m",
         "pip",
         "--disable-pip-version-check",
@@ -731,16 +731,8 @@ def _load_venv_mod(
         "--no-compile",
         "--no-warn-script-location",
         "--no-warn-conflicts",
-    ]
-    output = _process(
-        *((
-            ["cmd.exe", "/C", "set", f"PATH={venv_path_var}", "&"]
-            if _venv_is_win()
-            else ["env", f"PATH={venv_path_var}"]
-        )
-        + pip_args
-        + [install_item]),
-        env={ "PATH": venv_path_var, "VIRTUAL_ENV": venv_root }
+        install_item,
+        env=env
     )
     match = re.compile(
         "Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) "
