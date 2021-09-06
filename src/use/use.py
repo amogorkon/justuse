@@ -289,10 +289,16 @@ use("{package_name}", version="{version}", hashes={hashes!r}, modes=use.auto_ins
         lambda package_name, target_version: f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI."
     )
     no_version_or_hash_provided = (
-        lambda name, package_name, version, hashes: f"""Please specify version and hash for auto-installation of '{package_name}'.
+        lambda name, package_name, version, hash_value: f"""Please specify version and hash for auto-installation of '{package_name}'.
 To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
-If you want to auto-install the latest version: use("{name}", version="{version}", hashes={hashes!r}, modes=use.auto_install)
+If you want to auto-install the latest version: use("{name}", version="{version}", hashes={set([hash_value])}, modes=use.auto_install)
 """
+    )
+    cant_import = (
+        lambda name: f"No package installed named {name} and auto-installation not requested. Aborting."
+    )
+    cant_import_no_version = (
+        lambda package_name: f"Failed to auto-install '{package_name}' because no version was specified."
     )
 
 
@@ -478,45 +484,39 @@ def _venv_is_win() -> bool:
     return sys.platform.lower().startswith("win")
 
 
-def _no_pebkac(name, package_name, target_version, hash_algo, hashes) -> bool:
-    if target_version and not hashes:  # let's try to be helpful
-        data = _get_filtered_data(_get_package_data(package_name))
-        version = target_version
-        entry = data["releases"][str(target_version)][-1]
-        that_hash = entry["digests"][hash_algo.name]
-        hit = (version, that_hash)
-        log.info(f"{hit=} from Use._find_matching_artifact")
-        if that_hash:
-            if that_hash is not None:
-                hashes.add(that_hash)
-            raise RuntimeWarning(Message.pebkac_missing_hash(package_name, version, hashes))
-        raise RuntimeWarning(
-            f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
-        )
-    elif not target_version and hashes:
-        raise RuntimeWarning(
-            f"Failed to auto-install '{package_name}' because no version was specified."
-        )
-    elif not target_version:
-        # let's try to make an educated guess and give a useful suggestion
-        data = _get_filtered_data(_get_package_data(package_name))
-        for ver, infos in reversed(data["releases"].items()):
-            entry = infos[-1]
-            if not hashes or entry["digests"][hash_algo.name] in hashes:
-
-                hash_value = entry["digests"][hash_algo.name]
-                version = ver
-                hit = (version, hash_value)
-
-        if not hash_value:
-            raise RuntimeWarning(Message.pebkac_unsupported(package_name))
-
-        if not target_version:
-            hashes.add(hash_value)
-            raise RuntimeWarning(
-                Message.no_version_or_hash_provided(name, package_name, version, hashes)
+def _pebkac_version_no_hash(*, package_name, version, hash_algo, **kwargs) -> Exception:
+    data = _get_filtered_data(_get_package_data(package_name))
+    entry = data["releases"][str(version)][-1]
+    that_hash = entry["digests"][hash_algo.name]
+    if that_hash:
+        return RuntimeWarning(
+            Message.pebkac_missing_hash(
+                package_name,
+                version,
+                that_hash,
             )
-    return True
+        )
+    return RuntimeWarning(
+        f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
+    )
+
+
+def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Exception:
+    # let's try to make an educated guess and give a useful suggestion
+    data = _get_filtered_data(_get_package_data(package_name))
+    for version, infos in sorted(data["releases"].items()):
+        hash_value = infos[0]["digests"][hash_algo.name]
+        if hash_value:
+            return RuntimeWarning(
+                Message.no_version_or_hash_provided(
+                    name,
+                    package_name,
+                    version,
+                    hash_value,
+                )
+            )
+
+    return RuntimeWarning(Message.pebkac_unsupported(package_name))
 
 
 def _update_hashes(
@@ -1694,31 +1694,28 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         elif not auto_install:
             spec = importlib.util.find_spec(name)
 
+        # fmt: off
         result = {
-            (
-                False,
-                False,
-                False,
-                False,
-            ): lambda **kwargs: f"No package installed named {name} and auto-installation not requested. Aborting.",
-            (False, False, False, True): lambda **kwargs: None,
+            (False, False, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
+            (False, False, False, True): _pebkac_no_version_no_hash,
             (False, False, True, False): lambda **kwargs: None,
-            (False, True, False, False): lambda **kwargs: None,
-            (True, False, False, False): lambda **kwargs: None,
+            (False, True, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
+            (True, False, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
             (False, False, True, True): lambda **kwargs: None,
             (False, True, True, False): lambda **kwargs: None,
-            (True, True, False, False): lambda **kwargs: None,
-            (True, False, False, True): lambda **kwargs: None,
+            (True, True, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
+            (True, False, False, True): _pebkac_version_no_hash,
             (True, False, True, False): lambda **kwargs: None,
-            (False, True, False, True): lambda **kwargs: None,
+            (False, True, False, True): lambda **kwargs: RuntimeWarning(Message.cant_import_no_version(name)),
             (False, True, True, True): lambda **kwargs: None,
             (True, False, True, True): lambda **kwargs: None,
             (True, True, False, True): lambda **kwargs: None,
             (True, True, True, False): lambda **kwargs: None,
             (True, True, True, True): lambda **kwargs: None,
         }[(bool(version), bool(hashes), bool(spec), bool(auto_install))](
-            name=name, version=version, hashes=hashes, spec=spec
+            name=name, version=version, hashes=hashes, spec=spec, hash_algo=hash_algo, package_name=package_name,
         )
+        # fmt: on
         if isinstance(result, ModuleType):
             return _ensure_proxy(result)
         elif result is None:
@@ -1778,17 +1775,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     f"Setting {spec=}, since " f"{target_version=} != {this_version=}"
                 )
         else:
-            if not auto_install:
-                return _fail_or_default(
-                    ImportError(
-                        f"Could not find any installed package '{name}' and auto_install was not requested."
-                    ),
-                    default,
-                )
-
-            if _no_pebkac(name, package_name, target_version, hash_algo, hashes):
-                pass
-
             # if it's a pure python package, there is only an artifact, no installation
             query = self.registry.execute(
                 "SELECT id, installation_path FROM distributions WHERE name=? AND version=?",
