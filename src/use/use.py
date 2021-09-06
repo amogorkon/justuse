@@ -590,6 +590,10 @@ def _auto_install(
     version,
     registry,
     hashes,
+    url,
+    that_hash,
+    module_name,
+    _save_module_info,
     **kwargs,
 ):
     result = func(package_name=package_name, target_version=target_version, **kwargs)
