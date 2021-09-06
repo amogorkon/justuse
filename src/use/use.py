@@ -558,6 +558,62 @@ def _import_public_no_install(
     return ImportError(exc)
 
 
+def _auto_install(
+    *,
+    package_name,
+    target_version,
+    hash_algo,
+    all_hashes,
+    home,
+    name,
+    version,
+    registry,
+    hashes,
+    **kwargs,
+):
+
+    query = registry.execute(
+        "SELECT id, installation_path FROM distributions WHERE name=? AND version=?",
+        (name, version),
+    ).fetchone()
+
+    if query:
+        installation_path = query["installation_path"]
+        query = registry.execute(
+            "SELECT path FROM artifacts WHERE distribution_id=?",
+            [
+                query["id"],
+            ],
+        ).fetchone()
+    if query:
+        path = Path(query["path"])
+        if not path.exists():
+            path = None
+    if not path:
+        _update_hashes(
+            package_name,
+            target_version,
+            version,
+            hash_algo,
+            hashes,
+            all_hashes,
+            home,
+        )
+
+    if path:
+        # trying to import directly from zip
+        try:
+            importer = zipimport.zipimporter(path)
+            mod = importer.load_module(module_name)
+            print("Direct zipimport of", name, "successful.")
+        except:
+            if config["debugging"]:
+                log.debug(traceback.format_exc())
+            print("Direct zipimport failed, attempting to extract and load manually...")
+
+    installation_path = (path.parent / path.stem) if path else None
+
+
 def _update_hashes(
     package_name,
     target_version,
@@ -1802,41 +1858,43 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             version if target_version else version is target_version
         ), "Version must be None if target_version is None; otherwise, they must both have a value."
 
-        mod = None
-
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
         # let's first see if the user might mean something else entirely
         if any(Path(".").glob(f"{name}.py")):
             warn(Message.ambiguous_name_warning(name), AmbiguityWarning)
         spec = None
-        that_hash = None
-        all_hashes = set()
 
         if name in self._using:
             spec = self._using[name].spec
         elif not auto_install:
             spec = importlib.util.find_spec(name)
 
+        registry = self.registry
+        that_hash = None
+        all_hashes = set()
+        mod = None
+
         # fmt: off
+        case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
         result = {
             (False, False, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
             (False, False, False, True): _pebkac_no_version_no_hash,
             (False, False, True, False): _import_public_no_install,
             (False, True, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
             (True, False, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
-            (False, False, True, True): lambda **kwargs: None,
+            (False, False, True, True): lambda **kwargs: _auto_install(_import_public_no_install, **kwargs),
             (False, True, True, False): _import_public_no_install,
             (True, True, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
             (True, False, False, True): _pebkac_version_no_hash,
             (True, False, True, False): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
             (False, True, False, True): lambda **kwargs: RuntimeWarning(Message.cant_import_no_version(name)),
-            (False, True, True, True): lambda **kwargs: None,
-            (True, False, True, True): lambda **kwargs: None,
-            (True, True, False, True): lambda **kwargs: None,
+            (False, True, True, True): lambda **kwargs: _auto_install(_import_public_no_install, **kwargs),
+            (True, False, True, True): lambda **kwargs: _pebkac_version_no_hash(_ensure_version(_import_public_no_install, **kwargs), **kwargs),
+            (True, True, False, True): _auto_install,
             (True, True, True, False): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
-            (True, True, True, True): lambda **kwargs: None,
-        }[(bool(version), bool(hashes), bool(spec), bool(auto_install))](**locals())
+            (True, True, True, True): lambda **kwargs: _auto_install(_ensure_version(_import_public_no_install, **kwargs), **kwargs),
+        }[case](**locals())
         # fmt: on
         if isinstance(result, ModuleType):
             for (check, pattern), decorator in aspectize.items():
@@ -1854,52 +1912,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if spec:
             pass
         else:
-
-            # if it's a pure python package, there is only an artifact, no installation
-            query = self.registry.execute(
-                "SELECT id, installation_path FROM distributions WHERE name=? AND version=?",
-                (name, version),
-            ).fetchone()
-
-            # TODO: looks like a good place for a JOIN
-            if query:
-                installation_path = query["installation_path"]
-                query = self.registry.execute(
-                    "SELECT path FROM artifacts WHERE distribution_id=?",
-                    [
-                        query["id"],
-                    ],
-                ).fetchone()
-            if query:
-                path = Path(query["path"])
-                if not path.exists():
-                    path = None
-            if path and not url:
-                url = URL(f"file:/{path.absolute()}")
-            if not path:
-                _update_hashes(
-                    package_name,
-                    target_version,
-                    version,
-                    default,
-                    hash_algo,
-                    hashes,
-                    all_hashes,
-                    self.home,
-                )
-
-        if path:
-            # trying to import directly from zip
-            try:
-                importer = zipimport.zipimporter(path)
-                mod = importer.load_module(module_name)
-                print("Direct zipimport of", name, "successful.")
-            except:
-                if config["debugging"]:
-                    log.debug(traceback.format_exc())
-                print("Direct zipimport failed, attempting to extract and load manually...")
-
-        installation_path = (path.parent / path.stem) if path else None
+            mod = None
 
         if not mod:
             out_info = {}
