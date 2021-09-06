@@ -724,11 +724,11 @@ def _get_venv_data(
         artifact_path = sys.modules["use"].home/"packages"/filename
         if artifact_path.exists():
              install_item = str(artifact_path)
-    
+
     venv_root = _venv_root(name_prefix, version)
     venv_bins = [venv_root / "Scripts", venv_root / "bin"]
     venv_bin = _get_venv_bin(name_prefix, version, artifact_path or url)
-    
+
     python_exe = "python.exe" if _venv_is_win() else "python"
     m_env = dict(**os.environ)
     m_env.update({
@@ -778,16 +778,16 @@ def _get_venv_data(
                     "%s\n\n%s" % (output.stdout, output.stderr)
                 ):
                     for k, v in match.groupdict().items():
-                        if not k in info or not info[k] or info[k]  == "0.0.0":
+                        if k not in info or not info[k] or info[k] == "0.0.0":
                             info[k] = v
                             locals().__setitem__(k, v)
                             log.info("    Read [%s]=%s", k, v)
-                
+
             except BaseException as bex:
                 ex = bex
     if not info.get("version", None) and ex:
         raise RuntimeError("Can't get version", ex, locals()) from ex
-    
+
     filename = filename or (info.get("filename", None)) or (
         Path(artifact_path).name if artifact_path else filename
     ) or (
@@ -808,7 +808,7 @@ def _get_venv_data(
         filename = ent["filename"]
         artifact_path = sys.modules["use"].home/"packages"/filename
         info.update(ent)
-    
+
     package_name = (
         package_name or info.get("package_name", None)
         or name_prefix or name
@@ -852,7 +852,7 @@ def _get_venv_data(
        "url": url,
        "version": version or info["version"],
     })
-    
+
     return info
 
 
