@@ -977,6 +977,13 @@ def _ensure_proxy(mod) -> ProxyModule:
     return ProxyModule(mod)
 
 
+def _ensure_version(mod, target_version) -> ModuleType | None:
+    if _get_version(mod=mod) == target_version:
+        return mod
+    else:
+        return None
+
+
 def _fail_or_default(exception, default):
     if default is not mode.fastfail:
         return default  # TODO: write test for default
@@ -1745,28 +1752,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     fatal_exceptions=fatal_exceptions,
                 )
 
-            this_version = _get_version(name, package_name)
-            log.error("this_version=%s, target_version=%s", this_version, target_version)
-
-            if this_version == target_version:
-                assert False, "we need a test for this or remove the code block"
-                if not (version):
-                    warn(Message.no_version_provided(), AmbiguityWarning)
-                mod = self._import_classical_install(
-                    name=name,
-                    module_name=module_name,
-                    spec=spec,
-                    target_version=target_version,
-                    default=default,
-                    aspectize=aspectize,
-                    fatal_exceptions=fatal_exceptions,
-                    package_name=package_name,
-                )
-                warn(
-                    Message.classically_imported(),
-                    AmbiguityWarning,
-                )
-                return _ensure_proxy(mod)
             # wrong version => wrong spec
             this_version = _get_version(mod=mod)
             if this_version != target_version:
@@ -1775,6 +1760,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     f"Setting {spec=}, since " f"{target_version=} != {this_version=}"
                 )
         else:
+
             # if it's a pure python package, there is only an artifact, no installation
             query = self.registry.execute(
                 "SELECT id, installation_path FROM distributions WHERE name=? AND version=?",
