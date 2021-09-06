@@ -605,10 +605,12 @@ def _parse_filename(filename) -> dict:
 
 
 def _process(*argv, env={}):
-    _realenv = {}
-    for k,v in chain(os.environ.items(), env.items()):
-        if isinstance(k,str) and isinstance(v,str):
-             _realenv[k] = v
+    _realenv = {
+        k: v
+        for k, v in chain(os.environ.items(), env.items())
+        if isinstance(k, str) and isinstance(v, str)
+    }
+
     o = run(**(
         setup := dict(
             executable=(exe:=argv[0]),
