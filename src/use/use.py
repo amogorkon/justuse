@@ -110,6 +110,7 @@ from furl import furl as URL
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version as PkgVersion
+from pip._internal.utils import compatibility_tags
 
 # injected via initial_globals for testing, you can safely ignore this
 test_config: str = locals().get("test_config", {})
@@ -176,6 +177,18 @@ class PlatformTag(namedtuple("PlatformTag", ["platform"])):
 
     def __repr__(self):
         return self.platform
+
+
+# keyword args from inside the called function!
+def get_keyword_params(func, locs):
+    return {
+        name: locs[name]
+        for name, param in inspect.signature(func).parameters.items()
+        if (
+            param.kind is inspect.Parameter.KEYWORD_ONLY
+            or param.kind is inspect.Parameter.VAR_KEYWORD
+        )
+    }
 
 
 # singledispatch for methods
@@ -379,7 +392,6 @@ def get_supported() -> FrozenSet[PlatformTag]:
     supported on the current system.
     """
     items: List[PlatformTag] = []
-    from pip._internal.utils import compatibility_tags  # type: ignore
 
     for tag in compatibility_tags.get_supported():
         items.append(PlatformTag(platform=tag.platform))
@@ -485,6 +497,14 @@ def _venv_is_win() -> bool:
     return sys.platform.lower().startswith("win")
 
 
+def _pebkac_no_version_hash(func, *, name: str, **kwargs) -> "ModuleType|Exception":
+    result = func(name=name, **kwargs)
+    if isinstance(result, ModuleType):
+        return result
+    else:
+        return RuntimeWarning(Message.cant_import_no_version(name))
+
+
 def _pebkac_version_no_hash(*, package_name, version, hash_algo, **kwargs) -> Exception:
     data = _get_filtered_data(_get_package_data(package_name))
     entry = data["releases"][str(version)][-1]
@@ -559,6 +579,7 @@ def _import_public_no_install(
 
 
 def _auto_install(
+    func,
     *,
     package_name,
     target_version,
@@ -571,7 +592,7 @@ def _auto_install(
     hashes,
     **kwargs,
 ):
-
+    result = func(package_name=package_name, target_version=target_version, **kwargs)
     query = registry.execute(
         "SELECT id, installation_path FROM distributions WHERE name=? AND version=?",
         (name, version),
@@ -612,6 +633,29 @@ def _auto_install(
             print("Direct zipimport failed, attempting to extract and load manually...")
 
     installation_path = (path.parent / path.stem) if path else None
+
+    out_info = {}
+    mod = _load_venv_mod(
+        name_prefix=package_name,
+        name=name,
+        version=version,
+        artifact_path=path,
+        url=url,
+        out_info=out_info,
+    )
+    path = out_info["artifact_path"]
+    installation_path = out_info["installation_path"]
+    package_name = out_info["package_name"]
+    name = out_info["name"]
+    url = out_info["url"]
+    this_version = Version(out_info["version"])
+    _save_module_info(
+        name=name,
+        version=this_version,
+        artifact_path=path,
+        hash_value=that_hash,
+        installation_path=installation_path,
+    )
 
 
 def _update_hashes(
@@ -793,6 +837,10 @@ def _find_exe(venv_root):
         return p, env, Path(p).parent, Path(p).name
 
 
+def _download_artifact(*url, **kwargs):
+    pass
+
+
 def _load_venv_mod(
     name_prefix, name, version=None, artifact_path=None, url=None, out_info=None
 ) -> ModuleType:
@@ -809,6 +857,7 @@ def _load_venv_mod(
         info["filename"]
         or str(url or artifact_path).replace("\x5c", "/").split("/")[-1].split("#")[0]
     )
+    _download_artifact(url)
     url = url or URL(info["url"])
     package_name = package_name or info["package_name"]
     version = info["version"]
@@ -1888,8 +1937,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             (True, True, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
             (True, False, False, True): _pebkac_version_no_hash,
             (True, False, True, False): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
-            (False, True, False, True): lambda **kwargs: RuntimeWarning(Message.cant_import_no_version(name)),
-            (False, True, True, True): lambda **kwargs: _auto_install(_import_public_no_install, **kwargs),
+            (False, True, False, True): _pebkac_no_version_hash,
+            (False, True, True, True): lambda **kwargs: _pebkac_no_version_hash(_import_public_no_install, **kwargs),
             (True, False, True, True): lambda **kwargs: _pebkac_version_no_hash(_ensure_version(_import_public_no_install, **kwargs), **kwargs),
             (True, True, False, True): _auto_install,
             (True, True, True, False): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
@@ -1904,55 +1953,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
             return _ensure_proxy(result)
-        elif result is None:
-            print("case wasn't handled:", version, hashes, spec, auto_install)
-        else:
-            return _fail_or_default(result, default)
-
-        if spec:
-            pass
-        else:
-            mod = None
-
-        if not mod:
-            out_info = {}
-            mod = _load_venv_mod(
-                name_prefix=package_name,
-                name=name,
-                version=version,
-                artifact_path=path,
-                url=url,
-                out_info=out_info,
-            )
-            path = out_info["artifact_path"]
-            installation_path = out_info["installation_path"]
-            package_name = out_info["package_name"]
-            name = out_info["name"]
-            url = out_info["url"]
-            this_version = Version(out_info["version"])
-        self._save_module_info(
-            name=name,
-            version=this_version,
-            artifact_path=path,
-            hash_value=that_hash,
-            installation_path=installation_path,
-        )
-        for (check, pattern), decorator in aspectize.items():
-            if mod is not None:
-                _apply_aspect(
-                    mod,
-                    check,
-                    pattern,
-                    decorator,
-                    aspectize_dunders=bool(Use.aspectize_dunders & modes),
-                )
-        log.error("_use_str: mod=%s", mod)
-        try:
-            return mod
-        finally:
-            frame = inspect.getframeinfo(inspect.currentframe())
-            if frame:
-                self._set_mod(name=name, mod=mod, frame=frame)
+        return _fail_or_default(result, default)
 
 
 use = Use()

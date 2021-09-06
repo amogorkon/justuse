@@ -1,35 +1,12 @@
-from types import ModuleType
-import threading
-from importlib import import_module
+import inspect
 
-class ProxyModule(ModuleType):
-    def __init__(self, mod):
-        self.__implementation = mod
-        self.__condition = threading.RLock()
-    
-    @property
-    def path(self):
-        print("accessing sys.path..")
-        return 5
+def get_keyword_param_names(func, locs):
+    return {name:locs[name] for name, param in inspect.signature(func).parameters.items()
+        if (
+            param.kind is inspect.Parameter.KEYWORD_ONLY 
+            or param.kind is inspect.Parameter.VAR_KEYWORD
+        )}
 
-    def __getattribute__(self, name):
-        if name in ("_ProxyModule__implementation", "_ProxyModule__condition", "", "path"):
-            return object.__getattribute__(self, name)
-        with self.__condition:
-            return getattr(self.__implementation, name)
-
-    def __setattr__(self, name, value):
-        if name in (
-            "_ProxyModule__implementation",
-            "_ProxyModule__condition",
-        ):
-            object.__setattr__(self, name, value)
-            return
-        with self.__condition:
-            setattr(self.__implementation, name, value)
-
-import sys
-sys.modules["sys"] = ProxyModule(sys)
-sys.x = 4
-
-import asdf
+def foo(*, a, b, **kwargs):
+    return get_keyword_param_names(foo, locals())
+s = foo(a=2, b=3)
