@@ -93,7 +93,6 @@ from functools import lru_cache as cache
 from functools import singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
-from inspect import getsource, isclass, stack
 from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
 from pathlib import Path
@@ -336,14 +335,14 @@ class _PipeTransformer(ast.NodeTransformer):
 
 
 def pipes(func_or_class):
-    if isclass(func_or_class):
-        decorator_frame = stack()[1]
+    if inspect.isclass(func_or_class):
+        decorator_frame = inspect.stack()[1]
         ctx = decorator_frame[0].f_locals
         first_line_number = decorator_frame[2]
     else:
         ctx = func_or_class.__globals__
         first_line_number = func_or_class.__code__.co_firstlineno
-    source = getsource(func_or_class)
+    source = inspect.getsource(func_or_class)
     tree = ast.parse(dedent(source))
     ast.increment_lineno(tree, first_line_number - 1)
     source_indent = sum(1 for _ in takewhile(str.isspace, source)) + 1
@@ -521,6 +520,44 @@ def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Ex
     return RuntimeWarning(Message.pebkac_unsupported(package_name))
 
 
+def _import_public_no_install(
+    *,
+    name,
+    spec,
+    aspectize,
+    fatal_exceptions,
+    module_name,
+    **kwargs,
+) -> "ModuleType|Exception":
+    # builtin?
+    builtin = False
+    try:
+        metadata.PathDistribution.from_name(name)
+    except metadata.PackageNotFoundError:  # indeed builtin!
+        builtin = True
+
+    if builtin:
+        try:
+            mod = spec.loader.create_module(spec)
+            spec.loader.exec_module(mod)  # ! => cache
+            if aspectize:
+                warn(Message.aspectize_builtins_warning(), RuntimeWarning)
+            return mod
+        except:
+            exc = traceback.format_exc()
+        return ImportError(exc)
+
+    # it seems to be installed in some way, for instance via pip
+    try:
+        mod = importlib.import_module(module_name)  # ! => cache
+        return mod
+    except:
+        if fatal_exceptions:
+            raise
+        exc = traceback.format_exc()
+    return ImportError(exc)
+
+
 def _update_hashes(
     package_name,
     target_version,
@@ -608,56 +645,59 @@ def _parse_filename(filename) -> dict:
 
 def _process(*argv, env={}):
     _realenv = {}
-    for k,v in chain(os.environ.items(), env.items()):
-        if isinstance(k,str) and isinstance(v,str):
-             _realenv[k] = v
-    o = run(**(
-        setup := dict(
-            executable=(exe:=argv[0]),
-            args=[*map(str, argv)],
-            bufsize=1024,
-            input="",
-            capture_output=True,
-            timeout=45000,
-            check=False,
-            close_fds=True,
-            env=_realenv,
-            encoding="UTF-8",
-            errors="ISO-8859-1",
-            text=True,
-            shell=False
+    for k, v in chain(os.environ.items(), env.items()):
+        if isinstance(k, str) and isinstance(v, str):
+            _realenv[k] = v
+    o = run(
+        **(
+            setup := dict(
+                executable=(exe := argv[0]),
+                args=[*map(str, argv)],
+                bufsize=1024,
+                input="",
+                capture_output=True,
+                timeout=45000,
+                check=False,
+                close_fds=True,
+                env=_realenv,
+                encoding="UTF-8",
+                errors="ISO-8859-1",
+                text=True,
+                shell=False,
+            )
         )
-    ))
-    if o.returncode == 0: return o
+    )
+    if o.returncode == 0:
+        return o
     raise RuntimeError(
         "\x0a".join(
-          (
-            "\x1b[1;41;37m",
-            "Problem running--command exited with non-zero: %d",
-            "%s",
-            "---[  Errors  ]---",
-            "%s",
-            "\x1b[0;1;37m",
-            "Arguments to subprocess.run(**setup):",
-            "%s",
-            "---[  STDOUT  ]---",
-            "%s",
-            "---[  STDERR  ]---",
-            "%s\n1b[0m",
-         )
-       ) % (
+            (
+                "\x1b[1;41;37m",
+                "Problem running--command exited with non-zero: %d",
+                "%s",
+                "---[  Errors  ]---",
+                "%s",
+                "\x1b[0;1;37m",
+                "Arguments to subprocess.run(**setup):",
+                "%s",
+                "---[  STDOUT  ]---",
+                "%s",
+                "---[  STDERR  ]---",
+                "%s\n1b[0m",
+            )
+        )
+        % (
             o.returncode,
             shlex.join(map(str, setup["args"])),
             o.stderr or o.stdout,
             pformat(setup, indent=2, width=70, compact=False),
             o.stdout,
             o.stderr,
-       ) if o.returncode != 0 else (
-            "%s\n\n%s"
-       ) % (
-           o.stdout, o.stderr
-       )
+        )
+        if o.returncode != 0
+        else ("%s\n\n%s") % (o.stdout, o.stderr)
     )
+
 
 def _find_version(pkg_name, version=None):
     data = _get_filtered_data(_get_package_data(pkg_name))
@@ -669,28 +709,36 @@ def _find_version(pkg_name, version=None):
             return infos[-1]
     assert False, f"No match found for {pkg_name=!r}, {version=!r}"
 
+
 def _find_exe(venv_root):
-    env={"VIRTUAL_ENV": str(venv_root), "PATH": str(venv_root/"bin") + os.path.pathsep + str(venv_root/"Scripts") + os.path.pathsep + os.environ["PATH"]}
-    for p in ((
+    env = {
+        "VIRTUAL_ENV": str(venv_root),
+        "PATH": str(venv_root / "bin")
+        + os.path.pathsep
+        + str(venv_root / "Scripts")
+        + os.path.pathsep
+        + os.environ["PATH"],
+    }
+    for p in (
         *venv_root.rglob("**/bin/python"),
         *venv_root.rglob("**/bin/python.exe"),
         *venv_root.rglob("**/Scripts/python"),
         *venv_root.rglob("**/Scripts/python*.exe"),
-    )):
+    ):
         return p, env, Path(p).parent, Path(p).name
     o = _process(sys.executable, "-m", "venv", venv_root)
-    for p in ((
+    for p in (
         *venv_root.rglob("**/bin/python"),
         *venv_root.rglob("**/bin/python.exe"),
         *venv_root.rglob("**/Scripts/python"),
         *venv_root.rglob("**/Scripts/python*.exe"),
-    )):
-      o2 = _process(str(p), "-m", "ensurepip", "-v", "-v", env=env)
-      return p, env, Path(p).parent, Path(p).name
+    ):
+        o2 = _process(str(p), "-m", "ensurepip", "-v", "-v", env=env)
+        return p, env, Path(p).parent, Path(p).name
+
 
 def _load_venv_mod(
-    name_prefix, name, version=None,
-    artifact_path=None, url=None, out_info=None
+    name_prefix, name, version=None, artifact_path=None, url=None, out_info=None
 ) -> ModuleType:
     if not version or str(version) in ("0.0.0", "None"):
         version = None
@@ -701,13 +749,14 @@ def _load_venv_mod(
     p, env, venv_bin, python_exe = _find_exe(venv_root)
     install_item = package_name = pkg_name
     log.info("Installing %s using pip", install_item)
-    filename = info["filename"] or str(
-        url or artifact_path
-    ).replace("\x5c","/").split("/")[-1].split("#")[0]
+    filename = (
+        info["filename"]
+        or str(url or artifact_path).replace("\x5c", "/").split("/")[-1].split("#")[0]
+    )
     url = url or URL(info["url"])
     package_name = package_name or info["package_name"]
     version = info["version"]
-    artifact_path = artifact_path or sys.modules["use"].home/"packages"/filename
+    artifact_path = artifact_path or sys.modules["use"].home / "packages" / filename
     if not artifact_path.exists():
         artifact_path.write_bytes(requests.get(url).content)
     if artifact_path.exists():
@@ -732,12 +781,13 @@ def _load_venv_mod(
         "--no-warn-script-location",
         "--no-warn-conflicts",
         install_item,
-        env=env
+        env=env,
     )
     match = re.compile(
         "Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) "
         "from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))"
-        "(?:#(\\S*)|)(?=\\s)", re.DOTALL,
+        "(?:#(\\S*)|)(?=\\s)",
+        re.DOTALL,
     ).search("%s\n\n%s" % (output.stdout, output.stderr))
     info.update(match.groupdict() if match else {})
     orig_cwd = Path.cwd()
@@ -754,36 +804,37 @@ def _load_venv_mod(
         for _ in range(len(name_segments.split("."))):
             installation_path = installation_path.parent
         try:
-          log.error("installation_path = %s", installation_path)
-          os.chdir(str(installation_path))
-          out_info.update({
-              "artifact_path": artifact_path,
-              "installation_path": installation_path,
-              "module_path": module_path,
-              "package": package_name,
-              "package_name": package_name,
-              "name_prefix": name_prefix,
-              "name": name,
-              "url": url,
-              "version": version,
-              "info": info,
-              **meta,
-          })
-          mod = _load_venv_entry(
-              package_name=name_prefix,
-              name=name,
-              module_path=module_path
-          )
-          return mod
+            log.error("installation_path = %s", installation_path)
+            os.chdir(str(installation_path))
+            out_info.update(
+                {
+                    "artifact_path": artifact_path,
+                    "installation_path": installation_path,
+                    "module_path": module_path,
+                    "package": package_name,
+                    "package_name": package_name,
+                    "name_prefix": name_prefix,
+                    "name": name,
+                    "url": url,
+                    "version": version,
+                    "info": info,
+                    **meta,
+                }
+            )
+            mod = _load_venv_entry(
+                package_name=name_prefix, name=name, module_path=module_path
+            )
+            return mod
         except BaseException as ex:
-          if module_path == module_paths[-1]:
-              raise
-          if suppredssed: ex.__context__ = suppressed
-          suppressed = ex
+            if module_path == module_paths[-1]:
+                raise
+            if suppressed:
+                ex.__context__ = suppressed
+            suppressed = ex
         finally:
-          os.chdir(orig_cwd)
-          if not mod:
-              raise suppressed
+            os.chdir(orig_cwd)
+            if not mod:
+                raise suppressed
 
 
 def _load_venv_entry(package_name, name, module_path) -> ModuleType:
@@ -1037,11 +1088,16 @@ def _ensure_proxy(mod) -> ProxyModule:
     return ProxyModule(mod)
 
 
-def _ensure_version(mod, target_version) -> ModuleType | None:
-    if _get_version(mod=mod) == target_version:
-        return mod
+def _ensure_version(func, *, name, target_version, **kwargs) -> "ModuleType | Exception":
+    result = func(name=name, target_version=target_version, **kwargs)
+    if not isinstance(result, ModuleType):
+        return result
+
+    this_version = _get_version(mod=result)
+    if this_version == target_version:
+        return result
     else:
-        return None
+        return RuntimeWarning(Message.version_warning(name, target_version, this_version))
 
 
 def _fail_or_default(exception, default):
@@ -1722,6 +1778,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         log.debug(f"use-str: {name}")
         self.modes = modes
         aspectize = aspectize or {}
+        aspectize_dunders = bool(Use.aspectize_dunders & self.modes)
 
         if isinstance(hashes, str):
             hashes = set([hashes])
@@ -1765,25 +1822,29 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         result = {
             (False, False, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
             (False, False, False, True): _pebkac_no_version_no_hash,
-            (False, False, True, False): lambda **kwargs: None,
+            (False, False, True, False): _import_public_no_install,
             (False, True, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
             (True, False, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
             (False, False, True, True): lambda **kwargs: None,
-            (False, True, True, False): lambda **kwargs: None,
+            (False, True, True, False): _import_public_no_install,
             (True, True, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
             (True, False, False, True): _pebkac_version_no_hash,
-            (True, False, True, False): lambda **kwargs: None,
+            (True, False, True, False): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
             (False, True, False, True): lambda **kwargs: RuntimeWarning(Message.cant_import_no_version(name)),
             (False, True, True, True): lambda **kwargs: None,
             (True, False, True, True): lambda **kwargs: None,
             (True, True, False, True): lambda **kwargs: None,
-            (True, True, True, False): lambda **kwargs: None,
+            (True, True, True, False): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
             (True, True, True, True): lambda **kwargs: None,
-        }[(bool(version), bool(hashes), bool(spec), bool(auto_install))](
-            name=name, version=version, hashes=hashes, spec=spec, hash_algo=hash_algo, package_name=package_name,
-        )
+        }[(bool(version), bool(hashes), bool(spec), bool(auto_install))](**locals())
         # fmt: on
         if isinstance(result, ModuleType):
+            for (check, pattern), decorator in aspectize.items():
+                _apply_aspect(
+                    mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders
+                )
+            frame = inspect.getframeinfo(inspect.currentframe())
+            self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
             return _ensure_proxy(result)
         elif result is None:
             print("case wasn't handled:", version, hashes, spec, auto_install)
@@ -1791,34 +1852,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             return _fail_or_default(result, default)
 
         if spec:
-            # let's check if it's a builtin
-            builtin = False
-            try:
-                metadata.PathDistribution.from_name(name)
-            except metadata.PackageNotFoundError:  # indeed builtin!
-                builtin = True
-            if builtin:
-                return self._import_builtin(name, spec, default, aspectize)
-
-            # it seems to be installed in some way, for instance via pip
-            if not auto_install:
-                return self._import_classical_install(
-                    name=name,
-                    module_name=module_name,
-                    spec=spec,
-                    target_version=target_version,
-                    default=default,
-                    aspectize=aspectize,
-                    fatal_exceptions=fatal_exceptions,
-                )
-
-            # wrong version => wrong spec
-            this_version = _get_version(mod=mod)
-            if this_version != target_version:
-                spec = None
-                log.warning(
-                    f"Setting {spec=}, since " f"{target_version=} != {this_version=}"
-                )
+            pass
         else:
 
             # if it's a pure python package, there is only an artifact, no installation
