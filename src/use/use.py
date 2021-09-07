@@ -138,10 +138,9 @@ signal.signal(signal.SIGINT, signal_handler)
 # # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
 class Version(PkgVersion):
     def __new__(cls, *args, **kwargs):
-        if isinstance(args[0], Version):
-            return args[0]
-        else:
+        if not args or not isinstance(args[0], Version):
             return super(cls, Version).__new__(cls)
+        return args[0]
 
     def __init__(self, versionstr=None, *, major=0, minor=0, patch=0):
         if isinstance(versionstr, Version):
@@ -496,10 +495,8 @@ def _clean_sys_modules(package_name) -> None:
         del sys.modules[k]
 
 
-def _venv_root(package_name, version) -> Path:
-    venv_root = (
-        Path.home() / ".justuse-python" / "venv" / package_name / (version or "0.0.0")
-    )
+def _venv_root(package_name, version, home) -> Path:
+    venv_root = home / "venv" / package_name / (str(version) or "0.0.0")
     if not venv_root.exists():
         venv_root.mkdir(parents=True)
     return venv_root
@@ -604,7 +601,6 @@ def _auto_install(
     hash_algo,
     name,
     version,
-    hashes,
     **kwargs,
 ):
     if func:
@@ -656,7 +652,9 @@ def _auto_install(
     package_name = out_info["package_name"]
     name = out_info["name"]
     this_version = Version(out_info["version"])
-    _save_module_info(
+    that_hash = out_info["hash"]  # TODO: check if true
+
+    use._save_module_info(
         name=name,
         version=this_version,
         artifact_path=path,
@@ -846,7 +844,7 @@ def _load_venv_mod(
     info = (out_info := (out_info if out_info is not None else {}))
     pkg_name = name_prefix or name
     info.update(_find_version(pkg_name, version))
-    venv_root = _venv_root(pkg_name, version)
+    venv_root = _venv_root(pkg_name, version, use.home)
     p, env, venv_bin, python_exe = _find_exe(venv_root)
     install_item = package_name = pkg_name
     log.info("Installing %s using pip", install_item)
