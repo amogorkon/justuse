@@ -675,8 +675,7 @@ def _update_hashes(*, package_name, version, default, hash_algo, hashes, **kwarg
             log.error("url = %s", url)
             entry["version"] = str(version)
             log.debug(f"looking at {entry=}")
-            all_hashes = set()
-            all_hashes.add(that_hash := entry["digests"].get(hash_algo.name))
+            all_hashes = {that_hash := entry["digests"].get(hash_algo.name)}
             if hashes.intersection(all_hashes):
                 found = (entry, that_hash)
                 hit = VerHash(version, that_hash)
