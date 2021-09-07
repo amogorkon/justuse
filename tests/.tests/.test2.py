@@ -5,8 +5,7 @@ class Version(pkv):
         if isinstance(args[0], Version):
             return args[0]
         else:
-            instance = super(cls, Version).__new__(cls)
-            return instance
+            return super(cls, Version).__new__(cls)
 
     def __init__(self, versionstr=None, *, major=0, minor=0, patch=0):
         if isinstance(versionstr, Version):
