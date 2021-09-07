@@ -11,6 +11,7 @@ from unittest import skip
 import pytest
 import requests
 from setuptools import _find_all_simple
+
 from .unit_test import log, reuse
 
 not_local = "GITHUB_REF" in os.environ
@@ -74,7 +75,7 @@ def test_is_platform_compatible_win(reuse):
         "yanked_reason": None,
     }
     assert reuse._is_platform_compatible(info, platform_tags, include_sdist=False)
-    
+
 
 def test_pure_python_package(reuse):
     # https://pypi.org/project/example-pypi-package/
@@ -95,13 +96,11 @@ def test_pure_python_package(reuse):
     )
     assert str(test.Number(2)) == "2"
     if file.exists():
-      file.unlink()
+        file.unlink()
 
 
 def _do_load_venv_mod(reuse, name):
-    data = reuse._get_filtered_data(
-        reuse._get_package_data(name)
-    )
+    data = reuse._get_filtered_data(reuse._get_package_data(name))
     versions = sorted(list(data["releases"].keys()))
     version = versions[-1]
     items = data["releases"][version]
@@ -112,12 +111,11 @@ def _do_load_venv_mod(reuse, name):
                 name_prefix="",
                 name=name,
                 version=item["version"],
-                url=item["url"]
             )
-            if mod: return
+            if mod:
+                return
     assert False
 
-    
 
 def test_load_venv_mod_protobuf(reuse):
     _do_load_venv_mod(reuse, "protobuf")
@@ -158,20 +156,12 @@ def test_unsupported_artifact(reuse):
 
 def _get_test_ver_hash_data(reuse):
     VerHash = reuse.VerHash
-    h = (
-    "5de64950137f3a50b76ce93556db392e8f1f954c2d8207f78a92d1f79aa9f737"
-    )
-    vh1, vh2 = (
-        VerHash("1.0.1", h),
-        VerHash("1.0.2", h)
-    )
-    vh1u, vh2u, vh3u = (
-        VerHash("1.0.1", None),
-        VerHash(None, h),
-        VerHash(None, None)
-    )
+    h = "5de64950137f3a50b76ce93556db392e8f1f954c2d8207f78a92d1f79aa9f737"
+    vh1, vh2 = (VerHash("1.0.1", h), VerHash("1.0.2", h))
+    vh1u, vh2u, vh3u = (VerHash("1.0.1", None), VerHash(None, h), VerHash(None, None))
     vh1b = VerHash("1.0.1", h)
     return (VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b)
+
 
 def test_ver_hash_1(reuse):
     VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b = _get_test_ver_hash_data(reuse)
@@ -184,7 +174,8 @@ def test_ver_hash_1(reuse):
     assert vh1 == vh1
     assert vh1 != ("1.0.1", None)
     assert vh1 != ("1.0.1", None, None)
-    
+
+
 def test_ver_hash_2(reuse):
     VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b = _get_test_ver_hash_data(reuse)
     assert vh1 == ("1.0.1", h)
@@ -197,4 +188,3 @@ def test_ver_hash_2(reuse):
     assert h in vh2
     assert h in vh2u
     assert h not in vh3u
-    

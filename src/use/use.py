@@ -652,7 +652,7 @@ def _auto_install(
     package_name = out_info["package_name"]
     name = out_info["name"]
     this_version = Version(out_info["version"])
-    that_hash = out_info["hash"]  # TODO: check if true
+    that_hash = out_info["hash"]  # TODO: sorry, messed up here :)
 
     use._save_module_info(
         name=name,
@@ -837,7 +837,7 @@ def _download_artifact(url, artifact_path):
 
 
 def _load_venv_mod(
-    name_prefix, name, version=None, artifact_path=None, out_info=None
+    *, name_prefix, name, version=None, artifact_path=None, out_info=None
 ) -> ModuleType:
     if not version or str(version) in ("0.0.0", "None"):
         version = None
