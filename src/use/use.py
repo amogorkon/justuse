@@ -137,7 +137,16 @@ signal.signal(signal.SIGINT, signal_handler)
 # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
 # # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
 class Version(PkgVersion):
+    def __new__(cls, *args, **kwargs):
+        if isinstance(args[0], Version):
+            return args[0]
+        else:
+            return super(cls, Version).__new__(cls)
+
     def __init__(self, versionstr=None, *, major=0, minor=0, patch=0):
+        if isinstance(versionstr, Version):
+            return
+
         if not (versionstr or major or minor or patch):
             raise ValueError(
                 "Version must be initialized with either a string or major, minor and patch"
@@ -180,15 +189,18 @@ class PlatformTag(namedtuple("PlatformTag", ["platform"])):
 
 
 # keyword args from inside the called function!
-def get_keyword_params(func, locs):
-    return {
-        name: locs[name]
+def all_kwargs(func, other_locals):
+    d = {
+        name: other_locals[name]
         for name, param in inspect.signature(func).parameters.items()
         if (
             param.kind is inspect.Parameter.KEYWORD_ONLY
             or param.kind is inspect.Parameter.VAR_KEYWORD
         )
     }
+    d.update(d["kwargs"])
+    del d["kwargs"]
+    return d
 
 
 # singledispatch for methods
@@ -497,15 +509,22 @@ def _venv_is_win() -> bool:
     return sys.platform.lower().startswith("win")
 
 
-def _pebkac_no_version_hash(func, *, name: str, **kwargs) -> "ModuleType|Exception":
-    result = func(name=name, **kwargs)
-    if isinstance(result, ModuleType):
-        return result
-    else:
-        return RuntimeWarning(Message.cant_import_no_version(name))
+def _pebkac_no_version_hash(func=None, *, name: str, **kwargs) -> "ModuleType|Exception":
+    if func:
+        result = func(name=name, **kwargs)
+        if isinstance(result, ModuleType):
+            return result
+    return RuntimeWarning(Message.cant_import_no_version(name))
 
 
-def _pebkac_version_no_hash(*, package_name, version, hash_algo, **kwargs) -> Exception:
+def _pebkac_version_no_hash(
+    func=None, *, package_name, version, hash_algo, **kwargs
+) -> "Exception | ModuleType":
+    if func:
+        result = func(package_name=package_name, version=version, **kwargs)
+        if isinstance(result, ModuleType):
+            return result
+
     data = _get_filtered_data(_get_package_data(package_name))
     entry = data["releases"][str(version)][-1]
     that_hash = entry["digests"][hash_algo.name]
@@ -546,7 +565,7 @@ def _import_public_no_install(
     spec,
     aspectize,
     fatal_exceptions,
-    module_name,
+    package_name,
     **kwargs,
 ) -> "ModuleType|Exception":
     # builtin?
@@ -569,7 +588,7 @@ def _import_public_no_install(
 
     # it seems to be installed in some way, for instance via pip
     try:
-        mod = importlib.import_module(module_name)  # ! => cache
+        mod = importlib.import_module(package_name)  # ! => cache
         return mod
     except:
         if fatal_exceptions:
@@ -579,57 +598,43 @@ def _import_public_no_install(
 
 
 def _auto_install(
-    func,
+    func=None,
     *,
     package_name,
-    target_version,
     hash_algo,
-    all_hashes,
-    home,
     name,
     version,
-    registry,
     hashes,
-    url,
-    that_hash,
-    module_name,
-    _save_module_info,
     **kwargs,
 ):
-    result = func(package_name=package_name, target_version=target_version, **kwargs)
-    query = registry.execute(
-        "SELECT id, installation_path FROM distributions WHERE name=? AND version=?",
-        (name, version),
+    if func:
+        result = func(**all_kwargs(_auto_install, locals()))
+        if isinstance(result, ModuleType):
+            return result
+
+    query = use.registry.execute(
+        f"SELECT id, installation_path FROM distributions WHERE name='{package_name}' AND version='{str(version)}'",
     ).fetchone()
 
     if query:
         installation_path = query["installation_path"]
-        query = registry.execute(
+        query = use.registry.execute(
             "SELECT path FROM artifacts WHERE distribution_id=?",
             [
                 query["id"],
             ],
         ).fetchone()
+    path = None
     if query:
         path = Path(query["path"])
-        if not path.exists():
-            path = None
     if not path:
-        _update_hashes(
-            package_name,
-            target_version,
-            version,
-            hash_algo,
-            hashes,
-            all_hashes,
-            home,
-        )
+        _update_hashes(**all_kwargs(_auto_install, locals()))
 
     if path:
         # trying to import directly from zip
         try:
             importer = zipimport.zipimporter(path)
-            mod = importer.load_module(module_name)
+            mod = importer.load_module(package_name)
             print("Direct zipimport of", name, "successful.")
         except:
             if config["debugging"]:
@@ -644,14 +649,12 @@ def _auto_install(
         name=name,
         version=version,
         artifact_path=path,
-        url=url,
         out_info=out_info,
     )
     path = out_info["artifact_path"]
     installation_path = out_info["installation_path"]
     package_name = out_info["package_name"]
     name = out_info["name"]
-    url = out_info["url"]
     this_version = Version(out_info["version"])
     _save_module_info(
         name=name,
@@ -662,54 +665,40 @@ def _auto_install(
     )
 
 
-def _update_hashes(
-    package_name,
-    target_version,
-    version,
-    default,
-    hash_algo,
-    hashes,
-    all_hashes,
-    home,
-) -> None:
+def _update_hashes(*, package_name, version, default, hash_algo, hashes, **kwargs) -> None:
     found = None
     try:
         data = _get_filtered_data(_get_package_data(package_name))
-        infos = data["releases"][str(target_version)]
+        infos = data["releases"][str(version)]
         for entry in infos:
             url = URL(entry["url"])
-            path = home / "packages" / Path(url.asdict()["path"]["segments"][-1]).name
             log.error("url = %s", url)
-            entry["version"] = str(target_version)
+            entry["version"] = str(version)
             log.debug(f"looking at {entry=}")
-            assert isinstance(all_hashes, set)
+            all_hashes = set()
             all_hashes.add(that_hash := entry["digests"].get(hash_algo.name))
             if hashes.intersection(all_hashes):
-
                 found = (entry, that_hash)
                 hit = VerHash(version, that_hash)
                 log.info(f"Matches user hash: {entry=} {hit=}")
                 break
         if found is None:
-            return _fail_or_default(
-                AutoInstallationError(
-                    f"Tried to auto-install ({package_name=!r}) with {target_version=!r} but failed because none of the available hashes ({all_hashes=!r}) match the expected hash ({hashes=!r})."
-                ),
-                default,
+            return AutoInstallationError(
+                f"Tried to auto-install ({package_name=!r}) with {version=!r} but failed because none of the available hashes ({all_hashes=!r}) match the expected hash ({hashes=!r})."
             )
         entry, that_hash = found
         if that_hash is not None:
             assert isinstance(hashes, set)
             hashes.add(that_hash)
     except KeyError as be:  # json issuesa
-        msg = f"request to https://pypi.org/pypi/{package_name}/{target_version}/json lead to an error: {be}"
+        msg = f"request to https://pypi.org/pypi/{package_name}/{version}/json lead to an error: {be}"
         raise RuntimeError(msg) from be
     exc = None
     if exc:
-        return _fail_or_default(
-            AutoInstallationError(Message.pip_json_mess(package_name, target_version)),
-            default,
-        )
+        return AutoInstallationError(Message.pip_json_mess(package_name, version))
+
+
+# these are aliases for the purpose of aspectizing modules
 
 
 def isfunction(x: Any) -> bool:
@@ -727,6 +716,8 @@ def ismethod(x: Any) -> bool:
 # decorators for callable classes require a completely different approach i'm afraid.. removing the check should discourage users from trying
 # def isclass(x):
 #     return inspect.isclass(x) and hasattr(x, "__call__")
+
+
 def _parse_filename(filename) -> dict:
     """Match the filename and return a dict of parts.
     >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
@@ -843,12 +834,12 @@ def _find_exe(venv_root):
         return p, env, Path(p).parent, Path(p).name
 
 
-def _download_artifact(*url, **kwargs):
-    pass
+def _download_artifact(url, artifact_path):
+    artifact_path.write_bytes(requests.get(url).content)
 
 
 def _load_venv_mod(
-    name_prefix, name, version=None, artifact_path=None, url=None, out_info=None
+    name_prefix, name, version=None, artifact_path=None, out_info=None
 ) -> ModuleType:
     if not version or str(version) in ("0.0.0", "None"):
         version = None
@@ -861,15 +852,16 @@ def _load_venv_mod(
     log.info("Installing %s using pip", install_item)
     filename = (
         info["filename"]
-        or str(url or artifact_path).replace("\x5c", "/").split("/")[-1].split("#")[0]
+        or str(artifact_path).replace("\x5c", "/").split("/")[-1].split("#")[0]
     )
-    _download_artifact(url)
-    url = url or URL(info["url"])
+    url = URL(info["url"])
+
     package_name = package_name or info["package_name"]
     version = info["version"]
     artifact_path = artifact_path or sys.modules["use"].home / "packages" / filename
     if not artifact_path.exists():
-        artifact_path.write_bytes(requests.get(url).content)
+        _download_artifact(url, artifact_path)
+
     if artifact_path.exists():
         install_item = artifact_path
     output = _process(
@@ -1090,10 +1082,6 @@ def _is_compatible(
     )
 
 
-def dict_factory(cursor, row) -> Dict[str, Any]:
-    return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
-
-
 def _apply_aspect(
     thing,
     check,
@@ -1151,7 +1139,6 @@ def _build_mod(
         if (package_name and name and package_name != name)
         else name
     ).replace(".__init__", "")
-    from pathlib import Path
 
     module_path = (
         Path("%s" % module_path) if not isinstance(module_path, Path) else module_path
@@ -1199,16 +1186,16 @@ def _ensure_proxy(mod) -> ProxyModule:
     return ProxyModule(mod)
 
 
-def _ensure_version(func, *, name, target_version, **kwargs) -> "ModuleType | Exception":
-    result = func(name=name, target_version=target_version, **kwargs)
+def _ensure_version(func, *, name, version, **kwargs) -> "ModuleType | Exception":
+    result = func(**all_kwargs(_ensure_version, locals()))
     if not isinstance(result, ModuleType):
         return result
 
     this_version = _get_version(mod=result)
-    if this_version == target_version:
+    if this_version == version:
         return result
     else:
-        return RuntimeWarning(Message.version_warning(name, target_version, this_version))
+        return RuntimeWarning(Message.version_warning(name, version, this_version))
 
 
 def _fail_or_default(exception, default):
@@ -1336,7 +1323,6 @@ class Use(ModuleType):
         # TODO for some reason removing self._using isn't as straight forward..
         self._using = _using
         self.home: Path
-        self._hacks = {}
 
         self._set_up_files_and_directories()
         # might run into issues during testing otherwise
@@ -1349,7 +1335,9 @@ class Use(ModuleType):
                 raise RuntimeError(Message.couldnt_connect_to_db(e))
         else:
             self.registry = sqlite3.connect(":memory:").cursor()
-        self.registry.row_factory = dict_factory
+        self.registry.row_factory = lambda cursor, row: {
+            col[0]: row[idx] for idx, col in enumerate(cursor.description)
+        }
 
         self._set_up_registry()
         self._user_registry = toml.load(self.home / "user_registry.toml")
@@ -1857,8 +1845,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         name: str,
         /,
         *,
-        path=None,
-        url=None,
         version: str = None,
         hash_algo=Hash.sha256,
         hashes: Optional[Union[str, list[str]]] = None,
@@ -1887,8 +1873,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
         log.debug(f"use-str: {name}")
-        self.modes = modes
-        aspectize_dunders = bool(Use.aspectize_dunders & self.modes)
+
+        package_name = name.partition(".")[0]
 
         if isinstance(hashes, str):
             hashes = set([hashes])
@@ -1897,20 +1883,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         # we use boolean flags to reduce the complexity of the call signature
         fatal_exceptions = bool(Use.fatal_exceptions & modes) or "ERRORS" in os.environ
         auto_install = bool(Use.auto_install & modes)
+        aspectize_dunders = bool(Use.aspectize_dunders & modes)
 
-        # the whole auto-install shebang
-        package_name, _, module_name = name.partition(".")
-        module_name = module_name or name
-
-        assert (
-            version is None or isinstance(version, str) or isinstance(version, Version)
-        ), "Version must be given as string or packaging.version.Version."
-        target_version = Version(str(version)) if version else None
-        # just validating user input and canonicalizing it
-        version = str(target_version) if target_version else None
-        assert (
-            version if target_version else version is target_version
-        ), "Version must be None if target_version is None; otherwise, they must both have a value."
+        version = Version(version) if version else None
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
@@ -1924,9 +1899,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         elif not auto_install:
             spec = importlib.util.find_spec(name)
 
-        registry = self.registry
-        that_hash = None
-        all_hashes = set()
         # welcome to the buffet table, where everything is a lie
         # fmt: off
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))

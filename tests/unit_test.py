@@ -155,7 +155,7 @@ def test_autoinstall_PEBKAC(reuse):
         )
 
     # impossible version
-    with pytest.raises(AssertionError):  # version must be either str or tuple
+    with pytest.raises(TypeError):  # version must be either str or tuple
         reuse(
             "pytest",
             modes=reuse.auto_install,
