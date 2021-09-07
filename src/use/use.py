@@ -670,12 +670,12 @@ def _update_hashes(*, package_name, version, default, hash_algo, hashes, **kwarg
     try:
         data = _get_filtered_data(_get_package_data(package_name))
         infos = data["releases"][str(version)]
+        all_hashes = set()
         for entry in infos:
             url = URL(entry["url"])
             log.error("url = %s", url)
             entry["version"] = str(version)
             log.debug(f"looking at {entry=}")
-            all_hashes = set()
             all_hashes.add(that_hash := entry["digests"].get(hash_algo.name))
             if hashes.intersection(all_hashes):
                 found = (entry, that_hash)
