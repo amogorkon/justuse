@@ -652,7 +652,7 @@ def _auto_install(
     package_name = out_info["package_name"]
     name = out_info["name"]
     this_version = Version(out_info["version"])
-    that_hash = out_info["hash"]  # TODO: sorry, messed up here :)
+    that_hash = out_info["hash"]
 
     use._save_module_info(
         name=name,
@@ -1761,82 +1761,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         self._set_mod(name=name, mod=mod, frame=frame)
         return _ensure_proxy(mod)
 
-    def _import_builtin(self, name, spec, default, aspectize):
-        try:
-            mod = spec.loader.create_module(spec)
-            spec.loader.exec_module(mod)  # ! => cache
-            if aspectize:
-                warn(Message.aspectize_builtins_warning(), RuntimeWarning)
-            for (check, pattern), decorator in aspectize.items():
-                _apply_aspect(
-                    mod, check, pattern, decorator, aspectize_dunders=self.aspectize_dunders
-                )
-            frame = inspect.getframeinfo(inspect.currentframe())
-            self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
-            return _ensure_proxy(mod)
-        except:
-            exc = traceback.format_exc()
-        return _fail_or_default(default, ImportError(exc))
-
-    def _import_classical_install(
-        self,
-        *,
-        name,
-        module_name,
-        spec,
-        target_version,
-        default,
-        aspectize,
-        fatal_exceptions,
-        package_name=None,
-    ):
-        fatal_exceptions |= "ERRORS" in os.environ
-        exc = None
-        try:
-            # TODO - use spec?
-            mod = importlib.import_module(module_name)  # ! => cache
-            for (check, pattern), decorator in aspectize.items():
-                _apply_aspect(
-                    mod,
-                    check,
-                    pattern,
-                    decorator,
-                    aspectize_dunders=bool(Use.aspectize_dunders & self.modes),
-                )
-            frame = inspect.getframeinfo(inspect.currentframe())
-            self._set_mod(name=name, mod=mod, frame=frame)
-            if not target_version:
-                warn(
-                    Message.classically_imported(name, metadata.version(name)),
-                    AmbiguityWarning,
-                )
-                return _ensure_proxy(mod)
-        except:
-            if fatal_exceptions:
-                raise
-            exc = traceback.format_exc()
-        if exc:
-            return _fail_or_default(ImportError(exc), default)
-        # we only enforce versions with auto-install
-        this_version = _get_version(name, package_name, mod=mod)
-        if not this_version:
-            log.warning(f"Cannot find version for {name=}, {mod=}")
-        elif not target_version:
-            warn("No version was specified", AmbiguityWarning)
-        elif target_version != this_version:
-            warn(Message.version_warning(name, target_version, this_version), VersionWarning)
-        for (check, pattern), decorator in aspectize.items():
-            _apply_aspect(
-                mod,
-                check,
-                pattern,
-                decorator,
-                aspectize_dunders=bool(Use.aspectize_dunders & self.modes),
-            )
-        frame = inspect.getframeinfo(inspect.currentframe())
-        self._set_mod(name=name, mod=mod, frame=frame)
-        return _ensure_proxy(mod)
-
     @__call__.register(str)
     def _use_str(
         self,
@@ -1882,6 +1806,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         fatal_exceptions = bool(Use.fatal_exceptions & modes) or "ERRORS" in os.environ
         auto_install = bool(Use.auto_install & modes)
         aspectize_dunders = bool(Use.aspectize_dunders & modes)
+        aspectize = aspectize or {}
 
         version = Version(version) if version else None
 
@@ -1920,7 +1845,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         }[case](**locals())
         # fmt: on
         if isinstance(result, ModuleType):
-            aspectize = aspectize or {}
             mod = None
 
             for (check, pattern), decorator in aspectize.items():
