@@ -71,7 +71,6 @@ import ast
 import asyncio
 import atexit
 import codecs
-import furl
 import hashlib
 import importlib.util
 import inspect
@@ -104,6 +103,7 @@ from types import ModuleType
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Union
 from warnings import warn
 
+import furl
 import packaging
 import requests
 import toml
@@ -158,26 +158,6 @@ class Version(PkgVersion):
 
     def __iter__(self):
         yield from self.release
-
-
-class VerHash(namedtuple("VerHash", ["version", "hash"])):
-    @staticmethod
-    def empty():
-        return VerHash("", "")
-
-    def __bool__(self):
-        return bool(self.version and self.hash)
-
-    def __eq__(self, other):
-        if other is None or not hasattr(other, "__len__") or len(other) != len(self):
-            return False
-        return (
-            Version(str(self.version)) == Version(str([*other][0]))
-            and self.hash == [*other][1]
-        )
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
 
 
 class PlatformTag(namedtuple("PlatformTag", ["platform"])):
@@ -394,6 +374,7 @@ def pipes(func_or_class):
 
 def _ensure_path(value_for_path):
     from pathlib import Path
+
     if value_for_path is None:
         raise BaseException("value_for_path is None")
     if value_for_path in ("", b""):
@@ -403,12 +384,9 @@ def _ensure_path(value_for_path):
     if isinstance(value_for_path, (str, bytes)):
         return Path(value_for_path)
     if isinstance(value_for_path, furl.Path):
-        return reduce(
-            Path.__truediv__,
-            value_for_path.segments,
-            Path.cwd()
-        )
+        return reduce(Path.__truediv__, value_for_path.segments, Path.cwd())
     raise TypeError(f"Attempt to create a Path from an illegal value: {value_for_path!r}")
+
 
 @cache
 def get_supported() -> FrozenSet[PlatformTag]:
@@ -600,15 +578,14 @@ def _import_public_no_install(
 
     # it seems to be installed in some way, for instance via pip
     return importlib.import_module(rest)  # ! => cache
-    
+
 
 def _parse_name(name):
-    match = re.match(
-        r"(?P<package_name>[^.]+)\.?(?P<rest>[a-zA-Z0-9._]+)?", name
-    )
+    match = re.match(r"(?P<package_name>[^.]+)\.?(?P<rest>[a-zA-Z0-9._]+)?", name)
     assert match, f"Invalid name spec: {name!r}"
     names = match.groupdict()
     return names["package_name"], names["rest"] or name
+
 
 def _auto_install(
     func=None,
@@ -619,7 +596,7 @@ def _auto_install(
     **kwargs,
 ):
     package_name, rest = _parse_name(name)
-    
+
     if func:
         result = func(**all_kwargs(_auto_install, locals()))
 
@@ -675,6 +652,7 @@ def _auto_install(
     )
     return mod
 
+
 def _update_hashes(*, package_name, version, default, hash_algo, hashes, **kwargs) -> None:
     found = None
     try:
@@ -688,10 +666,10 @@ def _update_hashes(*, package_name, version, default, hash_algo, hashes, **kwarg
             all_hashes.add(that_hash := entry["digests"].get(hash_algo.name))
             if hashes.intersection(all_hashes):
                 found = (entry, that_hash)
-                hit = VerHash(version, that_hash)
+                hit = (version, that_hash)
                 log.info(f"Matches user hash: {entry=} {hit=}")
                 break
-        if found is None:
+        if not found:
             return AutoInstallationError(
                 f"Tried to auto-install ({package_name=!r}) with {version=!r} but failed because none of the available hashes ({all_hashes=!r}) match the expected hash ({hashes=!r})."
             )
@@ -702,7 +680,7 @@ def _update_hashes(*, package_name, version, default, hash_algo, hashes, **kwarg
     except KeyError as be:  # json issuesa
         msg = f"request to https://pypi.org/pypi/{package_name}/{version}/json lead to an error: {be}"
         return RuntimeError(msg)
-    
+
 
 # these are aliases for the purpose of aspectizing modules
 
@@ -842,9 +820,7 @@ def _download_artifact(url, artifact_path):
     artifact_path.write_bytes(requests.get(url).content)
 
 
-def _load_venv_mod(
-    name, version=None, artifact_path=None, out_info=None
-) -> ModuleType:
+def _load_venv_mod(name, version=None, artifact_path=None, out_info=None) -> ModuleType:
     if not version or str(version) in ("0.0.0", "None", ""):
         version = None
     info = (out_info := (out_info if out_info is not None else {}))
@@ -862,7 +838,7 @@ def _load_venv_mod(
     artifact_path = artifact_path or sys.modules["use"].home / "packages" / filename
     if not artifact_path.exists():
         _download_artifact(url, artifact_path)
-    
+
     if artifact_path.exists():
         install_item = artifact_path
     log.error("%s\n", pformat(locals()))
@@ -919,16 +895,15 @@ def _load_venv_mod(
                     "version": version,
                     "info": info,
                     **meta,
-                    **info
+                    **info,
                 }
             )
-            return _load_venv_entry(
-                name,
-                module_path=module_path
-            )
+            return _load_venv_entry(name, module_path=module_path)
         finally:
             os.chdir(orig_cwd)
-    assert False, f"{meta['import_relpath']=}, {relp=}, {name_segments=}, {package_name=}, {rest=}"
+    assert (
+        False
+    ), f"{meta['import_relpath']=}, {relp=}, {name_segments=}, {package_name=}, {rest=}"
 
 
 def _load_venv_entry(name, module_path) -> ModuleType:
@@ -942,12 +917,12 @@ def _load_venv_entry(name, module_path) -> ModuleType:
     )
     with open(module_path, "rb") as code_file:
         return _build_mod(
-                name=rest,
-                code=code_file.read(),
-                module_path=_ensure_path(module_path),
-                initial_globals={},
-                aspectize={},
-            )
+            name=rest,
+            code=code_file.read(),
+            module_path=_ensure_path(module_path),
+            initial_globals={},
+            aspectize={},
+        )
 
 
 @cache
@@ -1115,14 +1090,14 @@ def _build_mod(
     aspectize,
     aspectize_dunders=False,
 ) -> ModuleType:
-    
+
     package_name, rest = _parse_name(name)
     mod = None
     if "__init__" in module_path.stem:
         mod = ModuleType(rest + ".__init__")
     else:
         mod = ModuleType(rest)
-    
+
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = str(module_path)
     mod.__package__ = rest
@@ -1165,7 +1140,7 @@ def _ensure_version(func, *, name, version, **kwargs) -> "ModuleType | Exception
         return result
 
     this_version = _get_version(mod=result)
-    
+
     if this_version == version:
         return result
     else:
@@ -1173,7 +1148,9 @@ def _ensure_version(func, *, name, version, **kwargs) -> "ModuleType | Exception
 
 
 def _fail_or_default(exception, default):
-    assert isinstance(exception, BaseException), f"_fail_or_default MUST be called with a valid exception, but got {exception=}, {default=}"
+    assert isinstance(
+        exception, BaseException
+    ), f"_fail_or_default MUST be called with a valid exception, but got {exception=}, {default=}"
     if default is not mode.fastfail:
         return default  # TODO: write test for default
     else:
@@ -1331,7 +1308,7 @@ class Use(ModuleType):
 
         if config["version_warning"]:
             try:
-                response = requests.get('https://pypi.org/pypi/justuse/json')
+                response = requests.get("https://pypi.org/pypi/justuse/json")
                 data = response.json()
                 max_version = max(Version(version) for version in data["releases"].keys())
                 target_version = max_version
@@ -1637,7 +1614,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     # if we're calling from a script file e.g. `python3 my/script.py` like pytest unittest
                     if hasattr(main_mod, "__file__"):
                         source_dir = (
-                            _ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename)
+                            _ensure_path(
+                                inspect.currentframe().f_back.f_back.f_code.co_filename
+                            )
                             .resolve()
                             .parent
                         )
@@ -1773,7 +1752,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         log.debug(f"use-str: {name} {version} {hashes}")
         package_name, rest = _parse_name(name)
         log.debug(f"use-str: {package_name}, {rest} {version} {hashes}")
-        
+
         if isinstance(hashes, str):
             hashes = set([hashes])
         hashes = set(hashes) if hashes else set()
@@ -1784,7 +1763,11 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         aspectize_dunders = bool(Use.aspectize_dunders & modes)
         aspectize = aspectize or {}
 
-        version = version if isinstance(version,Version) else (Version(version) if version else None)
+        version = (
+            version
+            if isinstance(version, Version)
+            else (Version(version) if version else None)
+        )
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
@@ -1825,7 +1808,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         mod = result if isinstance(result, ModuleType) else mod
         exc = result if isinstance(result, BaseException) else None
         assert mod != None or exc != None
-        
+
         if mod:
             for (check, pattern), decorator in aspectize.items():
                 _apply_aspect(

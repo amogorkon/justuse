@@ -79,21 +79,22 @@ def test_simple_url(reuse):
     port = 8089
     orig_cwd = Path.cwd()
     try:
-      os.chdir(Path(__file__).parent.parent)
-    
-      with http.server.HTTPServer(("", port), http.server.SimpleHTTPRequestHandler) as svr:
-        foo_uri = f"http://localhost:{port}/tests/.tests/foo.py"
-        print(f"starting thread to handle HTTP request on port {port}")
-        import threading
+        os.chdir(Path(__file__).parent.parent)
 
-        thd = threading.Thread(target=svr.handle_request)
-        thd.start()
-        print(f"loading foo module via use(URL({foo_uri}))")
-        with pytest.warns(use.NoValidationWarning):
-            mod = reuse(URL(foo_uri), initial_globals={"a": 42})
-            assert mod.test() == 42
+        with http.server.HTTPServer(("", port), http.server.SimpleHTTPRequestHandler) as svr:
+            foo_uri = f"http://localhost:{port}/tests/.tests/foo.py"
+            print(f"starting thread to handle HTTP request on port {port}")
+            import threading
+
+            thd = threading.Thread(target=svr.handle_request)
+            thd.start()
+            print(f"loading foo module via use(URL({foo_uri}))")
+            with pytest.warns(use.NoValidationWarning):
+                mod = reuse(URL(foo_uri), initial_globals={"a": 42})
+                assert mod.test() == 42
     finally:
-      os.chdir(orig_cwd)
+        os.chdir(orig_cwd)
+
 
 def test_internet_url(reuse):
     foo_uri = "https://raw.githubusercontent.com/greyblue9/justuse/3f783e6781d810780a4bbd2a76efdee938dde704/tests/foo.py"
@@ -192,23 +193,23 @@ def suggested_artifact(name):
         mod = reuse(name, modes=reuse.auto_install)
         assert False
     except BaseException as rw:
-      assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
-      assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
-      assert isinstance(rw.args[0], str)
-      match = re.search(
-          'version="?(?P<version>[^"]+)".*' "hashes=?(?P<hashes>[^()]+), ",
-          str(rw),
-      )
-      assert match
-      hashes_evalstr = match.group("hashes")
-      log.debug("eval'ing the following string from rw message: %r", hashes_evalstr)
-      hashes = eval(hashes_evalstr)
-      log.debug("eval'ed to the following value: %r", hashes)
-      assert isinstance(
-          hashes, set
-      ), f"The wrong type of object is given in the warning message: {rw}"
-      version = match.group("version")
-      return (version, hashes)
+        assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
+        assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
+        assert isinstance(rw.args[0], str)
+        match = re.search(
+            'version="?(?P<version>[^"]+)".*' "hashes=?(?P<hashes>[^()]+), ",
+            str(rw),
+        )
+        assert match
+        hashes_evalstr = match.group("hashes")
+        log.debug("eval'ing the following string from rw message: %r", hashes_evalstr)
+        hashes = eval(hashes_evalstr)
+        log.debug("eval'ed to the following value: %r", hashes)
+        assert isinstance(
+            hashes, set
+        ), f"The wrong type of object is given in the warning message: {rw}"
+        version = match.group("version")
+        return (version, hashes)
 
 
 def test_use_global_install(reuse):
@@ -422,34 +423,3 @@ def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     assert mod.two() == 4
     assert mod.three() == 3
     assert reuse.ismethod
-
-
-def _get_test_ver_hash_data(reuse):
-    VerHash = reuse.VerHash
-    h = "5de64950137f3a50b76ce93556db392e8f1f954c2d8207f78a92d1f79aa9f737"
-    vh1, vh2 = (VerHash("1.0.1", h), VerHash("1.0.2", h))
-    vh1u, vh2u, vh3u = (VerHash("1.0.1", None), VerHash(None, h), VerHash(None, None))
-    vh1b = VerHash("1.0.1", h)
-    return (VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b)
-
-
-def test_ver_hash_1(reuse):
-    VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b = _get_test_ver_hash_data(reuse)
-    assert vh1 and vh2 and not vh3u
-    assert vh1.hash == vh2.hash
-    assert vh1u.version and vh2u.hash
-    assert vh1 == vh1b
-    assert vh1 != ("1.0.1", None)
-    assert vh1 != ("1.0.1", None, None)
-
-
-def test_ver_hash_2(reuse):
-    VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b = _get_test_ver_hash_data(reuse)
-    assert vh1 == ("1.0.1", h)
-    assert vh1 != ("1.0.1", h, None)
-    assert vh1 != object()
-    assert ("1.0.1", h, None) != vh1
-    assert "1.0.1" in vh1 and h not in vh3u
-    assert h in vh1
-    assert "1.0.1" not in vh2
-    assert h in vh2 and h in vh2u
