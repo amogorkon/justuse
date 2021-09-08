@@ -423,3 +423,14 @@ def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     assert mod.two() == 4
     assert mod.three() == 3
     assert reuse.ismethod
+
+
+def test_86_numpy(reuse):
+    use = reuse
+    with pytest.raises(RuntimeWarning) as w:
+        reuse("numpy", version="1.20.0", modes=reuse.auto_install)
+    assert w
+    recommendation = str(w.value).split("\n")[-1].strip()
+    mod = eval(recommendation)
+    assert mod.__name__ == "numpy"
+    assert mod.__version__ == "1.20.0"
