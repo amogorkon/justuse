@@ -934,22 +934,21 @@ def _load_venv_mod(
 
 def _load_venv_entry(name, module_path) -> ModuleType:
     package_name, rest = _parse_name(name)
-    if True:
-        _clean_sys_modules(name)
-        log.info(
-            "load_venv_entry package_name=%s rest=%s module_path=%s",
-            package_name,
-            rest,
-            module_path,
-        )
-        with open(module_path, "rb") as code_file:
-            return _build_mod(
-                    name=rest,
-                    code=code_file.read(),
-                    module_path=_ensure_path(module_path),
-                    initial_globals={},
-                    aspectize={},
-                )
+    _clean_sys_modules(name)
+    log.info(
+        "load_venv_entry package_name=%s rest=%s module_path=%s",
+        package_name,
+        rest,
+        module_path,
+    )
+    with open(module_path, "rb") as code_file:
+        return _build_mod(
+                name=rest,
+                code=code_file.read(),
+                module_path=_ensure_path(module_path),
+                initial_globals={},
+                aspectize={},
+            )
 
 
 @cache
@@ -1564,7 +1563,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             )
         except:
             raise
-            exc = traceback.format_exc()
         if exc:
             return _fail_or_default(ImportError(exc), default)
 
