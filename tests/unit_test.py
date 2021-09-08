@@ -181,40 +181,32 @@ def test_version_warning(reuse):
         assert issubclass(w[-1].category, (use.AmbiguityWarning, use.VersionWarning))
 
 
-def suggested_artifact(*args, **kwargs):
+def suggested_artifact(name):
     import use
 
     reuse = use
     rw = None
     try:
-        mod = reuse(*args, modes=reuse.auto_install | reuse.fatal_exceptions, **kwargs)
-    except RuntimeWarning as r:
-        rw = r
-    except BaseException as e:
-        raise AssertionError(
-            f"suggested_artifact failed for use("
-            f"{', '.join(map(repr, args))}, "
-            f"{', '.join(map(repr, kwargs.items()))}"
-            f"): {e}"
-        ) from e
-    assert rw
-    assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
-    assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
-    assert isinstance(rw.args[0], str)
-    match = re.search(
-        'version="?(?P<version>[^"]+)".*' "hashes=?(?P<hashes>[^()]+), ",
-        str(rw),
-    )
-    assert match
-    hashes_evalstr = match.group("hashes")
-    log.debug("eval'ing the following string from rw message: %r", hashes_evalstr)
-    hashes = eval(hashes_evalstr)
-    log.debug("eval'ed to the following value: %r", hashes)
-    assert isinstance(
-        hashes, set
-    ), f"The wrong type of object is given in the warning message: {rw}"
-    version = match.group("version")
-    return (version, hashes)
+        mod = reuse(name, modes=reuse.auto_install)
+        assert False
+    except BaseException as rw:
+      assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
+      assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
+      assert isinstance(rw.args[0], str)
+      match = re.search(
+          'version="?(?P<version>[^"]+)".*' "hashes=?(?P<hashes>[^()]+), ",
+          str(rw),
+      )
+      assert match
+      hashes_evalstr = match.group("hashes")
+      log.debug("eval'ing the following string from rw message: %r", hashes_evalstr)
+      hashes = eval(hashes_evalstr)
+      log.debug("eval'ed to the following value: %r", hashes)
+      assert isinstance(
+          hashes, set
+      ), f"The wrong type of object is given in the warning message: {rw}"
+      version = match.group("version")
+      return (version, hashes)
 
 
 def test_use_global_install(reuse):
@@ -385,6 +377,7 @@ def test_reloading(reuse):
 
 def test_suggestion_works(reuse):
     sugg = suggested_artifact("example-pypi-package.examplepy")
+    assert sugg
     mod = reuse(
         "example-pypi-package.examplepy",
         version=sugg[0],

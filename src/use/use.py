@@ -396,7 +396,7 @@ def get_supported() -> FrozenSet[PlatformTag]:
     """
     Results of this function are cached. They are expensive to
     compute, thanks to some heavyweight usual players
-    (*ahem* pip, pkg_resources, packaging.tags *cough*)
+    (*ahem* pip, package_resources, packaging.tags *cough*)
     whose modules are notoriously resource-hungry.
 
     Returns a set containing all platform _platform_tags
@@ -592,17 +592,26 @@ def _import_public_no_install(
             raise
         exc = traceback.format_exc()
     return ImportError(exc)
+    
 
+def _parse_name(name):
+    match = re.match(
+        r"(?P<package_name>[^.]+)\.?(?P<rest>[a-zA-Z0-9._]+)?", name
+    )
+    assert match, f"Invalid name spec: {name!r}"
+    names = match.groupdict()
+    return names["package_name"], names["rest"] or name
 
 def _auto_install(
     func=None,
     *,
-    package_name,
-    hash_algo,
     name,
+    hash_algo,
     version,
     **kwargs,
 ):
+    package_name, rest = _parse_name(name)
+    
     if func:
         result = func(**all_kwargs(_auto_install, locals()))
         if isinstance(result, ModuleType):
@@ -623,15 +632,15 @@ def _auto_install(
     path = None
     if query:
         path = Path(query["path"])
-    if not path:
-        _update_hashes(**all_kwargs(_auto_install, locals()))
+    
+    _update_hashes(**all_kwargs(_auto_install, locals()))
 
     if path:
         # trying to import directly from zip
         try:
             importer = zipimport.zipimporter(path)
-            mod = importer.load_module(package_name)
-            print("Direct zipimport of", name, "successful.")
+            mod = importer.load_module(rest)
+            print("Direct zipimport of", rest, "successful.")
         except:
             if config["debugging"]:
                 log.debug(traceback.format_exc())
@@ -641,27 +650,24 @@ def _auto_install(
 
     out_info = {}
     mod = _load_venv_mod(
-        name_prefix=package_name,
         name=name,
         version=version,
         artifact_path=path,
         out_info=out_info,
     )
-    path = out_info["artifact_path"]
+    path = path or out_info["artifact_path"]
     installation_path = out_info["installation_path"]
-    package_name = out_info["package_name"]
-    name = out_info["name"]
     this_version = Version(out_info["version"])
     that_hash = out_info["digests"][hash_algo.name]
 
     use._save_module_info(
-        name=name,
+        name=package_name,
         version=this_version,
         artifact_path=path,
         hash_value=that_hash,
         installation_path=installation_path,
     )
-
+    return mod
 
 def _update_hashes(*, package_name, version, default, hash_algo, hashes, **kwargs) -> None:
     found = None
@@ -794,15 +800,15 @@ def _process(*argv, env={}):
     )
 
 
-def _find_version(pkg_name, version=None):
-    data = _get_filtered_data(_get_package_data(pkg_name))
+def _find_version(package_name, version=None):
+    data = _get_filtered_data(_get_package_data(package_name))
     if not version or str(version) in ("0.0.0", "None"):
         version, infos = [*data["releases"].items()][-1]
         return infos[-1]
     for version, infos in data["releases"].items():
         if str(version) == version:
             return infos[-1]
-    assert False, f"No match found for {pkg_name=!r}, {version=!r}"
+    assert False, f"No match found for {package_name=!r}, {version=!r}"
 
 
 def _find_exe(venv_root):
@@ -837,16 +843,16 @@ def _download_artifact(url, artifact_path):
 
 
 def _load_venv_mod(
-    *, name_prefix, name, version=None, artifact_path=None, out_info=None
+    name, version=None, artifact_path=None, out_info=None
 ) -> ModuleType:
     if not version or str(version) in ("0.0.0", "None"):
         version = None
     info = (out_info := (out_info if out_info is not None else {}))
-    pkg_name = name_prefix or name
-    info.update(_find_version(pkg_name, version))
-    venv_root = _venv_root(pkg_name, version, use.home)
+    package_name, rest = _parse_name(name)
+    info.update(_find_version(package_name, version))
+    venv_root = _venv_root(package_name, version, use.home)
     p, env, venv_bin, python_exe = _find_exe(venv_root)
-    install_item = package_name = pkg_name
+    install_item = package_name = package_name
     log.info("Installing %s using pip", install_item)
     filename = (
         info["filename"]
@@ -896,9 +902,7 @@ def _load_venv_mod(
     meta.update(info)
     relp = meta["import_relpath"]
     name_segments = ".".join(relp.split(".")[0:-1]).split("-")[0].replace("/", ".")
-    name_prefix, _, name = name_segments.rpartition(".")
-    suppressed = None
-    mod = None
+    package_name, rest = _parse_name(name_segments)
     module_paths = [*venv_root.rglob(f"**/{relp}")]
     for module_path in module_paths:
         installation_path = module_path
@@ -912,58 +916,41 @@ def _load_venv_mod(
                     "artifact_path": artifact_path,
                     "installation_path": installation_path,
                     "module_path": module_path,
-                    "package": package_name,
                     "package_name": package_name,
-                    "name_prefix": name_prefix,
-                    "name": name,
                     "url": url,
                     "version": version,
                     "info": info,
                     **meta,
+                    **info
                 }
             )
-            mod = _load_venv_entry(
-                package_name=name_prefix, name=name, module_path=module_path
+            return _load_venv_entry(
+                name,
+                module_path=module_path
             )
-            return mod
-        except BaseException as ex:
-            if module_path == module_paths[-1]:
-                raise
-            if suppressed:
-                ex.__context__ = suppressed
-            suppressed = ex
         finally:
             os.chdir(orig_cwd)
-            if not mod:
-                raise suppressed
+    assert False, f"{meta['import_relpath']=}, {relp=}, {name_segments=}, {package_name=}, {rest=}"
 
 
-def _load_venv_entry(package_name, name, module_path) -> ModuleType:
-    mod = None
-    try:
+def _load_venv_entry(name, module_path) -> ModuleType:
+    package_name, rest = _parse_name(name)
+    if True:
         _clean_sys_modules(name)
-        _clean_sys_modules(package_name)
         log.info(
-            "load_venv_entry package_name=%s name=%s module_path=%s",
+            "load_venv_entry package_name=%s rest=%s module_path=%s",
             package_name,
-            name,
+            rest,
             module_path,
         )
         with open(module_path, "rb") as code_file:
-            return (
-                mod := _build_mod(
-                    name=name,
+            return _build_mod(
+                    name=rest,
                     code=code_file.read(),
                     module_path=Path(module_path),
                     initial_globals={},
                     aspectize={},
-                    package_name=package_name,
                 )
-            )
-    finally:
-        log.info("load_venv_entry returning mod=%s", mod)
-        _clean_sys_modules(name)
-        _clean_sys_modules(package_name)
 
 
 @cache
@@ -1130,28 +1117,20 @@ def _build_mod(
     module_path,
     aspectize,
     aspectize_dunders=False,
-    package_name=None,
 ) -> ModuleType:
-    name_qual = (
-        package_name + "." + name
-        if (package_name and name and package_name != name)
-        else name
-    ).replace(".__init__", "")
-
-    module_path = (
-        Path("%s" % module_path) if not isinstance(module_path, Path) else module_path
-    )
-
+    
+    package_name, rest = _parse_name(name)
+    mod = None
     if "__init__" in module_path.stem:
-        mod = ModuleType(name_qual + ".__init__")
+        mod = ModuleType(rest + ".__init__")
     else:
-        mod = ModuleType(name_qual)
-
+        mod = ModuleType(rest)
+    
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = str(module_path)
-    mod.__package__ = package_name
-    mod.__name__ = name
-
+    mod.__package__ = rest
+    mod.__name__ = rest
+    return mod
     code_text = codecs.decode(code)
     # module file "<", ">" chars are specially handled by inspect
     if not sys.platform.startswith("win"):
@@ -1197,6 +1176,7 @@ def _ensure_version(func, *, name, version, **kwargs) -> "ModuleType | Exception
 
 
 def _fail_or_default(exception, default):
+    assert isinstance(exception, BaseException), f"_fail_or_default MUST be called with a valid exception, but got {exception=}, {default=}"
     if default is not mode.fastfail:
         return default  # TODO: write test for default
     else:
@@ -1794,10 +1774,11 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         Returns:
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
+        mod = None
         log.debug(f"use-str: {name}")
-
-        package_name = name.partition(".")[0]
-
+        package_name, rest = _parse_name(name)
+        log.debug(f"use-str: {package_name}, {rest}")
+        
         if isinstance(hashes, str):
             hashes = set([hashes])
         hashes = set(hashes) if hashes else set()
@@ -1825,6 +1806,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         # welcome to the buffet table, where everything is a lie
         # fmt: off
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
+        log.info("case = %s", case)
         result = {
             (False, False, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
             (False, False, False, True): _pebkac_no_version_no_hash,
@@ -1843,18 +1825,21 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             (True, True, True, False): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
             (True, True, True, True): lambda **kwargs: _auto_install(_ensure_version(_import_public_no_install, **kwargs), **kwargs),
         }[case](**locals())
+        log.info("result = %s", result)
         # fmt: on
-        if isinstance(result, ModuleType):
-            mod = None
-
+        mod = result if isinstance(result, ModuleType) else mod
+        exc = result if isinstance(result, BaseException) else None
+        assert mod != None or exc != None
+        
+        if mod:
             for (check, pattern), decorator in aspectize.items():
                 _apply_aspect(
                     mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders
                 )
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
-            return _ensure_proxy(result)
-        return _fail_or_default(result, default)
+            return _ensure_proxy(mod) or mod
+        return mod or _fail_or_default(exc or result, default)
 
 
 use = Use()
