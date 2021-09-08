@@ -274,7 +274,7 @@ class Message(Enum):
     couldnt_connect_to_db = (
         lambda e: f"Could not connect to the registry database, please make sure it is accessible. ({e})"
     )
-    version_warning = (
+    use_version_warning = (
         lambda max_version: f"""Justuse is version {Version(__version__)}, but there is a newer version {max_version} available on PyPI.
 To find out more about the changes check out https://github.com/amogorkon/justuse/wiki/What's-new
 Please consider upgrading via 'python -m pip install -U justuse'"""
@@ -647,7 +647,7 @@ def _auto_install(
             importer = zipimport.zipimporter(path)
             mod = importer.load_module(rest)
             print("Direct zipimport of", rest, "successful.")
-        except:
+        except (zipimport.ZipImportError, ImportError):
             if config["debugging"]:
                 log.debug(traceback.format_exc())
             print("Direct zipimport failed, attempting to extract and load manually...")
@@ -835,7 +835,6 @@ def _find_exe(venv_root):
         *venv_root.rglob("**/Scripts/python"),
         *venv_root.rglob("**/Scripts/python*.exe"),
     ):
-        o2 = _process(sys.executable, "-m", "ensurepip", "-v", "-v", env=env)
         return p, env, _ensure_path(p).parent, _ensure_path(p).name
 
 
@@ -846,7 +845,7 @@ def _download_artifact(url, artifact_path):
 def _load_venv_mod(
     name, version=None, artifact_path=None, out_info=None
 ) -> ModuleType:
-    if not version or str(version) in ("0.0", "0.0.0", "None", ""):
+    if not version or str(version) in ("0.0.0", "None", ""):
         version = None
     info = (out_info := (out_info if out_info is not None else {}))
     package_name, rest = _parse_name(name)
@@ -1145,10 +1144,10 @@ def _build_mod(
     # not catching this causes the most irritating bugs ever!
     try:
         exec(compile(code, f"<{name}>", "exec"), vars(mod))
-    except:
+    except KeyError:
         try:
             exec(compile(code, module_path, "exec"), vars(mod))
-        except:  # reraise anything without handling - clean and simple.
+        except KeyError:  # reraise anything without handling - clean and simple.
             raise
     for (check, pattern), decorator in aspectize.items():
         _apply_aspect(mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders)
@@ -1167,10 +1166,11 @@ def _ensure_version(func, *, name, version, **kwargs) -> "ModuleType | Exception
         return result
 
     this_version = _get_version(mod=result)
+    
     if this_version == version:
         return result
     else:
-        return RuntimeWarning(Message.version_warning(name, version, this_version))
+        return AmbiguityWarning(Message.version_warning(name, version, this_version))
 
 
 def _fail_or_default(exception, default):
@@ -1252,7 +1252,7 @@ class ModuleReloader:
                         aspectize=self.aspectize,
                     )
                     self.proxy.__implementation = mod
-                except:
+                except KeyError:
                     print(traceback.format_exc())
             last_filehash = current_filehash
             await asyncio.sleep(1)
@@ -1274,7 +1274,7 @@ class ModuleReloader:
                             aspectize=self.aspectize,
                         )
                         self.proxy._ProxyModule__implementation = mod
-                    except:
+                    except KeyError:
                         print(traceback.format_exc())
                 last_filehash = current_filehash
             time.sleep(1)
@@ -1340,10 +1340,10 @@ class Use(ModuleType):
                 this_version = __version__
                 if Version(this_version) < target_version:
                     warn(
-                        Message.version_warning(name, target_version, this_version),
+                        Message.use_version_warning(target_version),
                         VersionWarning,
                     )
-            except:
+            except KeyError:
                 if test_version:
                     raise
                 log.debug(
@@ -1562,7 +1562,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 aspectize=aspectize,
                 aspectize_dunders=bool(Use.aspectize_dunders & modes),
             )
-        except:
+        except KeyError:
             raise
             exc = traceback.format_exc()
         if exc:
@@ -1672,7 +1672,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                         module_path=path.resolve(),
                         aspectize=aspectize,
                     )
-                except:
+                except KeyError:
                     exc = traceback.format_exc()
                 if exc:
                     return _fail_or_default(ImportError(exc), default)
@@ -1720,10 +1720,10 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                         module_path=path,
                         aspectize=aspectize,
                     )
-                except:
+                except KeyError:
                     del self._using[name]
                     exc = traceback.format_exc()
-        except:
+        except KeyError:
             exc = traceback.format_exc()
         finally:
             # let's not confuse the user and restore the cwd to the original in any case
@@ -1773,9 +1773,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
         mod = None
-        log.debug(f"use-str: {name}")
+        log.debug(f"use-str: {name} {version} {hashes}")
         package_name, rest = _parse_name(name)
-        log.debug(f"use-str: {package_name}, {rest}")
+        log.debug(f"use-str: {package_name}, {rest} {version} {hashes}")
         
         if isinstance(hashes, str):
             hashes = set([hashes])
@@ -1787,7 +1787,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         aspectize_dunders = bool(Use.aspectize_dunders & modes)
         aspectize = aspectize or {}
 
-        version = Version(version) if version else None
+        version = version if isinstance(version,Version) else (Version(version) if version else None)
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
