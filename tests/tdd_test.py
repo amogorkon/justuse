@@ -106,9 +106,7 @@ def _do_load_venv_mod(reuse, name):
     items = data["releases"][version]
     mod = None
     for item in items:
-        if item["filename"].endswith(".whl"):
             mod = reuse._load_venv_mod(
-                name_prefix="",
                 name=name,
                 version=item["version"],
             )
@@ -127,31 +125,6 @@ def test_load_venv_mod_numpy(reuse):
 
 def test_db_setup(reuse):
     assert reuse.registry
-
-
-def test_unsupported_artifact(reuse):
-    hashes = {
-        "win": "1fdae7d980a2fa617d119d0dc13ecb5c23cc63a8b04ffcb5298f2c59d86851e9",
-        "linux": "36a089dc604032d41343d86290ce85d4e6886012eea73faa88001260abf5ff81",
-        "macos": "39b5d36ab71f73c068cdcf70c38075511de73616e6c7fdd112d6268c2704d9f5",
-    }
-    if sys.platform.startswith("win"):
-        del hashes["win"]
-    elif sys.platform.startswith("macos"):
-        del hashes["macos"]
-    else:
-        del hashes["linux"]
-    try:
-        mod = reuse(
-            "sqlalchemy",
-            version="1.4.22",
-            hashes="5de64950137f3a50b76ce93556db392e8f1f954c2d8207f78a92d1f79aa9f737",
-            modes=reuse.auto_install,
-        )
-    except reuse.AutoInstallationError:
-        pass
-    else:
-        assert False, f"Expected use to fail but it returned {mod}"
 
 
 def _get_test_ver_hash_data(reuse):
