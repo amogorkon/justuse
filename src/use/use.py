@@ -1331,7 +1331,7 @@ class Use(ModuleType):
 
         if config["version_warning"]:
             try:
-                response = requests.get(f'https://pypi.org/pypi/justuse/json')
+                response = requests.get('https://pypi.org/pypi/justuse/json')
                 data = response.json()
                 max_version = max(Version(version) for version in data["releases"].keys())
                 target_version = max_version
