@@ -127,20 +127,6 @@ def test_db_setup(reuse):
     assert reuse.registry
 
 
-def test_unsupported_artifact(reuse):
-    try:
-        mod = reuse(
-            "sqlalchemy",
-            version="0.22",
-            hashes={"h"},
-            modes=reuse.auto_install,
-        )
-    except:
-        pass
-    else:
-        assert False, f"Expected use to fail but it returned {mod}"
-
-
 def _get_test_ver_hash_data(reuse):
     VerHash = reuse.VerHash
     h = "5de64950137f3a50b76ce93556db392e8f1f954c2d8207f78a92d1f79aa9f737"
