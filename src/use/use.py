@@ -652,7 +652,7 @@ def _auto_install(
     package_name = out_info["package_name"]
     name = out_info["name"]
     this_version = Version(out_info["version"])
-    that_hash = out_info["hash"]
+    that_hash = out_info["digests"][hash_algo.name]
 
     use._save_module_info(
         name=name,
