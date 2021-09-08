@@ -36,7 +36,7 @@ True
 >>> use("pprint").pprint([1,2,3])
 [1,2,3]
 # equivalent to sys.path manipulation, then `import tools` with a reload(tools) every second
->>> tools = use(use.Path("/media/sf_Dropbox/code/tools.py"), reloading=True)
+>>> tools = use(use._ensure_path("/media/sf_Dropbox/code/tools.py"), reloading=True)
 
 # it is possible to import standalone modules from online sources
 # with immediate sha1-hash-verificiation before execution of the code like
@@ -71,6 +71,7 @@ import ast
 import asyncio
 import atexit
 import codecs
+import furl
 import hashlib
 import importlib.util
 import inspect
@@ -90,7 +91,7 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import singledispatch, update_wrapper
+from functools import reduce, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from itertools import chain, takewhile
@@ -295,7 +296,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         lambda name, target_version, this_version: f"{name} expected to be version {target_version}, but got {this_version} instead"
     )
     ambiguous_name_warning = (
-        lambda name: f"Attempting to load the package '{name}', if you rather want to use the local module: use(use.Path('{name}.py'))"
+        lambda name: f"Attempting to load the package '{name}', if you rather want to use the local module: use(use._ensure_path('{name}.py'))"
     )
     no_version_provided = (
         lambda: "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
@@ -391,6 +392,24 @@ def pipes(func_or_class):
     return ctx[tree.body[0].name]
 
 
+def _ensure_path(value_for_path):
+    from pathlib import Path
+    if value_for_path is None:
+        raise BaseException("value_for_path is None")
+    if value_for_path in ("", b""):
+        raise BaseException("value_for_path is empty string or bytes")
+    if isinstance(value_for_path, Path):
+        return value_for_path
+    if isinstance(value_for_path, (str, bytes)):
+        return Path(value_for_path)
+    if isinstance(value_for_path, furl.Path):
+        return reduce(
+            Path.__truediv__,
+            value_for_path.segments,
+            Path.cwd()
+        )
+    raise TypeError(f"Attempt to create a Path from an illegal value: {value_for_path!r}")
+
 @cache
 def get_supported() -> FrozenSet[PlatformTag]:
     """
@@ -422,7 +441,7 @@ def archive_meta(artifact_path):
         meta = dict(
             map(
                 lambda n: (
-                    Path(n).stem,
+                    _ensure_path(n).stem,
                     (m := archive.open(n), str(m.read(), "UTF-8").splitlines(), m.close())[
                         1
                     ],
@@ -453,7 +472,7 @@ def archive_meta(artifact_path):
             )[0]
 
             rel2 = relpath.replace("-", "!").split("!")[0]
-            rel3 = Path(rel2)
+            rel3 = _ensure_path(rel2)
             rel4 = rel3.parts
             if rel3.stem == "__init__":
                 import_name = rel4[0:-1]
@@ -561,37 +580,26 @@ def _import_public_no_install(
     name,
     spec,
     aspectize,
-    fatal_exceptions,
-    package_name,
+    fatal_exceptions=False,
     **kwargs,
 ) -> "ModuleType|Exception":
     # builtin?
+    package_name, rest = _parse_name(name)
     builtin = False
     try:
-        metadata.PathDistribution.from_name(name)
+        metadata.PathDistribution.from_name(package_name)
     except metadata.PackageNotFoundError:  # indeed builtin!
         builtin = True
 
     if builtin:
-        try:
-            mod = spec.loader.create_module(spec)
-            spec.loader.exec_module(mod)  # ! => cache
-            if aspectize:
-                warn(Message.aspectize_builtins_warning(), RuntimeWarning)
-            return mod
-        except:
-            exc = traceback.format_exc()
-        return ImportError(exc)
+        mod = spec.loader.create_module(spec)
+        spec.loader.exec_module(mod)  # ! => cache
+        if aspectize:
+            warn(Message.aspectize_builtins_warning(), RuntimeWarning)
+        return mod
 
     # it seems to be installed in some way, for instance via pip
-    try:
-        mod = importlib.import_module(package_name)  # ! => cache
-        return mod
-    except:
-        if fatal_exceptions:
-            raise
-        exc = traceback.format_exc()
-    return ImportError(exc)
+    return importlib.import_module(rest)  # ! => cache
     
 
 def _parse_name(name):
@@ -629,7 +637,7 @@ def _auto_install(
         ).fetchone()
     path = None
     if query:
-        path = Path(query["path"])
+        path = _ensure_path(query["path"])
     if path:
         _update_hashes(**all_kwargs(_auto_install, locals()))
 
@@ -807,7 +815,6 @@ def _find_version(package_name, version=None):
 
 def _find_exe(venv_root):
     env = {
-        "VIRTUAL_ENV": str(venv_root),
         "PATH": str(venv_root / "bin")
         + os.path.pathsep
         + str(venv_root / "Scripts")
@@ -820,7 +827,7 @@ def _find_exe(venv_root):
         *venv_root.rglob("**/Scripts/python"),
         *venv_root.rglob("**/Scripts/python*.exe"),
     ):
-        return p, env, Path(p).parent, Path(p).name
+        return p, env, _ensure_path(p).parent, _ensure_path(p).name
     o = _process(sys.executable, "-m", "venv", venv_root)
     for p in (
         *venv_root.rglob("**/bin/python"),
@@ -828,8 +835,8 @@ def _find_exe(venv_root):
         *venv_root.rglob("**/Scripts/python"),
         *venv_root.rglob("**/Scripts/python*.exe"),
     ):
-        o2 = _process(str(p), "-m", "ensurepip", "-v", "-v", env=env)
-        return p, env, Path(p).parent, Path(p).name
+        o2 = _process(sys.executable, "-m", "ensurepip", "-v", "-v", env=env)
+        return p, env, _ensure_path(p).parent, _ensure_path(p).name
 
 
 def _download_artifact(url, artifact_path):
@@ -939,7 +946,7 @@ def _load_venv_entry(name, module_path) -> ModuleType:
             return _build_mod(
                     name=rest,
                     code=code_file.read(),
-                    module_path=Path(module_path),
+                    module_path=_ensure_path(module_path),
                     initial_globals={},
                     aspectize={},
                 )
@@ -1349,7 +1356,7 @@ class Use(ModuleType):
             self.home.mkdir(mode=0o755, parents=True, exist_ok=True)
         except PermissionError:
             # this should fix the permission issues on android #80
-            self.home = Path(tempfile.mkdtemp(prefix="justuse_"))
+            self.home = _ensure_path(tempfile.mkdtemp(prefix="justuse_"))
         (self.home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
         for file in (
             "config.toml",
@@ -1460,7 +1467,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         for ID, path in self.registry.execute(
             "SELECT id, installation_path FROM distributions"
         ).fetchall():
-            if not Path(path).exists():
+            if not _ensure_path(path).exists():
                 self.registry.execute(f"DELETE FROM distributions WHERE id=?", (ID,))
         self.registry.connection.commit()
 
@@ -1546,17 +1553,17 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         else:
             warn(Message.no_validation(url, hash_algo, this_hash), NoValidationWarning)
         name = str(url)
-
         try:
             mod = _build_mod(
                 name=name,
                 code=response.content,
-                module_path=Path(url.path),
+                module_path=_ensure_path(url.path),
                 initial_globals=initial_globals,
                 aspectize=aspectize,
                 aspectize_dunders=bool(Use.aspectize_dunders & modes),
             )
         except:
+            raise
             exc = traceback.format_exc()
         if exc:
             return _fail_or_default(ImportError(exc), default)
@@ -1633,12 +1640,12 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     # if we're calling from a script file e.g. `python3 my/script.py` like pytest unittest
                     if hasattr(main_mod, "__file__"):
                         source_dir = (
-                            Path(inspect.currentframe().f_back.f_back.f_code.co_filename)
+                            _ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename)
                             .resolve()
                             .parent
                         )
             if source_dir is None:
-                source_dir = Path(main_mod.__loader__.path).parent
+                source_dir = _ensure_path(main_mod.__loader__.path).parent
             if not source_dir.joinpath(path).exists():
                 source_dir = Path.cwd()
             if not source_dir.exists():
@@ -1775,7 +1782,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hashes = set(hashes) if hashes else set()
 
         # we use boolean flags to reduce the complexity of the call signature
-        fatal_exceptions = bool(Use.fatal_exceptions & modes) or "ERRORS" in os.environ
+        fatal_exceptions = bool(Use.fatal_exceptions & modes)
         auto_install = bool(Use.auto_install & modes)
         aspectize_dunders = bool(Use.aspectize_dunders & modes)
         aspectize = aspectize or {}
@@ -1785,7 +1792,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
         # let's first see if the user might mean something else entirely
-        if any(Path(".").glob(f"{name}.py")):
+        if any(_ensure_path(".").glob(f"**/{rest}.py")):
             warn(Message.ambiguous_name_warning(name), AmbiguityWarning)
         spec = None
 
@@ -1830,7 +1837,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
             return _ensure_proxy(mod) or mod
-        return mod or _fail_or_default(exc or result, default)
+        return _fail_or_default(result, default)
 
 
 use = Use()
