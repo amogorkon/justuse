@@ -106,9 +106,7 @@ def _do_load_venv_mod(reuse, name):
     items = data["releases"][version]
     mod = None
     for item in items:
-        if item["filename"].endswith(".whl"):
             mod = reuse._load_venv_mod(
-                name_prefix="",
                 name=name,
                 version=item["version"],
             )
@@ -145,10 +143,10 @@ def test_unsupported_artifact(reuse):
         mod = reuse(
             "sqlalchemy",
             version="1.4.22",
-            hashes="5de64950137f3a50b76ce93556db392e8f1f954c2d8207f78a92d1f79aa9f737",
+            hashes=set(hashes.values()),
             modes=reuse.auto_install,
         )
-    except reuse.AutoInstallationError:
+    except:
         pass
     else:
         assert False, f"Expected use to fail but it returned {mod}"

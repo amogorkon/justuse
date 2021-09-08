@@ -614,8 +614,6 @@ def _auto_install(
     
     if func:
         result = func(**all_kwargs(_auto_install, locals()))
-        if isinstance(result, ModuleType):
-            return result
 
     query = use.registry.execute(
         f"SELECT id, installation_path FROM distributions WHERE name='{package_name}' AND version='{str(version)}'",
@@ -632,8 +630,8 @@ def _auto_install(
     path = None
     if query:
         path = Path(query["path"])
-    
-    _update_hashes(**all_kwargs(_auto_install, locals()))
+    if path:
+        _update_hashes(**all_kwargs(_auto_install, locals()))
 
     if path:
         # trying to import directly from zip
@@ -678,7 +676,6 @@ def _update_hashes(*, package_name, version, default, hash_algo, hashes, **kwarg
         for entry in infos:
             url = URL(entry["url"])
             log.error("url = %s", url)
-            entry["version"] = str(version)
             log.debug(f"looking at {entry=}")
             all_hashes.add(that_hash := entry["digests"].get(hash_algo.name))
             if hashes.intersection(all_hashes):
@@ -696,11 +693,8 @@ def _update_hashes(*, package_name, version, default, hash_algo, hashes, **kwarg
             hashes.add(that_hash)
     except KeyError as be:  # json issuesa
         msg = f"request to https://pypi.org/pypi/{package_name}/{version}/json lead to an error: {be}"
-        raise RuntimeError(msg) from be
-    exc = None
-    if exc:
-        return AutoInstallationError(Message.pip_json_mess(package_name, version))
-
+        return RuntimeError(msg)
+    
 
 # these are aliases for the purpose of aspectizing modules
 
@@ -845,7 +839,7 @@ def _download_artifact(url, artifact_path):
 def _load_venv_mod(
     name, version=None, artifact_path=None, out_info=None
 ) -> ModuleType:
-    if not version or str(version) in ("0.0.0", "None"):
+    if not version or str(version) in ("0.0", "0.0.0", "None", ""):
         version = None
     info = (out_info := (out_info if out_info is not None else {}))
     package_name, rest = _parse_name(name)
@@ -859,15 +853,13 @@ def _load_venv_mod(
         or str(artifact_path).replace("\x5c", "/").split("/")[-1].split("#")[0]
     )
     url = URL(info["url"])
-
-    package_name = package_name or info["package_name"]
-    version = info["version"]
     artifact_path = artifact_path or sys.modules["use"].home / "packages" / filename
     if not artifact_path.exists():
         _download_artifact(url, artifact_path)
-
+    
     if artifact_path.exists():
         install_item = artifact_path
+    log.error("%s\n", pformat(locals()))
     output = _process(
         str(venv_bin / python_exe),
         "-m",
@@ -1130,7 +1122,6 @@ def _build_mod(
     mod.__file__ = str(module_path)
     mod.__package__ = rest
     mod.__name__ = rest
-    return mod
     code_text = codecs.decode(code)
     # module file "<", ">" chars are specially handled by inspect
     if not sys.platform.startswith("win"):
@@ -1560,7 +1551,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             mod = _build_mod(
                 name=name,
                 code=response.content,
-                module_path=url.path,
+                module_path=Path(url.path),
                 initial_globals=initial_globals,
                 aspectize=aspectize,
                 aspectize_dunders=bool(Use.aspectize_dunders & modes),
@@ -1671,7 +1662,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                         name=name,
                         code=code,
                         initial_globals=initial_globals,
-                        module_path=str(path.resolve()),
+                        module_path=path.resolve(),
                         aspectize=aspectize,
                     )
                 except:
@@ -1719,7 +1710,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                         name=name,
                         code=code,
                         initial_globals=initial_globals,
-                        module_path=str(path),
+                        module_path=path,
                         aspectize=aspectize,
                     )
                 except:

@@ -67,7 +67,7 @@ def test_fail_dir(reuse):
 
 
 def test_simple_path(reuse):
-    foo_path = Path(".tests/foo.py")
+    foo_path = Path(__file__).parent / ".tests" / "foo.py"
     print(f"loading foo module via use(Path('{foo_path}'))")
     mod = reuse(Path(foo_path), initial_globals={"a": 42})
     assert mod.test() == 42
@@ -77,7 +77,11 @@ def test_simple_url(reuse):
     import http.server
 
     port = 8089
-    with http.server.HTTPServer(("", port), http.server.SimpleHTTPRequestHandler) as svr:
+    orig_cwd = Path.cwd()
+    try:
+      os.chdir(Path(__file__).parent.parent)
+    
+      with http.server.HTTPServer(("", port), http.server.SimpleHTTPRequestHandler) as svr:
         foo_uri = f"http://localhost:{port}/tests/.tests/foo.py"
         print(f"starting thread to handle HTTP request on port {port}")
         import threading
@@ -88,7 +92,8 @@ def test_simple_url(reuse):
         with pytest.warns(use.NoValidationWarning):
             mod = reuse(URL(foo_uri), initial_globals={"a": 42})
             assert mod.test() == 42
-
+    finally:
+      os.chdir(orig_cwd)
 
 def test_internet_url(reuse):
     foo_uri = "https://raw.githubusercontent.com/greyblue9/justuse/3f783e6781d810780a4bbd2a76efdee938dde704/tests/foo.py"
@@ -130,11 +135,8 @@ def test_classical_install(reuse):
 
 
 def test_classical_install_no_version(reuse):
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        mod = reuse("pytest", modes=reuse.fatal_exceptions)
-        assert mod is pytest or mod._ProxyModule__implementation is pytest
-        assert w and issubclass(w[-1].category, use.AmbiguityWarning)
+    mod = reuse("pytest", modes=reuse.fatal_exceptions)
+    assert mod is pytest or mod._ProxyModule__implementation is pytest
 
 
 def test_autoinstall_PEBKAC(reuse):
