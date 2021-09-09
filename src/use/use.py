@@ -637,7 +637,7 @@ def _auto_install(
         out_info=out_info,
     )
     path = path or out_info["artifact_path"]
-    installation_path = out_info["installation_path"]
+    installation_path = installation_path or out_info["installation_path"]
     this_version = Version(out_info["version"])
     that_hash = out_info["digests"][hash_algo.name]
 
