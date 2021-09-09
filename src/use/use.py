@@ -785,8 +785,8 @@ def _find_version(package_name, version=None):
     if not version or str(version) in ("0.0.0", "None"):
         version, infos = [*data["releases"].items()][-1]
         return infos[-1]
-    for version, infos in data["releases"].items():
-        if str(version) == version:
+    for rel_version, infos in data["releases"].items():
+        if str(rel_version) == str(version):
             return infos[-1]
     assert False, f"No match found for {package_name=!r}, {version=!r}"
 
@@ -820,27 +820,42 @@ def _download_artifact(url, artifact_path):
     artifact_path.write_bytes(requests.get(url).content)
 
 
-def _load_venv_mod(name, version=None, artifact_path=None, out_info=None) -> ModuleType:
+def _load_venv_mod(name, version=None, artifact_path=None, url=None, out_info=None) -> ModuleType:
+    if "None" in str(artifact_path):
+        artifact_path = None
+    
+    log.error("_load_venv_mod(name=%s, version=%s, artifact_path=%s, out_info=%s)", name, version, artifact_path, out_info)
     if not version or str(version) in ("0.0.0", "None", ""):
+        log.error("resetting version")
         version = None
+    log.error("_load_venv_mod(name=%s, version=%s, artifact_path=%s, out_info=%s)", name, version, artifact_path, out_info)
+    
     info = (out_info := (out_info if out_info is not None else {}))
     package_name, rest = _parse_name(name)
-    info.update(_find_version(package_name, version))
+    
+    log.error("calling _find_version(package_name=%s, version=%s)", package_name, version)
+    vers_info = _find_version(package_name, version)
+    log.error("_find_version(packagw_name=%s, version=%s) returned %s", package_name, version, vers_info)
+    version = Version(vers_info["version"])
+    log.error("versoion = %s", version)
+    info.update(vers_info)
+    url = URL(info["url"])
+    filename = info["filename"]
+    artifact_path = sys.modules["use"].home / "packages" / info["filename"]
+    
+    
+    log.error("_load_venv_mod(name=%s, version=%s, artifact_path=%s, out_info=%s)", name, version, artifact_path, out_info)
+    
     venv_root = _venv_root(package_name, version, use.home)
     p, env, venv_bin, python_exe = _find_exe(venv_root)
-    install_item = package_name = package_name
-    log.info("Installing %s using pip", install_item)
-    filename = (
-        info["filename"]
-        or str(artifact_path).replace("\x5c", "/").split("/")[-1].split("#")[0]
-    )
-    url = URL(info["url"])
-    artifact_path = artifact_path or sys.modules["use"].home / "packages" / filename
-    if not artifact_path.exists():
+    
+    install_item = package_name + "==" + str(version)
+    if url and not artifact_path.exists():
         _download_artifact(url, artifact_path)
-
     if artifact_path.exists():
         install_item = artifact_path
+    log.info("Installing %s using pip", install_item)
+    
     log.error("%s\n", pformat(locals()))
     output = _process(
         str(venv_bin / python_exe),

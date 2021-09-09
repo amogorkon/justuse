@@ -99,10 +99,11 @@ def test_pure_python_package(reuse):
         file.unlink()
 
 
-def _do_load_venv_mod(reuse, name):
+def _do_load_venv_mod(reuse, name, version=None):
     data = reuse._get_filtered_data(reuse._get_package_data(name))
     versions = sorted(list(data["releases"].keys()))
-    version = versions[-1]
+    if not version:
+        version = versions[-1]
     items = data["releases"][version]
     mod = None
     for item in items:
@@ -120,7 +121,9 @@ def test_load_venv_mod_protobuf(reuse):
 
 
 def test_load_venv_mod_numpy(reuse):
-    _do_load_venv_mod(reuse, "numpy")
+    if "numpy.core._multiarray_umath" in sys.modules:
+        sys.modules["numpy.core._multiarray_umath"].asarray = lambda: None
+    _do_load_venv_mod(reuse, "numpy", "1.20.2")
 
 
 def test_db_setup(reuse):
