@@ -884,7 +884,7 @@ def _load_venv_mod(name, version=None, artifact_path=None, url=None, out_info=No
     meta = archive_meta(artifact_path)
     meta.update(info)
     relp = meta["import_relpath"]
-    name_segments = ".".join(relp.split(".")[0:-1]).split("-")[0].replace("/", ".")
+    name_segments = ".".join(relp.split(".")[0:-1]).split("-")[0].replace("/", ".").replace("\\", ".")
     package_name, rest = _parse_name(name_segments)
     module_paths = [*venv_root.rglob(f"**/{relp}")]
     for module_path in module_paths:
