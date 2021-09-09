@@ -629,8 +629,6 @@ def _auto_install(
                 log.debug(traceback.format_exc())
             print("Direct zipimport failed, attempting to extract and load manually...")
 
-    installation_path = (path.parent / path.stem) if path else None
-
     out_info = {}
     mod = _load_venv_mod(
         name=name,
