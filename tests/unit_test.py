@@ -123,8 +123,10 @@ def test_module_package_ambiguity(reuse):
 
 def test_builtin():
     # must be the original use because loading builtins requires looking up _using, which mustn't be wiped for this reason
-    mod = use("sys")
-    assert mod.path is sys.path
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        mod = use("sys")
+        assert mod.path is sys.path
 
 
 def test_classical_install(reuse):

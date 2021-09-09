@@ -666,8 +666,7 @@ def _update_hashes(*, package_name, version, default, hash_algo, hashes, **kwarg
             all_hashes.add(that_hash := entry["digests"].get(hash_algo.name))
             if hashes.intersection(all_hashes):
                 found = (entry, that_hash)
-                hit = (version, that_hash)
-                log.info(f"Matches user hash: {entry=} {hit=}")
+                log.info(f"Matches user hash: {entry=} {that_hash=}")
                 break
         if not found:
             return AutoInstallationError(
@@ -781,14 +780,8 @@ def _process(*argv, env={}):
 
 
 def _find_version(package_name, version=None):
-    data = _get_filtered_data(_get_package_data(package_name))
-    if not version or str(version) in ("0.0.0", "None"):
-        version, infos = [*data["releases"].items()][-1]
-        return infos[-1]
-    for rel_version, infos in data["releases"].items():
-        if str(rel_version) == str(version):
-            return infos[-1]
-    assert False, f"No match found for {package_name=!r}, {version=!r}"
+    data = _get_filtered_data(_get_package_data(package_name), version)
+    return [*data["releases"].items()][-1][1][0]
 
 
 def _find_exe(venv_root):
@@ -857,35 +850,36 @@ def _load_venv_mod(name, version=None, artifact_path=None, url=None, out_info=No
     log.info("Installing %s using pip", install_item)
     
     log.error("%s\n", pformat(locals()))
-    output = _process(
-        str(venv_bin / python_exe),
-        "-m",
-        "pip",
-        "--disable-pip-version-check",
-        "--no-color",
-        "install",
-        "--pre",
-        "-v",
-        "-v",
-        "-v",
-        "--prefer-binary",
-        "--exists-action",
-        "i",
-        "--no-build-isolation",
-        "--no-cache-dir",
-        "--no-compile",
-        "--no-warn-script-location",
-        "--no-warn-conflicts",
-        install_item,
-        env=env,
-    )
-    match = re.compile(
-        "Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) "
-        "from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))"
-        "(?:#(\\S*)|)(?=\\s)",
-        re.DOTALL,
-    ).search("%s\n\n%s" % (output.stdout, output.stderr))
-    info.update(match.groupdict() if match else {})
+    if not any(venv_root.rglob(f"**/{rest}*")):
+      output = _process(
+          str(venv_bin / python_exe),
+          "-m",
+          "pip",
+          "--disable-pip-version-check",
+          "--no-color",
+          "install",
+          "--pre",
+          "-v",
+          "-v",
+          "-v",
+          "--prefer-binary",
+          "--exists-action",
+          "i",
+          "--no-build-isolation",
+          "--no-cache-dir",
+          "--no-compile",
+          "--no-warn-script-location",
+          "--no-warn-conflicts",
+          install_item,
+          env=env,
+      )
+      match = re.compile(
+          "Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) "
+          "from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))"
+          "(?:#(\\S*)|)(?=\\s)",
+          re.DOTALL,
+      ).search("%s\n\n%s" % (output.stdout, output.stderr))
+      info.update(match.groupdict() if match else {})
     orig_cwd = Path.cwd()
     meta = archive_meta(artifact_path)
     meta.update(info)
@@ -959,13 +953,15 @@ def _get_package_data(package_name) -> Dict[str, str]:
     return data
 
 
-def _get_filtered_data(data) -> Dict[str, str]:
+def _get_filtered_data(data, version=None) -> Dict[str, str]:
     filtered = {"urls": [], "releases": {}}
     for ver, infos in data["releases"].items():
         filtered["releases"][ver] = []
         for info in infos:
             info["version"] = ver
             if not _is_compatible(info, hash_algo=Hash.sha256.name, include_sdist=False):
+                continue
+            if version and Version(str(version)) != Version(ver):
                 continue
             filtered["urls"].append(info)
             filtered["releases"][ver].append(info)
