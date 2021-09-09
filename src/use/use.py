@@ -603,7 +603,7 @@ def _auto_install(
     query = use.registry.execute(
         f"SELECT id, installation_path FROM distributions WHERE name='{package_name}' AND version='{str(version)}'",
     ).fetchone()
-
+    installation_path = None
     if query:
         installation_path = query["installation_path"]
         query = use.registry.execute(
