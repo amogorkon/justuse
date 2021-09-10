@@ -787,73 +787,59 @@ def _bootstrap_venv_pip(venv_root):
     log.info("_bootstrap_venv_pip %s", venv_root)
     if not hasattr(_bootstrap_venv_pip, "_saved_sys_path"):
         _bootstrap_venv_pip._saved_sys_path = [*sys.path]
-    try:
-        if sys.platform == "win32":
-            python_exe = venv_root / "Scripts" / "python.exe"
-        else:
-            python_exe = venv_root / "bin" / "python"
-        bootstrap_zip = (
-            Path(__file__).parent.parent / "ensurepip.zip"
-        ).absolute()
-        from pip._vendor import html5lib
-        backup_site_packages = (
-            Path(html5lib.__file__).parent.parent.parent.parent
-        ).absolute()
-        if "" not in sys.path: sys.path.insert(0, "")
-        if str(bootstrap_zip) not in sys.path:
-            sys.path.insert(1, str(bootstrap_zip))
-        sys.path.append(str(backup_site_packages))
-        if not python_exe.exists():
-            for k in [
-                _ for _ in sys.modules.keys()
-                if _.split(".")[0] in ("venv", "ensurepip")
-            ]:
-                log.debug("Deleting system module %s", k)
-                del sys.modules[k]
-            # workaround for pip stupidity
-            sys.modules["pip._vendor.html5lib"] = html5lib
-            log.debug("Importing venv")
-            import venv
-            log.debug("venv = %s", venv)
-            log.info("Importing ensurepip")
-            import ensurepip
-            log.debug("ensurepip = %s", ensurepip)
-            assert bootstrap_zip.name in venv.__file__
-            assert bootstrap_zip.name in ensurepip.__file__
-            log.debug(
-               "_bootstrap_venv_pip calling venv.create for %s",
-               venv_root
+    python_exe = _find_exe(venv_root)
+    bootstrap_zip = (
+        Path(__file__).parent.parent / "ensurepip.zip"
+    ).absolute()
+    # workaround for pip stupidity
+    from pip._vendor import html5lib
+    backup_site_packages = (
+        Path(html5lib.__file__).parent.parent.parent.parent
+    ).absolute()
+    if "" not in sys.path: sys.path.insert(0, "")
+    if str(bootstrap_zip) not in sys.path:
+        sys.path.insert(1, str(bootstrap_zip))
+    sys.path.append(str(backup_site_packages))
+    if not python_exe.exists():
+        for k in [
+            _ for _ in sys.modules.keys()
+            if _.split(".")[0] in ("venv", "ensurepip")
+        ]:
+            log.debug("Deleting system module %s", k)
+            del sys.modules[k]
+        # workaround for pip stupidity
+        sys.modules["pip._vendor.html5lib"] = html5lib
+        log.debug("Importing venv")
+        import venv
+        log.debug("venv = %s", venv)
+        # log.info("Importing ensurepip")
+        # import ensurepip
+        # log.debug("ensurepip = %s", ensurepip)
+        # assert bootstrap_zip.name in venv.__file__
+        # assert bootstrap_zip.name in ensurepip.__file__
+        log.debug("calling venv.create %s", venv_root)
+        try:
+            return venv.create(
+                venv_root,
+                system_site_packages=True, clear=True,
+                symlinks=False, with_pip=True, upgrade_deps=True
             )
+        except:
+            for r in venv_root.rglob("**/site-packages"):
+                log.info("Writing out bootstrap zip")
+                (r / f"python3{sys.version_info[1]}.zip"
+                    ).write_bytes(bootstrap_zip.read_bytes())
             try:
                 return venv.create(
                     venv_root,
-                    system_site_packages=True,
-                    clear=True,
-                    symlinks=False,
-                    with_pip=True,
-                    prompt=None,
-                    upgrade_deps=True
+                    system_site_packages=False,clear=False,
+                    symlinks=True, with_pip=False,
+                    upgrade_deps=False
                 )
             except:
-                for r in venv_root.rglob("**/site-packages"):
-                    log.info("Writing out bootstrap zip")
-                    (r / f"python3{sys.version_info[1]}.zip"
-                        ).write_bytes(bootstrap_zip.read_bytes())
-                log.info("Attempt #2")
-                try:
-                    return venv.create(
-                        venv_root,
-                        system_site_packages=False,
-                        clear=False,
-                        symlinks=True,
-                        with_pip=False,
-                        prompt=None,
-                        upgrade_deps=False
-                    )
-                except:
-                    log.error(traceback.format_exc())
-    finally:
-        log.info("_bootstrap_venv_pip finally: %s", venv_root)
+                log.error(traceback.format_exc())
+  finally:
+     log.info("_bootstrap_venv_pip finally: %s", venv_root)
 
 def _find_exe(venv_root):
     if sys.platform == "win32":
@@ -906,21 +892,18 @@ def _load_venv_mod(name, version=None, artifact_path=None, url=None, out_info=No
     filename, url, version = (
         info["filename"], URL(info["url"]),
         Version(info["version"])
-    )  
+    )
     artifact_path = _download_artifact(name, version, filename, url)
     info["artifact_path"] = artifact_path
-    log.info("_load_venv_mod info = %s", info)
     venv_root = _venv_root(package_name, version, use.home)
     python_exe = _find_exe(venv_root)
     env = _get_venv_env(venv_root)
-    if not python_exe.exists():
-        _bootstrap_venv_pip(venv_root)
-    install_item = package_name + "==" + str(version)
-    if artifact_path.exists():
-        install_item = artifact_path
-    log.info("Installing %s using pip", install_item)
-    log.debug("%s\n ", pformat(locals()))
-    if not any(venv_root.rglob(f"**/{rest}*")):
+    if not python_exe.exists(): _bootstrap_venv_pip(venv_root)
+    install_item = install_item = artifact_path
+    meta = archive_meta(artifact_path)
+    relp = meta["import_relpath"]
+    module_paths = [*venv_root.rglob(f"**/{relp}")]
+    if not module_paths:
         output = _process(
             python_exe,
             "-m",
@@ -943,9 +926,7 @@ def _load_venv_mod(name, version=None, artifact_path=None, url=None, out_info=No
             env=env,
         )
         sys.stderr.write(output.stderr or "")
-    meta = archive_meta(artifact_path)
-    relp = meta["import_relpath"]
-    module_paths = [*venv_root.rglob(f"**/{relp}")]
+        module_paths = [*venv_root.rglob(f"**/{relp}")]
     for module_path in module_paths:
         orig_cwd = Path.cwd()
         installation_path = module_path
@@ -954,12 +935,12 @@ def _load_venv_mod(name, version=None, artifact_path=None, url=None, out_info=No
         try:
             log.info("installation_path = %s", installation_path)
             os.chdir(str(installation_path))
-            out_info.update(info)
             out_info.update({
                 "artifact_path": artifact_path,
                 "installation_path": installation_path,
                 "module_path": module_path,
-                "info": info
+                "info": info,
+                **info
             })
             return _load_venv_entry(name, module_path=module_path)
         finally:
