@@ -799,9 +799,8 @@ def _bootstrap_venv_pip(venv_root):
         backup_site_packages = (
             Path(html5lib.__file__).parent.parent.parent.parent
         ).absolute()
-        if not "" in sys.path:
-            sys.path.insert(0, "")
-        if not str(bootstrap_zip) in sys.path:
+        if "" not in sys.path: sys.path.insert(0, "")
+        if str(bootstrap_zip) not in sys.path:
             sys.path.insert(1, str(bootstrap_zip))
         sys.path.append(str(backup_site_packages))
         if not python_exe.exists():
