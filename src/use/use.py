@@ -850,131 +850,118 @@ def _bootstrap_venv_pip(venv_root):
 
 def _find_exe(venv_root):
     if sys.platform == "win32":
-        python_exe = venv_root / "Scripts" / "python.exe"
+        return venv_root / "Scripts" / "python.exe"
     else:
-        python_exe = venv_root / "bin" / "python"
-    
-    _bootstrap_venv_pip(venv_root)
-    
-    env = {
-        "PATH": os.path.pathsep.join((
-            str(python_exe.parent.absolute()),
-            os.environ.get("PATH")
-        )),
-        "PYTHONPATH": str((Path(__file__).parent.parent / "ensurepip.zip").absolute()),
-        "VIRTUAL_ENV": str(venv_root.absolute()),
+        return venv_root / "bin" / "python"
+
+def _get_venv_env(venv_root):
+    pathvar = os.environ.get("PATH")
+    source_dir = Path(__file__).parent.parent.absolute()
+    return {
+        "PYTHONPATH": str(source_dir / "ensurepip.zip"),
+        "VIRTUAL_ENV": str(venv_root),
         "PYTHONSTARTUP": "",
-        "PYTHONHOME": ""
+        "PYTHONHOME": "",
+        "PATH": f"%{_find_exe(venv_root)}{os.path.pathsep}{pathvar}"
     }
-    
-    return python_exe, env, python_exe.parent, python_exe.name
 
-def _download_artifact(url, artifact_path):
-    artifact_path.write_bytes(requests.get(url).content)
-
+def _download_artifact(name, version, filename, url) -> Path:
+    path = (sys.modules["use"].home
+        / "packages" / filename).absolute()
+    if path.exists(): return path
+    log.info("Downloading %s==%s from %s", name, version, url)
+    if str(url).startswith("file:"):
+        from_path = Path(str(url).partition(":")[2])
+        data = from_path.read_bytes()
+    else:
+        data = requests.get(url).content
+    log.debug("Read package content: %d bytes", len(data))
+    path.write_bytes(data)
+    log.debug("Wrote %d bytes to %s", len(data), path)
+    return path
 
 def _load_venv_mod(name, version=None, artifact_path=None, url=None, out_info=None) -> ModuleType:
-    if "None" in str(artifact_path):
-        artifact_path = None
+    log.debug(
+        "_load_venv_mod(name=%s, version=%s, artifact_path=%s)",
+        name, version, artifact_path
+    )
+    if out_info is None: out_info = {}
     
-    log.error("_load_venv_mod(name=%s, version=%s, artifact_path=%s, out_info=%s)", name, version, artifact_path, out_info)
-    if not version or str(version) in ("0.0.0", "None", ""):
-        log.error("resetting version")
-        version = None
-    log.error("_load_venv_mod(name=%s, version=%s, artifact_path=%s, out_info=%s)", name, version, artifact_path, out_info)
-    
-    info = (out_info := (out_info if out_info is not None else {}))
     package_name, rest = _parse_name(name)
+    if not url:
+        info = _find_version(package_name, version)
+    else:
+        filename = str("url").split("\\/")[-1]
+        info = _parse_filename(filename)
+        info["url"] = str("url")
     
-    log.error("calling _find_version(package_name=%s, version=%s)", package_name, version)
-    vers_info = _find_version(package_name, version)
-    log.error("_find_version(packagw_name=%s, version=%s) returned %s", package_name, version, vers_info)
-    version = Version(vers_info["version"])
-    log.error("versoion = %s", version)
-    info.update(vers_info)
-    url = URL(info["url"])
-    filename = info["filename"]
-    artifact_path = sys.modules["use"].home / "packages" / info["filename"]
+    filename, url, version = (
+        info["filename"], URL(info["url"]),
+        Version(info["version"])
+    )
     
-    
-    log.error("_load_venv_mod(name=%s, version=%s, artifact_path=%s, out_info=%s)", name, version, artifact_path, out_info)
+    artifact_path = _download_artifact(name, version, filename, url)
+    info["artifact_path"] = artifact_path
+    log.info("_load_venv_mod info = %s", info)
     
     venv_root = _venv_root(package_name, version, use.home)
-    p, env, venv_bin, python_exe = _find_exe(venv_root)
+    python_exe = _find_exe(venv_root)
+    env = _get_venv_env(venv_root)
+    if not python_exe.exists():
+        _bootstrap_venv_pip(venv_root)
     
     install_item = package_name + "==" + str(version)
-    if url and not artifact_path.exists():
-        _download_artifact(url, artifact_path)
     if artifact_path.exists():
         install_item = artifact_path
     log.info("Installing %s using pip", install_item)
+    log.debug("%s\n ", pformat(locals()))
     
-    log.error("%s\n", pformat(locals()))
     if not any(venv_root.rglob(f"**/{rest}*")):
-      output = _process(
-          str(venv_bin / python_exe),
-          "-m",
-          "pip",
-          "--disable-pip-version-check",
-          "--no-color",
-          "install",
-          "--pre",
-          "-v",
-          "-v",
-          "-v",
-          "--prefer-binary",
-          "--exists-action",
-          "i",
-          "--no-use-pep517",
-          "--no-build-isolation",
-          "--no-cache-dir",
-          "--no-compile",
-          "--no-warn-script-location",
-          "--no-warn-conflicts",
-          install_item,
-          env=env,
-      )
-      match = re.compile(
-          "Added (?P<package_name>[^= ]+)(?:==(?P<version>[^ ]+)|) "
-          "from (?P<url>[^# ,\n]+(?:/(?P<filename>[^#, \n/]+)))"
-          "(?:#(\\S*)|)(?=\\s)",
-          re.DOTALL,
-      ).search("%s\n\n%s" % (output.stdout, output.stderr))
-      info.update(match.groupdict() if match else {})
-    orig_cwd = Path.cwd()
+        output = _process(
+            python_exe,
+            "-m",
+            "pip",
+            "--disable-pip-version-check",
+            "--no-color",
+            "install",
+            "--pre",
+            "-v",
+            "--prefer-binary",
+            "--exists-action",
+            "i",
+            "--no-use-pep517",
+            "--no-build-isolation",
+            "--no-cache-dir",
+            "--no-compile",
+            "--no-warn-script-location",
+            "--no-warn-conflicts",
+            install_item,
+            env=env,
+        )
+        sys.stderr.write(output.stderr or "")
+    
     meta = archive_meta(artifact_path)
-    meta.update(info)
     relp = meta["import_relpath"]
-    name_segments = ".".join(relp.split(".")[0:-1]).split("-")[0].replace("/", ".").replace("\\", ".")
-    package_name, rest = _parse_name(name_segments)
     module_paths = [*venv_root.rglob(f"**/{relp}")]
     for module_path in module_paths:
+        orig_cwd = Path.cwd()
         installation_path = module_path
-        for _ in range(len(name_segments.split("."))):
+        while not installation_path.name == "site-packages":
             installation_path = installation_path.parent
         try:
-            log.error("installation_path = %s", installation_path)
+            log.info("installation_path = %s", installation_path)
             os.chdir(str(installation_path))
-            out_info.update(
-                {
+            out_info.update(info)
+            out_info.update({
                     "artifact_path": artifact_path,
                     "installation_path": installation_path,
                     "module_path": module_path,
-                    "package_name": package_name,
-                    "url": url,
-                    "version": version,
-                    "info": info,
-                    **meta,
-                    **info,
-                }
-            )
+                    "info": info
+            })
             return _load_venv_entry(name, module_path=module_path)
         finally:
             os.chdir(orig_cwd)
-    assert (
-        False
-    ), f"{meta['import_relpath']=}, {relp=}, {name_segments=}, {package_name=}, {rest=}"
-
+    raise BaseException(locals())
 
 def _load_venv_entry(name, module_path) -> ModuleType:
     package_name, rest = _parse_name(name)
