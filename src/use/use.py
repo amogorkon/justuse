@@ -636,7 +636,6 @@ def _auto_install(
     try:
         importer = zipimport.zipimporter(path)
         return (mod := importer.load_module(import_relpath))
-        log.info("Direct zipimport of %s successful", rest)
     except:
         _clean_sys_modules(rest)
         if "DEBUG" in os.environ or config["debugging"]:
