@@ -624,7 +624,6 @@ def _auto_install(
     ).fetchone()
     if not query:
         query = _find_or_install(package_name, version)
-    
     path = _ensure_path(query["path"])
     installation_path = _ensure_path(query["installation_path"])
     module_path = _ensure_path(query["module_path"])
@@ -1470,6 +1469,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         self.registry.connection.commit()
 
     def recreate_registry(self):
+        self.registry.connection.close()
         number_of_backups = len(list((self.home / "registry.db").glob("*.bak")))
         (self.home / "registry.db").rename(
             self.home / f"registry.db.{number_of_backups + 1}.bak"
