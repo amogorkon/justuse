@@ -1149,7 +1149,7 @@ def _build_mod(
     package_name, rest = _parse_name(name)
     mod = None
     if "__init__" in module_path.stem:
-        mod = ModuleType(rest + ".__init__")
+        mod = ModuleType(rest)
     else:
         mod = ModuleType(rest)
 
@@ -1160,7 +1160,7 @@ def _build_mod(
     code_text = codecs.decode(code)
     # module file "<", ">" chars are specially handled by inspect
     if not sys.platform.startswith("win"):
-        getattr(linecache, "cache")[f"<{name}>"] = (
+        getattr(linecache, "cache")[module_path] = (
             len(code),  # size of source code
             None,  # last modified time; None means there is no physical file
             [
@@ -1172,12 +1172,10 @@ def _build_mod(
         )
     # not catching this causes the most irritating bugs ever!
     try:
-        exec(compile(code, f"<{name}>", "exec"), vars(mod))
-    except KeyError:
-        try:
-            exec(compile(code, module_path, "exec"), vars(mod))
-        except KeyError:  # reraise anything without handling - clean and simple.
-            raise
+        codeobj = compile(code, module_path, "exec")
+        exec(codeobj, mod.__dict__)
+    except ImportError:  # reraise anything without handling - clean and simple.
+        pass #raise
     for (check, pattern), decorator in aspectize.items():
         _apply_aspect(mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders)
     return mod
