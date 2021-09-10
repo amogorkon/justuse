@@ -761,7 +761,7 @@ def _process(*argv, env={}):
                 "---[  STDOUT  ]---",
                 "%s",
                 "---[  STDERR  ]---",
-                "%s\n1b[0m",
+                "%s\x1b[0m",
             )
         )
         % (
@@ -782,30 +782,92 @@ def _find_version(package_name, version=None):
     return [*data["releases"].items()][-1][1][0]
 
 
-def _find_exe(venv_root):
-    env = {
-        "PATH": str(venv_root / "bin")
-        + os.path.pathsep
-        + str(venv_root / "Scripts")
-        + os.path.pathsep
-        + os.environ["PATH"],
-    }
-    for p in (
-        *venv_root.rglob("**/bin/python"),
-        *venv_root.rglob("**/bin/python.exe"),
-        *venv_root.rglob("**/Scripts/python"),
-        *venv_root.rglob("**/Scripts/python*.exe"),
-    ):
-        return p, env, _ensure_path(p).parent, _ensure_path(p).name
-    o = _process(sys.executable, "-m", "venv", venv_root)
-    for p in (
-        *venv_root.rglob("**/bin/python"),
-        *venv_root.rglob("**/bin/python.exe"),
-        *venv_root.rglob("**/Scripts/python"),
-        *venv_root.rglob("**/Scripts/python*.exe"),
-    ):
-        return p, env, _ensure_path(p).parent, _ensure_path(p).name
+def _bootstrap_venv_pip(venv_root):
+    log.info("_bootstrap_venv_pip %s", venv_root)
+    if not hasattr(_bootstrap_venv_pip, "_saved_sys_path"):
+        _bootstrap_venv_pip._saved_sys_path = [*sys.path]
+    try:
+        if sys.platform == "win32":
+            python_exe = venv_root / "Scripts" / "python.exe"
+        else:
+            python_exe = venv_root / "bin" / "python"
+        bootstrap_zip = (Path(__file__).parent.parent / "ensurepip.zip").absolute()
+        from pip._vendor import html5lib
+        backup_site_packages = Path(html5lib.__file__).parent.parent.parent.parent
+        if not "" in sys.path:
+            sys.path.insert(0, "")
+        if not str(bootstrap_zip) in sys.path:
+            sys.path.insert(1, str(bootstrap_zip))
+        sys.path.append(str(backup_site_packages))
+        if not python_exe.exists():
+            for k in [_ for _ in sys.modules.keys() if _.split(".")[0] in ("venv", "ensurepip")]:
+                log/info("Deleting system module %s", k)
+                del sys.modules[k]
+            sys.modules["pip._vendor.html5lib"] = html5lib
+            log.info("Importing venv")
+            import venv
+            log.info("venv = %s", venv)
+            log.info("Importing ensurepip")
+            import ensurepip
+            log.info("ensurepip = %s", ensurepip)
+            assert bootstrap_zip.name in venv.__file__
+            assert bootstrap_zip.name in ensurepip.__file__
+            log.info("_bootstrap_venv_pip calling venv.create for %s", venv_root)
+            try:
+                result = venv.create(
+                    venv_root,
+                    system_site_packages=True,
+                    clear=True,
+                    symlinks=False,
+                    with_pip=True,
+                    prompt=None,
+                    upgrade_deps=True
+                )
+            except:
+                for r in venv_root.rglob("**/site-packages"):
+                    log.info("Writing out bootstrap zip")
+                    (r / f"python3{sys.version_info[1]}.zip").write_bytes(bootstrap_zip.read_bytes())
+                log.info("Attempt #2")
+                try:
+                    result = venv.create(
+                        venv_root,
+                        system_site_packages=False,
+                        clear=False,
+                        symlinks=True,
+                        with_pip=False,
+                        prompt=None,
+                        upgrade_deps=False
+                    )
+                except:
+                    log.error(traceback.format_exc())
+                    return False
+            log.info("_bootstrap_venv_pip: venv.create() finished; returned: %s", result)
+            return True
+    finally:
+        log.info("_bootstrap_venv_pip finally %s", venv_root)
+        # sys.path.clear()
+        #sys.path += _bootstrap_venv_pip._saved_sys_path
 
+def _find_exe(venv_root):
+    if sys.platform == "win32":
+        python_exe = venv_root / "Scripts" / "python.exe"
+    else:
+        python_exe = venv_root / "bin" / "python"
+    
+    _bootstrap_venv_pip(venv_root)
+    
+    env = {
+        "PATH": os.path.pathsep.join((
+            str(python_exe.parent.absolute()),
+            os.environ.get("PATH")
+        )),
+        "PYTHONPATH": str((Path(__file__).parent.parent / "ensurepip.zip").absolute()),
+        "VIRTUAL_ENV": str(venv_root.absolute()),
+        "PYTHONSTARTUP": "",
+        "PYTHONHOME": ""
+    }
+    
+    return python_exe, env, python_exe.parent, python_exe.name
 
 def _download_artifact(url, artifact_path):
     artifact_path.write_bytes(requests.get(url).content)
@@ -863,6 +925,7 @@ def _load_venv_mod(name, version=None, artifact_path=None, url=None, out_info=No
           "--prefer-binary",
           "--exists-action",
           "i",
+          "--no-use-pep517",
           "--no-build-isolation",
           "--no-cache-dir",
           "--no-compile",
@@ -951,21 +1014,35 @@ def _get_package_data(package_name) -> Dict[str, str]:
     return data
 
 
-def _get_filtered_data(data, version=None) -> Dict[str, str]:
+def _get_filtered_data(data, version=None, include_sdist=False) -> Dict[str, str]:
+    common_info = use._parse_filename(data["urls"][0]["filename"])
+    package_name = common_info["distribution"]
     filtered = {"urls": [], "releases": {}}
     for ver, infos in data["releases"].items():
         filtered["releases"][ver] = []
         for info in infos:
-            info["version"] = ver
-            if not _is_compatible(info, hash_algo=Hash.sha256.name, include_sdist=False):
+            if not _is_compatible(info, hash_algo=Hash.sha256.name, include_sdist=include_sdist):
                 continue
-            if version and Version(str(version)) != Version(ver):
+            if version is not None and Version(str(version)) != Version(ver):
                 continue
             filtered["urls"].append(info)
             filtered["releases"][ver].append(info)
     for ver in data["releases"].keys():
         if not filtered["releases"][ver]:
             del filtered["releases"][ver]
+    if not include_sdist and ((version is not None and str(version) not in filtered["releases"]) or
+       not filtered["urls"]):
+        log.warning(
+            "Unfortunately, none of the available binary packages for '%s' are compatible with the "
+            "current python ('%s' for '%s', version '%s'). We will attempt to use a source "
+            "distribution, which may have additional system requirements such as a working "
+            "C/C++ compiler, and may take more time to prepare for use.",
+            package_name,
+            sys.executable,
+            sys.platform,
+            ".".join(map(str, sys.version_info[0:2])),
+        )
+        return _get_filtered_data(data, version=version, include_sdist=True)
     return filtered
 
 
