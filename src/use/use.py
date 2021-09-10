@@ -1158,11 +1158,7 @@ def _build_mod(
 
     package_name, rest = _parse_name(name)
     mod = None
-    if "__init__" in module_path.stem:
-        mod = ModuleType(rest)
-    else:
-        mod = ModuleType(rest)
-
+    mod = ModuleType(rest)
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = str(module_path)
     mod.__package__ = rest
