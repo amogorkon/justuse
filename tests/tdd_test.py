@@ -131,24 +131,27 @@ def test_db_setup(reuse):
 
 
 @pytest.mark.parametrize(
-    "name, max_versions",
+    "name, floor_version, n_versions",
     [
-        ("numpy", 1),
-        ("numpy", 2),
-        ("numpy", 3),
-        ("protobuf", 1),
-        ("protobuf", 2),
-        ("protobuf", 3),
-        ("sqlalchemy", 1),
-        ("sqlalchemy", 2),
-        ("sqlalchemy", 3),
+        ("numpy", "1.19.0", 1),
+        ("numpy", "1.19.0", 2),
+        ("numpy", "1.19.0", 3),
+        ("protobuf", None, 1),
+        ("protobuf", None, 2),
+        ("protobuf", None, 3),
+        ("sqlalchemy", None, 1),
+        ("sqlalchemy", None, 2),
+        ("sqlalchemy", None, 3),
     ]
 )
-def test_load_multi_version(reuse, name, max_versions):
+def test_load_multi_version(reuse, name, floor_version, n_versions):
     data = reuse._get_filtered_data(reuse._get_package_data(name))
     versions = [*data["releases"].keys()]
     mods = []
-    for version in versions[0:min(len(versions), max_versions)]:
+    for version in versions[0:min(len(versions), n_versions)]:
+        if (floor_version 
+           and reuse.Version(version) < reuse.Version(floor_version)):
+            continue
         info = data["releases"][version][0]
         reuse._clean_sys_modules(name.replace("-", "_"))
         mod = reuse(
@@ -165,23 +168,34 @@ def test_load_multi_version(reuse, name, max_versions):
 
 
 @pytest.mark.parametrize(
-    "name, max_versions",
+    "name, floor_version, n_versions",
     [
-        ("numpy", 1),
-        ("numpy", 2),
-        ("numpy", 3),
-        ("protobuf", 1),
-        ("protobuf", 2),
-        ("protobuf", 3),
-        ("sqlalchemy", 1),
-        ("sqlalchemy", 2),
-        ("sqlalchemy", 3),
+        ("numpy", "1.19.0", 1),
+        ("numpy", "1.19.0", 2),
+        ("numpy", "1.19.0", 3),
+        ("protobuf", None, 1),
+        ("protobuf", None, 2),
+        ("protobuf", None, 3),
+        ("sqlalchemy", None, 1),
+        ("sqlalchemy", None, 2),
+        ("sqlalchemy", None, 3),
     ]
 )
-def test_check_multi_version(reuse, name, max_versions):
-    mods = test_load_multi_version(reuse, name, max_versions)
+def test_check_multi_version(reuse, name, floor_version, n_versions):
+    mods = test_load_multi_version(
+        reuse, name, floor_version, n_versions
+    )
     for expected_version, actual_version, mod in mods:
         if not hasattr(mod, "__version__"):
             continue
         assert expected_version == actual_version
+
+
+def test_no_isolation(reuse):
+    assert test_load_multi_version(
+        reuse, "numpy", "1.19.0", 1
+    )
+    assert test_load_multi_version(
+        reuse, "numpy", "1.19.0", 1
+    )
 
