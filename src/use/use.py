@@ -1469,7 +1469,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         )
         self.registry.connection.commit()
 
-    def _
+    def recreate_registry(self):
         number_of_backups = len(list((self.home / "registry.db").glob("*.bak")))
         (self.home / "registry.db").rename(
             self.home / f"registry.db.{number_of_backups + 1}.bak"
