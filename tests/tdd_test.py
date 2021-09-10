@@ -173,11 +173,4 @@ def test_no_isolation(reuse):
     )
 
 
-def test_db_cleanup(reuse):
-    reuse.cleanup()
-
-
-def test_recreate_t_cleanup(reuse):
-    reuse.recreate_registry()
-
 
