@@ -838,8 +838,6 @@ def _bootstrap_venv_pip(venv_root):
                 )
             except:
                 log.error(traceback.format_exc())
-  finally:
-     log.info("_bootstrap_venv_pip finally: %s", venv_root)
 
 def _find_exe(venv_root):
     if sys.platform == "win32":
