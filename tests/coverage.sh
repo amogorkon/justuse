@@ -113,6 +113,7 @@ for remote in "${remotes[@]}"; do
   badge_filenames+=( "$badge_filename" )
 done
  
+python3 -m pip install coverage-badge
 if [ "x$FTP_USER" != "x" -a $( python3 -m coverage_badge | wc -c ) -gt 800 ]; then
   python3 -c "import coverage_badge" >/dev/null 2>&1 || python3 -m pip install --force-reinstall coverage-badge
   for filename in "$orig_file" "${badge_filenames[@]}"; do
