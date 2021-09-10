@@ -928,7 +928,7 @@ def _load_venv_mod(name, version=None, artifact_path=None, url=None, out_info=No
     for module_path in module_paths:
         orig_cwd = Path.cwd()
         installation_path = module_path
-        while not installation_path.name == "site-packages":
+        while installation_path.name != "site-packages":
             installation_path = installation_path.parent
         try:
             log.info("installation_path = %s", installation_path)
