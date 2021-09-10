@@ -801,7 +801,7 @@ def _bootstrap_venv_pip(venv_root):
         sys.path.append(str(backup_site_packages))
         if not python_exe.exists():
             for k in [_ for _ in sys.modules.keys() if _.split(".")[0] in ("venv", "ensurepip")]:
-                log/info("Deleting system module %s", k)
+                log.info("Deleting system module %s", k)
                 del sys.modules[k]
             sys.modules["pip._vendor.html5lib"] = html5lib
             log.info("Importing venv")
