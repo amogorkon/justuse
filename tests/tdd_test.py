@@ -128,3 +128,47 @@ def test_load_venv_mod_numpy(reuse):
 
 def test_db_setup(reuse):
     assert reuse.registry
+
+
+def _do_dual_version(reuse, name, max_versions=2):
+    data = reuse._get_filtered_data(reuse._get_package_data(name))
+    versions = [*data["releases"].keys()]
+    mods = []
+    for version in versions[0:min(len(versions), max_versions)]:
+        info = data["releases"][version][0]
+        reuse._clean_sys_modules(name.replace("-", "_"))
+        # reuse._using.clear()
+        # import importlib
+        # importlib.invalidate_caches()
+        # sys.path_importer_cache.clear()
+        mod = reuse(
+            info["distribution"],
+            version=version,
+            hashes=info["digests"]["sha256"],
+            modes=reuse.auto_install
+        )
+        mod_version = getattr(
+            mod, "__version__", reuse._get_version(mod=mod)
+        )
+        mods.append((version, mod_version, mod))
+    return mods
+
+def test_numpy_dual_version(reuse):
+    _do_dual_version(reuse, "numpy")
+
+
+def test_sqlalchemy(reuse):
+    _do_dual_version(reuse, "sqlalchemy", max_versions=1)
+
+
+def test_protobuf_triple_version(reuse):
+    _do_dual_version(reuse, "protobuf", max_versions=3)
+
+
+def test_numpy_quadruple_version(reuse):
+    _do_dual_version(reuse, "numpy", max_versions=4)
+
+
+
+
+

@@ -483,9 +483,12 @@ def _clean_sys_modules(package_name) -> None:
         [
             (k, v.__spec__.loader)
             for k, v in sys.modules.items()
-            if getattr(v, "__spec__", None)
-            and isinstance(v.__spec__.loader, SourceFileLoader)
-            and (k.startswith(f"{package_name}.") or k == package_name)
+            if (getattr(v, "__spec__", None) is None or
+            isinstance(
+                v.__spec__.loader,
+                (SourceFileLoader, zipimport.zipimporter)
+            ))
+            and package_name in k.split(".")
         ]
     )
     for k in del_mods:
@@ -624,7 +627,8 @@ def _auto_install(
             importer = zipimport.zipimporter(path)
             mod = importer.load_module(rest)
             print("Direct zipimport of", rest, "successful.")
-        except (zipimport.ZipImportError, ImportError):
+        except:
+            _clean_sys_modules(rest)
             if config["debugging"]:
                 log.debug(traceback.format_exc())
             print("Direct zipimport failed, attempting to extract and load manually...")
@@ -898,8 +902,14 @@ def _load_venv_mod(name, version=None, artifact_path=None, url=None, out_info=No
     env = _get_venv_env(venv_root)
     if not python_exe.exists(): _bootstrap_venv_pip(venv_root)
     install_item = install_item = artifact_path
+    
     meta = archive_meta(artifact_path)
+    import_parts = re.split("[\\\\/]", meta["import_relpath"])
+    import_parts.remove("__init__.py")
+    import_name = '.'.join(import_parts)
+    name = f"{package_name}.{import_name}"
     relp = meta["import_relpath"]
+    
     module_paths = [*venv_root.rglob(f"**/{relp}")]
     if not module_paths:
         output = _process(
@@ -1172,13 +1182,26 @@ def _build_mod(
         )
     # not catching this causes the most irritating bugs ever!
     try:
+        _hacks(module_path, mod)
         codeobj = compile(code, module_path, "exec")
         exec(codeobj, mod.__dict__)
-    except ImportError:  # reraise anything without handling - clean and simple.
-        pass #raise
+    except:  # reraise anything without handling - clean and simple.
+        raise
     for (check, pattern), decorator in aspectize.items():
         _apply_aspect(mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders)
     return mod
+
+
+def _hacks(module_path, mod):
+        for r in module_path.parent.rglob("**/overrides.py"):
+            code = r.read_bytes()
+            if not code.endswith(b"\n#patched"):
+                code = code.replace(b"add_docstring, ", b"")
+                code = code.replace(b"add_docstring(", b"if False: add_docstring(")
+                code += b"\n#patched"
+                r.write_bytes(code)
+        mod.__dict__["add_docstring"] = lambda *a,**kw: \
+            print("Called fake add_docstring")
 
 
 def _ensure_proxy(mod) -> ProxyModule:
