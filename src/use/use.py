@@ -372,20 +372,20 @@ def pipes(func_or_class):
     return ctx[tree.body[0].name]
 
 
-def _ensure_path(value_for_path):
-    from pathlib import Path
-
-    if value_for_path is None:
-        raise BaseException("value_for_path is None")
-    if value_for_path in ("", b""):
-        raise BaseException("value_for_path is empty string or bytes")
-    if isinstance(value_for_path, Path):
-        return value_for_path
-    if isinstance(value_for_path, (str, bytes)):
-        return Path(value_for_path)
-    if isinstance(value_for_path, furl.Path):
-        return reduce(Path.__truediv__, value_for_path.segments, Path.cwd())
-    raise TypeError(f"Attempt to create a Path from an illegal value: {value_for_path!r}")
+@pipes
+def _ensure_path(value: Union[bytes, str, furl.Path, Path]):
+    if isinstance(value, (str, bytes)):
+        return Path(value).absolute()
+    if isinstance(value, furl.Path):
+        return (
+            Path.cwd(),
+            value.segments
+                << map(Path)
+                << tuple
+                << reduce(Path.__truediv__)
+        ) << reduce(Path.__truediv__)
+    assert isinstance(value, Path)
+    return value
 
 
 @cache
@@ -414,7 +414,8 @@ def get_supported() -> FrozenSet[PlatformTag]:
 def archive_meta(artifact_path):
     with zipfile.ZipFile(artifact_path) as archive:
         names = sorted(
-            file.filename for file in archive.filelist if not file.filename.endswith("pyi")
+            file.filename for file in archive.filelist
+            if not file.filename.endswith("pyi")
         )
         meta = dict(
             map(
@@ -453,9 +454,9 @@ def archive_meta(artifact_path):
             rel3 = _ensure_path(rel2)
             rel4 = rel3.parts
             if rel3.stem == "__init__":
-                import_name = rel4[0:-1]
+                import_name = list(rel4[0:-1])
             else:
-                import_name = rel4[0:-1] + [rel3.stem]
+                import_name = list(rel4[0:-1]) + [rel3.stem]
             meta["top_level"] = [import_name]
             meta["import_name"] = import_name
         else:
@@ -466,20 +467,22 @@ def archive_meta(artifact_path):
             import_name = (name,) if (top_level == name) else (top_level, name)
             meta["import_name"] = import_name
             relpath = sorted(
-                [*(n for n in names if re.search("[^/]+([.][^/]+|[-][^/]+)$", n))],
+                [
+                    n for n in names
+                    if re.search("[^/]+([.][^/]+|[-][^/]+)$", n)
+                ],
                 key=lambda n: (
                     not n.startswith(import_name),
                     not n.endswith("__init__.py"),
                     len(n),
                 ),
             )[0]
-
         meta["import_relpath"] = relpath
         return meta
 
 
-def _clean_sys_modules(package_name) -> None:
-    del_mods = dict(
+def _clean_sys_modules(package_name: str) -> None:
+    for k in dict(
         [
             (k, v.__spec__.loader)
             for k, v in sys.modules.items()
@@ -490,23 +493,22 @@ def _clean_sys_modules(package_name) -> None:
             ))
             and package_name in k.split(".")
         ]
-    )
-    for k in del_mods:
+    ):
         del sys.modules[k]
 
 
 def _venv_root(package_name, version, home) -> Path:
-    venv_root = home / "venv" / package_name / (str(version) or "0.0.0")
+    venv_root = home / "venv" / package_name / str(version)
     if not venv_root.exists():
         venv_root.mkdir(parents=True)
     return venv_root
 
 
 def _venv_is_win() -> bool:
-    return sys.platform.lower().startswith("win")
+    return sys.platform.startswith("win")
 
 
-def _pebkac_no_version_hash(func=None, *, name: str, **kwargs) -> "ModuleType|Exception":
+def _pebkac_no_version_hash(func=None, *, name: str, **kwargs) -> Union[ModuleType,Exception]:
     if func:
         result = func(name=name, **kwargs)
         if isinstance(result, ModuleType):
@@ -516,7 +518,7 @@ def _pebkac_no_version_hash(func=None, *, name: str, **kwargs) -> "ModuleType|Ex
 
 def _pebkac_version_no_hash(
     func=None, *, package_name, version, hash_algo, **kwargs
-) -> "Exception | ModuleType":
+) -> Union[Exception,ModuleType]:
     if func:
         result = func(package_name=package_name, version=version, **kwargs)
         if isinstance(result, ModuleType):
@@ -563,7 +565,7 @@ def _import_public_no_install(
     aspectize,
     fatal_exceptions=False,
     **kwargs,
-) -> "ModuleType|Exception":
+) -> Union[ModuleType, Exception]:
     # builtin?
     package_name, rest = _parse_name(name)
     builtin = False
@@ -584,7 +586,9 @@ def _import_public_no_install(
 
 
 def _parse_name(name):
-    match = re.match(r"(?P<package_name>[^.]+)\.?(?P<rest>[a-zA-Z0-9._]+)?", name)
+    match = re.match(
+        r"(?P<package_name>[^.]+)\.?(?P<rest>[a-zA-Z0-9._]+)?", name
+    )
     assert match, f"Invalid name spec: {name!r}"
     names = match.groupdict()
     return names["package_name"], names["rest"] or name
@@ -604,55 +608,58 @@ def _auto_install(
         result = func(**all_kwargs(_auto_install, locals()))
 
     query = use.registry.execute(
-        f"SELECT id, installation_path FROM distributions WHERE name='{package_name}' AND version='{str(version)}'",
+        '''
+        SELECT
+            artifacts.id, import_relpath,
+            path, installation_path, module_path
+        FROM distributions
+        JOIN artifacts ON artifacts.id = distributions.id
+        WHERE name=? AND version=?
+        ORDER BY artifacts.id DESC
+        ''',
+        [
+            package_name,
+            str(version),
+        ],
     ).fetchone()
-    installation_path = None
-    if query:
-        installation_path = query["installation_path"]
-        query = use.registry.execute(
-            "SELECT path FROM artifacts WHERE distribution_id=?",
-            [
-                query["id"],
-            ],
-        ).fetchone()
-    path = None
-    if query:
-        path = _ensure_path(query["path"])
-    if path:
-        _update_hashes(**all_kwargs(_auto_install, locals()))
-
-    if path:
-        # trying to import directly from zip
+    if not query:
+        query = _find_or_install(package_name, version)
+    
+    path = _ensure_path(query["path"])
+    installation_path = _ensure_path(query["installation_path"])
+    module_path = _ensure_path(query["module_path"])
+    import_relpath = query["import_relpath"]
+    that_hash = hash_algo.value(path.read_bytes()).hexdigest()
+    _update_hashes(**all_kwargs(_auto_install, locals()))
+    # trying to import directly from zip
+    _clean_sys_modules(rest)
+    mod = None
+    try:
+        importer = zipimport.zipimporter(path)
+        return (mod := importer.load_module(import_relpath))
+        log.info("Direct zipimport of %s successful", rest)
+    except:
+        _clean_sys_modules(rest)
+        if "DEBUG" in os.environ or config["debugging"]:
+            log.debug(traceback.format_exc())
+        orig_cwd = Path.cwd()
         try:
-            importer = zipimport.zipimporter(path)
-            mod = importer.load_module(rest)
-            print("Direct zipimport of", rest, "successful.")
-        except:
-            _clean_sys_modules(rest)
-            if config["debugging"]:
-                log.debug(traceback.format_exc())
-            print("Direct zipimport failed, attempting to extract and load manually...")
-
-    out_info = {}
-    mod = _load_venv_mod(
-        name=name,
-        version=version,
-        artifact_path=path,
-        out_info=out_info,
-    )
-    path = path or out_info["artifact_path"]
-    installation_path = installation_path or out_info["installation_path"]
-    this_version = Version(out_info["version"])
-    that_hash = out_info["digests"][hash_algo.name]
-
-    use._save_module_info(
-        name=package_name,
-        version=this_version,
-        artifact_path=path,
-        hash_value=that_hash,
-        installation_path=installation_path,
-    )
-    return mod
+            os.chdir(installation_path)
+            return (mod := _load_venv_entry(
+              name=import_relpath,
+              module_path=module_path,
+            ))
+        finally:
+            os.chdir(orig_cwd)
+            if mod: use._save_module_info(
+                name=package_name,
+                import_relpath=import_relpath,
+                version=version,
+                artifact_path=path,
+                hash_value=that_hash,
+                module_path=module_path,
+                installation_path=installation_path,
+            )
 
 
 def _update_hashes(*, package_name, version, default, hash_algo, hashes, **kwargs) -> None:
@@ -781,7 +788,7 @@ def _process(*argv, env={}):
     )
 
 
-def _find_version(package_name, version=None):
+def _find_version(package_name, version=None) -> dict:
     data = _get_filtered_data(_get_package_data(package_name), version)
     return [*data["releases"].items()][-1][1][0]
 
@@ -877,7 +884,13 @@ def _download_artifact(name, version, filename, url) -> Path:
     log.debug("Wrote %d bytes to %s", len(data), path)
     return path
 
-def _load_venv_mod(name, version=None, artifact_path=None, url=None, out_info=None) -> ModuleType:
+def _delete_none(a_dict: Dict[str, object]) ->  Dict[str, object]:
+    for k in tuple(a_dict):
+        if a_dict[k] is None:
+            del a_dict[k]
+    return a_dict
+
+def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=None) -> Dict[str, Union[dict, int, list, str, Path, Version]]:
     # fmt: off
     log.debug(
         "_load_venv_mod(name=%s, version=%s, artifact_path=%s)",
@@ -901,8 +914,8 @@ def _load_venv_mod(name, version=None, artifact_path=None, url=None, out_info=No
     python_exe = _find_exe(venv_root)
     env = _get_venv_env(venv_root)
     if not python_exe.exists(): _bootstrap_venv_pip(venv_root)
-    install_item = install_item = artifact_path
-    
+    install_item = artifact_path
+    out_info["path"] = artifact_path
     meta = archive_meta(artifact_path)
     import_parts = re.split("[\\\\/]", meta["import_relpath"])
     import_parts.remove("__init__.py")
@@ -947,10 +960,11 @@ def _load_venv_mod(name, version=None, artifact_path=None, url=None, out_info=No
                 "artifact_path": artifact_path,
                 "installation_path": installation_path,
                 "module_path": module_path,
+                "import_relpath": ".".join(relp.split("/")[0:-1]),
                 "info": info,
                 **info
             })
-            return _load_venv_entry(name, module_path=module_path)
+            return _delete_none(out_info)
         finally:
             os.chdir(orig_cwd)
     raise BaseException(locals())
@@ -975,7 +989,7 @@ def _load_venv_entry(name, module_path) -> ModuleType:
 
 
 @cache
-def _get_package_data(package_name) -> Dict[str, str]:
+def _get_package_data(package_name) -> Dict[str, Union[int,dict,list,str,Version,Path,URL]]:
     response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
     if response.status_code == 404:
         raise ImportError(
@@ -993,7 +1007,7 @@ def _get_package_data(package_name) -> Dict[str, str]:
     return data
 
 
-def _get_filtered_data(data, version=None, include_sdist=False) -> Dict[str, str]:
+def _get_filtered_data(data, version=None, include_sdist=False) -> Dict[str, Union[int,dict,list,str,Version,Path,URL]]:
     common_info = use._parse_filename(data["urls"][0]["filename"])
     package_name = common_info["distribution"]
     filtered = {"urls": [], "releases": {}}
@@ -1123,7 +1137,7 @@ def _apply_aspect(
 
 def _get_version(name=None, package_name=None, /, mod=None) -> Optional[Version]:
     assert name is None or isinstance(name, str)
-    version: Optional[Union[Callable[...], Version] | Version | str] = None
+    version: Optional[Union[Callable[...], Version], Version, str] = None
     for lookup_name in (name, package_name):
         if not lookup_name:
             continue
@@ -1206,7 +1220,7 @@ def _ensure_proxy(mod) -> ProxyModule:
     return ProxyModule(mod)
 
 
-def _ensure_version(func, *, name, version, **kwargs) -> "ModuleType | Exception":
+def _ensure_version(func, *, name, version, **kwargs) -> Union[ModuleType, Exception]:
     result = func(**all_kwargs(_ensure_version, locals()))
     if not isinstance(result, ModuleType):
         return result
@@ -1420,7 +1434,9 @@ class Use(ModuleType):
 CREATE TABLE IF NOT EXISTS "artifacts" (
 	"id"	INTEGER,
 	"distribution_id"	INTEGER,
+	"import_relpath" TEXT,
 	"path"	TEXT,
+  "module_path" TEXT,
 	PRIMARY KEY("id" AUTOINCREMENT),
 	FOREIGN KEY("distribution_id") REFERENCES "distributions"("id") ON DELETE CASCADE
 );
@@ -1453,7 +1469,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         )
         self.registry.connection.commit()
 
-    def recreate_registry(self):
+    def _
         number_of_backups = len(list((self.home / "registry.db").glob("*.bak")))
         (self.home / "registry.db").rename(
             self.home / f"registry.db.{number_of_backups + 1}.bak"
@@ -1521,11 +1537,13 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
     def _save_module_info(
         self,
         *,
-        version: Union[Version | str],  # type: ignore
+        version: Union[Version, str],  # type: ignore
         artifact_path: Optional[Path],
         hash_value=Optional[str],
         installation_path=Path,
+        module_path: Optional[Path],
         name: str,
+        import_relpath: str,
         hash_algo=Hash.sha256,
     ):
         """Update the registry to contain the package's metadata."""
@@ -1544,8 +1562,8 @@ VALUES ('{name}', '{version}', '{installation_path}', {time.time()}, {installati
             )
             self.registry.execute(
                 f"""
-INSERT OR IGNORE INTO artifacts (distribution_id, path)
-VALUES ({self.registry.lastrowid}, '{artifact_path}')
+INSERT OR IGNORE INTO artifacts (distribution_id, import_relpath, path, module_path)
+VALUES ({self.registry.lastrowid}, '{import_relpath}', '{artifact_path}', '{module_path}')
 """
             )
             self.registry.execute(
