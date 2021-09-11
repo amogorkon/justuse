@@ -1392,13 +1392,13 @@ class Use(ModuleType):
 
     def _set_up_registry(self, path: Optional[Path]=None):
         registry = None
-        if not test_version and not path:
+        if test_version or path:
+            registry = sqlite3.connect(path or ":memory:").cursor()
+        else:
             try:
                 registry = sqlite3.connect(self.home / "registry.db").cursor()
             except Exception as e:
                 raise RuntimeError(Message.couldnt_connect_to_db(e))
-        else:
-            registry = sqlite3.connect(path or ":memory:").cursor()
         registry.row_factory = self._sqlite_row_factory
         registry.execute("PRAGMA foreign_keys=ON")
         registry.execute("PRAGMA auto_vacuum = FULL")
@@ -1813,7 +1813,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         Returns:
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
-        mod = None
         log.debug(
            "_use_str(name=%s, version=%s, hash_algo=%s, hashes=%s, "
            "default=%s, aspectize=%s, modes=%s)",
@@ -1831,8 +1830,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         fatal_exceptions = bool(Use.fatal_exceptions & modes)
         auto_install = bool(Use.auto_install & modes)
         aspectize_dunders = bool(Use.aspectize_dunders & modes)
-        aspectize = aspectize or {}
-
         version = (
             version
             if isinstance(version, Version)
@@ -1877,6 +1874,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         assert result
         # fmt: on
         if isinstance(result, ModuleType):
+            mod = None
+            aspectize = aspectize or {}
+
             for (check, pattern), decorator in aspectize.items():
                 _apply_aspect(
                     mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders
