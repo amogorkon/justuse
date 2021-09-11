@@ -107,13 +107,10 @@ def test_db_setup(reuse):
     [
         ("numpy", "1.19.0", 1),
         ("numpy", "1.19.0", 2),
-        ("numpy", "1.19.0", 3),
         ("protobuf", None, 1),
         ("protobuf", None, 2),
-        ("protobuf", None, 3),
         ("sqlalchemy", None, 1),
         ("sqlalchemy", None, 2),
-        ("sqlalchemy", None, 3),
     ]
 )
 def test_load_multi_version(reuse, name, floor_version, n_versions):
@@ -144,13 +141,10 @@ def test_load_multi_version(reuse, name, floor_version, n_versions):
     [
         ("numpy", "1.19.0", 1),
         ("numpy", "1.19.0", 2),
-        ("numpy", "1.19.0", 3),
         ("protobuf", None, 1),
         ("protobuf", None, 2),
-        ("protobuf", None, 3),
         ("sqlalchemy", None, 1),
         ("sqlalchemy", None, 2),
-        ("sqlalchemy", None, 3),
     ]
 )
 def test_check_multi_version(reuse, name, floor_version, n_versions):
@@ -171,6 +165,4 @@ def test_no_isolation(reuse):
     assert test_load_multi_version(
         reuse, "numpy", "1.19.0", 1
     )
-
-
 
