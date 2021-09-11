@@ -96,7 +96,8 @@ mkdir -p coverage
 cp -vf -- .coverage coverage/.coverage
 
 mkdir -p "$dir"
-python3 -m coverage_badge | tee "$file"
+
+    bash tests/coverage_badge.sh | tee "$file"
 echo "Found an image to publish: [$file]" 1>&2
 orig_file="$file"
 
@@ -109,13 +110,12 @@ for remote in "${remotes[@]}"; do
   badge_filenames+=( "$badge_filename" )
 done
  
-python3 -m pip install coverage-badge
-if [ "x$FTP_USER" != "x" -a $( python3 -m coverage_badge | wc -c ) -gt 800 ]; then
-  python3 -c "import coverage_badge" >/dev/null 2>&1 || python3 -m pip install --force-reinstall coverage-badge
+if [ "x$FTP_USER" != "x" ]; then
   for filename in "$orig_file" "${badge_filenames[@]}"; do
     f="$file"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"; _dir="$dir"; f="$filename"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"; _fn="$fn"; f="$file"; fn="${f##*/}"
     fn="${filename##*/}"
-    rm -vf -- "$file" || rmdir "$file"; python3 -m coverage_badge | cat -v | tee "$_dir/$_fn" | tee "$file"; 
+    rm -vf -- "$file" || rmdir "$file"; 
+    bash tests/coverage_badge.sh | cat -v | tee "$_dir/$_fn" | tee "$file"; 
     for variant in \
       '"/public_html/mixed/$fn" "$file"'  \
       '"/public_html/mixed/coverage_amogorkon-main.svg" "$file"' \

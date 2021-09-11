@@ -90,7 +90,7 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import reduce, singledispatch, update_wrapper
+from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
 from itertools import chain, takewhile
@@ -135,22 +135,74 @@ def signal_handler(sig, frame) -> None:
 signal.signal(signal.SIGINT, signal_handler)
 
 
+# Since we have quite a bit of functional code that black would turn into a sort of arrow antipattern with lots of ((())),
+# we use @pipes to basically enable polish notation which allows us to avoid most parentheses.
+# source >> func(args) is equivalent to func(source, args) and
+# source << func(args) is equivalent to func(args, source), which can be chained arbitrarily.
+# Rules:
+# 1) apply pipes only to 3 or more nested function calls
+# 2) no pipes on single lines, since mixing << and >> is just confusing (also, having pipes on different lines has other benefits beside better readability)
+# 3) don't mix pipes with regular parenthesized function calls, that's just confusing
+# See https://github.com/robinhilliard/pipes/blob/master/pipeop/__init__.py for details and credit.
+class _PipeTransformer(ast.NodeTransformer):
+    def visit_BinOp(self, node):
+        if not isinstance(node.op, (ast.LShift, ast.RShift)):
+            return node
+        if not isinstance(node.right, ast.Call):
+            return self.visit(
+                ast.Call(
+                    func=node.right,
+                    args=[node.left],
+                    keywords=[],
+                    starargs=None,
+                    kwargs=None,
+                    lineno=node.right.lineno,
+                    col_offset=node.right.col_offset,
+                )
+            )
+        node.right.args.insert(
+            0 if isinstance(node.op, ast.RShift) else len(node.right.args), node.left
+        )
+        return self.visit(node.right)
+def pipes(func_or_class):
+    if inspect.isclass(func_or_class):
+        decorator_frame = inspect.stack()[1]
+        ctx = decorator_frame[0].f_locals
+        first_line_number = decorator_frame[2]
+    else:
+        ctx = func_or_class.__globals__
+        first_line_number = func_or_class.__code__.co_firstlineno
+    source = inspect.getsource(func_or_class)
+    tree = ast.parse(dedent(source))
+    ast.increment_lineno(tree, first_line_number - 1)
+    source_indent = sum(1 for _ in takewhile(str.isspace, source)) + 1
+    for node in ast.walk(tree):
+        if hasattr(node, "col_offset"):
+            node.col_offset += source_indent
+    tree.body[0].decorator_list = [
+        d
+        for d in tree.body[0].decorator_list
+        if isinstance(d, ast.Call)
+        and d.func.id != "pipes"
+        or isinstance(d, ast.Name)
+        and d.id != "pipes"
+    ]
+    tree = _PipeTransformer().visit(tree)
+    code = compile(
+        tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec"
+    )
+    exec(code, ctx)
+    return ctx[tree.body[0].name]
+
+
 # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
 # # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
+@pipes
 class Version(PkgVersion):
-    def __new__(cls, *args, **kwargs):
-        if not args or not isinstance(args[0], Version):
-            return super(cls, Version).__new__(cls)
-        return args[0]
+    def __new__(cls, *_, **__):
+        return super(cls, Version).__new__(cls)
 
     def __init__(self, versionstr=None, *, major=0, minor=0, patch=0):
-        if isinstance(versionstr, Version):
-            return
-
-        if not (versionstr or major or minor or patch):
-            raise ValueError(
-                "Version must be initialized with either a string or major, minor and patch"
-            )
         if major or minor or patch:
             # string as only argument, no way to construct a Version otherwise - WTF
             return super().__init__(".".join((str(major), str(minor), str(patch))))
@@ -177,8 +229,6 @@ class PlatformTag:
         return hash(self.platform)
 
     def __eq__(self, other):
-        if isinstance(other, str):
-            return self.platform == other
         assert isinstance(other, self.__class__)
         return self.platform == other.platform
 
@@ -323,70 +373,6 @@ If you want to auto-install the latest version: use("{name}", version="{version}
     )
 
 
-# Since we have quite a bit of functional code that black would turn into a sort of arrow antipattern with lots of ((())),
-# we use @pipes to basically enable polish notation which allows us to avoid most parentheses.
-# source >> func(args) is equivalent to func(source, args) and
-# source << func(args) is equivalent to func(args, source), which can be chained arbitrarily.
-# Rules:
-# 1) apply pipes only to 3 or more nested function calls
-# 2) no pipes on single lines, since mixing << and >> is just confusing (also, having pipes on different lines has other benefits beside better readability)
-# 3) don't mix pipes with regular parenthesized function calls, that's just confusing
-# See https://github.com/robinhilliard/pipes/blob/master/pipeop/__init__.py for details and credit.
-class _PipeTransformer(ast.NodeTransformer):
-    def visit_BinOp(self, node):
-        if not isinstance(node.op, (ast.LShift, ast.RShift)):
-            return node
-        if not isinstance(node.right, ast.Call):
-            return self.visit(
-                ast.Call(
-                    func=node.right,
-                    args=[node.left],
-                    keywords=[],
-                    starargs=None,
-                    kwargs=None,
-                    lineno=node.right.lineno,
-                    col_offset=node.right.col_offset,
-                )
-            )
-        node.right.args.insert(
-            0 if isinstance(node.op, ast.RShift) else len(node.right.args), node.left
-        )
-        return self.visit(node.right)
-
-
-def pipes(func_or_class):
-    if inspect.isclass(func_or_class):
-        decorator_frame = inspect.stack()[1]
-        ctx = decorator_frame[0].f_locals
-        first_line_number = decorator_frame[2]
-    else:
-        ctx = func_or_class.__globals__
-        first_line_number = func_or_class.__code__.co_firstlineno
-    source = inspect.getsource(func_or_class)
-    tree = ast.parse(dedent(source))
-    ast.increment_lineno(tree, first_line_number - 1)
-    source_indent = sum(1 for _ in takewhile(str.isspace, source)) + 1
-
-    for node in ast.walk(tree):
-        if hasattr(node, "col_offset"):
-            node.col_offset += source_indent
-    tree.body[0].decorator_list = [
-        d
-        for d in tree.body[0].decorator_list
-        if isinstance(d, ast.Call)
-        and d.func.id != "pipes"
-        or isinstance(d, ast.Name)
-        and d.id != "pipes"
-    ]
-
-    tree = _PipeTransformer().visit(tree)
-    code = compile(
-        tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec"
-    )
-    exec(code, ctx)
-    return ctx[tree.body[0].name]
-
-
 @pipes
 def _ensure_path(value: Union[bytes, str, furl.Path, Path]):
     if isinstance(value, (str, bytes)):
@@ -426,75 +412,59 @@ def get_supported() -> FrozenSet[PlatformTag]:
     log.debug("leave get_supported() -> %s", repr(tags))
     return tags
 
-
+@pipes
 def archive_meta(artifact_path):
+    DIST_PKG_INFO_REGEX = re.compile(
+        "(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$"
+    )
+    meta = names = None
     with zipfile.ZipFile(artifact_path) as archive:
+        def _read_entry(entry_name):
+            with archive.open(entry_name) as m:
+                text = m.read().decode("UTF-8").splitlines()
+                return (Path(entry_name).stem, text)
         names = sorted(
             file.filename for file in archive.filelist
             if not file.filename.endswith("pyi")
         )
         meta = dict(
-            map(
-                lambda n: (
-                    _ensure_path(n).stem,
-                    (m := archive.open(n), str(m.read(), "UTF-8").splitlines(), m.close())[
-                        1
-                    ],
-                ),
-                (
-                    n
-                    for n in names
-                    if re.search("(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$", n)
-                ),
-            )
+            names
+            << filter(DIST_PKG_INFO_REGEX.search)
+            << map(_read_entry)
         )
-        name = next(
-            l.partition(": ")[-1]
-            for l in meta["METADATA" if "METADATA" in meta else "PKG-INFO"]
-            if l.startswith("Name: ")
-        )
-        md_lines = next(i for i in meta.values() if "Metadata-Version" in str(i))
-        info = {
-            p[0].lower().replace("-", "_"): p[2]
-            for p in (l.partition(": ") for l in md_lines)
-        }
-        meta.update(info)
-        meta["names"] = names
-        if "top_level" not in meta:
-            relpath = sorted(
-                [*(n for n in names if re.search("[^/]+([.][^/]+|[-][^/]+)$", n))],
-                key=lambda n: ("__init__.py" not in n, len(n)),
-            )[0]
-
-            rel2 = relpath.replace("-", "!").split("!")[0]
-            rel3 = _ensure_path(rel2)
-            rel4 = rel3.parts
-            if rel3.stem == "__init__":
-                import_name = list(rel4[0:-1])
-            else:
-                import_name = list(rel4[0:-1]) + [rel3.stem]
-            meta["top_level"] = [import_name]
-            meta["import_name"] = import_name
-        else:
-            top_level, name, = (
-                meta["top_level"][0],
-                meta["name"],
-            )
-            import_name = (name,) if (top_level == name) else (top_level, name)
-            meta["import_name"] = import_name
-            relpath = sorted(
-                [
-                    n for n in names
-                    if re.search("[^/]+([.][^/]+|[-][^/]+)$", n)
-                ],
-                key=lambda n: (
-                    not n.startswith(import_name),
-                    not n.endswith("__init__.py"),
-                    len(n),
-                ),
-            )[0]
+    name = next(
+        l.partition(": ")[-1] for l in meta[
+            "METADATA" if "METADATA" in meta else "PKG-INFO"
+        ] if l.startswith("Name: ")
+    )
+    md_lines = next(
+        i for i in meta.values()
+        if "Metadata-Version" in str(i)
+    )
+    info = {
+        p[0].lower().replace("-", "_"): p[2]
+        for p in (l.partition(": ") for l in md_lines)
+    }
+    meta.update(info)
+    if "top_level" not in meta: return meta
+    top_level, name, = (meta["top_level"][0], meta["name"])
+    import_name = (name,) if (top_level==name) else (top_level,name)
+    meta["names"] = names
+    meta["import_name"] = import_name
+    for relpath in sorted(
+        [
+             n for n in names
+             if re.compile("[^/]+([.][^/]+|[-][^/]+)$").search(n)
+        ],
+        key=lambda n: (
+            not n.startswith(import_name),
+            not n.endswith("__init__.py"),
+            len(n),
+        ),
+    ):
         meta["import_relpath"] = relpath
-        return meta
+        break
+    return meta
 
 
 def _clean_sys_modules(package_name: str) -> None:
@@ -567,7 +537,6 @@ def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Ex
                 hash_value,
             )
         )
-    return RuntimeWarning(Message.pebkac_unsupported(package_name))
 
 
 def _import_public_no_install(
@@ -619,7 +588,6 @@ def _auto_install(
     if func:
         result = func(**all_kwargs(_auto_install, locals()))
 
-    use.cleanup()
     query = use.registry.execute(
         '''
         SELECT
@@ -682,7 +650,7 @@ def isfunction(x: Any) -> bool:
 
 
 def ismethod(x: Any) -> bool:
-    return inspect.isfunction(x)
+    return inspect.ismethod(x)
 
 
 # decorators for callable classes require a completely different approach i'm afraid.. removing the check should discourage users from trying
@@ -841,11 +809,8 @@ def _download_artifact(name, version, filename, url) -> Path:
         / "packages" / filename).absolute()
     if path.exists(): return path
     log.info("Downloading %s==%s from %s", name, version, url)
-    if str(url).startswith("file:"):
-        from_path = Path(str(url).partition(":")[2])
-        data = from_path.read_bytes()
-    else:
-        data = requests.get(url).content
+    assert str(url).startswith("http")
+    data = requests.get(url).content
     log.debug("Read package content: %d bytes", len(data))
     path.write_bytes(data)
     log.debug("Wrote %d bytes to %s", len(data), path)
@@ -934,7 +899,7 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
             return _delete_none(out_info)
         finally:
             os.chdir(orig_cwd)
-    raise BaseException(locals())
+
 
 def _load_venv_entry(name, module_path) -> ModuleType:
     package_name, rest = _parse_name(name)
@@ -957,62 +922,56 @@ def _load_venv_entry(name, module_path) -> ModuleType:
 
 @cache(maxsize=512, typed=True)
 def _get_package_data(package_name) -> Dict[str, Union[int,dict,list,str,Version,Path,URL]]:
-    log.info("enter _get_package_data(package_name: %s)", package_name)
-    response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
+    json_url = f"https://pypi.org/pypi/{package_name}/json"
+    response = requests.get(json_url)
     if response.status_code == 404:
-        raise ImportError(
-            "Package {package_name!r} is not available on pypi; are you sure it exists?"
-        )
+        raise ImportError(Message.pebkac_unsupported(package_name))
     elif response.status_code != 200:
-        raise RuntimeWarning(
-            f"Something bad happened while contacting PyPI for info on {package_name} ( {response.status_code} ), which we tried to look up because a matching hashes for the auto-installation was missing."
-        )
+        raise RuntimeWarning(Message.web_error(json_url, response))
     data: dict = response.json()
     for v, infos in data["releases"].items():
         for info in infos:
             info["version"] = v
             info.update(_parse_filename(info["filename"]))
-    log.info("leave _get_package_data(package_name: %s)", package_name)
     return data
 
 
 def _get_filtered_data(data, version=None, include_sdist=None) -> Dict[str, Union[int,dict,list,str,Version,Path,URL]]:
-  try:
-    log.info("enter _get_filtered_data(data=%x, version=%s, include_sdist=%s)", id(data), version, include_sdist)
     common_info = use._parse_filename(data["urls"][0]["filename"])
     package_name = common_info["distribution"]
     filtered = {"urls": [], "releases": dict()}
     for ver, infos in data["releases"].items():
         if version and str(version) != str(ver): continue
         for info in infos:
-            is_compat = _is_compatible(info, hash_algo=Hash.sha256.name, include_sdist=include_sdist)
+            is_compat = _is_compatible(
+                info,
+                hash_algo=Hash.sha256.name,
+                include_sdist=include_sdist
+            )
             if not is_compat: continue
-            log.debug("ended _is_compatible[%s]: %s", is_compat, info["filename"])
             filtered["urls"].append(info)
             if ver not in filtered["releases"]:
                 filtered["releases"][ver] = []
             filtered["releases"][ver].append(info)
-
-    if not include_sdist and ((version is not None and str(version) not in filtered["releases"]) or
-       not filtered["urls"]):
+    if not include_sdist and (
+        (version is not None 
+        and str(version) not in filtered["releases"]) or
+        not filtered["urls"]
+    ):
         log.warning(
-            "Unfortunately, none of the available binary packages for '%s' are compatible with the "
-            "current python ('%s' for '%s', version '%s'). We will attempt to use a source "
-            "distribution, which may have additional system requirements such as a working "
-            "C/C++ compiler, and may take more time to prepare for use.",
-            package_name,
-            sys.executable,
-            sys.platform,
+            "Unfortunately, none of the available binary packages for '%s' are compatible with the current python ('%s' for '%s', version '%s'). We will attempt to use a source distribution, which may have additional system requirements such as a working C/C++ compiler, and may take more time to prepare for use.",
+            package_name, sys.executable, sys.platform,
             ".".join(map(str, sys.version_info[0:2])),
         )
-        return _get_filtered_data(data, version=version, include_sdist=True)
+        return _get_filtered_data(
+            data, version=version, include_sdist=True
+        )
     return filtered
-  finally:
-    log.info("leave _get_package_data(data: %x)", id(data))
 
 def _is_version_satisfied(info, sys_version) -> bool:
     """
-    SpecifierSet("") matches anything, no need to artificially lock down versions at this point
+    SpecifierSet("") matches anything, no need to artificially
+    lock down versions at this point
 
     @see https://warehouse.readthedocs.io/api-reference/json.html
     @see https://packaging.pypa.io/en/latest/specifiers.html
@@ -1453,6 +1412,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         )
         (self.home / "registry.db").touch(mode=0o644)
         self.registry = self._set_up_registry(*args)
+        self.cleanup()
 
     def install(self):
         # yeah, really.. __builtins__ sometimes appears as a dict and other times as a module, don't ask me why
