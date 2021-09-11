@@ -779,7 +779,7 @@ def _bootstrap_venv_pip(venv_root):
                 return venv.create(
                     venv_root,
                     system_site_packages=False,clear=False,
-                    symlinks=True, with_pip=False,
+                    symlinks=False, with_pip=False,
                     upgrade_deps=False
                 )
             except:
