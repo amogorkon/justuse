@@ -4,6 +4,7 @@ import re
 import sys
 import tempfile
 import warnings
+from contextlib import closing
 from pathlib import Path
 from threading import _shutdown_locks
 
@@ -44,6 +45,25 @@ def reuse():
     use._aspects = {}
     use._reloaders = {}
     return use
+
+
+def test_redownload_module(reuse):
+    def inject_fault(*, path, **kwargs):
+        log.info("fault_inject: deleting %s", path)
+        path.delete()
+    assert test_86_numpy(
+        reuse, "example-pypi-package.examplepy", "0.1.0"
+    )
+    try:
+        reuse.config["fault_inject"] = inject_fault
+        assert test_86_numpy(
+            reuse, "example-pypi-package.examplepy", "0.1.0"
+        )
+    finally:
+        del reuse.config["fault_inject"]
+    assert test_86_numpy(
+        reuse, "example-pypi-package.examplepy", "0.1.0"
+    )
 
 
 def test_access_to_home(reuse):
@@ -369,7 +389,7 @@ def test_reloading(reuse):
     with Restorer():
         mod = None
         newfile = f"{file}.t"
-        for check in range(1, 5):
+        for check in range(2):
             with open(newfile, "w") as f:
                 f.write(f"def foo(): return {check}")
                 f.flush()
@@ -427,12 +447,31 @@ def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     assert reuse.ismethod
 
 
-def test_86_numpy(reuse):
+@pytest.mark.parametrize(
+    "name, version", (
+        ("numpy", "1.19.3"),
+    )
+)
+def test_86_numpy(reuse, name, version):
     use = reuse
     with pytest.raises(RuntimeWarning) as w:
-        reuse("numpy", version="1.20.0", modes=reuse.auto_install)
+        reuse(name, version=version, modes=reuse.auto_install)
     assert w
     recommendation = str(w.value).split("\n")[-1].strip()
     mod = eval(recommendation)
-    assert mod.__name__ == "numpy"
-    assert mod.__version__ == "1.20.0"
+    assert mod.__name__ == name.split(".")[-1]
+    assert mod.__version__ == version
+    return mod
+
+
+def test_clear_registry(reuse):
+    reuse.registry.connection.close()
+    try:
+        fd, file = tempfile.mkstemp(".db", "test_registry")
+        with closing(open(fd, "rb")):
+            reuse.registry = reuse._set_up_registry(Path(file))
+            reuse.cleanup()
+    finally:
+        reuse.registry = reuse._set_up_registry()
+
+
