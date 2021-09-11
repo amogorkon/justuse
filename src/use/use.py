@@ -496,7 +496,9 @@ def _venv_is_win() -> bool:
 
 def _pebkac_no_version_hash(func=None, *, name: str, **kwargs) -> Union[ModuleType,Exception]:
     if func:
-        return func(name=name, **kwargs)
+        result = func(name=name, **kwargs)
+        if isinstance(result, ModuleType):
+            return result
     return RuntimeWarning(Message.cant_import_no_version(name))
 
 
