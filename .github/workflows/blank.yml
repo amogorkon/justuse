@@ -1,62 +1,122 @@
+
 name: Unit Tests
 
 on:
   pull_request:
-    types: [assigned, unassigned, labeled, unlabeled, opened, edited, closed, reopened, synchronize, ready_for_review, locked, unlocked, review_requested, review_request_removed]
+    types: [synchronize]
   push:
   registry_package:
     types: [published, updated]
   release:
-    types: [published, unpublished, created, edited, deleted, prereleased, released]
-
+    types: [published, edited, released]
 jobs:
   test-ubuntu:
     runs-on: ubuntu-latest
     steps:
       - name: Ubuntu - Check out source
         uses: actions/checkout@v2
-      - name: Ubuntu - Run Unit Tests with Coverage
-        run: |
-          export FTP_USER="${{ secrets.FTP_USER }}"
-          export FTP_PASS="${{ secrets.FTP_PASS }}"
-          mkdir -p ~/.justuse-python/
-          echo "debug = true" > ~/.justuse-python/config.toml
-          [ -e tests/coverage.sh ] && bash tests/coverage.sh || {
-            python3 -m pip install --force-reinstall --upgrade -r requirements.txt
-            python3 -m pytest
-          }
-
-  test-windows:
-    runs-on: windows-latest
-
-    steps:
-      - name: Run a multi-line script
-        uses: actions/checkout@v2
-      - name: Run setup python
+      - name: Ubuntu - Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.x' # Version range or exact version of a Python version to use, using SemVer's version range syntax
+          python-version: '3.9.7' # Version range or exact version of a Python version to use, using SemVer's version range syntax
           architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified
-      - run: |
-          echo "Setting TLS security properties ..."
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          echo "Windows-Tests: Preloading package dependencies ..."
-          & "python.exe" -m pip install --force-reinstall --upgrade -r requirements.txt
-          echo "Windows-Tests: Running tests ..."
-          $env:DEBUG = 1
-          $env:ERRORS = 1
-          & "python.exe" -m pytest
+      - name: Ubuntu - Run Unit Tests with Coverage
+        run: |
+          export FTP_USER="${{ secrets.FTP_USER }}" FTP_PASS="${{ secrets.FTP_PASS }}"
+          mkdir -p ~/.justuse-python/;
+          typeset -p | grep -vFe PASS;
+          echo -E $'debug=true\ndebugging=true\n' > ~/.justuse-python/config.toml;
+          busybox --list 2>/dev/null 1>&2 || sudo apt install -y busybox;
+          export PYTHON="$( busybox readlink -f "$( busybox which python3; )"; )"
+          "$PYTHON" -m pip install coverage-badge
+          export DEBUG=1 DEBUGGING=1 ERRORS=1 PYTHONDEBUGMODE=1;
+          export PYTHON3="$PYTHON"
+          source ./tests/coverage.sh
+      - name: Collect Coverage
+        run: |
+          find . -regextype egrep -type f -a -iregex ".*cov.*" \
+            | sort | cut -c 3- | tar -zcvf coverage-ubuntu.tar.gz --files-from=-
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage
+          path: coverage-ubuntu.tar.gz
 
-  test-macos:
-    runs-on: macos-latest
-
+  test-windows-x86:
+    runs-on: windows-latest
     steps:
-      - name: Run a multi-line script
+      - name: Windows - Check out source
         uses: actions/checkout@v2
-      - run: |
-          echo "MacOS-Tests: Preloading package dependencies ..."
-          python3 -m pip install --force-reinstall --upgrade -r requirements.txt
-          echo "MacOS-Tests: Running tests ..."
-          mkdir -p ~/.justuse-python/
-          echo "debug = true" > ~/.justuse-python/config.toml
-          env DEBUG=1 ERRORS=1 python3 -m pytest
+      - name: Windows - Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9.7' # Version range or exact version of a Python version to use, using SemVer's version range syntax
+          architecture: 'x86' # optional x64 or x86. Defaults to x64 if not specified
+      - name: Windows - Run Unit Tests with Coverage
+        run: |
+          $env:FTP_USER = "${{ secrets.FTP_USER }}"
+          $env:FTP_PASS = "${{ secrets.FTP_PASS }}"
+          $env:DEBUG = 1
+          $env:DEBUGGING = 1
+          $env:ERRORS = 1
+          $env:PYTHONPATH = (Get-ChildItem "${env:PWD}" -Recurse -Filter 'ensurepip.zip')[0]
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Write-Host "Setting PYTHONPATH to: ${env:PYTHONPATH}"
+          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade -r requirements.txt
+          & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x86/ --cov-report annotate:coverage-win32-x86/annotated --cov-report xml:coverage-win32-x86/cov.xml --cov=setup --cov=tests..tests..test1 --cov=tests..tests..test2 --cov=tests..tests..test3 --cov=tests..tests.bar --cov=tests..tests.foo --cov=tests..tests.modA --cov=tests..tests.modA_test --cov=tests..tests.modB --cov=tests..tests.modD --cov=tests..tests.modE --cov=tests..tests.sys --cov=tests..tests.tests_subdir.modC --cov=tests.__init__ --cov=tests.foo --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.unit_test --cov=use.__init__ --cov=use.use -v --cov-append -vv
+          & "xcopy.exe" ".\.coverage" ".\coverage-win32-x86"
+      - name: Collect Coverage
+        uses: master-atul/tar-action@v1.0.2
+        id: compress
+        with:
+          command: c
+          cwd: .
+          files: |
+            ./.coverage
+            ./coverage-win32-x86
+          outPath: coverage-win32-x86.tar.gz
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage
+          path: coverage-win32-x86.tar.gz
+
+  test-windows-x64:
+    runs-on: windows-latest
+    steps:
+      - name: Windows - Check out source
+        uses: actions/checkout@v2
+      - name: Windows - Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9.7' # Version range or exact version of a Python version to use, using SemVer's version range syntax
+          architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified
+      - name: Windows - Run Unit Tests with Coverage
+        run: |
+          $env:FTP_USER = "${{ secrets.FTP_USER }}"
+          $env:FTP_PASS = "${{ secrets.FTP_PASS }}"
+          $env:DEBUG = 1
+          $env:DEBUGGING = 1
+          $env:ERRORS = 1
+          $env:PYTHONPATH = (Get-ChildItem "${env:PWD}" -Recurse -Filter 'ensurepip.zip')[0]
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Write-Host "Setting PYTHONPATH to: ${env:PYTHONPATH}"
+          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade -r requirements.txt
+          & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x64/ --cov-report annotate:coverage-win32-x64/annotated --cov-report xml:coverage-win32-x64/cov.xml --cov=setup --cov=tests..tests..test1 --cov=tests..tests..test2 --cov=tests..tests..test3 --cov=tests..tests.bar --cov=tests..tests.foo --cov=tests..tests.modA --cov=tests..tests.modA_test --cov=tests..tests.modB --cov=tests..tests.modD --cov=tests..tests.modE --cov=tests..tests.sys --cov=tests..tests.tests_subdir.modC --cov=tests.__init__ --cov=tests.foo --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.unit_test --cov=use.__init__ --cov=use.use -v --cov-append -vv
+          & "xcopy.exe" ".\.coverage" ".\coverage-win32-x64"
+      - name: Collect Coverage
+        uses: master-atul/tar-action@v1.0.2
+        id: compress
+        with:
+          command: c
+          cwd: .
+          files: |
+            ./.coverage
+            ./coverage-win32-x64
+          outPath: coverage-win32-x64.tar.gz
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage
+          path: coverage-win32-x64.tar.gz
+

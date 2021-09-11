@@ -8,6 +8,8 @@ while [ ! -e requirements.txt ]; do
   cd ..
 done
 
+eval "cov_file_opts=($( find -name "*.py" | sed -r -e 's~^\./~~; s~\.py$~~; s~[_-][^_/.-]*\..*$~~; s~/~.~g; s~^src\.~~; s~^~--cov=~;' | sort | tr -s '\n ' " "; ))"
+
 : ${PYTHON:=python3}
 [ "x${PYTHON: 0:1}" = "x/" ] || PYTHON="$( which ""$PYTHON"" || which "python" || which "python.exe" )"
 export PYTHON
@@ -44,14 +46,13 @@ f="$default"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"
 file="${COVERAGE_IMAGE:-${default}}"
 f="$file"; fn="${f##*/}"; dir="${f: 0:${#f}-${#fn}}"; dir="${dir%%/}"; nme="${fn%.*}"
 covcom=( --cov-branch --cov-report term-missing --cov-report html:coverage/ --cov-report annotate:coverage/annotated --cov-report xml:coverage/cov.xml )
-covsrc=( --cov=use --cov=use.use --cov=package_hacks )
+covsrc=( "${cov_file_opts[@]}" )
   
 echo "default=$default" 1>&2
 echo "COVERAGE_IMAGE=$COVERAGE_IMAGE" 1>&2
 echo "file=$file" 1>&2
   
 opts=( -v )
-unset DEBUG ERRORS
 for append in 1; do
 
   if (( append > 0 )); then 
@@ -59,11 +60,6 @@ for append in 1; do
     opts+=( -vv )
   fi
   
-  if (( append > 0 )); then 
-    echo -E $'\ndebug = true\n\ndebugging = true\n\n'
-  else
-    echo -E $'\ndebug = false\n\ndebugging = false\n\n'
-  fi > ~/.justuse-python/config.toml
     
   "$PYTHON" -m pytest "${covcom[@]}" "${covsrc[@]}" "${opts[@]}"
   rs=$?
@@ -122,6 +118,8 @@ if [ "x$FTP_USER" != "x" -a $( python3 -m coverage_badge | wc -c ) -gt 800 ]; th
     rm -vf -- "$file" || rmdir "$file"; python3 -m coverage_badge | cat -v | tee "$_dir/$_fn" | tee "$file"; 
     for variant in \
       '"/public_html/mixed/$fn" "$file"'  \
+      '"/public_html/mixed/coverage_amogorkon-main.svg" "$file"' \
+      '"/public_html/mixed/coverage.svg" "$file"' \
       ;  \
     do
       eval "set -- $variant"
