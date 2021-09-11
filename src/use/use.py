@@ -767,8 +767,8 @@ def _bootstrap_venv_pip(venv_root):
         try:
             return venv.create(
                 venv_root,
-                system_site_packages=True, clear=False,
-                symlinks=True, with_pip=False, upgrade_deps=False
+                system_site_packages=True, clear=True,
+                symlinks=False, with_pip=True, upgrade_deps=True
             )
         except:
             for r in venv_root.rglob("**/site-packages"):
@@ -778,8 +778,8 @@ def _bootstrap_venv_pip(venv_root):
             try:
                 return venv.create(
                     venv_root,
-                    system_site_packages=True, clear=False,
-                    symlinks=False, with_pip=False,
+                    system_site_packages=False,clear=False,
+                    symlinks=True, with_pip=False,
                     upgrade_deps=False
                 )
             except:
