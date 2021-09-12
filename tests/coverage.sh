@@ -61,7 +61,7 @@ for append in 1; do
   fi
   
     
-  "$PYTHON" -m pytest "${covcom[@]}" "${covsrc[@]}" "${opts[@]}"
+  "$PYTHON" -m pytest "${covcom[@]}" "${covsrc[@]}" "${opts[@]}" "$@"
   rs=$?
   
   (( rs )) && exit $rs
