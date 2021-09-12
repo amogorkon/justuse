@@ -90,9 +90,11 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
+from functools import (partial, partialmethod, reduce, singledispatch,
+                       update_wrapper)
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
+from inspect import isfunction, ismethod
 from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
 from pathlib import Path
@@ -104,6 +106,7 @@ from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Union
 from warnings import warn
 
 import furl
+import icontract
 import packaging
 import requests
 import toml
@@ -228,8 +231,8 @@ class PlatformTag:
     def __hash__(self):
         return hash(self.platform)
 
+    @icontract.require(lambda self, other: isinstance(other, self.__class__))
     def __eq__(self, other):
-        assert isinstance(other, self.__class__)
         return self.platform == other.platform
 
 
@@ -373,8 +376,9 @@ If you want to auto-install the latest version: use("{name}", version="{version}
     )
 
 
+
 @pipes
-def _ensure_path(value: Union[bytes, str, furl.Path, Path]):
+def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
     if isinstance(value, (str, bytes)):
         return Path(value).absolute()
     if isinstance(value, furl.Path):
@@ -385,7 +389,6 @@ def _ensure_path(value: Union[bytes, str, furl.Path, Path]):
                 << tuple
                 << reduce(Path.__truediv__)
         ) << reduce(Path.__truediv__)
-    assert isinstance(value, Path)
     return value
 
 
@@ -624,8 +627,8 @@ def _auto_install(
         try:
             os.chdir(installation_path)
             return (mod := _load_venv_entry(
-              name=import_relpath,
-              module_path=module_path,
+                name=import_relpath,
+                module_path=module_path,
             ))
         finally:
             os.chdir(orig_cwd)
@@ -640,23 +643,6 @@ def _auto_install(
                 module_path=module_path,
                 installation_path=installation_path,
             )
-
-
-# these are aliases for the purpose of aspectizing modules
-
-
-def isfunction(x: Any) -> bool:
-    return inspect.isfunction(x)
-
-
-def ismethod(x: Any) -> bool:
-    return inspect.ismethod(x)
-
-
-# decorators for callable classes require a completely different approach i'm afraid.. removing the check should discourage users from trying
-# def isclass(x):
-#     return inspect.isclass(x) and hasattr(x, "__call__")
-
 
 @cache(maxsize=4096, typed=True)
 def _parse_filename(filename) -> dict:
@@ -779,7 +765,7 @@ def _bootstrap_venv_pip(venv_root):
                 return venv.create(
                     venv_root,
                     system_site_packages=False,clear=False,
-                    symlinks=True, with_pip=False,
+                    symlinks=False, with_pip=False,
                     upgrade_deps=False
                 )
             except:
@@ -803,13 +789,13 @@ def _get_venv_env(venv_root):
         "PATH": f"%{_find_exe(venv_root)}{os.path.pathsep}{pathvar}"
     }
 
+@icontract.ensure(lambda url: str(url).startswith("http"))
 def _download_artifact(name, version, filename, url) -> Path:
     # fmt: off
     path = (sys.modules["use"].home
         / "packages" / filename).absolute()
     if path.exists(): return path
     log.info("Downloading %s==%s from %s", name, version, url)
-    assert str(url).startswith("http")
     data = requests.get(url).content
     log.debug("Read package content: %d bytes", len(data))
     path.write_bytes(data)
@@ -1018,9 +1004,9 @@ def _is_platform_compatible(
     )
 
 
-
+@icontract.ensure(lambda sys_version: isinstance(sys_version, Version))
 def _is_compatible(
-    info,
+    info: Dict,
     hash_algo=Hash.sha256.name,
     sys_version=None,
     platform_tags=None,
@@ -1028,14 +1014,13 @@ def _is_compatible(
 ) -> bool:
     """Return true if the artifact described by 'info'
     is compatible with the current or specified system."""
-    assert isinstance(info, dict)
     if not sys_version:
         sys_version = Version(".".join(map(str, sys.version_info[0:3])))
     if not platform_tags:
         platform_tags = get_supported()
     if "platform_tag" not in info:
         return False
-    assert isinstance(sys_version, Version)
+
     return (
         _is_version_satisfied(info, sys_version)
         and _is_platform_compatible(info, platform_tags, include_sdist)
@@ -1061,10 +1046,8 @@ def _apply_aspect(
             thing.__dict__[name] = decorator(obj)
     return thing
 
-
-def _get_version(name=None, package_name=None, /, mod=None) -> Optional[Version]:
-    assert name is None or isinstance(name, str)
-    version: Optional[Union[Callable[...], Version], Version, str] = None
+def _get_version(name:Optional[str]=None, package_name=None, /, mod=None) -> Optional[Version]:
+    version: Optional[Union[Callable[...], Version, Version, str]] = None
     for lookup_name in (name, package_name):
         if not lookup_name:
             continue
@@ -1159,11 +1142,7 @@ def _ensure_version(func, *, name, version, **kwargs) -> Union[ModuleType, Excep
     else:
         return AmbiguityWarning(Message.version_warning(name, version, this_version))
 
-
-def _fail_or_default(exception, default):
-    assert isinstance(
-        exception, BaseException
-    ), f"_fail_or_default MUST be called with a valid exception, but got {exception=}, {default=}"
+def _fail_or_default(exception:BaseException, default: Any):
     if default is not mode.fastfail:
         return default  # TODO: write test for default
     else:
@@ -1214,10 +1193,8 @@ class ModuleReloader:
         loop = asyncio.get_running_loop()
         loop.create_task(self.run_async())
 
+    @icontract.require(lambda self: self._thread is None or self._thread.is_alive())
     def start_threaded(self):
-        assert not (
-            self._thread is not None and not self._thread.is_alive()
-        ), "Can't start another reloader thread while one is already running."
         self._stopped = False
         atexit.register(self.stop)
         self._thread = threading.Thread(
@@ -1472,7 +1449,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
     def _save_module_info(
         self,
         *,
-        version: Union[Version, str],  # type: ignore
+        version: Version,
         artifact_path: Optional[Path],
         hash_value=Optional[str],
         installation_path=Path,
@@ -1482,10 +1459,6 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         hash_algo=Hash.sha256,
     ):
         """Update the registry to contain the package's metadata."""
-        # version = str(version) if version else "0.0.0"
-        # assert version not in ("None", "null", "")
-        assert isinstance(version, Version)
-
         if not self.registry.execute(
             f"SELECT * FROM distributions WHERE name='{name}' AND version='{version}'"
         ).fetchone():
@@ -1516,6 +1489,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     def __call__(self, thing, /, *args, **kwargs):
         raise NotImplementedError(Message.cant_use(thing))
 
+
+    @icontract.require(lambda hash_algo: hash_algo in Hash)
+    @icontract.require(lambda as_import: as_import.isidentifier())
     @__call__.register(URL)
     def _use_url(
         self,
@@ -1525,17 +1501,13 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hash_algo=Hash.sha256,
         hash_value=None,
         initial_globals: Optional[Dict[Any, Any]] = None,
-        as_import=None,
+        as_import:str=None,
         default=mode.fastfail,
         aspectize=None,
         modes=0,
     ) -> ModuleType:
         log.debug(f"use-url: {url}")
         exc = None
-        assert url is not None, f"called with url == {url!r}"
-        assert url != "None", f"called with url == {url!r}"
-
-        assert hash_algo in Hash, f"{hash_algo} is not a valid hashing algorithm!"
 
         aspectize = aspectize or {}
         response = requests.get(str(url))
@@ -1570,13 +1542,10 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
         if as_import:
-            assert isinstance(
-                as_import, str
-            ), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
-            assert as_import.isidentifier(), "as_import must be a valid identifier."
             sys.modules[as_import] = mod
         return _ensure_proxy(mod)
 
+    @icontract.require(lambda as_import: as_import.isidentifier())
     @__call__.register(Path)
     def _use_path(
         self,
@@ -1584,7 +1553,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         /,
         *,
         initial_globals=None,
-        as_import=None,
+        as_import:str=None,
         default=mode.fastfail,
         aspectize=None,
         modes=0,
@@ -1732,9 +1701,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if exc:
             return _fail_or_default(ImportError(exc), default)
         if as_import:
-            assert isinstance(
-                as_import, str
-            ), f"as_import must be the name (as str) of the module as which it should be imported, got {as_import} ({type(as_import)}) instead."
             sys.modules[as_import] = mod
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)

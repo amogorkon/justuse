@@ -51,19 +51,14 @@ def test_redownload_module(reuse):
     def inject_fault(*, path, **kwargs):
         log.info("fault_inject: deleting %s", path)
         path.delete()
-    assert test_86_numpy(
-        reuse, "example-pypi-package.examplepy", "0.1.0"
-    )
+
+    assert test_86_numpy(reuse, "example-pypi-package.examplepy", "0.1.0")
     try:
         reuse.config["fault_inject"] = inject_fault
-        assert test_86_numpy(
-            reuse, "example-pypi-package.examplepy", "0.1.0"
-        )
+        assert test_86_numpy(reuse, "example-pypi-package.examplepy", "0.1.0")
     finally:
         del reuse.config["fault_inject"]
-    assert test_86_numpy(
-        reuse, "example-pypi-package.examplepy", "0.1.0"
-    )
+    assert test_86_numpy(reuse, "example-pypi-package.examplepy", "0.1.0")
 
 
 def test_access_to_home(reuse):
@@ -215,23 +210,27 @@ def suggested_artifact(name):
         mod = reuse(name, modes=reuse.auto_install)
         assert False
     except BaseException as rw:
-        assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
-        assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
-        assert isinstance(rw.args[0], str)
-        match = re.search(
-            'version="?(?P<version>[^"]+)".*' "hashes=?(?P<hashes>[^()]+), ",
-            str(rw),
-        )
-        assert match
-        hashes_evalstr = match.group("hashes")
-        log.debug("eval'ing the following string from rw message: %r", hashes_evalstr)
-        hashes = eval(hashes_evalstr)
-        log.debug("eval'ed to the following value: %r", hashes)
-        assert isinstance(
-            hashes, set
-        ), f"The wrong type of object is given in the warning message: {rw}"
-        version = match.group("version")
-        return (version, hashes)
+        return _extracted_from_suggested_artifact_10(rw)
+
+
+def _extracted_from_suggested_artifact_10(rw):
+    assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
+    assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
+    assert isinstance(rw.args[0], str)
+    match = re.search(
+        'version="?(?P<version>[^"]+)".*' "hashes=?(?P<hashes>[^()]+), ",
+        str(rw),
+    )
+    assert match
+    hashes_evalstr = match.group("hashes")
+    log.debug("eval'ing the following string from rw message: %r", hashes_evalstr)
+    hashes = eval(hashes_evalstr)
+    log.debug("eval'ed to the following value: %r", hashes)
+    assert isinstance(
+        hashes, set
+    ), f"The wrong type of object is given in the warning message: {rw}"
+    version = match.group("version")
+    return (version, hashes)
 
 
 def test_use_global_install(reuse):
@@ -447,11 +446,7 @@ def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     assert reuse.ismethod
 
 
-@pytest.mark.parametrize(
-    "name, version", (
-        ("numpy", "1.19.3"),
-    )
-)
+@pytest.mark.parametrize("name, version", (("numpy", "1.19.3"),))
 def test_86_numpy(reuse, name, version):
     use = reuse
     with pytest.raises(RuntimeWarning) as w:
@@ -473,5 +468,3 @@ def test_clear_registry(reuse):
             reuse.cleanup()
     finally:
         reuse.registry = reuse._set_up_registry()
-
-
