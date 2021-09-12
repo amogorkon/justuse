@@ -93,7 +93,7 @@ from functools import lru_cache as cache
 from functools import (partial, partialmethod, reduce, singledispatch,
                        update_wrapper)
 from importlib import metadata
-from importlib.machinery import SourceFileLoader
+from importlib.machinery import ModuleSpec, SourceFileLoader
 from inspect import isfunction, ismethod
 from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
@@ -119,6 +119,14 @@ from pip._internal.utils import compatibility_tags
 # injected via initial_globals for testing, you can safely ignore this
 test_config: str = locals().get("test_config", {})
 test_version: str = locals().get("test_version", None)
+__name__ = "use.use"
+__package__ = "use"
+__path__ = __file__
+__spec__ = ModuleSpec(
+    "use.use",
+    loader=SourceFileLoader(fullname="use", path=__file__)
+)
+__spec__.submodule_search_locations = [Path(__file__).parent]
 __version__ = test_version or "0.4.2"
 
 _reloaders: Dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
@@ -471,6 +479,39 @@ def archive_meta(artifact_path):
     return meta
 
 
+def suggested_artifact(name, *args, **kwargs):
+    try:
+        mod = use(name, *args, modes=1, **kwargs)
+        assert False, f"Actually returned mod: {mod}"
+    except (RuntimeWarning, RuntimeError) as rw:
+        assert rw.args
+        for message in rw.args:
+            return _parse_warning_message("%s" % message)
+    assert False, "Did not find a suggested artifact"
+
+
+def _parse_warning_message(message: str):
+    # fmt: off
+    RW_REGEX = re.compile(
+        r'version=((?:(?!, \w+=).)+).*hashes=((?:(?!, \w+=).)+)',
+        re.DOTALL
+    )
+    version_evalstr, hashes_evalstr = RW_REGEX.findall(message)[0]
+    log.debug(
+      "eval'ing the following string from rw message [%s]:\n "
+      " hashes_evalstr: [%s], version_evalstr: [%s]",
+      message, hashes_evalstr, version_evalstr
+    )
+    hashes = eval(hashes_evalstr)
+    version = eval(version_evalstr)
+    result = (version, hashes)
+    log.debug("eval'ed to the following: %s", result)
+    assert isinstance(hashes, (set, str)), (
+        f"Wrong object type is given in the warning: {message!r}"
+    )
+    return result
+
+
 def _clean_sys_modules(package_name: str) -> None:
     for k in dict(
         [
@@ -495,7 +536,7 @@ def _venv_root(package_name, version, home) -> Path:
 
 
 def _venv_is_win() -> bool:
-    return sys.platform.startswith("win")
+    return sys.platform == "win32"
 
 
 def _pebkac_no_version_hash(func=None, *, name: str, **kwargs) -> Union[ModuleType,Exception]:
@@ -503,7 +544,7 @@ def _pebkac_no_version_hash(func=None, *, name: str, **kwargs) -> Union[ModuleTy
         result = func(name=name, **kwargs)
         if isinstance(result, ModuleType):
             return result
-    return RuntimeWarning(Message.cant_import_no_version(name))
+    raise RuntimeWarning(Message.cant_import_no_version(name))
 
 
 def _pebkac_version_no_hash(
@@ -516,14 +557,14 @@ def _pebkac_version_no_hash(
     package_name, rest = _parse_name(name)
     all_data = _get_package_data(package_name)
     data = _get_filtered_data(all_data, str(version))
-    if not data["urls"]: return RuntimeWarning(
+    if not data["urls"]: raise RuntimeWarning(
         f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
     )
     hashes = {
         entry["digests"].get(hash_algo.name)
         for entry in all_data["releases"][str(version)]
     }
-    return RuntimeWarning(
+    raise RuntimeWarning(
         Message.pebkac_missing_hash(package_name, version, hashes)
     )
 
@@ -533,7 +574,7 @@ def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Ex
     data = _get_filtered_data(_get_package_data(package_name))
     for version, infos in sorted(reversed(data["releases"].items())):
         hash_value = infos[0]["digests"][hash_algo.name]
-        return RuntimeWarning(
+        raise RuntimeWarning(
             Message.no_version_or_hash_provided(
                 name,
                 package_name,
@@ -879,7 +920,7 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
             os.chdir(str(installation_path))
             out_info.update({
                 "artifact_path": artifact_path,
-                "installation_path": instal lation_path,
+                "installation_path": installation_path,
                 "module_path": module_path,
                 "import_relpath": ".".join(relp.split("/")[0:-1]),
                 "info": info,
@@ -1411,7 +1452,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
             if hasattr(__builtins__, "use"):
                 delattr(__builtins__, "use")
         else:
-            RuntimeWarning("__builtins__ is something unexpected")
+            raise RuntimeWarning("__builtins__ is something unexpected")
 
     def del_entry(self, name, version):
         # TODO: CASCADE to artifacts etc

@@ -29,6 +29,7 @@ if Path("src").is_dir():
 import_base = Path(__file__).parent.parent / "src"
 is_win = sys.platform.startswith("win")
 import use
+from use import suggested_artifact
 
 __package__ = "tests"
 
@@ -201,38 +202,6 @@ def test_version_warning(reuse):
         pass
 
 
-def suggested_artifact(name):
-    import use
-
-    reuse = use
-    rw = None
-    try:
-        mod = reuse(name, modes=reuse.auto_install)
-        assert False
-    except BaseException as rw:
-        return _extracted_from_suggested_artifact_10(rw)
-
-
-def _extracted_from_suggested_artifact_10(rw):
-    assert "version=" in str(rw), f"warning does not suggest a version: {rw}"
-    assert "hashes=" in str(rw), f"warning does not suggest a hash: {rw}"
-    assert isinstance(rw.args[0], str)
-    match = re.search(
-        'version="?(?P<version>[^"]+)".*' "hashes=?(?P<hashes>[^()]+), ",
-        str(rw),
-    )
-    assert match
-    hashes_evalstr = match.group("hashes")
-    log.debug("eval'ing the following string from rw message: %r", hashes_evalstr)
-    hashes = eval(hashes_evalstr)
-    log.debug("eval'ed to the following value: %r", hashes)
-    assert isinstance(
-        hashes, set
-    ), f"The wrong type of object is given in the warning message: {rw}"
-    version = match.group("version")
-    return (version, hashes)
-
-
 def test_use_global_install(reuse):
     from . import foo
 
@@ -246,7 +215,7 @@ def test_use_global_install(reuse):
 
 
 def test_is_version_satisfied(reuse):
-    sys_version = packaging.version.Version("3.6.0")
+    sys_version = reuse.Version("3.6.0")
     # google.protobuf 1.19.5 normal case
     info = {
         "comment_text": "",
@@ -338,7 +307,7 @@ def test_classic_import_same_version(reuse):
     version = reuse.Version(__import__("furl").__version__)
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        mod = reuse("furl", version=version, modes=reuse.fatal_exceptions)
+        mod = reuse("furl", version=version)
         assert not w
         assert reuse.Version(mod.__version__) == version
 
@@ -356,7 +325,6 @@ def test_classic_import_diff_version(reuse):
         pass
 
 
-@pytest.mark.skipif(is_win, reason="code lines can't be looked up? # TODO")
 def test_use_ugrade_version_warning(reuse):
     version = "0.0.0"
     with warnings.catch_warnings(record=True) as w:
@@ -388,7 +356,7 @@ def test_reloading(reuse):
     with Restorer():
         mod = None
         newfile = f"{file}.t"
-        for check in range(2):
+        for check in range(1):
             with open(newfile, "w") as f:
                 f.write(f"def foo(): return {check}")
                 f.flush()
@@ -468,3 +436,5 @@ def test_clear_registry(reuse):
             reuse.cleanup()
     finally:
         reuse.registry = reuse._set_up_registry()
+
+
