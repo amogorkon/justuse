@@ -855,7 +855,8 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
             "--progress-bar", "ascii",
             "--no-deps",
             "--prefer-binary",
-            "--exists-action", "i",
+            "--force-reinstall",
+            "--exists-action", "b",
             "--ignore-installed",
             "--ignore-requires-python",
             "--no-use-pep517",
@@ -878,7 +879,7 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
             os.chdir(str(installation_path))
             out_info.update({
                 "artifact_path": artifact_path,
-                "installation_path": installation_path,
+                "installation_path": instal lation_path,
                 "module_path": module_path,
                 "import_relpath": ".".join(relp.split("/")[0:-1]),
                 "info": info,
