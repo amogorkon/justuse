@@ -529,11 +529,14 @@ def _clean_sys_modules(package_name: str) -> None:
 
 
 def _venv_root(package_name, version, home) -> Path:
+    assert version
     venv_root = home / "venv" / package_name / str(version)
     if not venv_root.exists():
         venv_root.mkdir(parents=True)
-    return venv_root
-
+        _bootstrap_venv_pip(venv_root)
+    if _find_exe(venv_root).exists():
+        return venv_root
+    raise Exception("Virtual environment not properly created")
 
 def _venv_is_win() -> bool:
     return sys.platform == "win32"
@@ -774,6 +777,14 @@ def _bootstrap_venv_pip(venv_root):
     if not hasattr(_bootstrap_venv_pip, "_saved_sys_path"):
         _bootstrap_venv_pip._saved_sys_path = [*sys.path]
     python_exe = _find_exe(venv_root)
+    if python_exe.exists():
+        return
+    _clean_sys_modules("venv")
+    _clean_sys_modules("virtualenv") 
+    _clean_sys_modules("pip")
+    _clean_sys_modules("ensurepip")
+    _clean_sys_modules("site")
+    _clean_sys_modules("_sitecustomize")
     bootstrap_zip = (
         Path(__file__).parent.parent / "ensurepip.zip"
     ).absolute()
@@ -791,12 +802,18 @@ def _bootstrap_venv_pip(venv_root):
         # workaround for pip stupidity
         sys.modules["pip._vendor.html5lib"] = html5lib
         log.debug("Importing venv")
-        import venv
+        venv = __import__("venv")
+        log.debug("Importing venv -> %s", venv)
+        log.info(
+          "venv contents: %s",
+          pformat(dict(inspect.getmembers(venv)))
+        )
+        
         try:
             return venv.create(
                 venv_root,
-                system_site_packages=True, clear=True,
-                symlinks=False, with_pip=True, upgrade_deps=True
+                system_site_packages=False, clear=True,
+                symlinks=False, with_pip=True, upgrade_deps=False
             )
         except:
             for r in venv_root.rglob("**/site-packages"):
@@ -806,12 +823,12 @@ def _bootstrap_venv_pip(venv_root):
             try:
                 return venv.create(
                     venv_root,
-                    system_site_packages=False,clear=False,
-                    symlinks=False, with_pip=False,
+                    system_site_packages=True,clear=False,
+                    symlinks=True, with_pip=False,
                     upgrade_deps=False
                 )
             except:
-                log.error(traceback.format_exc())
+                raise
 
 def _find_exe(venv_root):
     if sys.platform == "win32":
@@ -821,14 +838,29 @@ def _find_exe(venv_root):
 
 def _get_venv_env(venv_root):
     pathvar = os.environ.get("PATH")
+    python_exe = _find_exe(venv_root)
+    exe_dir = python_exe.parent.absolute()
+    
+    if not python_exe.exists():
+        o1 = run(args=["cmd.exe", "/C", "taskkill", "/F", "/IM", "pip.exe"], shell=False)
+        exe_dir.parent.unlink()
+        o2 = _process(args=["cmd.exe", "/C", "del", "/S", "/Q", venv_root], shell=False)
+        venv_root.mkdir(parents=True)
+        os.chdir(venv_root)
+        python_exe.write_bytes(Path(sys.executable).read_bytes())
+        (exe_dir / Path(sys.executable).name).write_bytes(
+            Path(sys.executable).read_bytes()
+        )
+        o3 = _process(args=["cmd.exe", "/C", "CD", "/D", venv_root, "&", sys.executable, "-m", "venv", "--verbose", str(venv_root.absolute())], shell=False)
+        [os.chmod(a[0], 0o10777) for a in os.fwalk(venv_dir)]
+    
+    
     source_dir = Path(__file__).parent.parent.absolute()
     # fmt: off
     return {
-        "PYTHONPATH": str(source_dir / "ensurepip.zip"),
-        "VIRTUAL_ENV": str(venv_root),
-        "PYTHONSTARTUP": "",
-        "PYTHONHOME": "",
-        "PATH": f"%{_find_exe(venv_root)}{os.path.pathsep}{pathvar}"
+        "PYTHONPATH": str(source_dir / "ensurepip.zip") + os.path.pathsep + os.getenv("PYTHONPATH", "."),
+        "VIRTUAL_ENV": str(venv_root.absolute()),
+        "PATH": f"{exe_dir.absolute()!s}{os.path.pathsep}{pathvar}"
     }
 
 @icontract.ensure(lambda url: str(url).startswith("http"))
