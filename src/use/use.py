@@ -126,6 +126,7 @@ _aspects = {}
 _using = {}
 
 ModInUse = namedtuple("ModInUse", "name mod path spec frame")
+NoneType = type(None)
 
 # sometimes all you need is a sledge hammer..
 def signal_handler(sig, frame) -> None:
@@ -1004,11 +1005,11 @@ def _is_platform_compatible(
     )
 
 
-@icontract.ensure(lambda sys_version: isinstance(sys_version, Version))
+@icontract.ensure(lambda sys_version: isinstance(sys_version, (Version, NoneType)))
 def _is_compatible(
     info: Dict,
     hash_algo=Hash.sha256.name,
-    sys_version=None,
+    sys_version:Optional[Version]=None,
     platform_tags=None,
     include_sdist=None,
 ) -> bool:
