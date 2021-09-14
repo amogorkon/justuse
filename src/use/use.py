@@ -209,7 +209,6 @@ def pipes(func_or_class):
 
 # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
 # # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
-@pipes
 class Version(PkgVersion):
     def __new__(cls, *_, **__):
         return super(cls, Version).__new__(cls)
@@ -611,7 +610,11 @@ def _import_public_no_install(
         return mod
 
     # it seems to be installed in some way, for instance via pip
-    return importlib.import_module(rest)  # ! => cache
+    try:
+        return importlib.import_module(rest)  # ! => cache
+    except ImportError as exc:
+        pass
+    return exc
 
 
 def _parse_name(name):
@@ -635,6 +638,8 @@ def _auto_install(
 
     if func:
         result = func(**all_kwargs(_auto_install, locals()))
+        if isinstance(result, ModuleType):
+            return result
 
     query = use.registry.execute(
         '''
@@ -897,7 +902,8 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
         info = _parse_filename(filename)
         info["url"] = str("url")
     filename, url, version = (
-        info["filename"], URL(info["url"]),
+        info["filename"], 
+        URL(info["url"]),
         Version(info["version"])
     )
     artifact_path = _download_artifact(name, version, filename, url)
@@ -1336,6 +1342,7 @@ class Use(ModuleType):
     fatal_exceptions = 2 ** 1
     reloading = 2 ** 2
     aspectize_dunders = 2 ** 3
+    no_public_installation = 2 ** 4
 
     def __init__(self):
         # TODO for some reason removing self._using isn't as straight forward..
@@ -1832,11 +1839,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         fatal_exceptions = bool(Use.fatal_exceptions & modes)
         auto_install = bool(Use.auto_install & modes)
         aspectize_dunders = bool(Use.aspectize_dunders & modes)
-        version = (
-            version
-            if isinstance(version, Version)
-            else (Version(version) if version else None)
-        )
+        no_public_installation = bool(Use.no_public_installation & modes)
+        version = Version(version) if version else None
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
@@ -1844,17 +1848,18 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if any(_ensure_path(".").glob(f"**/{rest}.py")):
             warn(Message.ambiguous_name_warning(name), AmbiguityWarning)
         spec = None
-
-        if name in self._using:
-            spec = self._using[name].spec
-        elif not auto_install:
-            spec = importlib.util.find_spec(name)
+        
+        if not no_public_installation:
+            if name in self._using:
+                spec = self._using[name].spec
+            else:
+                spec = importlib.util.find_spec(name)
 
         # welcome to the buffet table, where everything is a lie
         # fmt: off
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
         log.info("case = %s", case)
-        result = {
+        case_func = {
             (False, False, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
             (False, False, False, True): _pebkac_no_version_no_hash,
             (False, False, True, False): _import_public_no_install,
@@ -1871,12 +1876,14 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             (True, True, False, True): _auto_install,
             (True, True, True, False): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
             (True, True, True, True): lambda **kwargs: _auto_install(_ensure_version(_import_public_no_install, **kwargs), **kwargs),
-        }[case](**locals())
+        }[case]  
+        # fmt: on
+        result = case_func(**locals())  # for debugging nicer to have on an extra line
         log.info("result = %s", result)
         assert result
-        # fmt: on
+
         if isinstance(result, ModuleType):
-            mod = None
+            mod = result
             aspectize = aspectize or {}
 
             for (check, pattern), decorator in aspectize.items():
