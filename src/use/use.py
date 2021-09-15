@@ -217,6 +217,10 @@ class Version(PkgVersion):
         if major or minor or patch:
             # string as only argument, no way to construct a Version otherwise - WTF
             return super().__init__(".".join((str(major), str(minor), str(patch))))
+        elif isinstance(versionstr, PkgVersion):
+            return super().__init__(".".join(map(str,versionstr.release)))
+        elif not isinstance(versionstr, (str, tuple)):
+            raise TypeError(f"use.Version({versionstr!r}): parameter must be either tuple or str, unless major/minor/patch are supplied. Actual argument: {type(versionstr).__qualname__}")
         return super().__init__(versionstr)
 
     def __iter__(self):
@@ -1852,7 +1856,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if not no_public_installation:
             if name in self._using:
                 spec = self._using[name].spec
-            else:
+            elif not auto_install:
                 spec = importlib.util.find_spec(name)
 
         # welcome to the buffet table, where everything is a lie
