@@ -1,8 +1,8 @@
-from packaging.version import Version as pkv
+from packaging.version import Version as PkgVersion
 
-class Version(pkv):
+class Version(PkgVersion):
     def __new__(cls, *args, **kwargs):
-        if isinstance(args[0], Version):
+        if args and isinstance(args[0], Version):
             return args[0]
         else:
             return super(cls, Version).__new__(cls)
@@ -19,6 +19,13 @@ class Version(pkv):
             return super().__init__(".".join((str(major), str(minor), str(patch))))
         return super().__init__(versionstr)
 
+    def __iter__(self):
+        yield from self.release
+
+    def __repr__(self):
+        return f"use.Version({'.'.join(map(str,self.release))!r})"
+
 
 v = Version(Version("1"))
 print(v)
+v2 = Version(Version(major=2, minor=0))

@@ -29,7 +29,6 @@ if Path("src").is_dir():
 import_base = Path(__file__).parent.parent / "src"
 is_win = sys.platform.startswith("win")
 import use
-from use import suggested_artifact
 
 __package__ = "tests"
 
@@ -46,6 +45,39 @@ def reuse():
     use._aspects = {}
     use._reloaders = {}
     return use
+
+
+def suggested_artifact(name, *args, **kwargs):
+    try:
+        mod = use(name, *args, modes=1, **kwargs)
+        assert False, f"Actually returned mod: {mod}"
+    except (RuntimeWarning, RuntimeError) as rw:
+        assert rw.args
+        for message in rw.args:
+            return _parse_warning_message("%s" % message)
+    assert False, "Did not find a suggested artifact"
+
+
+def _parse_warning_message(message: str):
+    RW_REGEX = re.compile(
+        r"version=((?:(?!, \w+=).)+).*hashes=((?:(?!, \w+=).)+)", re.DOTALL
+    )
+    version_evalstr, hashes_evalstr = RW_REGEX.findall(message)[0]
+    log.debug(
+        "eval'ing the following string from rw message [%s]:\n "
+        " hashes_evalstr: [%s], version_evalstr: [%s]",
+        message,
+        hashes_evalstr,
+        version_evalstr,
+    )
+    hashes = eval(hashes_evalstr)
+    version = eval(version_evalstr)
+    result = (version, hashes)
+    log.debug("eval'ed to the following: %s", result)
+    assert isinstance(
+        hashes, (set, str)
+    ), f"Wrong object type is given in the warning: {message!r}"
+    return result
 
 
 def test_redownload_module(reuse):
@@ -416,7 +448,7 @@ def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
 
 @pytest.mark.parametrize("name, version", (("numpy", "1.19.3"),))
 def test_86_numpy(reuse, name, version):
-    use = reuse
+    use = reuse  # for the eval() later
     with pytest.raises(RuntimeWarning) as w:
         reuse(name, version=version, modes=reuse.auto_install)
     assert w
@@ -424,7 +456,7 @@ def test_86_numpy(reuse, name, version):
     mod = eval(recommendation)
     assert mod.__name__ == name.split(".")[-1]
     assert mod.__version__ == version
-    return mod
+    return mod  # for the redownload test
 
 
 def test_clear_registry(reuse):
