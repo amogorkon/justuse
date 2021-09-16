@@ -881,7 +881,7 @@ def _bootstrap_venv_pip(venv_root):
     if python_exe.exists():
         return
     _clean_sys_modules("venv")
-    _clean_sys_modules("virtualenv") 
+    _clean_sys_modules("virtualenv")
     _clean_sys_modules("pip")
     _clean_sys_modules("ensurepip")
     _clean_sys_modules("site")
@@ -909,24 +909,19 @@ def _bootstrap_venv_pip(venv_root):
           "venv contents: %s",
           pformat(dict(inspect.getmembers(venv)))
         )
-        
+
         try:
             return venv.create(
                 venv_root,
                 system_site_packages=False, clear=True,
-                symlinks=False, with_pip=True, upgrade_deps=False
+                symlinks=False, with_pip=True
             )
         except:
-            for r in venv_root.rglob("**/site-packages"):
-                log.info("Writing out bootstrap zip")
-                (r / f"python3{sys.version_info[1]}.zip"
-                    ).write_bytes(bootstrap_zip.read_bytes())
             try:
                 return venv.create(
                     venv_root,
                     system_site_packages=True,clear=False,
-                    symlinks=True, with_pip=False,
-                    upgrade_deps=False
+                    symlinks=True, with_pip=False
                 )
             except:
                 raise
@@ -984,7 +979,7 @@ def _find_exe(venv_root):
 #""
 #       )
 #       use.registry.execute(
-#           f""" 
+#           f"""
 #NSERT OR IGNORE INTO hashes (artifact_id, algo, value)
 #ALUES ({use.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 #       )
@@ -1003,7 +998,7 @@ def _get_venv_env(venv_root):
     pathvar = os.environ.get("PATH")
     python_exe = _find_exe(venv_root)
     exe_dir = python_exe.parent.absolute()
-    
+
     if not python_exe.exists():
         o1 = run(args=["cmd.exe", "/C", "taskkill", "/F", "/IM", "pip.exe"], shell=False)
         exe_dir.parent.unlink()
@@ -1016,8 +1011,8 @@ def _get_venv_env(venv_root):
         )
         o3 = _process(args=["cmd.exe", "/C", "CD", "/D", venv_root, "&", sys.executable, "-m", "venv", "--verbose", str(venv_root.absolute())], shell=False)
         [os.chmod(a[0], 0o10777) for a in os.fwalk(venv_dir)]
-    
-    
+
+
     source_dir = Path(__file__).parent.parent.absolute()
     # fmt: off
     return {
@@ -1239,7 +1234,7 @@ def _get_filtered_data(data, version=None, include_sdist=None) -> Dict[str, Unio
                 filtered["releases"][ver] = []
             filtered["releases"][ver].append(info)
     if not include_sdist and (
-        (version is not None 
+        (version is not None
         and str(version) not in filtered["releases"]) or
         not filtered["urls"]
     ):
