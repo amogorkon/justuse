@@ -71,7 +71,6 @@ import ast
 import asyncio
 import atexit
 import codecs
-import furl
 import hashlib
 import importlib.util
 import inspect
@@ -94,6 +93,7 @@ from functools import lru_cache as cache
 from functools import reduce, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import SourceFileLoader
+from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
 from pathlib import Path
@@ -104,6 +104,7 @@ from types import ModuleType
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Union
 from warnings import warn
 
+import furl
 import packaging
 import requests
 import toml
@@ -392,8 +393,7 @@ def pipes(func_or_class):
     return ctx[tree.body[0].name]
 
 
-def _ensure_path(value_for_path):
-    from pathlib import Path
+def _ensure_path(value_for_path) -> Path:
     if value_for_path is None:
         raise BaseException("value_for_path is None")
     if value_for_path in ("", b""):
@@ -403,12 +403,9 @@ def _ensure_path(value_for_path):
     if isinstance(value_for_path, (str, bytes)):
         return Path(value_for_path)
     if isinstance(value_for_path, furl.Path):
-        return reduce(
-            Path.__truediv__,
-            value_for_path.segments,
-            Path.cwd()
-        )
+        return reduce(Path.__truediv__, value_for_path.segments, Path.cwd())
     raise TypeError(f"Attempt to create a Path from an illegal value: {value_for_path!r}")
+
 
 @cache
 def get_supported() -> FrozenSet[PlatformTag]:
@@ -521,10 +518,6 @@ def _venv_root(package_name, version, home) -> Path:
     return venv_root
 
 
-def _venv_is_win() -> bool:
-    return sys.platform.lower().startswith("win")
-
-
 def _pebkac_no_version_hash(func=None, *, name: str, **kwargs) -> "ModuleType|Exception":
     if func:
         result = func(name=name, **kwargs)
@@ -600,15 +593,14 @@ def _import_public_no_install(
 
     # it seems to be installed in some way, for instance via pip
     return importlib.import_module(rest)  # ! => cache
-    
 
-def _parse_name(name):
-    match = re.match(
-        r"(?P<package_name>[^.]+)\.?(?P<rest>[a-zA-Z0-9._]+)?", name
-    )
+
+def _parse_name(name) -> Tuple[str, str]:
+    match = re.match(r"(?P<package_name>[^.]+)\.?(?P<rest>[a-zA-Z0-9._]+)?", name)
     assert match, f"Invalid name spec: {name!r}"
     names = match.groupdict()
     return names["package_name"], names["rest"] or name
+
 
 def _auto_install(
     func=None,
@@ -616,15 +608,20 @@ def _auto_install(
     name,
     hash_algo,
     version,
+    package_name,
+    rest,
+    hashes,
     **kwargs,
-):
-    package_name, rest = _parse_name(name)
-    
+) -> "ModuleType|Exception":
+
     if func:
         result = func(**all_kwargs(_auto_install, locals()))
+        if isinstance(result, ModuleType):
+            return result
 
+    # TODO: JOIN
     query = use.registry.execute(
-        f"SELECT id, installation_path FROM distributions WHERE name='{package_name}' AND version='{str(version)}'",
+        f"SELECT id, installation_path, pure_python_package FROM distributions WHERE name='{package_name}' AND version='{str(version)}'",
     ).fetchone()
 
     if query:
@@ -635,18 +632,26 @@ def _auto_install(
                 query["id"],
             ],
         ).fetchone()
+    # TODO: we need to ensure an artifact exists at this point
     path = None
     if query:
         path = _ensure_path(query["path"])
     if path:
         _update_hashes(**all_kwargs(_auto_install, locals()))
-
     if path:
         # trying to import directly from zip
         try:
             importer = zipimport.zipimporter(path)
             mod = importer.load_module(rest)
-            print("Direct zipimport of", rest, "successful.")
+            _save_module_info(
+                name=package_name,
+                version=version,
+                artifact_path=path,
+                hash_value=hash_value,
+                installation_path=None,
+            )
+            print("Direct zipimport of", package_name, "successful.")
+            return mod
         except (zipimport.ZipImportError, ImportError):
             if config["debugging"]:
                 log.debug(traceback.format_exc())
@@ -666,7 +671,7 @@ def _auto_install(
     this_version = Version(out_info["version"])
     that_hash = out_info["digests"][hash_algo.name]
 
-    use._save_module_info(
+    _save_module_info(
         name=package_name,
         version=this_version,
         artifact_path=path,
@@ -675,7 +680,8 @@ def _auto_install(
     )
     return mod
 
-def _update_hashes(*, package_name, version, default, hash_algo, hashes, **kwargs) -> None:
+
+def _update_hashes(*, package_name, version, hash_algo, hashes, **kwargs) -> None:
     found = None
     try:
         data = _get_filtered_data(_get_package_data(package_name))
@@ -699,29 +705,9 @@ def _update_hashes(*, package_name, version, default, hash_algo, hashes, **kwarg
         if that_hash is not None:
             assert isinstance(hashes, set)
             hashes.add(that_hash)
-    except KeyError as be:  # json issuesa
+    except KeyError as be:  # json issues
         msg = f"request to https://pypi.org/pypi/{package_name}/{version}/json lead to an error: {be}"
         return RuntimeError(msg)
-    
-
-# these are aliases for the purpose of aspectizing modules
-
-
-def isfunction(x: Any) -> bool:
-    return inspect.isfunction(x)
-
-
-def ismethod(x: Any) -> bool:
-    return inspect.isfunction(x)
-
-
-def ismethod(x: Any) -> bool:
-    return inspect.isfunction(x)
-
-
-# decorators for callable classes require a completely different approach i'm afraid.. removing the check should discourage users from trying
-# def isclass(x):
-#     return inspect.isclass(x) and hasattr(x, "__call__")
 
 
 def _parse_filename(filename) -> dict:
@@ -838,13 +824,48 @@ def _find_exe(venv_root):
         return p, env, _ensure_path(p).parent, _ensure_path(p).name
 
 
+def _save_module_info(
+    *,
+    version: Union[Version | str],  # type: ignore
+    artifact_path: Optional[Path],
+    hash_value: Optional[str],
+    installation_path: Path,
+    name: str,
+    hash_algo=Hash.sha256,
+):
+    """Update the registry to contain the package's metadata."""
+    # version = str(version) if version else "0.0.0"
+    # assert version not in ("None", "null", "")
+    assert isinstance(version, Version)
+
+    if not use.registry.execute(
+        f"SELECT * FROM distributions WHERE name='{name}' AND version='{version}'"
+    ).fetchone():
+        use.registry.execute(
+            f"""
+INSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
+VALUES ('{name}', '{version}', '{installation_path}', {time.time()}, {installation_path is None})
+"""
+        )
+        use.registry.execute(
+            f"""
+INSERT OR IGNORE INTO artifacts (distribution_id, path)
+VALUES ({use.registry.lastrowid}, '{artifact_path}')
+"""
+        )
+        use.registry.execute(
+            f""" 
+INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
+VALUES ({use.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
+        )
+    use.registry.connection.commit()
+
+
 def _download_artifact(url, artifact_path):
     artifact_path.write_bytes(requests.get(url).content)
 
 
-def _load_venv_mod(
-    name, version=None, artifact_path=None, out_info=None
-) -> ModuleType:
+def _load_venv_mod(name, version=None, artifact_path=None, out_info=None) -> ModuleType:
     if not version or str(version) in ("0.0.0", "None", ""):
         version = None
     info = (out_info := (out_info if out_info is not None else {}))
@@ -862,7 +883,7 @@ def _load_venv_mod(
     artifact_path = artifact_path or sys.modules["use"].home / "packages" / filename
     if not artifact_path.exists():
         _download_artifact(url, artifact_path)
-    
+
     if artifact_path.exists():
         install_item = artifact_path
     log.error("%s\n", pformat(locals()))
@@ -919,16 +940,12 @@ def _load_venv_mod(
                     "version": version,
                     "info": info,
                     **meta,
-                    **info
+                    **info,
                 }
             )
-            return _load_venv_entry(
-                name,
-                module_path=module_path
-            )
+            return _load_venv_entry(name, module_path=module_path)
         finally:
             os.chdir(orig_cwd)
-    assert False, f"{meta['import_relpath']=}, {relp=}, {name_segments=}, {package_name=}, {rest=}"
 
 
 def _load_venv_entry(name, module_path) -> ModuleType:
@@ -942,12 +959,12 @@ def _load_venv_entry(name, module_path) -> ModuleType:
     )
     with open(module_path, "rb") as code_file:
         return _build_mod(
-                name=rest,
-                code=code_file.read(),
-                module_path=_ensure_path(module_path),
-                initial_globals={},
-                aspectize={},
-            )
+            name=rest,
+            code=code_file.read(),
+            module_path=_ensure_path(module_path),
+            initial_globals={},
+            aspectize={},
+        )
 
 
 @cache
@@ -1115,14 +1132,14 @@ def _build_mod(
     aspectize,
     aspectize_dunders=False,
 ) -> ModuleType:
-    
+
     package_name, rest = _parse_name(name)
     mod = None
     if "__init__" in module_path.stem:
         mod = ModuleType(rest + ".__init__")
     else:
         mod = ModuleType(rest)
-    
+
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = str(module_path)
     mod.__package__ = rest
@@ -1165,7 +1182,7 @@ def _ensure_version(func, *, name, version, **kwargs) -> "ModuleType | Exception
         return result
 
     this_version = _get_version(mod=result)
-    
+
     if this_version == version:
         return result
     else:
@@ -1173,7 +1190,9 @@ def _ensure_version(func, *, name, version, **kwargs) -> "ModuleType | Exception
 
 
 def _fail_or_default(exception, default):
-    assert isinstance(exception, BaseException), f"_fail_or_default MUST be called with a valid exception, but got {exception=}, {default=}"
+    assert isinstance(
+        exception, BaseException
+    ), f"_fail_or_default MUST be called with a valid exception, but got {exception=}, {default=}"
     if default is not mode.fastfail:
         return default  # TODO: write test for default
     else:
@@ -1316,6 +1335,7 @@ class Use(ModuleType):
 
         self._set_up_registry()
         self._user_registry = toml.load(self.home / "user_registry.toml")
+        self.cleanup()
 
         # for the user to copy&paste
         with open(self.home / "default_config.toml", "w") as file:
@@ -1331,7 +1351,7 @@ class Use(ModuleType):
 
         if config["version_warning"]:
             try:
-                response = requests.get('https://pypi.org/pypi/justuse/json')
+                response = requests.get("https://pypi.org/pypi/justuse/json")
                 data = response.json()
                 max_version = max(Version(version) for version in data["releases"].keys())
                 target_version = max_version
@@ -1469,43 +1489,6 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
                 self.registry.execute(f"DELETE FROM distributions WHERE id=?", (ID,))
         self.registry.connection.commit()
 
-    def _save_module_info(
-        self,
-        *,
-        version: Union[Version | str],  # type: ignore
-        artifact_path: Optional[Path],
-        hash_value=Optional[str],
-        installation_path=Path,
-        name: str,
-        hash_algo=Hash.sha256,
-    ):
-        """Update the registry to contain the package's metadata."""
-        # version = str(version) if version else "0.0.0"
-        # assert version not in ("None", "null", "")
-        assert isinstance(version, Version)
-
-        if not self.registry.execute(
-            f"SELECT * FROM distributions WHERE name='{name}' AND version='{version}'"
-        ).fetchone():
-            self.registry.execute(
-                f"""
-INSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
-VALUES ('{name}', '{version}', '{installation_path}', {time.time()}, {installation_path is None})
-"""
-            )
-            self.registry.execute(
-                f"""
-INSERT OR IGNORE INTO artifacts (distribution_id, path)
-VALUES ({self.registry.lastrowid}, '{artifact_path}')
-"""
-            )
-            self.registry.execute(
-                f""" 
-INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
-VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
-            )
-        self.registry.connection.commit()
-
     def _set_mod(self, *, name, mod, frame, path=None, spec=None):
         """Helper to get the order right."""
         self._using[name] = ModInUse(name, mod, path, spec, frame)
@@ -1637,7 +1620,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     # if we're calling from a script file e.g. `python3 my/script.py` like pytest unittest
                     if hasattr(main_mod, "__file__"):
                         source_dir = (
-                            _ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename)
+                            _ensure_path(
+                                inspect.currentframe().f_back.f_back.f_code.co_filename
+                            )
                             .resolve()
                             .parent
                         )
@@ -1773,7 +1758,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         log.debug(f"use-str: {name} {version} {hashes}")
         package_name, rest = _parse_name(name)
         log.debug(f"use-str: {package_name}, {rest} {version} {hashes}")
-        
+
         if isinstance(hashes, str):
             hashes = set([hashes])
         hashes = set(hashes) if hashes else set()
@@ -1784,7 +1769,11 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         aspectize_dunders = bool(Use.aspectize_dunders & modes)
         aspectize = aspectize or {}
 
-        version = version if isinstance(version,Version) else (Version(version) if version else None)
+        version = (
+            version
+            if isinstance(version, Version)
+            else (Version(version) if version else None)
+        )
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
@@ -1795,7 +1784,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         if name in self._using:
             spec = self._using[name].spec
-        elif not auto_install:
+        else:
             spec = importlib.util.find_spec(name)
 
         # welcome to the buffet table, where everything is a lie
@@ -1825,7 +1814,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         mod = result if isinstance(result, ModuleType) else mod
         exc = result if isinstance(result, BaseException) else None
         assert mod != None or exc != None
-        
+
         if mod:
             for (check, pattern), decorator in aspectize.items():
                 _apply_aspect(
