@@ -50,6 +50,7 @@ requires=(
     "requests(>= 2.24.0)",
     "yarl(>= 1.6.3)",
     "packaging(>= 1.0.0)",
+    "typeguard(~= 2.12.1)",
 )
 
 

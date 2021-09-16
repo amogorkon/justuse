@@ -10,7 +10,6 @@ from unittest import skip
 
 import pytest
 import requests
-from setuptools import _find_all_simple
 
 from .unit_test import log, reuse
 
@@ -99,65 +98,71 @@ def test_pure_python_package(reuse):
         file.unlink()
 
 
-def _do_load_venv_mod(reuse, name):
-    data = reuse._get_filtered_data(reuse._get_package_data(name))
-    versions = sorted(list(data["releases"].keys()))
-    version = versions[-1]
-    items = data["releases"][version]
-    mod = None
-    for item in items:
-            mod = reuse._load_venv_mod(
-                name=name,
-                version=item["version"],
-            )
-            if mod:
-                return
-    assert False
-
-
-def test_load_venv_mod_protobuf(reuse):
-    _do_load_venv_mod(reuse, "protobuf")
-
-
-def test_load_venv_mod_numpy(reuse):
-    _do_load_venv_mod(reuse, "numpy")
-
-
 def test_db_setup(reuse):
     assert reuse.registry
 
 
-def _get_test_ver_hash_data(reuse):
-    VerHash = reuse.VerHash
-    h = "5de64950137f3a50b76ce93556db392e8f1f954c2d8207f78a92d1f79aa9f737"
-    vh1, vh2 = (VerHash("1.0.1", h), VerHash("1.0.2", h))
-    vh1u, vh2u, vh3u = (VerHash("1.0.1", None), VerHash(None, h), VerHash(None, None))
-    vh1b = VerHash("1.0.1", h)
-    return (VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b)
+@pytest.mark.parametrize(
+    "name, floor_version, n_versions",
+    [
+        ("numpy", "1.19.0", 1),
+        ("numpy", "1.19.0", 2),
+        ("protobuf", None, 1),
+        ("protobuf", None, 2),
+        ("sqlalchemy", None, 1),
+        ("sqlalchemy", None, 2),
+    ]
+)
+def test_load_multi_version(reuse, name, floor_version, n_versions):
+    data = reuse._get_filtered_data(reuse._get_package_data(name))
+    versions = [*data["releases"].keys()]
+    mods = []
+    for version in versions[0:min(len(versions), n_versions)]:
+        if (floor_version 
+           and reuse.Version(version) < reuse.Version(floor_version)):
+            continue
+        info = data["releases"][version][0]
+        reuse._clean_sys_modules(name.replace("-", "_"))
+        mod = reuse(
+            info["distribution"],
+            version=version,
+            hashes=info["digests"]["sha256"],
+            modes=reuse.auto_install
+        )
+        mod_version = getattr(
+            mod, "__version__", reuse._get_version(mod=mod)
+        )
+        mods.append((version, mod_version, mod))
+    return mods
 
 
-def test_ver_hash_1(reuse):
-    VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b = _get_test_ver_hash_data(reuse)
-    assert vh1 and vh2
-    assert vh1.hash == vh2.hash
-    assert vh1u.version
-    assert vh2u.hash
-    assert not vh3u
-    assert vh1 == vh1b
-    assert vh1 == vh1
-    assert vh1 != ("1.0.1", None)
-    assert vh1 != ("1.0.1", None, None)
+@pytest.mark.parametrize(
+    "name, floor_version, n_versions",
+    [
+        ("numpy", "1.19.0", 1),
+        ("numpy", "1.19.0", 2),
+        ("protobuf", None, 1),
+        ("protobuf", None, 2),
+        ("sqlalchemy", None, 1),
+        ("sqlalchemy", None, 2),
+    ]
+)
+def test_check_multi_version(reuse, name, floor_version, n_versions):
+    mods = test_load_multi_version(
+        reuse, name, floor_version, n_versions
+    )
+    for expected_version, actual_version, mod in mods:
+        if not hasattr(mod, "__version__"):
+            continue
+        assert expected_version == actual_version
 
 
-def test_ver_hash_2(reuse):
-    VerHash, h, vh1, vh2, vh1u, vh2u, vh3u, vh1b = _get_test_ver_hash_data(reuse)
-    assert vh1 == ("1.0.1", h)
-    assert vh1 != ("1.0.1", h, None)
-    assert vh1 != object()
-    assert ("1.0.1", h, None) != vh1
-    assert "1.0.1" in vh1
-    assert h in vh1
-    assert "1.0.1" not in vh2
-    assert h in vh2
-    assert h in vh2u
-    assert h not in vh3u
+@pytest.mark.skipif(True, reason="broken")
+def test_no_isolation(reuse):
+    assert test_load_multi_version(
+        reuse, "numpy", "1.19.0", 1
+    )
+    assert test_load_multi_version(
+        reuse, "numpy", "1.19.0", 1
+    )
+
