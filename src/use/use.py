@@ -610,7 +610,6 @@ def _auto_install(
     version,
     package_name,
     rest,
-    hashes,
     **kwargs,
 ) -> "ModuleType|Exception":
 
@@ -1120,7 +1119,7 @@ def _get_version(name=None, package_name=None, /, mod=None) -> Optional[Version]
         version = version.__call__()
     if isinstance(version, str):
         return Version(version)
-    return version
+    return Version(version)
 
 
 def _build_mod(
@@ -1754,7 +1753,6 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         Returns:
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
-        mod = None
         log.debug(f"use-str: {name} {version} {hashes}")
         package_name, rest = _parse_name(name)
         log.debug(f"use-str: {package_name}, {rest} {version} {hashes}")
@@ -1811,11 +1809,9 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         }[case](**locals())
         log.info("result = %s", result)
         # fmt: on
-        mod = result if isinstance(result, ModuleType) else mod
-        exc = result if isinstance(result, BaseException) else None
-        assert mod != None or exc != None
+        assert result != None
 
-        if mod:
+        if isinstance((mod := result), ModuleType):
             for (check, pattern), decorator in aspectize.items():
                 _apply_aspect(
                     mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders
