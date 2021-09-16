@@ -569,7 +569,7 @@ def _venv_root(package_name, version, home) -> Path:
 def _venv_is_win() -> bool:
     return sys.platform == "win32"
 
-  
+
 def _pebkac_no_version_hash(func=None, *, name: str, **kwargs) -> Union[ModuleType,Exception]:
     if func:
         result = func(name=name, **kwargs)
@@ -641,7 +641,7 @@ def _import_public_no_install(
     # it seems to be installed in some way, for instance via pip
     return importlib.import_module(rest)  # ! => cache
 
-  
+
 def _parse_name(name) -> Tuple[str, str]:
     match = re.match(r"(?P<package_name>[^.]+)\.?(?P<rest>[a-zA-Z0-9._]+)?", name)
     assert match, f"Invalid name spec: {name!r}"
@@ -841,7 +841,7 @@ def _bootstrap_venv_pip(venv_root):
     if python_exe.exists():
         return
     _clean_sys_modules("venv")
-    _clean_sys_modules("virtualenv") 
+    _clean_sys_modules("virtualenv")
     _clean_sys_modules("pip")
     _clean_sys_modules("ensurepip")
     _clean_sys_modules("site")
@@ -869,7 +869,7 @@ def _bootstrap_venv_pip(venv_root):
           "venv contents: %s",
           pformat(dict(inspect.getmembers(venv)))
         )
-        
+
         try:
             return venv.create(
                 venv_root,
@@ -927,7 +927,7 @@ VALUES ({use.registry.lastrowid}, '{artifact_path}')
 """
         )
         use.registry.execute(
-            f""" 
+            f"""
 INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
 VALUES ({use.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         )
@@ -938,7 +938,7 @@ def _get_venv_env(venv_root):
     pathvar = os.environ.get("PATH")
     python_exe = _find_exe(venv_root)
     exe_dir = python_exe.parent.absolute()
-    
+
     if not python_exe.exists():
         o1 = run(args=["cmd.exe", "/C", "taskkill", "/F", "/IM", "pip.exe"], shell=False)
         exe_dir.parent.unlink()
@@ -951,8 +951,8 @@ def _get_venv_env(venv_root):
         )
         o3 = _process(args=["cmd.exe", "/C", "CD", "/D", venv_root, "&", sys.executable, "-m", "venv", "--verbose", str(venv_root.absolute())], shell=False)
         [os.chmod(a[0], 0o10777) for a in os.fwalk(venv_dir)]
-    
-    
+
+
     source_dir = Path(__file__).parent.parent.absolute()
     # fmt: off
     return {
@@ -1158,7 +1158,7 @@ def _get_filtered_data(data, version=None, include_sdist=None) -> Dict[str, Unio
                 filtered["releases"][ver] = []
             filtered["releases"][ver].append(info)
     if not include_sdist and (
-        (version is not None 
+        (version is not None
         and str(version) not in filtered["releases"]) or
         not filtered["urls"]
     ):
