@@ -436,5 +436,3 @@ def test_clear_registry(reuse):
             reuse.cleanup()
     finally:
         reuse.registry = reuse._set_up_registry()
-
-

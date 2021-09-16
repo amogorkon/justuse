@@ -6,6 +6,7 @@ import subprocess
 import sys
 import warnings
 from pathlib import Path
+from shutil import rmtree
 from unittest import skip
 
 import pytest
@@ -82,8 +83,14 @@ def test_pure_python_package(reuse):
         reuse.Path.home()
         / ".justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl"
     )
-
+    venv_dir = (
+        reuse.Path.home()
+        / ".justuse-python/venv/example-pypi-package/0.1.0"
+    )
     file.unlink(missing_ok=True)
+    if venv_dir.exists():
+        rmtree(venv_dir)
+    
     test = reuse(
         "example-pypi-package.examplepy",
         version="0.1.0",
@@ -93,6 +100,8 @@ def test_pure_python_package(reuse):
         },
         modes=reuse.auto_install,
     )
+    assert venv_dir.exists() == False, "Should not have created venv for example-pypi-package"
+    
     assert str(test.Number(2)) == "2"
     if file.exists():
         file.unlink()
@@ -165,4 +174,3 @@ def test_no_isolation(reuse):
     assert test_load_multi_version(
         reuse, "numpy", "1.19.0", 1
     )
-
