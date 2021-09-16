@@ -2091,7 +2091,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         # fmt: off
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
         log.info("case = %s", case)
-        result = {
+        case_func = {
             (False, False, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
             (False, False, False, True): _pebkac_no_version_no_hash,
             (False, False, True, False): _import_public_no_install,
@@ -2108,21 +2108,21 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             (True, True, False, True): _auto_install,
             (True, True, True, False): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
             (True, True, True, True): lambda **kwargs: _auto_install(_ensure_version(_import_public_no_install, **kwargs), **kwargs),
-        }[case](**locals())
+        }[case]
+        result = case_func(**locals())
         log.info("result = %s", result)
         # fmt: on
-        mod = result if isinstance(result, ModuleType) else mod
-        exc = result if isinstance(result, BaseException) else None
-        assert mod != None or exc != None
+        assert result
 
-        if mod:
+        if isinstance(result, ModuleType):
+            mod = result
             for (check, pattern), decorator in aspectize.items():
                 _apply_aspect(
                     mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders
                 )
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
-            return _ensure_proxy(mod) or mod
+            return _ensure_proxy(mod)
         return _fail_or_default(result, default)
 
 
