@@ -1982,7 +1982,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     threaded = True
                 if not threaded:
                     reloader.start_async()
-                elif not auto_install:
+                else:
                     reloader.start_threaded()
 
                 if not all(
