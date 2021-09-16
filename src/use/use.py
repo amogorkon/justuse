@@ -389,6 +389,22 @@ If you want to auto-install the latest version: use("{name}", version="{version}
     cant_import_no_version = (
         lambda package_name: f"Failed to auto-install '{package_name}' because no version was specified."
     )
+    venv_unavailable = (
+        lambda python_exe, python_version, python_platform: f"""
+Your system does not have a usable 'venv' package for this version of Python:
+   Path =     {python_exe}
+   Version =  {python_version}
+   Platform = {python_platform}
+
+Please run:
+   sudo apt update
+   sudo apt install python3-venv
+to install the necessary packages.
+
+You can test if your version of venv is working by running:
+  {python_exe} -m venv testenv && ls -lA testenv/bin/python
+"""
+    )
 
 
 
@@ -557,9 +573,12 @@ def _venv_root(package_name, version, home) -> Path:
         _bootstrap_venv_pip(venv_root)
     if _find_exe(venv_root).exists():
         return venv_root
-    raise Exception("Virtual environment not properly created")
+    raise AutoInstallationError(Message.venv_unavailable(
+        python_exe=sys.executable,
+        python_version='.'.join(sys.version_info),
+        python_platform=sys.platform
+    ))
 
-#ef _pebkac_no_version_hash(func=None, *, name: str, **kwargs) -> "ModuleType|Exception":
 
 def _venv_is_win() -> bool:
     return sys.platform == "win32"
@@ -880,15 +899,6 @@ def _bootstrap_venv_pip(venv_root):
     python_exe = _find_exe(venv_root)
     if python_exe.exists():
         return
-    _clean_sys_modules("venv")
-    _clean_sys_modules("virtualenv")
-    _clean_sys_modules("pip")
-    _clean_sys_modules("ensurepip")
-    _clean_sys_modules("site")
-    _clean_sys_modules("_sitecustomize")
-    bootstrap_zip = (
-        Path(__file__).parent.parent / "ensurepip.zip"
-    ).absolute()
     # workaround for pip stupidity
     from pip._vendor import html5lib
     backup_site_packages = (
@@ -927,67 +937,6 @@ def _bootstrap_venv_pip(venv_root):
                 raise
 
 def _find_exe(venv_root):
-#   env = {
-#       "PATH": str(venv_root / "bin")
-#       + os.path.pathsep
-#       + str(venv_root / "Scripts")
-#       + os.path.pathsep
-#       + os.environ["PATH"],
-#   }
-#   for p in (
-#       *venv_root.rglob("**/bin/python"),
-#       *venv_root.rglob("**/bin/python.exe"),
-#       *venv_root.rglob("**/Scripts/python"),
-#       *venv_root.rglob("**/Scripts/python*.exe"),
-#   ):
-#       return p, env, _ensure_path(p).parent, _ensure_path(p).name
-#   o = _process(sys.executable, "-m", "venv", venv_root)
-#   for p in (
-#       *venv_root.rglob("**/bin/python"),
-#       *venv_root.rglob("**/bin/python.exe"),
-#       *venv_root.rglob("**/Scripts/python"),
-#       *venv_root.rglob("**/Scripts/python*.exe"),
-#   ):
-#       return p, env, _ensure_path(p).parent, _ensure_path(p).name
-#
-#ef _save_module_info(
-#   *,
-#   version: Union[Version | str],  # type: ignore
-#   artifact_path: Optional[Path],
-#   hash_value: Optional[str],
-#   installation_path: Path,
-#   name: str,
-#   hash_algo=Hash.sha256,
-#:
-#   """Update the registry to contain the package's metadata."""
-#   # version = str(version) if version else "0.0.0"
-#   # assert version not in ("None", "null", "")
-#   assert isinstance(version, Version)
-#    if not use.registry.execute(
-#       f"SELECT * FROM distributions WHERE name='{name}' AND version='{version}'"
-#   ).fetchone():
-#       use.registry.execute(
-#           f"""
-#NSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
-#ALUES ('{name}', '{version}', '{installation_path}', {time.time()}, {installation_path is None})
-#""
-#       )
-#       use.registry.execute(
-#           f"""
-#NSERT OR IGNORE INTO artifacts (distribution_id, path)
-#ALUES ({use.registry.lastrowid}, '{artifact_path}')
-#""
-#       )
-#       use.registry.execute(
-#           f"""
-#NSERT OR IGNORE INTO hashes (artifact_id, algo, value)
-#ALUES ({use.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
-#       )
-#   use.registry.connection.commit()
-#
-#ef _download_artifact(url, artifact_path):
-#   artifact_path.write_bytes(requests.get(url).content)
-
     if sys.platform == "win32":
         return venv_root / "Scripts" / "python.exe"
     else:
@@ -1016,53 +965,10 @@ def _get_venv_env(venv_root):
     source_dir = Path(__file__).parent.parent.absolute()
     # fmt: off
     return {
-        "PYTHONPATH": str(source_dir / "ensurepip.zip") + os.path.pathsep + os.getenv("PYTHONPATH", "."),
+        "PYTHONPATH": os.getenv("PYTHONPATH", "."),
         "VIRTUAL_ENV": str(venv_root.absolute()),
         "PATH": f"{exe_dir.absolute()!s}{os.path.pathsep}{pathvar}"
     }
-
-#ef _load_venv_mod(name, version=None, artifact_path=None, out_info=None) -> ModuleType:
-#   if not version or str(version) in ("0.0.0", "None", ""):
-#       version = None
-#   info = (out_info := (out_info if out_info is not None else {}))
-#   package_name, rest = _parse_name(name)
-#   info.update(_find_version(package_name, version))
-#   venv_root = _venv_root(package_name, version, use.home)
-#   p, env, venv_bin, python_exe = _find_exe(venv_root)
-#   install_item = package_name = package_name
-#   log.info("Installing %s using pip", install_item)
-#   filename = (
-#       info["filename"]
-#       or str(artifact_path).replace("\x5c", "/").split("/")[-1].split("#")[0]
-#   )
-#   url = URL(info["url"])
-#   artifact_path = artifact_path or sys.modules["use"].home / "packages" / filename
-#   if not artifact_path.exists():
-#       _download_artifact(url, artifact_path)
-#    if artifact_path.exists():
-#       install_item = artifact_path
-#   log.error("%s\n", pformat(locals()))
-#   output = _process(
-#       str(venv_bin / python_exe),
-#       "-m",
-#       "pip",
-#       "--disable-pip-version-check",
-#       "--no-color",
-#       "install",
-#       "--pre",
-#       "-v",
-#       "-v",
-#       "-v",
-#       "--prefer-binary",
-#       "--exists-action",
-#       "i",
-#       "--no-build-isolation",
-#       "--no-cache-dir",
-#       "--no-compile",
-#       "--no-warn-script-location",
-#       "--no-warn-conflicts",
-#       install_item,
-#       env=env,
 
 @icontract.ensure(lambda url: str(url).startswith("http"))
 def _download_artifact(name, version, filename, url) -> Path:
