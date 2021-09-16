@@ -656,7 +656,6 @@ def _auto_install(
     version,
     package_name,
     rest,
-    hashes,
     **kwargs,
 # -> "ModuleType|Exception":
 
@@ -1367,7 +1366,7 @@ def _get_version(name:Optional[str]=None, package_name=None, /, mod=None) -> Opt
         version = version.__call__()
     if isinstance(version, str):
         return Version(version)
-    return version
+    return Version(version)
 
 
 def _build_mod(
@@ -2055,12 +2054,15 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         Returns:
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
+#       log.debug(f"use-str: {name} {version} {hashes}")
+
         log.debug(
            "_use_str(name=%s, version=%s, hash_algo=%s, hashes=%s, "
            "default=%s, aspectize=%s, modes=%s)",
            name, version, hash_algo, hashes,
            default, aspectize, modes
         )
+
         package_name, rest = _parse_name(name)
 #       log.debug(f"use-str: {package_name}, {rest} {version} {hashes}")
 
@@ -2121,9 +2123,13 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         log.info("result = %s", result)
         assert result
         # fmt: on
+#       assert result != None
+#        if isinstance((mod := result), ModuleType):
+
         if isinstance(result, ModuleType):
             mod = None
             aspectize = aspectize or {}
+
 
             for (check, pattern), decorator in aspectize.items():
                 _apply_aspect(
