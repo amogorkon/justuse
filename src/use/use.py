@@ -93,7 +93,7 @@ from functools import lru_cache as cache
 from functools import (partial, partialmethod, reduce, singledispatch,
                        update_wrapper)
 from importlib import metadata
-from importlib.machinery import SourceFileLoader
+from importlib.machinery import SourceFileLoader, ModuleSpec
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
@@ -561,8 +561,9 @@ def _venv_root(package_name, version, home) -> Path:
     venv_root = home / "venv" / package_name / str(version)
     if not venv_root.exists():
         venv_root.mkdir(parents=True)
-        _bootstrap_venv_pip(venv_root)
-    if _find_exe(venv_root).exists():
+        run([sys.executable, "-m", "venv", str(venv_root)])
+        # _bootstrap_venv_pip(venv_root)
+    if venv_root.exists():
         return venv_root
     raise Exception("Virtual environment not properly created")
 
@@ -716,7 +717,7 @@ def _auto_install(
             log.warning("Direct zipimport failed, attempting to extract and load manually...")
 
     out_info = {}
-    mod = _load_venv_mod(
+    _find_or_install(
         name=name,
         version=version,
         artifact_path=path,
@@ -724,8 +725,10 @@ def _auto_install(
     )
     path = path or out_info["artifact_path"]
     installation_path = out_info["installation_path"]
+    module_path = out_info["module_path"]
     this_version = Version(out_info["version"])
     that_hash = out_info["digests"][hash_algo.name]
+    mod = _load_venv_entry(name, module_path)
 
     _save_module_info(
         name=package_name,
@@ -739,15 +742,7 @@ def _auto_install(
 
 def _update_hashes(*, package_name, version, hash_algo, hashes, **kwargs) -> 'NoneType':
     # FIXME: I couldn't find the other part of this function
-    assert False, "_update_hashes needs fix"
-    try:
-        entry, that_hash = found
-        if that_hash is not None:
-            assert isinstance(hashes, set)
-            hashes.add(that_hash)
-    except KeyError as be:  # json issues
-        msg = f"request to https://pypi.org/pypi/{package_name}/{version}/json lead to an error: {be}"
-        return RuntimeError(msg)
+    pass
 
 
 @cache(maxsize=4096, typed=True)
@@ -777,25 +772,24 @@ def _process(*argv, env={}):
         if isinstance(k, str) and isinstance(v, str)
     }
 
-    o = run(
-        **(
-            setup := dict(
-                executable=(exe := argv[0]),
-                args=[*map(str, argv)],
-                bufsize=1024,
-                input="",
-                capture_output=True,
-                timeout=45000,
-                check=False,
-                close_fds=True,
-                env=_realenv,
-                encoding="UTF-8",
-                errors="ISO-8859-1",
-                text=True,
-                shell=False,
-            )
-        )
+    setup = dict(
+        args=[*map(str, argv)],
+        bufsize=1024,
+        input="",
+        capture_output=True,
+        timeout=45000,
+        check=False,
+        close_fds=True,
+        env=_realenv,
+        encoding="UTF-8",
+        errors="ISO-8859-1",
+        text=True,
+        shell=False,
     )
+    argv = setup["args"]
+    del setup["args"]
+
+    o = run(argv, **(setup))
     if o.returncode == 0:
         return o
     raise RuntimeError(
@@ -874,7 +868,7 @@ def _bootstrap_venv_pip(venv_root):
             return venv.create(
                 venv_root,
                 system_site_packages=False, clear=True,
-                symlinks=False, with_pip=True, upgrade_deps=False
+                symlinks=False, with_pip=True
             )
         except:
             for r in venv_root.rglob("**/site-packages"):
@@ -885,8 +879,7 @@ def _bootstrap_venv_pip(venv_root):
                 return venv.create(
                     venv_root,
                     system_site_packages=True,clear=False,
-                    symlinks=True, with_pip=False,
-                    upgrade_deps=False
+                    symlinks=True, with_pip=False
                 )
             except:
                 raise
@@ -939,17 +932,16 @@ def _get_venv_env(venv_root):
     python_exe = _find_exe(venv_root)
     exe_dir = python_exe.parent.absolute()
 
-    if not python_exe.exists():
-        o1 = run(args=["cmd.exe", "/C", "taskkill", "/F", "/IM", "pip.exe"], shell=False)
-        exe_dir.parent.unlink()
-        o2 = _process(args=["cmd.exe", "/C", "del", "/S", "/Q", venv_root], shell=False)
+    if not python_exe.exists() and _venv_is_win():
+        o1 = run(["cmd.exe", "/C", "taskkill", "/F", "/IM", "pip.exe"], shell=False)
+        o2 = _process(["cmd.exe", "/C", "del", "/S", "/Q", venv_root], shell=False)
         venv_root.mkdir(parents=True)
         os.chdir(venv_root)
         python_exe.write_bytes(Path(sys.executable).read_bytes())
         (exe_dir / Path(sys.executable).name).write_bytes(
             Path(sys.executable).read_bytes()
         )
-        o3 = _process(args=["cmd.exe", "/C", "CD", "/D", venv_root, "&", sys.executable, "-m", "venv", "--verbose", str(venv_root.absolute())], shell=False)
+        o3 = _process(["cmd.exe", "/C", "CD", "/D", venv_root, "&", sys.executable, "-m", "venv", "--verbose", str(venv_root.absolute())], shell=False)
         [os.chmod(a[0], 0o10777) for a in os.fwalk(venv_dir)]
 
 
@@ -995,52 +987,9 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
         info = _parse_filename(filename)
         info["url"] = str("url")
     filename, url, version = (
-        info["filename"], URL(info["url"]),
+        info["filename"],
+        URL(info["url"]),
         Version(info["version"])
-
-def _load_venv_mod(name, version=None, artifact_path=None, out_info=None) -> ModuleType:
-    if not version or str(version) in ("0.0.0", "None", ""):
-        version = None
-    info = (out_info := (out_info if out_info is not None else {}))
-    package_name, rest = _parse_name(name)
-    info.update(_find_version(package_name, version))
-    venv_root = _venv_root(package_name, version, use.home)
-    p, env, venv_bin, python_exe = _find_exe(venv_root)
-    install_item = package_name = package_name
-    log.info("Installing %s using pip", install_item)
-    filename = (
-        info["filename"]
-        or str(artifact_path).replace("\x5c", "/").split("/")[-1].split("#")[0]
-    )
-    url = URL(info["url"])
-    artifact_path = artifact_path or sys.modules["use"].home / "packages" / filename
-    if not artifact_path.exists():
-        _download_artifact(url, artifact_path)
-
-    if artifact_path.exists():
-        install_item = artifact_path
-    log.error("%s\n", pformat(locals()))
-    output = _process(
-        str(venv_bin / python_exe),
-        "-m",
-        "pip",
-        "--disable-pip-version-check",
-        "--no-color",
-        "install",
-        "--pre",
-        "-v",
-        "-v",
-        "-v",
-        "--prefer-binary",
-        "--exists-action",
-        "i",
-        "--no-build-isolation",
-        "--no-cache-dir",
-        "--no-compile",
-        "--no-warn-script-location",
-        "--no-warn-conflicts",
-        install_item,
-        env=env,
     )
     artifact_path = _download_artifact(name, version, filename, url)
     info["artifact_path"] = artifact_path
@@ -1098,7 +1047,8 @@ def _load_venv_mod(name, version=None, artifact_path=None, out_info=None) -> Mod
                 "module_path": module_path,
                 "import_relpath": ".".join(relp.split("/")[0:-1]),
                 "info": info,
-                **info
+                **info,
+                **meta,
             })
             return _delete_none(out_info)
         finally:
