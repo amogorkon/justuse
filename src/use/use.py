@@ -567,8 +567,7 @@ def _clean_sys_modules(package_name: str) -> None:
 
 def _venv_root(package_name, version, home) -> Path:
     assert version
-    venv_root = home / "venv" / package_name / str(version)
-    return venv_root
+    return home / "venv" / package_name / str(version)
 
 
 def _venv_is_win() -> bool:
@@ -695,9 +694,7 @@ def _auto_install(
     ).fetchone()
     if not query or not _ensure_path(query["path"]).exists():
         query = _find_or_install(package_name, version)
-        path = _ensure_path(query["path"])
-    else:
-        path = _ensure_path(query["path"])
+    path = _ensure_path(query["path"])
     installation_path = _ensure_path(query["installation_path"])
     module_path = _ensure_path(query["module_path"])
     import_relpath = query["import_relpath"]
@@ -705,7 +702,7 @@ def _auto_install(
     # trying to import directly from zip
     _clean_sys_modules(rest)
     mod = None
-    
+
     try:
         importer = zipimport.zipimporter(path)
         return (mod := importer.load_module(query["import_name"]))
