@@ -494,7 +494,7 @@ def test_51_sqlalchemy(reuse):
     mod = use(
         "sqlalchemy",
         version="0.7.1",
-        hash_value="5ef95d19c31a8cd3905c697be0a7e94e70ab1926ecd4159c3e6c1cf01fc3c492",
+        hashes="5ef95d19c31a8cd3905c697be0a7e94e70ab1926ecd4159c3e6c1cf01fc3c492",
         modes=use.auto_install,
     )
     assert mod.__version__ == "0.7.1"
