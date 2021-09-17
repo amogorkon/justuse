@@ -468,3 +468,14 @@ def test_clear_registry(reuse):
             reuse.cleanup()
     finally:
         reuse.registry = reuse._set_up_registry()
+
+
+def test_85_pywt(reuse):
+    try:
+        import pywt
+    except ImportError:
+        pytest.skip("pywt not installed")
+    finally:
+        del sys.modules["pywt"]
+    mod = reuse("pywt", version="1.1.1")
+    assert mod
