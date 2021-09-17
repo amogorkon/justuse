@@ -479,3 +479,22 @@ def test_85_pywt(reuse):
         del sys.modules["pywt"]
     mod = reuse("pywt", version="1.1.1")
     assert mod
+
+
+def test_51_sqlalchemy(reuse):
+    try:
+        import sqlalchemy
+
+        if sqlalchemy.__version__ == "0.7.1":
+            pytest.skip("Can't test with exactly version 0.7.1")
+    except ImportError:
+        pytest.skip("sqlalchemy not installed")
+    finally:
+        del sys.modules["sqlalchemy"]
+    mod = use(
+        "sqlalchemy",
+        version="0.7.1",
+        hash_value="5ef95d19c31a8cd3905c697be0a7e94e70ab1926ecd4159c3e6c1cf01fc3c492",
+        modes=use.auto_install,
+    )
+    assert mod.__version__ == "0.7.1"
