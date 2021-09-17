@@ -476,7 +476,8 @@ def test_85_pywt(reuse):
     except ImportError:
         pytest.skip("pywt not installed")
     finally:
-        del sys.modules["pywt"]
+        if "pywt" in sys.modules:
+            del sys.modules["pywt"]
     mod = reuse("pywt", version="1.1.1")
     assert mod
 
@@ -490,7 +491,8 @@ def test_51_sqlalchemy(reuse):
     except ImportError:
         pytest.skip("sqlalchemy not installed")
     finally:
-        del sys.modules["sqlalchemy"]
+        if "sqlalchemy" in sys.modules:
+            del sys.modules["sqlalchemy"]
     mod = use(
         "sqlalchemy",
         version="0.7.1",
