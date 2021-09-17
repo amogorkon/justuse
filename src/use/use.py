@@ -81,6 +81,7 @@ import shlex
 import signal
 import sqlite3
 import sys
+import tarfile
 import tempfile
 import threading
 import time
@@ -451,18 +452,44 @@ def get_supported() -> FrozenSet[PlatformTag]:
 @pipes
 def archive_meta(artifact_path):
     DIST_PKG_INFO_REGEX = re.compile("(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$")
-    meta = names = None
-    with zipfile.ZipFile(artifact_path) as archive:
-
-        def _read_entry(entry_name):
+    meta = archive = names = None
+    
+    if ".tar" in str(artifact_path):
+        archive = tarfile.open(artifact_path)
+        members = [m for m in archive.getmembers() if m.type == b"0"]
+        def read_entry(entry_name):
+            m = archive.getmember(entry_name)
+            with archive.extractfile(m) as f:
+                bdata = f.read()
+                text = str(bdata, "UTF-8").splitlines()
+                return (Path(entry_name).stem, text)
+                
+        def get_archive(artifact_path):
+            archive = tarfile.open(artifact_path)
+            return (
+                archive,
+                [m.name for m in archive.getmembers()
+                 if m.type == b"0"]
+            )
+    else:
+        def read_entry(entry_name):
             with archive.open(entry_name) as m:
                 text = m.read().decode("UTF-8").splitlines()
                 return (Path(entry_name).stem, text)
 
-        names = sorted(
-            file.filename for file in archive.filelist if not file.filename.endswith("pyi")
+        def get_archive(artifact_path):
+            archive = zipfile.ZipFile(artifact_path)
+            return (
+                archive,
+                [e.filename for e in archive.filelist]
+            )
+    
+    archive, names = get_archive(artifact_path)
+    meta = dict(
+            names
+            << filter(DIST_PKG_INFO_REGEX.search)
+            << map(read_entry)
         )
-        meta = dict(names << filter(DIST_PKG_INFO_REGEX.search) << map(_read_entry))
     name = next(
         l.partition(": ")[-1]
         for l in meta["METADATA" if "METADATA" in meta else "PKG-INFO"]
@@ -492,6 +519,7 @@ def archive_meta(artifact_path):
     ):
         meta["import_relpath"] = relpath
         break
+    archive.close()
     return meta
 
 
@@ -688,7 +716,18 @@ def _parse_filename(filename) -> dict:
         "(?P<platform_tag>.*)\\."
         "(?P<ext>whl|zip|egg|tar|tar\\.gz)"
     ).match(filename)
-    return match.groupdict() if match else {}
+    if not match:
+        match = re.search(
+            "^(?P<distribution>(?:(?!-[0-9]+[.]).)+)-"
+            "(?P<version>[0-9][0-9.]*[0-9].*)"
+            "[.](?P<ext>whl|zip|egg|tar|tar\\.gz)$",
+            filename
+        )
+        assert match
+        d = match.groupdict()
+        d["platform_tag"] = "any"
+        return d
+    return match.groupdict()
 
 
 def _process(*argv, env={}):
@@ -830,14 +869,15 @@ def _pure_python_package(artifact_path, meta):
         any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES)
         for n in meta["names"]
     )
-    return not not_pure_python
+    
+    return not (".tar" in str(artifact_path) or not_pure_python)
 
 
 def _find_or_install(
     name, version=None, artifact_path=None, url=None, out_info=None
-) -> Dict[str, Union[dict, int, list, str, Path, Version]]:
+) -> Dict[str, Union[dict, int, list, str, tuple, Path, Version]]:
     log.debug(
-        "_load_venv_mod(name=%s, version=%s, artifact_path=%s)", name, version, artifact_path
+        "_find_or_install(name=%s, version=%s, artifact_path=%s, url=%s)", name, version, artifact_path, url
     )
     if out_info is None:
         out_info = {}
@@ -848,7 +888,7 @@ def _find_or_install(
         filename = str("url").split("\\/")[-1]
         info = _parse_filename(filename)
         info["url"] = str("url")
-
+    
     filename, url, version = (info["filename"], URL(info["url"]), Version(info["version"]))
     artifact_path = _download_artifact(name, version, filename, url)
     info["artifact_path"] = artifact_path
@@ -867,7 +907,7 @@ def _find_or_install(
     out_info["module_path"] = relp
     out_info["import_relpath"] = relp
     out_info["import_name"] = import_name
-
+    out_info.update(meta)
     if _pure_python_package(artifact_path, meta):
         log.info(f"pure python package: {package_name, version, use.home}")
         return out_info
@@ -878,7 +918,9 @@ def _find_or_install(
 
     env = _get_venv_env(venv_root)
     module_paths = [*venv_root.rglob(f"**/{relp}")]
+    log.info("module_paths = %s", module_paths)
     if not module_paths:
+        log.info("calling pip to install install_item=%s", install_item)
         output = _process(
             python_exe,
             "-m",
@@ -903,8 +945,17 @@ def _find_or_install(
             install_item,
             env=env,
         )
-        sys.stderr.write(output.stderr or "")
+        sys.stderr.write("\n\n".join((output.stderr, output.stdout)))
+    module_paths = [*venv_root.rglob(f"**/{relp}")]
+    while len(relp) > 2 and not module_paths:
+        log.info("relp = %s", relp)
         module_paths = [*venv_root.rglob(f"**/{relp}")]
+        if module_paths:
+            break
+        relp = "/".join(Path(relp).parts[1:])
+        log.info(relp)
+        
+    assert module_paths
     for module_path in module_paths:
         installation_path = module_path
         while installation_path.name != "site-packages":
@@ -979,6 +1030,14 @@ def _get_filtered_data(
             is_compat = _is_compatible(
                 info, hash_algo=Hash.sha256.name, include_sdist=include_sdist
             )
+            
+            log.verbose(
+                    "%s ->  use._is_compatible(info:=%s, hash_algo=%s, include_sdist=%s)",
+                    is_compat,
+                    repr(info),
+                    repr(Hash.sha256.name),
+                    repr(include_sdist),
+            )
             if not is_compat:
                 continue
             filtered["urls"].append(info)
@@ -1019,14 +1078,12 @@ def _is_platform_compatible(
     platform_tags: FrozenSet[PlatformTag],
     include_sdist=False,
 ) -> bool:
-    reject = "py2" in info["filename"] or ".tar" in info["filename"]
-    if reject:
-        return False
+    if "py2" in info["filename"]: return False
     if "platform_tag" not in info:
         info.update(_parse_filename(info["filename"]))
     our_python_tag = tags.interpreter_name() + tags.interpreter_version()
     python_tag = info.get("python_tag", "") or "cp" + info["python_version"].replace(".", "")
-    if python_tag == "py3":
+    if python_tag in ("py3", "cpsource"):
         python_tag = our_python_tag
     cur_platform_tags = (
         info.get("platform_tag", "any").split(".") << map(PlatformTag) >> frozenset
@@ -1056,13 +1113,15 @@ def _is_compatible(
         platform_tags = get_supported()
     if "platform_tag" not in info:
         return False
-
+    
     return (
         _is_version_satisfied(info, sys_version)
         and _is_platform_compatible(info, platform_tags, include_sdist)
         and not info["yanked"]
-        and not info["filename"].endswith(".tar")
-        and not info["filename"].endswith(".tar.gz")
+        and (include_sdist or not (
+            info["filename"].endswith(".tar") or
+            info["filename"].endswith(".tar.gz")
+        ))
     )
 
 
@@ -1811,9 +1870,19 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         if name in self._using:
             spec = self._using[name].spec
-        elif not auto_install:
-            spec = importlib.util.find_spec(name)
-
+        else:
+            spec = importlib.util.find_spec(package_name)
+        if spec:
+            spec_version = spec.version
+            if Version(spec_version) != version:
+                log.info(
+                    "Not using installed package %s, because its version (%s) does not match the expected version (%s)",
+                    spec,
+                    spec_version,
+                    version
+                )
+                spec = None
+        
         # welcome to the buffet table, where everything is a lie
         # fmt: off
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
