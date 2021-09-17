@@ -535,7 +535,8 @@ def _clean_sys_modules(package_name: str) -> None:
             and package_name in k.split(".")
         ]
     ):
-        del sys.modules[k]
+        if k in sys.modules:
+            del sys.modules[k]
 
 
 def _venv_root(package_name, version, home) -> Path:
@@ -723,7 +724,7 @@ def _parse_filename(filename) -> dict:
             "[.](?P<ext>whl|zip|egg|tar|tar\\.gz)$",
             filename
         )
-        assert match
+        if not match: return {}
         d = match.groupdict()
         d["platform_tag"] = "any"
         return d
@@ -870,7 +871,11 @@ def _pure_python_package(artifact_path, meta):
         for n in meta["names"]
     )
     
-    return not (".tar" in str(artifact_path) or not_pure_python)
+    if ".tar" in str(artifact_path):
+        return False
+    if not_pure_python:
+        return False
+    return True
 
 
 def _find_or_install(
@@ -907,7 +912,7 @@ def _find_or_install(
     out_info["module_path"] = relp
     out_info["import_relpath"] = relp
     out_info["import_name"] = import_name
-    out_info.update(meta)
+    log.info(meta["names"])
     if _pure_python_package(artifact_path, meta):
         log.info(f"pure python package: {package_name, version, use.home}")
         return out_info
@@ -1081,6 +1086,8 @@ def _is_platform_compatible(
     if "py2" in info["filename"]: return False
     if "platform_tag" not in info:
         info.update(_parse_filename(info["filename"]))
+    if not include_sdist and (".tar" in info["filename"] or info.get("python_tag", "cpsource") in ("cpsource", "sdist")): return False
+
     our_python_tag = tags.interpreter_name() + tags.interpreter_version()
     python_tag = info.get("python_tag", "") or "cp" + info["python_version"].replace(".", "")
     if python_tag in ("py3", "cpsource"):
@@ -1870,18 +1877,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         if name in self._using:
             spec = self._using[name].spec
-        else:
+        elif not auto_install:
             spec = importlib.util.find_spec(package_name)
-        if spec:
-            spec_version = spec.version
-            if Version(spec_version) != version:
-                log.info(
-                    "Not using installed package %s, because its version (%s) does not match the expected version (%s)",
-                    spec,
-                    spec_version,
-                    version
-                )
-                spec = None
         
         # welcome to the buffet table, where everything is a lie
         # fmt: off
