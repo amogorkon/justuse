@@ -614,7 +614,7 @@ def _auto_install(
         if isinstance(result, ModuleType):
             return result
 
-    query = use.registry.execute(
+    query = use.execute_wrapped(
         f"""
 SELECT
     artifacts.id, import_relpath,
@@ -1427,6 +1427,13 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         (self.home / "registry.db").touch(mode=0o644)
         self.registry = self._set_up_registry()
         self.cleanup()
+    
+    def execute_wrapped(self, *args, **kwargs):
+        try:
+            return self.registry.execute(*args, **kwargs)
+        except sqlite3.OperationalError as _oe:
+            self.recreate_registry()
+            return self.registry.execute(*args, **kwargs)
 
     def install(self):
         # yeah, really.. __builtins__ sometimes appears as a dict and other times as a module, don't ask me why
