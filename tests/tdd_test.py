@@ -90,7 +90,7 @@ def test_pure_python_package(reuse):
     file.unlink(missing_ok=True)
     if venv_dir.exists():
         rmtree(venv_dir)
-    
+
     test = reuse(
         "example-pypi-package.examplepy",
         version="0.1.0",
@@ -101,7 +101,7 @@ def test_pure_python_package(reuse):
         modes=reuse.auto_install,
     )
     assert venv_dir.exists() == False, "Should not have created venv for example-pypi-package"
-    
+
     assert str(test.Number(2)) == "2"
     if file.exists():
         file.unlink()
@@ -127,7 +127,7 @@ def test_load_multi_version(reuse, name, floor_version, n_versions):
     versions = [*data["releases"].keys()]
     mods = []
     for version in versions[0:min(len(versions), n_versions)]:
-        if (floor_version 
+        if (floor_version
            and reuse.Version(version) < reuse.Version(floor_version)):
             continue
         info = data["releases"][version][0]
