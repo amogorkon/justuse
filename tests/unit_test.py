@@ -269,7 +269,10 @@ def test_is_version_satisfied(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert reuse._is_version_satisfied(info, sys_version)
+    assert reuse._is_version_satisfied(
+        info.get("requires_python", ""),
+        sys_version
+    )
 
     # requires >= python 4!
     info = {
@@ -292,7 +295,10 @@ def test_is_version_satisfied(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert not reuse._is_version_satisfied(info, sys_version)
+    assert False == reuse._is_version_satisfied(
+        info.get("requires_python", ""),
+        sys_version
+    )
 
     # pure python
     info = {
@@ -315,7 +321,10 @@ def test_is_version_satisfied(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert reuse._is_version_satisfied(info, sys_version)
+    assert reuse._is_version_satisfied(
+        info.get("requires_python", ""),
+        sys_version
+    )
 
 
 def test_find_windows_artifact(reuse):
@@ -327,7 +336,6 @@ def test_parse_filename(reuse):
     assert reuse._parse_filename("protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl") == {
         "distribution": "protobuf",
         "version": "1.19.5",
-        "build_tag": None,
         "python_tag": "cp36",
         "abi_tag": "cp36m",
         "platform_tag": "macosx_10_9_x86_64",
