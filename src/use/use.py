@@ -464,9 +464,7 @@ class TarFunctions:
         m = self.archive.getmember(entry_name)
         with self.archive.extractfile(m) as f:
             bdata = f.read()
-            text = ""
-            if len(bdata) < 8192:
-                text = bdata.decode("UTF-8").splitlines()
+            text = bdata.decode("UTF-8").splitlines() if len(bdata) < 8192 else ""
             return (Path(entry_name).stem, text.splitlines())
             
 class ZipFunctions:
@@ -480,9 +478,7 @@ class ZipFunctions:
     def read_entry(self, entry_name):
         with self.archive.open(entry_name) as f:
             bdata = f.read()
-            text = ""
-            if len(bdata) < 8192:
-                text = bdata.decode("UTF-8").splitlines()
+            text = bdata.decode("UTF-8").splitlines() if len(bdata) < 8192 else ""
             return (Path(entry_name).stem, text)
          
 @pipes
@@ -1408,7 +1404,7 @@ class Use(ModuleType):
 
     def _set_up_registry(self, path: Optional[Path] = None):
         registry = None
-        if path or (test_version and not "DB_TEST" in os.environ):
+        if path or test_version and "DB_TEST" not in os.environ:
             registry = sqlite3.connect(path or ":memory:").cursor()
         else:
             try:
