@@ -1394,7 +1394,7 @@ class Use(ModuleType):
 
     def _set_up_registry(self, path: Optional[Path] = None):
         registry = None
-        if path or (test_version and not "DB_TEST" in os.environ):
+        if path or test_version and "DB_TEST" not in os.environ:
             registry = sqlite3.connect(path or ":memory:").cursor()
         else:
             try:
