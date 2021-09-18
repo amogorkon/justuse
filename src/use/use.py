@@ -464,7 +464,9 @@ class TarFunctions:
         m = self.archive.getmember(entry_name)
         with self.archive.extractfile(m) as f:
             bdata = f.read()
-            text = bdata.decode("UTF-8").splitlines() if len(bdata) < 8192 else ""
+            text = ""
+            if len(bdata) < 8192:
+                text = bdata.decode("UTF-8").splitlines()
             return (Path(entry_name).stem, text.splitlines())
             
 class ZipFunctions:
@@ -478,7 +480,9 @@ class ZipFunctions:
     def read_entry(self, entry_name):
         with self.archive.open(entry_name) as f:
             bdata = f.read()
-            text = bdata.decode("UTF-8").splitlines() if len(bdata) < 8192 else ""
+            text = ""
+            if len(bdata) < 8192:
+                text = bdata.decode("UTF-8").splitlines()
             return (Path(entry_name).stem, text)
          
 @pipes
@@ -1296,8 +1300,10 @@ class ModuleReloader:
             target=self.run_threaded, name=f"reloader__{self.name}"
         )
         self._thread.start()
-    
-    def _inner(self, last_filehash):
+
+    async def run_async(self):
+        last_filehash = None
+        while not self._stopped:
             with open(self.path, "rb") as file:
                 code = file.read()
             current_filehash = hashlib.blake2b(code).hexdigest()
@@ -1313,19 +1319,29 @@ class ModuleReloader:
                     self.proxy.__implementation = mod
                 except KeyError:
                     print(traceback.format_exc())
-            return current_filehash
-
-    async def run_async(self): # pragma no cov
-        last_filehash = None
-        while not self._stopped:
-            last_filehash = self._inner(last_filehash)
+            last_filehash = current_filehash
             await asyncio.sleep(1)
 
     def run_threaded(self):
         last_filehash = None
         while not self._stopped:
             with self._condition:
-                last_filehash = self._inner(last_filehash)
+                with open(self.path, "rb") as file:
+                    code = file.read()
+                current_filehash = hashlib.blake2b(code).hexdigest()
+                if current_filehash != last_filehash:
+                    try:
+                        mod = _build_mod(
+                            name=self.name,
+                            code=code,
+                            initial_globals=self.initial_globals,
+                            module_path=self.path,
+                            aspectize=self.aspectize,
+                        )
+                        self.proxy._ProxyModule__implementation = mod
+                    except KeyError:
+                        print(traceback.format_exc())
+                last_filehash = current_filehash
             time.sleep(1)
 
     def stop(self):
@@ -1408,7 +1424,7 @@ class Use(ModuleType):
 
     def _set_up_registry(self, path: Optional[Path] = None):
         registry = None
-        if path or test_version and "DB_TEST" not in os.environ:
+        if path or (test_version and not "DB_TEST" in os.environ):
             registry = sqlite3.connect(path or ":memory:").cursor()
         else:
             try:
@@ -1683,6 +1699,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 )
 
             # calling from another use()d module
+            # let's see where we started
+            main_mod = __import__("__main__")
             if source_dir and source_dir.exists():
                 os.chdir(source_dir.parent)
                 source_dir = source_dir.parent
@@ -1692,8 +1710,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 jupyter = "ipykernel" in sys.modules
                 # we're in jupyter, we use the CWD as set in the notebook
                 if not jupyter:
-                    # let's see where we started
-                    main_mod = __import__("__main__")
                     # if we're calling from a script file e.g. `python3 my/script.py` like pytest unittest
                     if hasattr(main_mod, "__file__"):
                         source_dir = (
@@ -1701,10 +1717,15 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                                 inspect.currentframe().f_back.f_back.f_code.co_filename
                             )
                             .resolve()
-                            .parent
+                            .parent 
                         )
             if source_dir is None:
-                source_dir = _ensure_path(main_mod.__loader__.path).parent
+                if main_mod.__loader__:
+                    source_dir = _ensure_path(
+                        main_mod.__loader__.path
+                    ).parent
+                else:
+                    source_dir = Path.cwd()
             if not source_dir.joinpath(path).exists():
                 source_dir = Path.cwd()
             if not source_dir.exists():
