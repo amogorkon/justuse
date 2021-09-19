@@ -494,8 +494,8 @@ def test_51_sqlalchemy(reuse):
     try:
         import sqlalchemy
 
-        if sqlalchemy.__version__ == "0.7.1":
-            pytest.skip("Can't test with exactly version 0.7.1")
+        if sqlalchemy.__version__ == "1.4.10":
+            pytest.skip("Can't test with exactly version 1.4.10")
     except ImportError:
         pytest.skip("sqlalchemy not installed")
     finally:
@@ -503,8 +503,8 @@ def test_51_sqlalchemy(reuse):
             del sys.modules["sqlalchemy"]
     mod = use(
         "sqlalchemy",
-        version="0.7.1",
+        version="1.4.10",
         hashes="5ef95d19c31a8cd3905c697be0a7e94e70ab1926ecd4159c3e6c1cf01fc3c492",
         modes=use.auto_install,
     )
-    assert mod.__version__ == "0.7.1"
+    assert mod.__version__ == "1.4.10"

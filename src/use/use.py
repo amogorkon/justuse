@@ -621,7 +621,15 @@ def _import_public_no_install(
         builtin = True
 
     if builtin:
-        mod = spec.loader.create_module(spec)
+        if spec.name in sys.modules:
+            mod = sys.modules[spec.name]
+            importlib.reload(mod)
+        else:
+            mod = spec.loader.create_module(spec)
+        if mod is None:
+            mod = importlib.import_module(spec.name)
+        assert mod
+        sys.modules[spec.name] = mod
         spec.loader.exec_module(mod)  # ! => cache
         if aspectize:
             warn(Message.aspectize_builtins_warning(), RuntimeWarning)
