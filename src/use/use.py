@@ -91,13 +91,14 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
+from functools import (partial, partialmethod, reduce, singledispatch,
+                       update_wrapper)
 from importlib import metadata
 from importlib.machinery import ModuleSpec, SourceFileLoader
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
-from pathlib import Path, WindowsPath, PureWindowsPath
+from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
 from subprocess import PIPE, run
 from textwrap import dedent
@@ -124,7 +125,7 @@ __package__ = "use"
 __path__ = __file__
 __spec__ = ModuleSpec("use.use", loader=SourceFileLoader(fullname="use", path=__file__))
 __spec__.submodule_search_locations = [Path(__file__).parent]
-__version__ = test_version or "0.4.2"
+__version__ = test_version or "0.5.0"
 
 _reloaders: Dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
 _aspects = {}
