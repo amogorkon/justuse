@@ -83,10 +83,7 @@ def test_pure_python_package(reuse):
         reuse.Path.home()
         / ".justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl"
     )
-    venv_dir = (
-        reuse.Path.home()
-        / ".justuse-python/venv/example-pypi-package/0.1.0"
-    )
+    venv_dir = reuse.Path.home() / ".justuse-python/venv/example-pypi-package/0.1.0"
     file.unlink(missing_ok=True)
     if venv_dir.exists():
         rmtree(venv_dir)
@@ -100,7 +97,9 @@ def test_pure_python_package(reuse):
         },
         modes=reuse.auto_install,
     )
-    assert venv_dir.exists() == False, "Should not have created venv for example-pypi-package"
+    assert (
+        venv_dir.exists() == False
+    ), "Should not have created venv for example-pypi-package"
 
     assert str(test.Number(2)) == "2"
     if file.exists():
@@ -120,15 +119,14 @@ def test_db_setup(reuse):
         ("protobuf", None, 2),
         ("sqlalchemy", None, 1),
         ("sqlalchemy", None, 2),
-    ]
+    ],
 )
 def test_load_multi_version(reuse, name, floor_version, n_versions):
     data = reuse._get_filtered_data(reuse._get_package_data(name))
     versions = [*data["releases"].keys()]
     mods = []
-    for version in versions[0:min(len(versions), n_versions)]:
-        if (floor_version
-           and reuse.Version(version) < reuse.Version(floor_version)):
+    for version in versions[0 : min(len(versions), n_versions)]:
+        if floor_version and reuse.Version(version) < reuse.Version(floor_version):
             continue
         info = data["releases"][version][0]
         reuse._clean_sys_modules(name.replace("-", "_"))
@@ -136,11 +134,9 @@ def test_load_multi_version(reuse, name, floor_version, n_versions):
             info["distribution"],
             version=version,
             hashes=info["digests"]["sha256"],
-            modes=reuse.auto_install
+            modes=reuse.auto_install,
         )
-        mod_version = getattr(
-            mod, "__version__", reuse._get_version(mod=mod)
-        )
+        mod_version = getattr(mod, "__version__", reuse._get_version(mod=mod))
         mods.append((version, mod_version, mod))
     return mods
 
@@ -154,12 +150,10 @@ def test_load_multi_version(reuse, name, floor_version, n_versions):
         ("protobuf", None, 2),
         ("sqlalchemy", None, 1),
         ("sqlalchemy", None, 2),
-    ]
+    ],
 )
 def test_check_multi_version(reuse, name, floor_version, n_versions):
-    mods = test_load_multi_version(
-        reuse, name, floor_version, n_versions
-    )
+    mods = test_load_multi_version(reuse, name, floor_version, n_versions)
     for expected_version, actual_version, mod in mods:
         if not hasattr(mod, "__version__"):
             continue
@@ -168,9 +162,20 @@ def test_check_multi_version(reuse, name, floor_version, n_versions):
 
 @pytest.mark.skipif(True, reason="broken")
 def test_no_isolation(reuse):
-    assert test_load_multi_version(
-        reuse, "numpy", "1.19.0", 1
-    )
-    assert test_load_multi_version(
-        reuse, "numpy", "1.19.0", 1
-    )
+    assert test_load_multi_version(reuse, "numpy", "1.19.0", 1)
+    assert test_load_multi_version(reuse, "numpy", "1.19.0", 1)
+
+
+def test_use_str(reuse):
+    mod = reuse("matplotlib/pyplot")
+    assert mod
+
+
+def test_use_tuple(reuse):
+    mod = reuse(("matplotlib", "pyplot"))
+    assert mod
+
+
+def test_use_kwargs(reuse):
+    mod = reuse(package_name="matplotlib", module_name="pyplot")
+    assert mod

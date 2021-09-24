@@ -1,6 +1,8 @@
 import inspect
 
-def get_keyword_param_names(func, locs):
+def get_keyword_param_names(locs):
+    func = globals()[inspect.stack()[1].__code__.co_varnames]
+    print(func, type(func))
     return {name:locs[name] for name, param in inspect.signature(func).parameters.items()
         if (
             param.kind is inspect.Parameter.KEYWORD_ONLY 
@@ -8,5 +10,6 @@ def get_keyword_param_names(func, locs):
         )}
 
 def foo(*, a, b, **kwargs):
-    return get_keyword_param_names(foo, locals())
+    return get_keyword_param_names(locals())
 s = foo(a=2, b=3)
+print(s)

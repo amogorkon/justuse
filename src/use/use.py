@@ -91,8 +91,7 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import (partial, partialmethod, reduce, singledispatch,
-                       update_wrapper)
+from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import ModuleSpec, SourceFileLoader
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
@@ -279,6 +278,9 @@ def methdispatch(func) -> Callable:
     dispatcher = singledispatch(func)
 
     def wrapper(*args, **kw):
+        # so we can dispatch on None
+        if len(args) == 1:
+            args = args + (None,)
         return dispatcher.dispatch(args[1].__class__)(*args, **kw)
 
     wrapper.register = dispatcher.register
@@ -366,10 +368,10 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
         lambda: "Applying aspects to builtins may lead to unexpected behaviour, but there you go.."
     )
     version_warning = (
-        lambda name, target_version, this_version: f"{name} expected to be version {target_version}, but got {this_version} instead"
+        lambda package_name, target_version, this_version: f"{package_name} expected to be version {target_version}, but got {this_version} instead"
     )
     ambiguous_name_warning = (
-        lambda name: f"Attempting to load the package '{name}', if you rather want to use the local module: use(use._ensure_path('{name}.py'))"
+        lambda package_name: f"Attempting to load the package '{package_name}', if you rather want to use the local module: use(use._ensure_path('{package_name}.py'))"
     )
     no_version_provided = (
         lambda: "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
@@ -418,6 +420,20 @@ You can test if your version of venv is working by running:
     no_distribution_found = (
         lambda package_name, version: f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
     )
+
+
+class StrMessage(Message):
+    cant_import = (
+        lambda package_name: f"No package installed named {package_name} and auto-installation not requested. Aborting."
+    )
+
+
+class TupleMessage(Message):
+    pass
+
+
+class KwargsMessage(Message):
+    pass
 
 
 @pipes
@@ -623,22 +639,26 @@ def _import_public_no_install(
         builtin = True
 
     if builtin:
-        if spec.name in sys.modules:
-            mod = sys.modules[spec.name]
-            importlib.reload(mod)
-        else:
-            mod = spec.loader.create_module(spec)
-        if mod is None:
-            mod = importlib.import_module(spec.name)
-        assert mod
-        sys.modules[spec.name] = mod
-        spec.loader.exec_module(mod)  # ! => cache
-        if aspectize:
-            warn(Message.aspectize_builtins_warning(), RuntimeWarning)
-        return mod
-
+        return _extracted_from__import_public_no_install_18(spec, aspectize)
     # it seems to be installed in some way, for instance via pip
     return importlib.import_module(rest)  # ! => cache
+
+
+# TODO Rename this here and in `_import_public_no_install`
+def _extracted_from__import_public_no_install_18(spec, aspectize):
+    if spec.name in sys.modules:
+        mod = sys.modules[spec.name]
+        importlib.reload(mod)
+    else:
+        mod = spec.loader.create_module(spec)
+    if mod is None:
+        mod = importlib.import_module(spec.name)
+    assert mod
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)  # ! => cache
+    if aspectize:
+        warn(Message.aspectize_builtins_warning(), RuntimeWarning)
+    return mod
 
 
 def _parse_name(name) -> Tuple[str, str]:
@@ -1559,7 +1579,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
                     sub.unlink()
             path.rmdir()
 
-        for name, version, path, installation_path in self.registry.execute(
+        for name, version, artifact_path, installation_path in self.registry.execute(
             "SELECT name, version, artifact_path, installation_path FROM distributions JOIN artifacts on distributions.id = distribution_id"
         ).fetchall():
             if not (
@@ -1827,6 +1847,101 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         self._set_mod(name=name, mod=mod, frame=frame)
         return ProxyModule(mod)
 
+    @__call__.register(type(None))  # singledispatch is picky - can't be anything but a type
+    def _use_kwargs(
+        self,
+        _: None,  # sic! otherwise single-dispatch with 'empty' *args won't work
+        /,
+        *,
+        package_name: str = None,
+        module_name: str = None,
+        version: str = None,
+        hash_algo=Hash.sha256,
+        hashes: Optional[Union[str, list[str]]] = None,
+        default=mode.fastfail,
+        aspectize=None,
+        modes: int = 0,
+    ) -> ProxyModule:
+        """
+        Import a package by name.
+
+        https://github.com/amogorkon/justuse/wiki/Use-String
+
+        Args:
+            name (str): The name of the package to import.
+            version (str or Version, optional): The version of the package to import. Defaults to None.
+            hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
+            hashes (str | [str]), optional): A single hash or list of hashes of the package to import. Defaults to None.
+            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
+            aspectize (dict, optional): Aspectize callables. Defaults to None.
+            modes (int, optional): Any combination of Use.modes . Defaults to 0.
+
+        Raises:
+            RuntimeWarning: May be raised if the auto-installation of the package fails for some reason.
+
+        Returns:
+            Optional[ModuleType]: Module if successful, default as specified otherwise.
+        """
+        log.debug(f"use-kwargs: {package_name} {module_name} {version} {hashes}")
+        return self._use_package(
+            name=f"{package_name}/{module_name}",
+            package_name=package_name,
+            module_name=module_name,
+            version=version,
+            hash_algo=hash_algo,
+            hashes=hashes,
+            default=default,
+            aspectize=aspectize,
+            modes=modes,
+        )
+
+    @__call__.register(tuple)
+    def _use_tuple(
+        self,
+        pkg_tuple,
+        /,
+        *,
+        version: str = None,
+        hash_algo=Hash.sha256,
+        hashes: Optional[Union[str, list[str]]] = None,
+        default=mode.fastfail,
+        aspectize=None,
+        modes: int = 0,
+    ) -> ProxyModule:
+        """
+        Import a package by name.
+
+        https://github.com/amogorkon/justuse/wiki/Use-String
+
+        Args:
+            name (str): The name of the package to import.
+            version (str or Version, optional): The version of the package to import. Defaults to None.
+            hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
+            hashes (str | [str]), optional): A single hash or list of hashes of the package to import. Defaults to None.
+            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
+            aspectize (dict, optional): Aspectize callables. Defaults to None.
+            modes (int, optional): Any combination of Use.modes . Defaults to 0.
+
+        Raises:
+            RuntimeWarning: May be raised if the auto-installation of the package fails for some reason.
+
+        Returns:
+            Optional[ModuleType]: Module if successful, default as specified otherwise.
+        """
+        log.debug(f"use-tuple: {pkg_tuple} {version} {hashes}")
+        package_name, module_name = pkg_tuple
+        return self._use_package(
+            name=f"{package_name}/{module_name}",
+            package_name=package_name,
+            module_name=module_name,
+            version=version,
+            hash_algo=hash_algo,
+            hashes=hashes,
+            default=default,
+            aspectize=aspectize,
+            modes=modes,
+        )
+
     @__call__.register(str)
     def _use_str(
         self,
@@ -1860,11 +1975,36 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         Returns:
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
-        mod = None
         log.debug(f"use-str: {name} {version} {hashes}")
-        package_name, rest = _parse_name(name)
-        log.debug(f"use-str: {package_name}, {rest} {version} {hashes}")
+        package_name, module_name = _parse_name(name)
+        return self._use_package(
+            name=name,
+            package_name=package_name,
+            module_name=module_name,
+            version=version,
+            hash_algo=hash_algo,
+            hashes=hashes,
+            default=default,
+            aspectize=aspectize,
+            modes=modes,
+        )
 
+    def _use_package(
+        self,
+        *,
+        name,
+        package_name,
+        module_name,
+        version,
+        hashes,
+        modes,
+        default,
+        aspectize,
+        hash_algo,
+        user_msg=Message,
+    ):
+        mod = None
+        log.debug(f"use-package: {name}, {package_name}, {module_name}, {version}, {hashes}")
         if isinstance(hashes, str):
             hashes = set([hashes])
         hashes = set(hashes) if hashes else set()
@@ -1876,40 +2016,37 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         aspectize = aspectize or {}
 
         version: Version = Version(version) if version else None
+        rest = module_name  # TODO: kill it
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
         # let's first see if the user might mean something else entirely
         if any(_ensure_path(".").glob(f"**/{rest}.py")):
-            warn(Message.ambiguous_name_warning(name), AmbiguityWarning)
-        spec = None
+            warn(Message.ambiguous_name_warning(package_name), AmbiguityWarning)
 
-        if name in self._using:
-            spec = self._using[name].spec
-        elif not auto_install:
-            spec = importlib.util.find_spec(package_name)
+        spec = importlib.util.find_spec(package_name)
 
         # welcome to the buffet table, where everything is a lie
         # fmt: off
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
         log.info("case = %s", case)
         case_func = {
-            (False, False, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
-            (False, False, False, True): _pebkac_no_version_no_hash,
-            (False, False, True, False): _import_public_no_install,
-            (False, True, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
-            (True, False, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
-            (False, False, True, True): lambda **kwargs: _auto_install(_import_public_no_install, **kwargs),
-            (False, True, True, False): _import_public_no_install,
-            (True, True, False, False): lambda **kwargs: ImportError(Message.cant_import(name)),
-            (True, False, False, True): _pebkac_version_no_hash,
-            (True, False, True, False): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
-            (False, True, False, True): _pebkac_no_version_hash,
-            (False, True, True, True): lambda **kwargs: _pebkac_no_version_hash(_import_public_no_install, **kwargs),
-            (True, False, True, True): lambda **kwargs: _pebkac_version_no_hash(_ensure_version(_import_public_no_install, **kwargs), **kwargs),
-            (True, True, False, True): _auto_install,
-            (True, True, True, False): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
-            (True, True, True, True): lambda **kwargs: _auto_install(_ensure_version(_import_public_no_install, **kwargs), **kwargs),
+            (0, 0, 0, 0): lambda **kwargs: ImportError(user_msg.cant_import(name)),
+            (0, 0, 0, 1): _pebkac_no_version_no_hash,
+            (0, 0, 1, 0): _import_public_no_install,
+            (0, 1, 0, 0): lambda **kwargs: ImportError(Message.cant_import(name)),
+            (1, 0, 0, 0): lambda **kwargs: ImportError(Message.cant_import(name)),
+            (0, 0, 1, 1): lambda **kwargs: _auto_install(_import_public_no_install, **kwargs),
+            (0, 1, 1, 0): _import_public_no_install,
+            (1, 1, 0, 0): lambda **kwargs: ImportError(Message.cant_import(name)),
+            (1, 0, 0, 1): _pebkac_version_no_hash,
+            (1, 0, 1, 0): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
+            (0, 1, 0, 1): _pebkac_no_version_hash,
+            (0, 1, 1, 1): lambda **kwargs: _pebkac_no_version_hash(_import_public_no_install, **kwargs),
+            (1, 0, 1, 1): lambda **kwargs: _pebkac_version_no_hash(_ensure_version(_import_public_no_install, **kwargs), **kwargs),
+            (1, 1, 0, 1): _auto_install,
+            (1, 1, 1, 0): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
+            (1, 1, 1, 1): lambda **kwargs: _auto_install(_ensure_version(_import_public_no_install, **kwargs), **kwargs),
         }[case]
         result = case_func(**locals())
         log.info("result = %s", result)
