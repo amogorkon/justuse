@@ -1160,10 +1160,10 @@ def _is_compatible(
     specifier = info.get("requires_python", "")
 
     return (
-        (not specifier or _is_version_satisfied(specifier, sys_version))
+        ((not specifier or _is_version_satisfied(specifier, sys_version)))
         and _is_platform_compatible(info, platform_tags, include_sdist)
         and not info["yanked"]
-        and (include_sdist or not info["ext"] in ("tar", "tar.gz" "zip"))
+        and (include_sdist or info["ext"] not in ("tar", "tar.gz" "zip"))
     )
 
 
