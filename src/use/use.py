@@ -94,6 +94,7 @@ from functools import lru_cache as cache
 from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.machinery import ModuleSpec, SourceFileLoader
+from importlib.abc import Finder, Loader
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
@@ -553,10 +554,16 @@ def archive_meta(artifact_path):
     return meta
 
 
+def _ensure_loader(spec: ModuleSpec) -> Union[Loader,zipimport.zipimporter]:
+    if spec.loader:
+        return spec.loader
+    return importlib.util.loader_from_spec(spec)
+
+
 def _clean_sys_modules(package_name: str) -> None:
     for k in dict(
         [
-            (k, v.__spec__.loader)
+            (k, _ensure_loader(v.__spec__))
             for k, v in sys.modules.items()
             if (
                 getattr(v, "__spec__", None) is None
@@ -650,7 +657,7 @@ def _extracted_from__import_public_no_install_18(spec, aspectize):
         mod = sys.modules[spec.name]
         importlib.reload(mod)
     else:
-        mod = spec.loader.create_module(spec)
+        mod = _ensure_loader(spec).create_module(spec)
     if mod is None:
         mod = importlib.import_module(spec.name)
     assert mod
