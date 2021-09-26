@@ -1,5 +1,7 @@
 import use
 
+use("sys", modes=use.fatal_exceptions)
+
 use(
     "numpy",
     version="1.19.3",
