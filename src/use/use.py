@@ -1892,8 +1892,10 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
         log.debug(f"use-kwargs: {package_name} {module_name} {version} {hashes}")
-        return self._use_str(
-            f"{package_name}/{module_name}",
+        return self._use_package(
+            name=f"{package_name}/{module_name}",
+            package_name=package_name,
+            module_name=module_name,
             version=version,
             hash_algo=hash_algo,
             hashes=hashes,
@@ -1937,8 +1939,10 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         """
         log.debug(f"use-tuple: {pkg_tuple} {version} {hashes}")
         package_name, module_name = pkg_tuple
-        return self._use_str(
-            f"{package_name}/{module_name}",
+        return self._use_package(
+            name=f"{package_name}/{module_name}",
+            package_name=package_name,
+            module_name=module_name,
             version=version,
             hash_algo=hash_algo,
             hashes=hashes,
@@ -1980,14 +1984,36 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         Returns:
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
-        mod = None
-        log.debug(f"use-str: {name} {version} {hashes}")
-
+        package_name, module_name = _parse_name(name)
+        return self._use_package(
+            name=name,
+            package_name=package_name,
+            module_name=module_name,
+            version=version,
+            hash_algo=hash_algo,
+            hashes=hashes,
+            default=default,
+            aspectize=aspectize,
+            modes=modes,
+        )
         package_name = name.split("/")[0]
-        rest = name.split("/")[-1]
-        module_name = rest
-        log.debug(f"use-str: {package_name}, {rest} {version} {hashes}")
-
+        rest = module_name = name.split("/")[-1]
+    def _use_package(
+        self,
+        *,
+        name,
+        package_name,
+        module_name,
+        version,
+        hashes,
+        modes,
+        default,
+        aspectize,
+        hash_algo,
+        user_msg=Message,
+    ):
+        mod = None
+        log.debug(f"use-package: {name}, {package_name}, {module_name}, {version}, {hashes}")
         if isinstance(hashes, str):
             hashes = set([hashes])
         hashes = set(hashes) if hashes else set()
