@@ -350,7 +350,7 @@ class Message(Enum):
     )
     use_version_warning = (
         lambda max_version: f"""Justuse is version {Version(__version__)}, but there is a newer version {max_version} available on PyPI.
-To find out more about the changes check out https://github.com/amogorkon/justuse/wiki/What's-new 
+To find out more about the changes check out https://github.com/amogorkon/justuse/wiki/What's-new
 Please consider upgrading via
 python -m pip install -U justuse
 """
@@ -646,20 +646,21 @@ def _import_public_no_install(
         builtin = True
 
     if builtin:
-        return _extracted_from__import_public_no_install_18(spec, aspectize)
+        return _extracted_from__import_public_no_install_18(name, spec, aspectize)
     # it seems to be installed in some way, for instance via pip
     return importlib.import_module(rest)  # ! => cache
 
 
 # TODO Rename this here and in `_import_public_no_install`
-def _extracted_from__import_public_no_install_18(spec, aspectize):
+def _extracted_from__import_public_no_install_18(name, spec, aspectize):
+    package_name, rest = _parse_name(name)
     if spec.name in sys.modules:
         mod = sys.modules[spec.name]
         importlib.reload(mod)
     else:
         mod = _ensure_loader(spec).create_module(spec)
     if mod is None:
-        mod = importlib.import_module(spec.name)
+        mod = importlib.import_module(rest)
     assert mod
     sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)  # ! => cache
@@ -669,7 +670,7 @@ def _extracted_from__import_public_no_install_18(spec, aspectize):
 
 
 def _parse_name(name) -> Tuple[str, str]:
-    match = re.match(r"(?P<package_name>[^.]+)\.?(?P<rest>[a-zA-Z0-9._]+)?", name)
+    match = re.match(r"(?P<package_name>[^/.]+)/?(?P<rest>[a-zA-Z0-9._]+)?$", name)
     assert match, f"Invalid name spec: {name!r}"
     names = match.groupdict()
     return names["package_name"], names["rest"] or name
@@ -1673,7 +1674,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 )
         else:
             warn(Message.no_validation(url, hash_algo, this_hash), NoValidationWarning)
-        name = str(url)
+
+        name = url.path.segments[-1]
         try:
             mod = _build_mod(
                 name=name,
@@ -1890,10 +1892,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
         log.debug(f"use-kwargs: {package_name} {module_name} {version} {hashes}")
-        return self._use_package(
-            name=f"{package_name}/{module_name}",
-            package_name=package_name,
-            module_name=module_name,
+        return self._use_str(
+            f"{package_name}/{module_name}",
             version=version,
             hash_algo=hash_algo,
             hashes=hashes,
@@ -1937,10 +1937,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         """
         log.debug(f"use-tuple: {pkg_tuple} {version} {hashes}")
         package_name, module_name = pkg_tuple
-        return self._use_package(
-            name=f"{package_name}/{module_name}",
-            package_name=package_name,
-            module_name=module_name,
+        return self._use_str(
+            f"{package_name}/{module_name}",
             version=version,
             hash_algo=hash_algo,
             hashes=hashes,
@@ -1982,36 +1980,14 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         Returns:
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
-        log.debug(f"use-str: {name} {version} {hashes}")
-        package_name, module_name = _parse_name(name)
-        return self._use_package(
-            name=name,
-            package_name=package_name,
-            module_name=module_name,
-            version=version,
-            hash_algo=hash_algo,
-            hashes=hashes,
-            default=default,
-            aspectize=aspectize,
-            modes=modes,
-        )
-
-    def _use_package(
-        self,
-        *,
-        name,
-        package_name,
-        module_name,
-        version,
-        hashes,
-        modes,
-        default,
-        aspectize,
-        hash_algo,
-        user_msg=Message,
-    ):
         mod = None
-        log.debug(f"use-package: {name}, {package_name}, {module_name}, {version}, {hashes}")
+        log.debug(f"use-str: {name} {version} {hashes}")
+
+        package_name = name.split("/")[0]
+        rest = name.split("/")[-1]
+        module_name = rest
+        log.debug(f"use-str: {package_name}, {rest} {version} {hashes}")
+
         if isinstance(hashes, str):
             hashes = set([hashes])
         hashes = set(hashes) if hashes else set()
@@ -2023,22 +1999,25 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         aspectize = aspectize or {}
 
         version: Version = Version(version) if version else None
-        rest = module_name  # TODO: kill it
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
         # let's first see if the user might mean something else entirely
-        if any(_ensure_path(".").glob(f"**/{rest}.py")):
-            warn(Message.ambiguous_name_warning(package_name), AmbiguityWarning)
+        if _ensure_path(f"./{rest}.py").exists():
+            warn(Message.ambiguous_name_warning(name), AmbiguityWarning)
+        spec = None
 
-        spec = importlib.util.find_spec(package_name)
+        if name in self._using:
+            spec = self._using[name].spec
+        elif not auto_install:
+            spec = importlib.util.find_spec(package_name)
 
         # welcome to the buffet table, where everything is a lie
         # fmt: off
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
         log.info("case = %s", case)
         case_func = {
-            (0, 0, 0, 0): lambda **kwargs: ImportError(user_msg.cant_import(name)),
+            (0, 0, 0, 0): lambda **kwargs: ImportError(Message.cant_import(name)),
             (0, 0, 0, 1): _pebkac_no_version_no_hash,
             (0, 0, 1, 0): _import_public_no_install,
             (0, 1, 0, 0): lambda **kwargs: ImportError(Message.cant_import(name)),

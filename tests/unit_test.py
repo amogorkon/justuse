@@ -85,13 +85,13 @@ def test_redownload_module(reuse):
         log.info("fault_inject: deleting %s", path)
         path.delete()
 
-    assert test_86_numpy(reuse, "example-pypi-package.examplepy", "0.1.0")
+    assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
     try:
         reuse.config["fault_inject"] = inject_fault
-        assert test_86_numpy(reuse, "example-pypi-package.examplepy", "0.1.0")
+        assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
     finally:
         del reuse.config["fault_inject"]
-    assert test_86_numpy(reuse, "example-pypi-package.examplepy", "0.1.0")
+    assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
 
 
 def test_access_to_home(reuse):
@@ -407,10 +407,10 @@ def test_reloading(reuse):
 
 
 def test_suggestion_works(reuse):
-    sugg = suggested_artifact("example-pypi-package.examplepy")
+    sugg = suggested_artifact("example-pypi-package/examplepy")
     assert sugg
     mod = reuse(
-        "example-pypi-package.examplepy",
+        "example-pypi-package/examplepy",
         version=sugg[0],
         hashes=sugg[1],
         modes=use.auto_install,
@@ -462,7 +462,7 @@ def test_86_numpy(reuse, name, version):
     assert w
     recommendation = str(w.value).split("\n")[-1].strip()
     mod = eval(recommendation)
-    assert mod.__name__ == name.split(".")[-1]
+    assert mod.__name__ == reuse._parse_name(name)[1]
     assert mod.__version__ == version
     return mod  # for the redownload test
 

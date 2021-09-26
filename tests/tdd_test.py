@@ -89,7 +89,7 @@ def test_pure_python_package(reuse):
         rmtree(venv_dir)
 
     test = reuse(
-        "example-pypi-package.examplepy",
+        "example-pypi-package/examplepy",
         version="0.1.0",
         hashes={
             "3c1b4ddf718d85bde796a20cf3fdea254a33a4dc89129dff5bfc5b7cd760c86b",
@@ -167,15 +167,15 @@ def test_no_isolation(reuse):
 
 
 def test_use_str(reuse):
-    mod = reuse("matplotlib/pyplot")
+    mod = reuse("matplotlib/matplotlib.pyplot")
     assert mod
 
 
 def test_use_tuple(reuse):
-    mod = reuse(("matplotlib", "pyplot"))
+    mod = reuse(("matplotlib", "matplotlib.pyplot"))
     assert mod
 
 
 def test_use_kwargs(reuse):
-    mod = reuse(package_name="matplotlib", module_name="pyplot")
+    mod = reuse(package_name="matplotlib", module_name="matplotlib.pyplot")
     assert mod

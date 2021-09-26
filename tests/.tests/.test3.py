@@ -5,7 +5,7 @@ def get_keyword_param_names(locs):
     print(func, type(func))
     return {name:locs[name] for name, param in inspect.signature(func).parameters.items()
         if (
-            param.kind is inspect.Parameter.KEYWORD_ONLY 
+            param.kind is inspect.Parameter.KEYWORD_ONLY
             or param.kind is inspect.Parameter.VAR_KEYWORD
         )}
 
