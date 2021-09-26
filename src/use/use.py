@@ -1017,6 +1017,7 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
         module_path,
     )
     cwd = Path.cwd()
+    package_name, rest = _parse_name(name)
     with open(module_path, "rb") as code_file:
         try:
             os.chdir(installation_path)
@@ -2029,6 +2030,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
         # let's first see if the user might mean something else entirely
+        package_name, rest = _parse_name(name)
         if _ensure_path(f"./{rest}.py").exists():
             warn(Message.ambiguous_name_warning(name), AmbiguityWarning)
         spec = None
