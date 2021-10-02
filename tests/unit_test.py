@@ -269,10 +269,7 @@ def test_is_version_satisfied(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert reuse._is_version_satisfied(
-        info.get("requires_python", ""),
-        sys_version
-    )
+    assert reuse._is_version_satisfied(info.get("requires_python", ""), sys_version)
 
     # requires >= python 4!
     info = {
@@ -295,10 +292,7 @@ def test_is_version_satisfied(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert False == reuse._is_version_satisfied(
-        info.get("requires_python", ""),
-        sys_version
-    )
+    assert False == reuse._is_version_satisfied(info.get("requires_python", ""), sys_version)
 
     # pure python
     info = {
@@ -321,10 +315,7 @@ def test_is_version_satisfied(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert reuse._is_version_satisfied(
-        info.get("requires_python", ""),
-        sys_version
-    )
+    assert reuse._is_version_satisfied(info.get("requires_python", ""), sys_version)
 
 
 def test_find_windows_artifact(reuse):
@@ -508,3 +499,22 @@ def test_51_sqlalchemy(reuse):
         modes=use.auto_install,
     )
     assert mod.__version__ == "1.4.10"
+
+
+def test_97_multiple_hashes(reuse):
+    mod = reuse(
+        "numpy",
+        version="1.21.2",
+        hashes={
+            "52a664323273c08f3b473548bf87c8145b7513afd63e4ebba8496ecd3853df13",  # aarch64
+            "51a7b9db0a2941434cd930dacaafe0fc9da8f3d6157f9d12f761bbde93f46218",  # manylinux x86
+            "9f2dc79c093f6c5113718d3d90c283f11463d77daa4e83aeeac088ec6a0bda52",  # macosx 10.9 x86_64
+            "a55e4d81c4260386f71d22294795c87609164e22b28ba0d435850fbdf82fc0c5",  # manylinux 2021 i686
+            "426a00b68b0d21f2deb2ace3c6d677e611ad5a612d2c76494e24a562a930c254",  # manylinux2010_x86_64
+            "298156f4d3d46815eaf0fcf0a03f9625fc7631692bd1ad851517ab93c3168fc6",  # manylinux2014_aarch64
+            "09858463db6dd9f78b2a1a05c93f3b33d4f65975771e90d2cf7aadb7c2f66edf",  # manylinux_2_5_i686
+            "b160b9a99ecc6559d9e6d461b95c8eec21461b332f80267ad2c10394b9503496",  # win_amd64
+        },
+        modes=reuse.auto_install,
+    )
+    assert mod.__version__ == "1.21.2"
