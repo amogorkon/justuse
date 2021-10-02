@@ -25,7 +25,7 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [x] safely hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
 - [x] safely auto-install version-tagged pure python packages from PyPI (packages with C-extensions like numpy don't work yet)
 - [x] have multiple versions of the same package installed and loaded in the same program without conflicts
-- [ ] auto-install packages with C-extensions and other precompiled stuff
+- [x] auto-install packages with C-extensions and other precompiled stuff
 - [ ] try to pull packages from a P2P network before pulling from PyPI or conda directly
 - [ ] provide a visual representation of the internal dependency graph
 - [ ] module-level variable guards aka "module-properties"
