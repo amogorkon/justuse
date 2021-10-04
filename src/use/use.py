@@ -525,14 +525,8 @@ def archive_meta(artifact_path):
     )
     name = meta.get("name", Path(artifact_path).stem.split("-")[0])
     meta["name"] = name
-    for k in list(meta):
-        if not k.islower() or (isinstance(meta[k], list) and "    " in str(meta[k])):
-            del meta[k]
-
     if "top_level" not in meta:
-        archive.close()
-        return meta
-
+        meta["top_level"] = [""]
     (
         top_level,
         name,
