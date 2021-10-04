@@ -708,45 +708,58 @@ ORDER BY artifacts.id DESC
     module_path = _ensure_path(query["module_path"])
     # trying to import directly from zip
     _clean_sys_modules(rest)
+    missing_modules = None
     try:
         importer = zipimport.zipimporter(artifact_path)
         return importer.load_module(query["import_name"])
-    except (ImportError, zipimport.ZipImportError, KeyError):
-        _clean_sys_modules(rest)
+    except (ImportError, zipimport.ZipImportError) as zerr:
+        if isinstance(zerr.__context__, ModuleNotFoundError):
+            missing_modules = zerr.__context__
+    except ModuleNotFoundError as zerr:
+        missing_modules = zerr
+    except KeyError:
         if "DEBUG" in os.environ or config["debugging"]:
             log.debug(traceback.format_exc())
-        orig_cwd = Path.cwd()
-        mod = None
-        installation_path = _ensure_path(query["installation_path"])
-        try:
-            os.chdir(installation_path)
-            import_name = (
-                str(module_path.relative_to(installation_path))
-                .replace("\\", "/")
-                .replace("/__init__.py", "")
+    orig_cwd = Path.cwd()
+    mod = None
+    if "installation_path" not in query or missing_modules:
+        query = _find_or_install(
+            package_name, version, force_install=True
+        )
+        artifact_path = _ensure_path(query["artifact_path"])
+        module_path = _ensure_path(query["module_path"])
+        
+    assert "installation_path" in query
+    assert query["installation_path"]
+    installation_path = _ensure_path(query["installation_path"])
+    try:
+        os.chdir(installation_path)
+        import_name = (
+            str(module_path.relative_to(installation_path))
+            .replace("\\", "/")
+            .replace("/__init__.py", "")
+        )
+        return (
+            mod := _load_venv_entry(
+                import_name,
+                module_path=module_path,
+                installation_path=installation_path,
             )
-            return (
-                mod := _load_venv_entry(
-                    import_name,
-                    module_path=module_path,
-                    installation_path=installation_path,
-                )
+        )
+    finally:
+        os.chdir(orig_cwd)
+        if "fault_inject" in config:
+            config["fault_inject"](**locals())
+        if mod:
+            use._save_module_info(
+                name=package_name,
+                import_relpath=query["import_relpath"],
+                version=version,
+                artifact_path=artifact_path,
+                hash_value=hash_algo.value(artifact_path.read_bytes()).hexdigest(),
+                module_path=module_path,
+                installation_path=installation_path,
             )
-        finally:
-            os.chdir(orig_cwd)
-            if "fault_inject" in config:
-                config["fault_inject"](**locals())
-            if mod:
-                use._save_module_info(
-                    name=package_name,
-                    import_relpath=query["import_relpath"],
-                    version=version,
-                    artifact_path=artifact_path,
-                    hash_value=hash_algo.value(artifact_path.read_bytes()).hexdigest(),
-                    module_path=module_path,
-                    installation_path=installation_path,
-                )
-
 
 @cache(maxsize=4096, typed=True)
 def _parse_filename(filename) -> dict:
@@ -897,7 +910,12 @@ def _pure_python_package(artifact_path, meta):
 
 
 def _find_or_install(
-    name, version=None, artifact_path=None, url=None, out_info=None
+    name,
+    version=None,
+    artifact_path=None,
+    url=None,
+    out_info=None,
+    force_install=False
 ) -> Dict[str, Union[dict, int, list, str, tuple, Path, Version]]:
     log.debug(
         "_find_or_install(name=%s, version=%s, artifact_path=%s, url=%s)",
@@ -930,7 +948,7 @@ def _find_or_install(
     out_info["module_path"] = relp
     out_info["import_relpath"] = relp
     out_info["import_name"] = import_name
-    if _pure_python_package(artifact_path, meta):
+    if not force_install and _pure_python_package(artifact_path, meta):
         log.info(f"pure python package: {package_name, version, use.home}")
         return out_info
 
@@ -939,7 +957,7 @@ def _find_or_install(
     python_exe = _find_exe(venv_root)
     env = _get_venv_env(venv_root)
     module_paths = venv_root.rglob(f"**/{relp}")
-    if not python_exe.exists() or not any(module_paths):
+    if force_install or (not python_exe.exists() or not any(module_paths)):
         log.info("calling pip to install install_item=%s", install_item)
         # If we get here, the venv/pip setup is required.
         output = _process(
@@ -950,7 +968,6 @@ def _find_or_install(
             "--no-color",
             "install",
             "--pre",
-            "--no-deps",
             "--root",
             PureWindowsPath(venv_root).drive
             if isinstance(venv_root, (WindowsPath, PureWindowsPath))
