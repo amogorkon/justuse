@@ -54,7 +54,7 @@ for i, package in enumerate(packages.data):
                 "version": package.versions[-1],
                 "stars": package.stars,
                 "err": [exc_type, exc_value, exc_tb],
-                "retry": f"use({package.name}, version={package.versions[-1]}, modes=use.auto_install, hashes={hashes})",
+                "retry": f"""use("{package.name}"", version="{package.versions[-1]}", modes=use.auto_install, hashes={hashes})""",
             }
         )
 
