@@ -1,0 +1,9 @@
+version: "2"
+services:
+    justuse-scraper:
+        build: .
+        image: challisa/justuse-scraper
+        container_name: justuse-scraper
+        volumes:
+            - .:/opt/working
+        entrypoint: sleep 50000
