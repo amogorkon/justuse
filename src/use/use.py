@@ -1094,11 +1094,13 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
     with open(module_path, "rb") as code_file:
         try:
         for variant in (
+          installation_path,
           Path(str(str(installation_path).replace("lib64/","lib/"))),
           Path(str(str(installation_path).replace("lib/","lib64/"))),
           None
         ):
           if not variant: raise RuntimeError()
+          if not variant.exists(): continue
           try:
             os.chdir(cwd)
             os.chdir(variant)
