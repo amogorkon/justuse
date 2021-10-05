@@ -166,16 +166,19 @@ def test_no_isolation(reuse):
     assert test_load_multi_version(reuse, "numpy", "1.19.0", 1)
 
 
+@pytest.mark.skipif(not_local, reason="requires matplotlib")
 def test_use_str(reuse):
     mod = reuse("matplotlib/matplotlib.pyplot")
     assert mod
 
 
+@pytest.mark.skipif(not_local, reason="requires matplotlib")
 def test_use_tuple(reuse):
     mod = reuse(("matplotlib", "matplotlib.pyplot"))
     assert mod
 
 
+@pytest.mark.skipif(not_local, reason="requires matplotlib")
 def test_use_kwargs(reuse):
     mod = reuse(package_name="matplotlib", module_name="matplotlib.pyplot")
     assert mod
