@@ -194,6 +194,7 @@ def test_use_str(reuse):
     assert mod
 
 
+@pytest.mark.skipif(not_local, reason="requires matplotlib")
 def test_use_tuple(reuse):
     if not installed_or_skip("matplotlib"):
         return
@@ -201,6 +202,7 @@ def test_use_tuple(reuse):
     assert mod
 
 
+@pytest.mark.skipif(not_local, reason="requires matplotlib")
 def test_use_kwargs(reuse):
     if not installed_or_skip("matplotlib"):
         return

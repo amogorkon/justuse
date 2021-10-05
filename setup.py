@@ -60,6 +60,19 @@ meta = {
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3 :: Only",
     ],
+    "extras_require": {
+        "test": ["pytest", "pytest-cov", "pytest-env"]
+    },
+    "fullname": "justuse",
+    "dist_files": ["pytest.ini", "tests/pytest.ini"],
+    "description": "a pure-python alternative to import",
+    "maintainer_email": "justuse-pypi@anselm.kiefner.de",
+    "maintainer": "Anselm Kiefner",
+    "platforms": ["any"],
+    "download_url": (
+        "https://github.com/amogorkon/justuse/"
+        "archive/refs/heads/main.zip"
+    )
 }
 
 requires = (
@@ -84,6 +97,7 @@ setup(
     long_description_content_type="text/markdown",
     requires=requires,
     install_requires=requires,
+    setup_requires=requires,
     zip_safe=True,
     **meta
 )
