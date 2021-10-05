@@ -1042,6 +1042,7 @@ def _find_or_install(
             "--no-use-pep517",
             "--no-build-isolation",
             "--no-warn-script-location",
+            "--force-reinstall",
             "--no-warn-conflicts",
             install_item,
         )
@@ -1065,12 +1066,12 @@ def _find_or_install(
         log.info("module_path = %s", module_path)
         out_info.update(
             {
+                **info,
                 "artifact_path": artifact_path,
                 "installation_path": installation_path,
                 "module_path": module_path,
                 "import_relpath": ".".join(relp.split("/")[0:-1]),
                 "info": info,
-                **info,
             }
         )
         return _delete_none(out_info)
@@ -1086,10 +1087,21 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
         module_path,
     )
     cwd = Path.cwd()
+    log.info(f"{cwd=}")
+    log.info(f"{sys.path=}")
     package_name, rest = _parse_name(name)
+    orig_exc = None
     with open(module_path, "rb") as code_file:
         try:
-            os.chdir(installation_path)
+        for variant in (
+          Path(str(str(installation_path).replace("lib64/","lib/"))),
+          Path(str(str(installation_path).replace("lib/","lib64/"))),
+          None
+        ):
+          if not variant: raise RuntimeError()
+          try:
+            os.chdir(cwd)
+            os.chdir(variant)
             return _build_mod(
                 name=rest,
                 code=code_file.read(),
@@ -1097,6 +1109,14 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
                 initial_globals={},
                 aspectize={},
             )
+          except (ImportError, ModuleNotFoundError) as ierr0:
+            orig_exc = orig_exc or ierr0
+            continue
+      except RuntimeError as ierr:
+            try:
+                return importlib.import_module(rest)
+            except BaseException as ierr2:
+                raise ierr from orig_exc
         finally:
             os.chdir(cwd)
 
