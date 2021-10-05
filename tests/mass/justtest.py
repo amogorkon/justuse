@@ -34,6 +34,8 @@ packages.data.sort(key=lambda p: p.stars or 0, reverse=True)
 
 failed_packages = []
 for i, package in enumerate(packages.data):
+    # if i < 5:
+    #     continue
     try:
         use(package.name, version=package.versions[-1], modes=use.auto_install)
     except RuntimeWarning as e:
@@ -52,6 +54,7 @@ for i, package in enumerate(packages.data):
                 "version": package.versions[-1],
                 "stars": package.stars,
                 "err": [exc_type, exc_value, exc_tb],
+                "retry": f"use({package.name}, version={package.versions[-1]}, modes=use.auto_install, hashes={hashes})",
             }
         )
 
