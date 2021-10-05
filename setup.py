@@ -64,9 +64,12 @@ meta = {
 
 requires = (
     "requests(>= 2.24.0)",
-    "yarl(>= 1.6.3)",
-    "packaging(>= 1.0.0)",
+    "packaging(>= 21.0)",
     "typeguard(>= 2.12.1)",
+    "pip(>= 21.2.1)",
+    "furl(>= 2.1.2)",
+    "wheel(>= 0.36.2)",
+    "icontract(>= 2.5.4)",
 )
 
 
