@@ -1029,6 +1029,9 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
     log.info(f"{sys.path=}")
     package_name, rest = _parse_name(name)
     orig_exc = None
+    old_sys_path = list(sys.path)
+    if "" != sys.path[0]:
+      sys.path.insert(0, "")
     with open(module_path, "rb") as code_file:
       try:
         for variant in (
@@ -1059,6 +1062,9 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
                 raise ierr from orig_exc
       finally:
             os.chdir(cwd)
+            sys.path.clear()
+            for p in old_sys_path:
+              sys.path.append(p)
 
 
 @cache(maxsize=512, typed=True)
