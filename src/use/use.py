@@ -2064,8 +2064,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             aspectize=aspectize,
             modes=modes,
         )
-        package_name = name.split("/")[0]
-        rest = module_name = name.split("/")[-1]
 
     def _use_package(
         self,
