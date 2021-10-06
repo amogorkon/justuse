@@ -93,8 +93,8 @@ from enum import Enum
 from functools import lru_cache as cache
 from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
 from importlib import metadata
-from importlib.machinery import ModuleSpec, SourceFileLoader
 from importlib.abc import Finder, Loader
+from importlib.machinery import ModuleSpec, SourceFileLoader
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
@@ -239,6 +239,9 @@ class Version(PkgVersion):
 
     def __repr__(self):
         return f"use.Version({'.'.join(map(str,self.release))!r})"
+
+    def __hash__(self):
+        return hash(self._version)
 
 
 class PlatformTag:
@@ -548,7 +551,7 @@ def archive_meta(artifact_path):
     return meta
 
 
-def _ensure_loader(spec: ModuleSpec) -> Union[Loader,zipimport.zipimporter]:
+def _ensure_loader(spec: ModuleSpec) -> Union[Loader, zipimport.zipimporter]:
     if spec.loader:
         return spec.loader
     return importlib.util.loader_from_spec(spec)
@@ -591,13 +594,12 @@ def _pebkac_no_version_hash(
 
 
 def _pebkac_version_no_hash(
-    func=None, *, name: str, version: Version, hash_algo, **kwargs
+    func=None, *, version: Version, hash_algo, package_name: str, **kwargs
 ) -> Union[Exception, ModuleType]:
     if func:
         result = func(**all_kwargs(_pebkac_version_no_hash, locals()))
         if isinstance(result, ModuleType):
             return result
-    package_name, rest = _parse_name(name)
     all_data = _get_package_data(package_name)
     data = _get_filtered_data(all_data, version)
     if not data["urls"]:
@@ -723,12 +725,10 @@ ORDER BY artifacts.id DESC
     orig_cwd = Path.cwd()
     mod = None
     if "installation_path" not in query or missing_modules:
-        query = _find_or_install(
-            package_name, version, force_install=True
-        )
+        query = _find_or_install(package_name, version, force_install=True)
         artifact_path = _ensure_path(query["artifact_path"])
         module_path = _ensure_path(query["module_path"])
-        
+
     assert "installation_path" in query
     assert query["installation_path"]
     installation_path = _ensure_path(query["installation_path"])
@@ -760,6 +760,7 @@ ORDER BY artifacts.id DESC
                 module_path=module_path,
                 installation_path=installation_path,
             )
+
 
 @cache(maxsize=4096, typed=True)
 def _parse_filename(filename) -> dict:
@@ -910,12 +911,7 @@ def _pure_python_package(artifact_path, meta):
 
 
 def _find_or_install(
-    name,
-    version=None,
-    artifact_path=None,
-    url=None,
-    out_info=None,
-    force_install=False
+    name, version=None, artifact_path=None, url=None, out_info=None, force_install=False
 ) -> Dict[str, Union[dict, int, list, str, tuple, Path, Version]]:
     log.debug(
         "_find_or_install(name=%s, version=%s, artifact_path=%s, url=%s)",
@@ -1100,7 +1096,6 @@ def _get_filtered_data(
         for info in data["releases"][ver]:
             if not _is_compatible(
                 info,
-                hash_algo=Hash.sha256.name,
                 sys_version=sys_version,
                 platform_tags=platform_tags,
                 include_sdist=include_sdist,
@@ -1170,7 +1165,6 @@ def _is_compatible(
     info: Dict,
     sys_version,
     platform_tags,
-    hash_algo=Hash.sha256.name,
     include_sdist=None,
 ) -> bool:
     """Return true if the artifact described by 'info'
@@ -2010,6 +2004,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         )
         package_name = name.split("/")[0]
         rest = module_name = name.split("/")[-1]
+
     def _use_package(
         self,
         *,

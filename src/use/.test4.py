@@ -1,5 +1,7 @@
 import use
 
+use("olefile", version="0.46", modes=use.auto_install)
+
 use("sys", modes=use.fatal_exceptions)
 
 use(
