@@ -36,7 +36,6 @@ with open(os.path.join(src, "use.py")) as f:
 
 meta = {
     "name": "justuse",
-    "description": "A beautiful, simple and explicit way to import modules in Python with advanced features.",
     "license": "MIT",
     "url": "https://github.com/amogorkon/justuse",
     "version": version,
@@ -60,20 +59,17 @@ meta = {
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3 :: Only",
     ],
-    "extras_require": {
-        "test": ["pytest", "pytest-cov", "pytest-env"]
-    },
+    "extras_require": {"test": ["pytest", "pytest-cov", "pytest-env"]},
     "fullname": "justuse",
     "dist_files": ["pytest.ini", "tests/pytest.ini"],
     "description": "a pure-python alternative to import",
     "maintainer_email": "justuse-pypi@anselm.kiefner.de",
     "maintainer": "Anselm Kiefner",
     "platforms": ["any"],
-    "download_url": (
-        "https://github.com/amogorkon/justuse/"
-        "archive/refs/heads/main.zip"
-    )
+    "download_url": "https://github.com/amogorkon/justuse/"
+    "archive/refs/heads/main.zip",
 }
+
 
 requires = (
     "requests(>= 2.24.0)",

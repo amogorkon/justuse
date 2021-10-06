@@ -1100,7 +1100,7 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
     package_name, rest = _parse_name(name)
     orig_exc = None
     old_sys_path = list(sys.path)
-    if "" != sys.path[0]:
+    if sys.path[0] != "":
       sys.path.insert(0, "")
     with open(module_path, "rb") as code_file:
         try:
@@ -1122,7 +1122,7 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
                 initial_globals={},
                 aspectize={},
             )
-          except (ImportError, ModuleNotFoundError) as ierr0:
+                except ImportError as ierr0:
             orig_exc = orig_exc or ierr0
             continue
       except RuntimeError as ierr:
