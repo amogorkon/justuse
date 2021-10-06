@@ -238,7 +238,15 @@ class Version(PkgVersion):
         yield from self.release
 
     def __repr__(self):
-        return f"use.Version({'.'.join(map(str,self.release))!r})"
+        return "use.Version(\"" + ".".join(
+          map(
+            str,
+            (
+                *self.release[0:-1],
+                str(self.release[-1]) + self.pre[0] + str(self.pre[1])
+            ) 
+          )
+        ) + "\")"
 
     def __hash__(self):
         return hash(self._version)
@@ -1179,10 +1187,19 @@ def _get_filtered_data(
     filtered = {"urls": (flat := []), "releases": (by_ver := {})}
     sys_version = _sys_version()
     platform_tags = get_supported()
+    version = Version(str(version)) if version else None
 
     for ver in data["releases"]:
-        if version and version != Version(ver):
+        if version:
+            if Version(str(ver)) != version:
             continue
+            log.info(
+                "Matched _get_filtered_data Version(str(ver=%s))=%s"
+                " == version=%s",
+                repr(ver),
+                repr(Version(str(ver))),
+                repr(version)
+            )
         for info in data["releases"][ver]:
             if not _is_compatible(
                 info,
@@ -1190,11 +1207,12 @@ def _get_filtered_data(
                 platform_tags=platform_tags,
                 include_sdist=include_sdist,
             ):
-                continue
+                pass # continue
+            info["version"] = ver
             flat.append(info)
             if ver not in by_ver:
                 by_ver[ver] = []
-            by_ver[ver].append(info)
+            by_ver[ver].append({**info, "version":ver})
 
     if not include_sdist and (version and str(version) not in by_ver):
         return _get_filtered_data(data, version=version, include_sdist=True)
