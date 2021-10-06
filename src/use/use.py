@@ -116,6 +116,7 @@ from packaging import tags
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version as PkgVersion
 from pip._internal.utils import compatibility_tags
+from pydantic import BaseModel
 
 # injected via initial_globals for testing, you can safely ignore this
 test_config: str = locals().get("test_config", {})
@@ -238,15 +239,19 @@ class Version(PkgVersion):
         yield from self.release
 
     def __repr__(self):
-        return "use.Version(\"" + ".".join(
+        return (
+            'use.Version("'
+            + ".".join(
           map(
             str,
             (
                 *self.release[0:-1],
-                str(self.release[-1]) + self.pre[0] + str(self.pre[1])
+                        str(self.release[-1]) + self.pre[0] + str(self.pre[1]),
+                    ),
+                )
             ) 
+            + '")'
           )
-        ) + "\")"
 
     def __hash__(self):
         return hash(self._version)
@@ -283,6 +288,66 @@ def all_kwargs(func, other_locals):
     d.update(d["kwargs"])
     del d["kwargs"]
     return d
+
+
+class PyPI_Info(BaseModel):
+    author: str = None
+    author_email: str = None
+    bugtrack_url: str = None
+    classifiers: List[str] = None
+    description: str = None
+    description_content_type: str = None
+    docs_url: str = None
+    download_url: str = None
+    downloads: Dict[str, int] = None
+    home_page: str = None
+    keywords: str = None
+    license: str = None
+    maintainer: str = None
+    maintainer_email: str = None
+    name: str = None
+    package_name: str = None
+    package_url: str = None
+    platform: str = None
+    project_url: str
+    project_urls: Dict[str, str] = None
+    release_url: str = None
+    requires_dist: str = None
+    requires_python: str = None
+    summary: str = None
+    version: str = None
+    yanked: bool = False
+    yanked_reason: str = None
+
+
+class PyPI_Release(BaseModel):
+    comment_text: str = None
+    digests: Dict[str, str] = None
+    download_url: str = None
+
+
+class PyPI_URL(BaseModel):
+    comment_text: str = None
+    digests: Dict[str, str] = None
+    downloads: int = -1
+    filename: str = None
+    has_sig: bool = False
+    md5_digest: str = None
+    packagetype: str = None
+    python_version: str = None
+    requires_python: str = None
+    size: int = -1
+    upload_time_iso_8601: str = None
+    url: str = None
+    yanked: bool = False
+    yanked_reason: str = None
+
+
+class PyPI_Project(BaseModel):
+    info: PyPI_Info
+    releases: Dict[str, List[PyPI_Release]]
+    urls: List[PyPI_URL]
+    last_serial: int
 
 
 # singledispatch for methods
@@ -682,9 +747,9 @@ def _pebkac_version_no_hash(
 
 def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Exception:
     # let's try to make an educated guess and give a useful suggestion
-    data = _get_filtered_data(_get_package_data(package_name))
-    for version, infos in data["releases"].items():
-        hash_value = infos[0]["digests"][hash_algo.name]
+    data = _get_package_data(package_name)
+    for version, infos in data.releases.items():
+        hash_value = infos[0].digests[hash_algo.name]
         return RuntimeWarning(
             Message.no_version_or_hash_provided(
                 name,
@@ -1106,12 +1171,14 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
         try:
         for variant in (
           installation_path,
-          Path(str(str(installation_path).replace("lib64/","lib/"))),
-          Path(str(str(installation_path).replace("lib/","lib64/"))),
-          None
+                Path(str(str(installation_path).replace("lib64/", "lib/"))),
+                Path(str(str(installation_path).replace("lib/", "lib64/"))),
+                None,
         ):
-          if not variant: raise RuntimeError()
-          if not variant.exists(): continue
+                if not variant:
+                    raise RuntimeError()
+                if not variant.exists():
+                    continue
           try:
             os.chdir(cwd)
             os.chdir(variant)
@@ -1138,37 +1205,14 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
 
 
 @cache(maxsize=512, typed=True)
-def _get_package_data(
-    package_name,
-) -> Dict[str, Union[int, dict, list, str, Version, Path, URL]]:
+def _get_package_data(package_name) -> PyPI_Project:
     json_url = f"https://pypi.org/pypi/{package_name}/json"
     response = requests.get(json_url)
     if response.status_code == 404:
         raise ImportError(Message.pebkac_unsupported(package_name))
     elif response.status_code != 200:
         raise RuntimeWarning(Message.web_error(json_url, response))
-    data: dict = response.json()
-    newdata = {"urls": [], "releases": {}}
-    for ver in data["releases"].keys():
-        itr = iter(data["releases"].get(ver))
-        first = True
-        while True:
-            try:
-                info = next(itr)
-                parsed = _parse_filename(info["filename"])
-                if parsed:
-                    info.update(parsed)
-                    info["package_name"] = package_name
-                    info["version"] = ver
-                    info2 = _delete_none(info)
-                    if first:
-                        newdata["releases"][ver] = []
-                        first = False
-                    newdata["releases"][ver].append(info2)
-                    newdata["urls"].append(info2)
-            except StopIteration:
-                break
-    return newdata
+    return PyPI_Project(**response.json())
 
 
 class Info(dict):
@@ -1180,43 +1224,49 @@ def _sys_version():
     return Version(".".join(map(str, sys.version_info[0:3])))
 
 
-def _get_filtered_data(
-    data, version: Version = None, include_sdist=None
-) -> Dict[str, Union[int, dict, list, str, Version, Path, URL]]:
+def _filtered_by_version(data: PyPI_Project, version: Version) -> PyPI_Project:
+    filtered = {"urls": [], "releases": {}}
 
-    filtered = {"urls": (flat := []), "releases": (by_ver := {})}
-    sys_version = _sys_version()
-    platform_tags = get_supported()
-    version = Version(str(version)) if version else None
-
-    for ver in data["releases"]:
-        if version:
-            if Version(str(ver)) != version:
+    for V, R in ((Version(ver), releases) for ver, releases in data.releases.items()):
+        if V != version:
             continue
-            log.info(
-                "Matched _get_filtered_data Version(str(ver=%s))=%s"
-                " == version=%s",
-                repr(ver),
-                repr(Version(str(ver))),
-                repr(version)
-            )
-        for info in data["releases"][ver]:
-            if not _is_compatible(
-                info,
-                sys_version=sys_version,
-                platform_tags=platform_tags,
-                include_sdist=include_sdist,
-            ):
-                pass # continue
-            info["version"] = ver
-            flat.append(info)
-            if ver not in by_ver:
-                by_ver[ver] = []
-            by_ver[ver].append({**info, "version":ver})
+        log.info(f"found a match for {version}!")
+        for info in R:
+            info["version"] = V
+            filtered["urls"].append(info)
+            if V not in filtered["releases"]:
+                filtered["releases"][V] = []
+            filtered["releases"][V].append({**info, "version": V})
+    return PyPI_Project(**filtered)
 
-    if not include_sdist and (version and str(version) not in by_ver):
-        return _get_filtered_data(data, version=version, include_sdist=True)
-    return filtered
+
+def _filtered_by_platform(
+    data: PyPI_Project, *, tags: FrozenSet[PlatformTag], sys_version: Version
+) -> PyPI_Project:
+    filtered = {"urls": [], "releases": {}}
+
+    for V, R in ((Version(ver), releases) for ver, releases in data.releases.items()):
+        for info in R:
+            if not _is_compatible(
+                info, sys_version=sys_version, platform_tags=tags, include_sdist=True
+            ):
+                continue
+            info["version"] = V
+            filtered["urls"].append(info)
+            if V not in filtered["releases"]:
+                filtered["releases"][V] = []
+            filtered["releases"][V].append({**info, "version": V})
+    return PyPI_Project(**filtered)
+
+
+@pipes
+def _get_filtered_data(data: PyPI_Project, *, version: Version) -> PyPI_Project:
+    filtered = (
+        data
+        >> _filtered_by_version(version=version)
+        >> _filtered_by_platform(tags=get_supported(), sys_version=_sys_version())
+    )
+    return PyPI_Project(**filtered)
 
 
 @cache
