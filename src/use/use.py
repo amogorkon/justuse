@@ -299,7 +299,7 @@ class PyPI_Info(BaseModel):
     description_content_type: str = None
     docs_url: str = None
     download_url: str = None
-    downloads: Dict[str, int] = None
+    downloads: PyPI_Downloads = None
     home_page: str = None
     keywords: str = None
     license: str = None
@@ -312,7 +312,7 @@ class PyPI_Info(BaseModel):
     project_url: str
     project_urls: Dict[str, str] = None
     release_url: str = None
-    requires_dist: str = None
+    requires_dist: List[str] = None
     requires_python: str = None
     summary: str = None
     version: str = None
@@ -326,6 +326,12 @@ class PyPI_Release(BaseModel):
     download_url: str = None
 
 
+class PyPI_Downloads(BaseModel):
+    last_day: int
+    last_month: int
+    last_week: int
+
+
 class PyPI_URL(BaseModel):
     comment_text: str = None
     digests: Dict[str, str] = None
@@ -337,6 +343,7 @@ class PyPI_URL(BaseModel):
     python_version: str = None
     requires_python: str = None
     size: int = -1
+    upload_time: str = None
     upload_time_iso_8601: str = None
     url: str = None
     yanked: bool = False
