@@ -6,4 +6,4 @@ services:
         container_name: justuse-scraper
         volumes:
             - .:/opt/working
-        entrypoint: sleep 50000
+        command: tail -f /dev/null
