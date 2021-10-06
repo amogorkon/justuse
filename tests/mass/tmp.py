@@ -28,4 +28,4 @@ mod = use(
         "49fd2889d8116d7acef0709e4c82b8560a8b22b0f77471391d12c27596e90267",
     },
 )
-mod.DataFrame
+print(mod.DataFrame)

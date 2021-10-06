@@ -3,6 +3,7 @@ import json
 from typing import List, Optional
 import re
 import logging
+import traceback
 
 import use
 from pydantic import BaseModel
@@ -47,18 +48,19 @@ for i, package in enumerate(packages.data):
         assert module
 
     except Exception as e:
-        exc_type, exc_value, exc_tb = sys.exc_info()
+        exc_type, exc_value, _ = sys.exc_info()
+        tb = traceback.format_exc()
         failed_packages.append(
             {
                 "name": package.name,
                 "version": package.versions[-1],
                 "stars": package.stars,
-                "err": [exc_type, exc_value, exc_tb],
-                "retry": f"""use("{package.name}"", version="{package.versions[-1]}", modes=use.auto_install, hashes={hashes})""",
+                "err": {"type": str(exc_type), "value": str(exc_value), "traceback": tb.split("\n")},
+                "retry": f"""use('{package.name}', version='{package.versions[-1]}', modes=use.auto_install, hashes={hashes})""",
             }
         )
 
-    # if i > 10:
-    #     break
+    if i > 10:
+        break
 
-print(failed_packages)
+print(json.dumps(failed_packages))
