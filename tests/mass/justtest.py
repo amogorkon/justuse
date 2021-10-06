@@ -31,6 +31,10 @@ class PackageToTest(BaseModel):
     repo: Optional[str] = None
     stars: Optional[int] = None
 
+    @property
+    def safe_versions(self):
+        return list(filter(lambda k: k.replace(".", "").isnumeric(), self.versions))
+
 
 class Packages(BaseModel):
     data: List[PackageToTest] = []
@@ -44,6 +48,7 @@ with open("pypi.json", "r") as f:
 
 packages.data.sort(key=lambda p: p.stars or 0, reverse=True)
 
+
 # Use to test the below code for now
 # packages = Packages(data=[PackageToTest(name="sqlalchemy", versions=["1.4.10"])])
 
@@ -54,7 +59,7 @@ for i, package in enumerate(packages.data):
     #     continue
 
     try:
-        use(package.name, version=package.versions[-1], modes=use.auto_install)
+        use(package.name, version=package.safe_versions[-1], modes=use.auto_install)
     except RuntimeWarning as e:
         if str(e).startswith("Failed to auto-install "):
             hashes = re.findall("hashes={([a-z0-9A-Z', ]+)}", str(e))[0]
@@ -62,14 +67,14 @@ for i, package in enumerate(packages.data):
 
     logs = start_capture_logs()
     try:
-        module = use(package.name, version=package.versions[-1], modes=use.auto_install, hashes=hashes)
+        module = use(package.name, version=package.safe_versions[-1], modes=use.auto_install, hashes=hashes)
         assert module
         passing_packages.append(
             {
                 "name": package.name,
-                "version": package.versions[-1],
+                "version": package.safe_versions[-1],
                 "stars": package.stars,
-                "retry": f"""use('{package.name}', version='{package.versions[-1]}', modes=use.auto_install, hashes={hashes})""",
+                "retry": f"""use('{package.name}', version='{package.safe_versions[-1]}', modes=use.auto_install, hashes={hashes})""",
             }
         )
 
@@ -79,7 +84,7 @@ for i, package in enumerate(packages.data):
         failed_packages.append(
             {
                 "name": package.name,
-                "version": package.versions[-1],
+                "version": package.safe_versions[-1],
                 "stars": package.stars,
                 "err": {
                     "type": str(exc_type),
@@ -87,7 +92,7 @@ for i, package in enumerate(packages.data):
                     "traceback": tb.split("\n"),
                     "logs": get_capture_logs(logs).split("\n"),
                 },
-                "retry": f"""use('{package.name}', version='{package.versions[-1]}', modes=use.auto_install, hashes={hashes})""",
+                "retry": f"""use('{package.name}', version='{package.safe_versions[-1]}', modes=use.auto_install, hashes={hashes})""",
             }
         )
 
