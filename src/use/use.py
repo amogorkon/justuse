@@ -2081,11 +2081,11 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hash_algo,
         user_msg=Message,
     ):
-        mod = None
         log.debug(f"use-package: {name}, {package_name}, {module_name}, {version}, {hashes}")
         if isinstance(hashes, str):
             hashes = set([hashes])
         hashes = set(hashes) if hashes else set()
+        rest = module_name
 
         # we use boolean flags to reduce the complexity of the call signature
         fatal_exceptions = bool(Use.fatal_exceptions & modes)
@@ -2098,8 +2098,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
         # let's first see if the user might mean something else entirely
-        package_name, rest = _parse_name(name)
-        if _ensure_path(f"./{rest}.py").exists():
+        if _ensure_path(f"./{module_name}.py").exists():
             warn(Message.ambiguous_name_warning(name), AmbiguityWarning)
         spec = None
 
@@ -2135,8 +2134,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         # fmt: on
         assert result
 
-        if isinstance(result, ModuleType):
-            mod = result
+        if isinstance((mod := result), ModuleType):
             for (check, pattern), decorator in aspectize.items():
                 _apply_aspect(
                     mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders
