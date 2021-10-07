@@ -51,12 +51,8 @@ True
 :license: MIT
 """
 
-# Structure of this module:
-# 1) imports
-# 2) setup of config, logging
-# 3) global functions
-# 4) ProxyModule and Use
-# 5) initialization
+#% Preamble
+# we use https://github.com/microsoft/vscode-python/issues/17218 with % syntax to structure the code
 
 # Read in this order:
 # 1) initialization (instance of Use() is set as module on import)
@@ -64,6 +60,8 @@ True
 # 3) from there, various global functions are called
 # 4) a ProxyModule is always returned, wrapping the module that was imported
 
+
+#% Imports
 
 from __future__ import annotations
 
@@ -118,6 +116,8 @@ from packaging.version import Version as PkgVersion
 from pip._internal.utils import compatibility_tags
 from pydantic import BaseModel
 
+#% Constants and Initialization
+
 # injected via initial_globals for testing, you can safely ignore this
 test_config: str = locals().get("test_config", {})
 test_version: str = locals().get("test_version", None)
@@ -135,20 +135,71 @@ _using = {}
 ModInUse = namedtuple("ModInUse", "name mod path spec frame")
 NoneType = type(None)
 
+
+# Really looking forward to actual builtin sentinel values..
+mode = Enum("Mode", "fastfail")
+
+# defaults
+config = {"version_warning": True, "debugging": False, "use_db": True}
+
+# initialize logging
+root.addHandler(StreamHandler(sys.stderr))
+root.setLevel(NOTSET)
+if "DEBUG" in os.environ or "pytest" in getattr(
+    sys.modules.get("__init__", ""), "__file__", ""
+):
+    root.setLevel(DEBUG)
+    test_config["debugging"] = True
+else:
+    root.setLevel(INFO)
+
+# TODO: log to file
+log = getLogger(__name__)
+
+
+class Hash(Enum):
+    sha256 = hashlib.sha256
+
+
+class VersionWarning(Warning):
+    pass
+
+
+class NotReloadableWarning(Warning):
+    pass
+
+
+class NoValidationWarning(Warning):
+    pass
+
+
+class AmbiguityWarning(Warning):
+    pass
+
+
+class UnexpectedHash(ImportError):
+    pass
+
+
+class AutoInstallationError(ImportError):
+    pass
+
+
 # sometimes all you need is a sledge hammer..
 def signal_handler(sig: int, frame: Optional[FrameType] = None) -> None:
     try:
         for reloader in _reloaders.values():
             reloader.stop()
-    finally:
-        # Invoke the default action, usually KeyboardInterrupt
-        signal.raise_signal(sig)
+    except:
+        pass
+    # Invoke the default action, usually KeyboardInterrupt
+    signal.raise_signal(sig)
 
+
+#%% Pipes
 
 # Register our signal handler
 signal.signal(signal.SIGINT, signal_handler)
-# if h is not signal.default_int_handler:
-#    signal.signal(signal.SIGINT, signal.default_int_handler)
 
 # Since we have quite a bit of functional code that black would turn into a sort of arrow antipattern with lots of ((())),
 # we use @pipes to basically enable polish notation which allows us to avoid most parentheses.
@@ -212,8 +263,10 @@ def pipes(func_or_class):
     return ctx[tree.body[0].name]
 
 
+#%% Version and Packaging
+
 # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
-# # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
+# This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
 
 
 class Version(PkgVersion):
@@ -275,19 +328,17 @@ class PlatformTag:
         return self.platform == other.platform
 
 
-# keyword args from inside the called function!
-def all_kwargs(func, other_locals):
-    d = {
-        name: other_locals[name]
-        for name, param in inspect.signature(func).parameters.items()
-        if (
-            param.kind is inspect.Parameter.KEYWORD_ONLY
-            or param.kind is inspect.Parameter.VAR_KEYWORD
-        )
-    }
-    d.update(d["kwargs"])
-    del d["kwargs"]
-    return d
+#%% PyPI API
+class PyPI_Release(BaseModel):
+    comment_text: str = None
+    digests: Dict[str, str] = None
+    download_url: str = None
+
+
+class PyPI_Downloads(BaseModel):
+    last_day: int
+    last_month: int
+    last_week: int
 
 
 class PyPI_Info(BaseModel):
@@ -320,18 +371,6 @@ class PyPI_Info(BaseModel):
     yanked_reason: str = None
 
 
-class PyPI_Release(BaseModel):
-    comment_text: str = None
-    digests: Dict[str, str] = None
-    download_url: str = None
-
-
-class PyPI_Downloads(BaseModel):
-    last_day: int
-    last_month: int
-    last_week: int
-
-
 class PyPI_URL(BaseModel):
     comment_text: str = None
     digests: Dict[str, str] = None
@@ -351,10 +390,27 @@ class PyPI_URL(BaseModel):
 
 
 class PyPI_Project(BaseModel):
-    info: PyPI_Info
     releases: Dict[str, List[PyPI_Release]]
     urls: List[PyPI_URL]
-    last_serial: int
+    last_serial: str = None
+    info: PyPI_Info
+
+
+#% Helper Functions
+
+# keyword args from inside the called function!
+def all_kwargs(func, other_locals):
+    d = {
+        name: other_locals[name]
+        for name, param in inspect.signature(func).parameters.items()
+        if (
+            param.kind is inspect.Parameter.KEYWORD_ONLY
+            or param.kind is inspect.Parameter.VAR_KEYWORD
+        )
+    }
+    d.update(d["kwargs"])
+    del d["kwargs"]
+    return d
 
 
 # singledispatch for methods
@@ -370,55 +426,6 @@ def methdispatch(func) -> Callable:
     wrapper.register = dispatcher.register
     update_wrapper(wrapper, func)
     return wrapper
-
-
-# Really looking forward to actual builtin sentinel values..
-mode = Enum("Mode", "fastfail")
-
-# defaults
-config = {"version_warning": True, "debugging": False, "use_db": True}
-
-# initialize logging
-root.addHandler(StreamHandler(sys.stderr))
-root.setLevel(NOTSET)
-if "DEBUG" in os.environ or "pytest" in getattr(
-    sys.modules.get("__init__", ""), "__file__", ""
-):
-    root.setLevel(DEBUG)
-    test_config["debugging"] = True
-else:
-    root.setLevel(INFO)
-
-# TODO: log to file
-log = getLogger(__name__)
-
-
-class Hash(Enum):
-    sha256 = hashlib.sha256
-
-
-class VersionWarning(Warning):
-    pass
-
-
-class NotReloadableWarning(Warning):
-    pass
-
-
-class NoValidationWarning(Warning):
-    pass
-
-
-class AmbiguityWarning(Warning):
-    pass
-
-
-class UnexpectedHash(ImportError):
-    pass
-
-
-class AutoInstallationError(ImportError):
-    pass
 
 
 # This is a collection of the messages directed to the user.
@@ -520,6 +527,9 @@ class KwargsMessage(Message):
     pass
 
 
+#% Installation and Import Functions
+
+
 @pipes
 def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
     if isinstance(value, (str, bytes)):
@@ -596,9 +606,7 @@ def archive_meta(artifact_path):
         functions = ZipFunctions(artifact_path)
 
     archive, names = functions.get()
-    meta = Info(
-        dict(names << filter(DIST_PKG_INFO_REGEX.search) << map(functions.read_entry))
-    )
+    meta = dict(names << filter(DIST_PKG_INFO_REGEX.search) << map(functions.read_entry))
     meta.update(
         dict(
             (lp := l.partition(": "), (lp[0].lower().replace("-", "_"), lp[2]))[-1]
@@ -658,10 +666,6 @@ def _venv_root(package_name, version, home) -> Path:
     return home / "venv" / package_name / str(version)
 
 
-def _venv_is_win() -> bool:
-    return sys.platform == "win32"  # pragma no cov
-
-
 def _pebkac_no_version_hash(
     func=None, *, name: str, **kwargs
 ) -> Union[ModuleType, Exception]:
@@ -681,7 +685,7 @@ def _pebkac_version_no_hash(
         if isinstance(result, ModuleType):
             return result
     all_data = _get_package_data(package_name)
-    data = _get_filtered_data(all_data, version)
+    data = _get_filtered_data(all_data, version=version)
     if not data["urls"]:
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
     hashes = {
@@ -1160,11 +1164,6 @@ def _get_package_data(package_name) -> PyPI_Project:
     return PyPI_Project(**response.json())
 
 
-class Info(dict):
-    def __repr__(self):
-        return "<Info of size %d>" % len(self)
-
-
 def _sys_version():
     return Version(".".join(map(str, sys.version_info[0:3])))
 
@@ -1177,11 +1176,10 @@ def _filtered_by_version(data: PyPI_Project, version: Version) -> PyPI_Project:
             continue
         log.info(f"found a match for {version}!")
         for info in R:
-            info["version"] = V
             filtered["urls"].append(info)
             if V not in filtered["releases"]:
                 filtered["releases"][V] = []
-            filtered["releases"][V].append({**info, "version": V})
+            filtered["releases"][V].append({**info.dict(), "version": V})
     return PyPI_Project(**filtered)
 
 
@@ -1400,6 +1398,9 @@ def _fail_or_default(exception: BaseException, default: Any):
         return default  # TODO: write test for default
     else:
         raise exception
+
+
+#% Main Classes
 
 
 class ProxyModule(ModuleType):
