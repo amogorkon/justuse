@@ -3,11 +3,12 @@
 # If this code is inside use.py, it causes all kinds of problems.
 
 from __future__ import annotations
-from typing import Dict
-from typing import List
+
+from typing import Dict, List
 
 from pydantic import BaseModel
-from version_stuff import Version
+
+from .version import Version
 
 
 class PyPI_Release(BaseModel):

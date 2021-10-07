@@ -89,8 +89,7 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import (partial, partialmethod, reduce, singledispatch,
-                       update_wrapper)
+from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.abc import Finder, Loader
 from importlib.machinery import ModuleSpec, SourceFileLoader
@@ -115,8 +114,8 @@ from packaging import tags
 from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
 
-from pypi_model import PyPI_Project
-from version_stuff import Version
+from .pypi_model import PyPI_Project
+from .version import Version
 
 #% Constants and Initialization
 
@@ -1123,7 +1122,7 @@ def _sys_version():
 def _filtered_by_version(data: PyPI_Project, version: Version) -> PyPI_Project:
     filtered = {"urls": [], "releases": {}}
 
-    for V, R in ((Version(ver), releases) for ver, releases in data.releases.items()):
+    for V, R in data.releases.items():
         if V != version:
             continue
         log.info(f"found a match for {version}!")
@@ -1131,8 +1130,8 @@ def _filtered_by_version(data: PyPI_Project, version: Version) -> PyPI_Project:
             filtered["urls"].append(info)
 
             if V not in filtered["releases"]:
-                filtered["releases"][str(V)] = []
-            filtered["releases"][str(V)].append({**info.dict(), "version": V})
+                filtered["releases"][V] = []
+            filtered["releases"][V].append({**info.dict(), "version": V})
     return PyPI_Project(**filtered)
 
 
@@ -1141,7 +1140,7 @@ def _filtered_by_platform(
 ) -> PyPI_Project:
     filtered = {"urls": [], "releases": {}}
 
-    for V, R in ((Version(ver), releases) for ver, releases in data.releases.items()):
+    for V, R in data.releases.items():
         for info in R:
             if not _is_compatible(
                 info, sys_version=sys_version, platform_tags=tags, include_sdist=True
@@ -1215,7 +1214,7 @@ def _is_platform_compatible(
 
 
 def _is_compatible(
-    info: Dict,
+    info: PyPI_Project,
     sys_version,
     platform_tags,
     include_sdist=None,
