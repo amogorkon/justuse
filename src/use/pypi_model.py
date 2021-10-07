@@ -1,12 +1,26 @@
+# Pydantic model for the PyPi JSON API
+
+# It needs to live in a module without from __future__ import annotations due
+# to issues regarding forward refs. Inside use.py there is also an issue involving pydantic magic getting confused with
+# use.use, which can't be resolved otherwise.
+
+from __future__ import annotations
+from typing import Dict, List
+
 from pydantic import BaseModel
-from typing import List, Dict
-import requests
+
+
+class PyPI_Release(BaseModel):
+    comment_text: str = None
+    digests: Dict[str, str] = None
+    url: str = None
 
 
 class PyPI_Downloads(BaseModel):
     last_day: int
     last_month: int
     last_week: int
+
 
 class PyPI_Info(BaseModel):
     author: str = None
@@ -38,12 +52,6 @@ class PyPI_Info(BaseModel):
     yanked_reason: str = None
 
 
-class PyPI_Release(BaseModel):
-    comment_text: str = None
-    digests: Dict[str, str] = None
-    download_url: str = None
-
-
 class PyPI_URL(BaseModel):
     comment_text: str = None
     digests: Dict[str, str] = None
@@ -63,12 +71,7 @@ class PyPI_URL(BaseModel):
 
 
 class PyPI_Project(BaseModel):
-    info: PyPI_Info
-    releases: Dict[str, List[PyPI_Release]]
-    urls: List[PyPI_URL]
-    last_serial: int
-
-data = requests.get("https://pypi.org/pypi/olefile/0.46/json").json()
-O = PyPI_Project(**data)
-print(O.info.name)
-
+    releases: Dict[str, List[PyPI_Release]] = None
+    urls: List[PyPI_URL] = None
+    last_serial: int = None
+    info: PyPI_Info = None
