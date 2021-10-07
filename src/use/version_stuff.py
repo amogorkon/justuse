@@ -45,3 +45,11 @@ class Version(PkgVersion):
 
     def __hash__(self):
         return hash(self._version)
+
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, value):
+        return Version(value)
