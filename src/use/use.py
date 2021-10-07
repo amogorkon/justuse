@@ -114,8 +114,11 @@ from packaging import tags
 from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
 
-from .pypi_model import PyPI_Project
-from .version import Version
+cwd = Path("")
+os.chdir(Path(__file__).parent)
+from pypi_model import PyPI_Project, Version
+
+os.chdir(cwd)
 
 #% Constants and Initialization
 
