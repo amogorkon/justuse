@@ -74,6 +74,7 @@ meta = {
 requires = (
     "requests(>= 2.24.0)",
     "packaging(>= 21.0)",
+    "pydantic(>= 1.8.2)",
     "typeguard(>= 2.12.1)",
     "pip(>= 21.2.1)",
     "furl(>= 2.1.2)",
