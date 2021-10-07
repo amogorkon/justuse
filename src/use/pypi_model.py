@@ -1,13 +1,13 @@
 # Pydantic model for the PyPi JSON API
 
-# It needs to live in a module without from __future__ import annotations due
-# to issues regarding forward refs. Inside use.py there is also an issue involving pydantic magic getting confused with
-# use.use, which can't be resolved otherwise.
+# If this code is inside use.py, it causes all kinds of problems.
 
 from __future__ import annotations
-from typing import Dict, List
+from typing import Dict
+from typing import List
 
 from pydantic import BaseModel
+from version_stuff import Version
 
 
 class PyPI_Release(BaseModel):
@@ -71,7 +71,7 @@ class PyPI_URL(BaseModel):
 
 
 class PyPI_Project(BaseModel):
-    releases: Dict[str, List[PyPI_Release]] = None
+    releases: Dict[Version, List[PyPI_Release]] = None
     urls: List[PyPI_URL] = None
     last_serial: int = None
     info: PyPI_Info = None

@@ -113,10 +113,10 @@ from furl import furl as URL
 from icontract import ensure, invariant, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
-from packaging.version import Version as PkgVersion
 from pip._internal.utils import compatibility_tags
 
 from pypi_model import PyPI_Project
+from version_stuff import Version
 
 #% Constants and Initialization
 
@@ -267,50 +267,6 @@ def pipes(func_or_class):
 
 #%% Version and Packaging
 
-# Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
-# This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
-
-
-class Version(PkgVersion):
-    def __new__(cls, *args, **kwargs):
-        if args and isinstance(args[0], Version):
-            return args[0]
-        else:
-            return super(cls, Version).__new__(cls)
-
-    def __init__(self, versionstr=None, *, major=0, minor=0, patch=0):
-        if isinstance(versionstr, Version):
-            return
-        if not (versionstr or major or minor or patch):
-            raise ValueError(
-                "Version must be initialized with either a string or major, minor and patch"
-            )
-        if major or minor or patch:
-            # string as only argument, no way to construct a Version otherwise - WTF
-            return super().__init__(".".join((str(major), str(minor), str(patch))))
-        return super().__init__(versionstr)
-
-    def __iter__(self):
-        yield from self.release
-
-    def __repr__(self):
-        return (
-            'use.Version("'
-            + ".".join(
-                map(
-                    str,
-                    (
-                        *self.release[0:-1],
-                        str(self.release[-1]) + self.pre[0] + str(self.pre[1]),
-                    ),
-                )
-            )
-            + '")'
-        )
-
-    def __hash__(self):
-        return hash(self._version)
-
 
 class PlatformTag:
     def __init__(self, platform: str):
@@ -328,6 +284,7 @@ class PlatformTag:
     @require(lambda self, other: isinstance(other, self.__class__))
     def __eq__(self, other):
         return self.platform == other.platform
+
 
 #% Helper Functions
 
@@ -619,7 +576,7 @@ def _pebkac_version_no_hash(
             return result
     all_data = _get_package_data(package_name)
     data = _get_filtered_data(all_data, version=version)
-    if not data["urls"]:
+    if not data.urls:
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
     hashes = {
         entry["digests"].get(hash_algo.name) for entry in all_data["releases"][str(version)]
@@ -1110,9 +1067,10 @@ def _filtered_by_version(data: PyPI_Project, version: Version) -> PyPI_Project:
         log.info(f"found a match for {version}!")
         for info in R:
             filtered["urls"].append(info)
+
             if V not in filtered["releases"]:
-                filtered["releases"][V] = []
-            filtered["releases"][V].append({**info.dict(), "version": V})
+                filtered["releases"][str(V)] = []
+            filtered["releases"][str(V)].append({**info.dict(), "version": V})
     return PyPI_Project(**filtered)
 
 
@@ -1137,12 +1095,11 @@ def _filtered_by_platform(
 
 @pipes
 def _get_filtered_data(data: PyPI_Project, *, version: Version) -> PyPI_Project:
-    filtered = (
+    return (
         data
         >> _filtered_by_version(version=version)
         >> _filtered_by_platform(tags=get_supported(), sys_version=_sys_version())
     )
-    return PyPI_Project(**filtered)
 
 
 @cache
