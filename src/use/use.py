@@ -89,7 +89,8 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
+from functools import (partial, partialmethod, reduce, singledispatch,
+                       update_wrapper)
 from importlib import metadata
 from importlib.abc import Finder, Loader
 from importlib.machinery import ModuleSpec, SourceFileLoader
@@ -114,7 +115,8 @@ from packaging import tags
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version as PkgVersion
 from pip._internal.utils import compatibility_tags
-from pydantic import BaseModel
+
+from pypi_model import PyPI_Project
 
 #% Constants and Initialization
 
@@ -326,75 +328,6 @@ class PlatformTag:
     @require(lambda self, other: isinstance(other, self.__class__))
     def __eq__(self, other):
         return self.platform == other.platform
-
-
-#%% PyPI API
-class PyPI_Release(BaseModel):
-    comment_text: str = None
-    digests: Dict[str, str] = None
-    download_url: str = None
-
-
-class PyPI_Downloads(BaseModel):
-    last_day: int
-    last_month: int
-    last_week: int
-
-
-class PyPI_Info(BaseModel):
-    author: str = None
-    author_email: str = None
-    bugtrack_url: str = None
-    classifiers: List[str] = None
-    description: str = None
-    description_content_type: str = None
-    docs_url: str = None
-    download_url: str = None
-    downloads: PyPI_Downloads = None
-    home_page: str = None
-    keywords: str = None
-    license: str = None
-    maintainer: str = None
-    maintainer_email: str = None
-    name: str = None
-    package_name: str = None
-    package_url: str = None
-    platform: str = None
-    project_url: str
-    project_urls: Dict[str, str] = None
-    release_url: str = None
-    requires_dist: List[str] = None
-    requires_python: str = None
-    summary: str = None
-    version: str = None
-    yanked: bool = False
-    yanked_reason: str = None
-
-
-class PyPI_URL(BaseModel):
-    comment_text: str = None
-    digests: Dict[str, str] = None
-    downloads: int = -1
-    filename: str = None
-    has_sig: bool = False
-    md5_digest: str = None
-    packagetype: str = None
-    python_version: str = None
-    requires_python: str = None
-    size: int = -1
-    upload_time: str = None
-    upload_time_iso_8601: str = None
-    url: str = None
-    yanked: bool = False
-    yanked_reason: str = None
-
-
-class PyPI_Project(BaseModel):
-    releases: Dict[str, List[PyPI_Release]]
-    urls: List[PyPI_URL]
-    last_serial: str = None
-    info: PyPI_Info
-
 
 #% Helper Functions
 
