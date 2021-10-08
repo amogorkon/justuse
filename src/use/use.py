@@ -243,7 +243,10 @@ class Version(PkgVersion):
             str,
             (
                 *self.release[0:-1],
-                str(self.release[-1]) + self.pre[0] + str(self.pre[1])
+                str(self.release[-1])
+		    # needed to properly materialize e.g. use.Version('1.21.6rc2') and friends
+		    + str((self.pre or ('',''))[0])
+		    + str((self.pre or ('',''))[1])
             ) 
           )
         ) + "\")"
