@@ -972,15 +972,11 @@ def _find_or_install(
     if not url:
         import inspect
         info = dict(inspect.getmembers(_find_version(package_name, version)))
-        filename = URL(info["url"]).path.segments[-1]
-        info["filename"] = filename
-        info.update(_parse_filename(filename))
     else:
         info["url"] = str(url)
         filename = URL(info["url"]).path.segments[-1]
         info["filename"] = filename
         info.update(_parse_filename(filename))
-
     filename, url, version = (info["filename"], URL(info["url"]), Version(info["version"]))
     artifact_path = _download_artifact(name, version, filename, url)
     info["artifact_path"] = artifact_path
@@ -1181,7 +1177,7 @@ def _filtered_by_platform(
                 
                 if not compat:
                     continue
-                log.info(f"found a match: %s", V)
+                log.info('found a match: %s', V)
                 as_dict["version"] = V
                 filtered["urls"].append(as_dict)
             if V not in filtered["releases"]:
