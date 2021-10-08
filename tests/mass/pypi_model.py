@@ -190,15 +190,20 @@ class PyPI_Project(BaseModel):
         )
 
     def filter_by_platform(self, tags: FrozenSet[PlatformTag], sys_version: Version) -> "PyPI_Project":
-        filtered = {}
-        for ver, releases in self.releases.items():
-            filtered[ver] = list(
-                (
-                    rel.dict()
-                    for rel in releases
-                    if _is_compatible(rel, sys_version=sys_version, platform_tags=tags, include_sdist=True)
+        filtered = {
+            ver: [
+                rel.dict()
+                for rel in releases
+                if _is_compatible(
+                    rel,
+                    sys_version=sys_version,
+                    platform_tags=tags,
+                    include_sdist=True,
                 )
-            )
+            ]
+            for ver, releases in self.releases.items()
+        }
+
         return PyPI_Project(**{**self.dict(), **{"releases": filtered}})
 
     def filter_by_version_and_current_platform(self, version: str) -> "PyPI_Project":
@@ -247,8 +252,7 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
     @see https://packaging.pypa.io/en/latest/specifiers.html
     """
     specifiers = SpecifierSet(specifier or "")
-    is_match = sys_version in specifiers
-    return is_match
+    return sys_version in specifiers
 
 
 def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist=None) -> bool:
