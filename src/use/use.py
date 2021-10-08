@@ -820,7 +820,6 @@ def _parse_filename(filename) -> dict:
 
 
 def _process(*argv, env={}):
-    _realenv = 
     o = run(
         **(
             setup := dict(
