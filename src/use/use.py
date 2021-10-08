@@ -811,10 +811,10 @@ def _parse_filename(filename) -> dict:
     distribution = version = build_tag = python_tag = abi_tag = platform_tag = None
     pp = Path(filename)
     if ".tar" in filename:
-        ext = filename[filename.index(".tar") :]
+        ext = filename[filename.index(".tar"):]
     else:
-        ext = pp.name[len(pp.stem) + 1 :]
-    rest = pp.name[0 : -len(ext) - 1]
+        ext = pp.name[len(pp.stem):]
+    rest = pp.name[0 : -len(ext)]
 
     p = rest.split("-")
     np = len(p)
@@ -828,11 +828,12 @@ def _parse_filename(filename) -> dict:
         distribution, version = p
     else:
         return {}
-
-    return _delete_none(
+    print(p)
+    # ['SQLAlchemy', '1.3.19', 'cp27', 'cp27m', 'macosx_10_14_x86_64']
+    info = _delete_none(
         {
             "distribution": distribution,
-            "version": version,
+            "version": Version(version),
             "build_tag": build_tag,
             "python_tag": python_tag,
             "abi_tag": abi_tag,
@@ -840,6 +841,13 @@ def _parse_filename(filename) -> dict:
             "ext": ext,
         }
     )
+    if python_tag:
+        info["python_version"] = (
+            info["python_tag"].replace("cp", "")[0]
+              + "."
+              + info["python_tag"].replace("cp", "")[1:]
+        )
+    return info
 
 
 def _process(*argv, env={}):
@@ -901,7 +909,7 @@ def _process(*argv, env={}):
 
 def _find_version(package_name, version=None) -> dict:
     data = _get_filtered_data(_get_package_data(package_name), version)
-    return [*data["releases"].items()][-1][1][0]
+    return next(iter(reversed(data.releases.items())))[1][-1]
 
 
 def _find_exe(venv_root: Path) -> Path:
@@ -962,11 +970,16 @@ def _find_or_install(
         out_info = {}
     package_name, rest = _parse_name(name)
     if not url:
-        info = _find_version(package_name, version)
+        import inspect
+        info = dict(inspect.getmembers(_find_version(package_name, version)))
+        filename = URL(info["url"]).path.segments[-1]
+        info["filename"] = filename
+        info.update(_parse_filename(filename))
     else:
-        filename = str("url").split("\\/")[-1]
-        info = _parse_filename(filename)
-        info["url"] = str("url")
+        info["url"] = str(url)
+        filename = URL(info["url"]).path.segments[-1]
+        info["filename"] = filename
+        info.update(_parse_filename(filename))
 
     filename, url, version = (info["filename"], URL(info["url"]), Version(info["version"]))
     artifact_path = _download_artifact(name, version, filename, url)
@@ -1071,7 +1084,6 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
     if sys.path[0] != "":
       sys.path.insert(0, "")
     with open(module_path, "rb") as code_file:
-        try:
         for variant in (
           installation_path,
                 Path(str(str(installation_path).replace("lib64/", "lib/"))),
@@ -1082,7 +1094,7 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
                     raise RuntimeError()
                 if not variant.exists():
                     continue
-          try:
+        try:
             os.chdir(cwd)
             os.chdir(variant)
             return _build_mod(
@@ -1092,10 +1104,7 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
                 initial_globals={},
                 aspectize={},
             )
-                except ImportError as ierr0:
-            orig_exc = orig_exc or ierr0
-            continue
-      except RuntimeError as ierr:
+        except RuntimeError as ierr:
             try:
                 return importlib.import_module(rest)
             except BaseException as ierr2:
@@ -1128,13 +1137,25 @@ def _filtered_by_version(data: PyPI_Project, version: Version) -> PyPI_Project:
     for V, R in data.releases.items():
         if V != version:
             continue
+        if not R:
+            continue
         log.info(f"found a match for {version}!")
         for info in R:
-            filtered["urls"].append(info)
-
+            as_dict = info.dict()
+            url = URL(as_dict["url"])
+            filename = url.path.segments[-1]
+            as_dict["filename"] = filename
+            as_dict.update(_parse_filename(filename))
+            as_dict = {**as_dict, "version": V}
+            filtered["urls"].append(as_dict)
             if V not in filtered["releases"]:
                 filtered["releases"][V] = []
-            filtered["releases"][V].append({**info.dict(), "version": V})
+            filtered["releases"][V].append(as_dict)
+    if filtered["releases"]:
+        print("return PyPI_Project(**%s)" % repr(filtered))
+        r = PyPI_Project(**filtered)
+        print("return r = %s" % r)
+        return r
     return PyPI_Project(**filtered)
 
 
@@ -1142,28 +1163,52 @@ def _filtered_by_platform(
     data: PyPI_Project, *, tags: FrozenSet[PlatformTag], sys_version: Version
 ) -> PyPI_Project:
     filtered = {"urls": [], "releases": {}}
-
-    for V, R in data.releases.items():
-        for info in R:
-            if not _is_compatible(
-                info, sys_version=sys_version, platform_tags=tags, include_sdist=True
-            ):
+    for sdist in (False, True):
+      for V, R in data.releases.items():
+            if not R:
                 continue
-            info["version"] = V
-            filtered["urls"].append(info)
+            for info in R:
+                as_dict = info.dict()
+                url = URL(as_dict["url"])
+                filename = url.path.segments[-1]
+                as_dict["filename"] = filename
+                as_dict.update(_parse_filename(filename))
+                as_dict = {**as_dict, "version": V}
+                compat = _is_compatible(
+                    as_dict, sys_version=sys_version, platform_tags=tags, include_sdist=sdist
+                )
+                log.info(f"{compat!r}  <-  use._is_compatible({info!r}, {sys_version=!r}, platform_tags={tags!r}, include_sdist={sdist!r}")
+                
+                if not compat:
+                    continue
+                log.info(f"found a match: %s", V)
+                as_dict["version"] = V
+                filtered["urls"].append(as_dict)
             if V not in filtered["releases"]:
                 filtered["releases"][V] = []
-            filtered["releases"][V].append({**info, "version": V})
+                filtered["releases"][V].append(as_dict)
+    
+            if filtered["releases"]:
+                print("return PyPI_Project(**%s)" % repr(filtered))
+                r = PyPI_Project(**filtered)
+                print("return r = %s" % r)
+                return r
     return PyPI_Project(**filtered)
 
 
 @pipes
-def _get_filtered_data(data: PyPI_Project, *, version: Version) -> PyPI_Project:
-    return (
-        data
-        >> _filtered_by_version(version=version)
-        >> _filtered_by_platform(tags=get_supported(), sys_version=_sys_version())
-    )
+def _get_filtered_data(data: PyPI_Project, version: Versio=None) -> PyPI_Project:
+    if version:
+        return (
+            data
+            >> _filtered_by_version(version=version)
+            >> _filtered_by_platform(tags=get_supported(), sys_version=_sys_version())
+        )
+    else:
+        return (
+            data
+            >> _filtered_by_platform(tags=get_supported(), sys_version=_sys_version())
+        )
 
 
 @cache
@@ -1191,8 +1236,10 @@ def _is_platform_compatible(
     # TODO: Simplify
     if "py2" in info["filename"]:
         return False
-    if "platform_tag" not in info:
-        info.update(_parse_filename(info["filename"]))
+    if "platform_tag" not in info or "python_version" not in info:
+        info.update(_parse_filename(
+          URL(info["url"]).path.segments[-1]
+        ))
     if not include_sdist and (
         ".tar" in info["filename"]
         or info.get("python_tag", "cpsource") in ("cpsource", "sdist")
@@ -1200,6 +1247,8 @@ def _is_platform_compatible(
         return False
 
     our_python_tag = tags.interpreter_name() + tags.interpreter_version()
+    if "python_version" not in info:
+        return False
     python_tag = info.get("python_tag", "") or "cp" + info["python_version"].replace(".", "")
     if python_tag in ("py3", "cpsource"):
         python_tag = our_python_tag
@@ -1207,11 +1256,12 @@ def _is_platform_compatible(
         info.get("platform_tag", "any").split(".") << map(PlatformTag) >> frozenset
     )
     is_sdist = (
-        info["packagetype"] == "sdist"
-        or info["python_version"] == "source"
+           info["python_version"] == "source"
         or info.get("abi_tag", "") == "none"
     )
-    return our_python_tag == python_tag and (
+    # if "aarch64" in str(info):
+    #  raise Exception()
+    return (our_python_tag == python_tag or python_tag.startswith("cp3")) and (
         (is_sdist and include_sdist) or any(cur_platform_tags.intersection(platform_tags))
     )
 
@@ -1224,14 +1274,11 @@ def _is_compatible(
 ) -> bool:
     """Return true if the artifact described by 'info'
     is compatible with the current or specified system."""
-    if "platform_tag" not in info:
-        return False
     specifier = info.get("requires_python", "")
 
     return (
         ((not specifier or _is_version_satisfied(specifier, sys_version)))
         and _is_platform_compatible(info, platform_tags, include_sdist)
-        and not info["yanked"]
         and (include_sdist or info["ext"] not in ("tar", "tar.gz" "zip"))
     )
 
