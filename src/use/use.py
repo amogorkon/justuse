@@ -615,13 +615,14 @@ def _pebkac_version_no_hash(
     try:
         hashes = {
             entry["digests"].get(hash_algo.name)
-	    for entry in _get_filtered_data(_get_package_data(package_name), version)["releases"][str(version)]
+            for entry in _get_filtered_data(
+                _get_package_data(package_name), version
+            )["releases"][str(version)]
         }
-	return RuntimeWarning(Message.pebkac_missing_hash(package_name, version, hashes))
+        return RuntimeWarning(Message.pebkac_missing_hash(package_name, version, hashes))
     except (IndexError, KeyError) as ike:
         log.warning("_pebkac_version_no_hash: ike=%s accessing ['releases'] on filtered data", ike)
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
-    
 
 
 def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Exception:
