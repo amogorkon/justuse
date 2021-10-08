@@ -1034,37 +1034,37 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
     package_name, rest = _parse_name(name)
     orig_exc = None
     old_sys_path = list(sys.path)
-    if "" != sys.path[0]:
-      sys.path.insert(0, "")
+    if sys.path[0] != "":
+        sys.path.insert(0, "")
     with open(module_path, "rb") as code_file:
-      try:
-        for variant in (
-          installation_path,
-          Path(str(str(installation_path).replace("lib64/","lib/"))),
-          Path(str(str(installation_path).replace("lib/","lib64/"))),
-          None
-        ):
-          if not variant: raise RuntimeError()
-          if not variant.exists(): continue
-          try:
-            os.chdir(cwd)
-            os.chdir(variant)
-            return _build_mod(
-                name=rest,
-                code=code_file.read(),
-                module_path=_ensure_path(module_path),
-                initial_globals={},
-                aspectize={},
-            )
-          except (ImportError, ModuleNotFoundError) as ierr0:
-            orig_exc = orig_exc or ierr0
-            continue
-      except RuntimeError as ierr:
-            try:
-                return importlib.import_module(rest)
-            except BaseException as ierr2:
-                raise ierr from orig_exc
-      finally:
+        try:
+            for variant in     (
+              installation_path,
+              Path(str(str(installation_path).replace("lib64/","lib/"))),
+              Path(str(str(installation_path).replace("lib/","lib64/"))),
+              None
+            ):
+                if not variant: raise RuntimeError()
+                if not variant.exists(): continue
+                try:
+                    os.chdir(cwd)
+                    os.chdir(variant)
+                    return _build_mod(
+                        name=rest,
+                        code=code_file.read(),
+                        module_path=_ensure_path(module_path),
+                        initial_globals={},
+                        aspectize={},
+                    )
+                except ImportError as ierr0:
+                    orig_exc = orig_exc or ierr0
+                    continue
+        except RuntimeError as ierr:
+              try:
+                  return importlib.import_module(rest)
+              except BaseException as ierr2:
+                  raise ierr from orig_exc
+        finally:
             os.chdir(cwd)
             sys.path.clear()
             for p in old_sys_path:
@@ -2036,8 +2036,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             aspectize=aspectize,
             modes=modes,
         )
-        package_name = name.split("/")[0]
-        rest = module_name = name.split("/")[-1]
     def _use_package(
         self,
         *,
