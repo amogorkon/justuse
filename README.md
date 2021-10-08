@@ -62,7 +62,7 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
  `utils = use(use.URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
             hash_value="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")`  # no chance with classical imports
             
- `np = use("numpy", version="1.21.0rc2", hash_value="3c90b0bb77615bda5e007cfa4c53eb6097ecc82e247726e0eb138fcda769b45d", auto_install=True)` # inline installation of packages and importing the same package with different versions in parallel in the same code - most people wouldn't even dream of that!
+ `np = use("numpy", version="1.21.0rc2", hash_value="3c90b0bb77615bda5e007cfa4c53eb6097ecc82e247726e0eb138fcda769b45d", modes=use.auto_install)` # inline installation of packages and importing the same package with different versions in parallel in the same code - most people wouldn't even dream of that!
 
 Thanks to the *default* keyword argument, it is also easy to simplify the rather clumsy optional import usecase like
 
@@ -79,14 +79,14 @@ while it is possible of course to pass anything as default, for instance some fa
 To auto-install packages, the simplest way is to try to import the package simply with auto-install active, check the link whether you picked the right package and not some typo-squatting one and then simply copy&paste the last line of the exception to get the latest version, here is an example:
 
 ```
->>> test = use("example-pypi-package.examplepy", auto_install=True)
+>>> test = use("example-pypi-package.examplepy", modes=use.auto_install)
 
 RuntimeWarning: Please specify version and hash for auto-installation of 'example-pypi-package'. 
 To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/example-pypi-package
 If you want to auto-install the latest version: 
-use("example-pypi-package.examplepy", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", auto_install=True)
+use("example-pypi-package.examplepy", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", modes=use.auto_install)
 
->>> test = use("example-pypi-package.examplepy", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", auto_install=True)
+>>> test = use("example-pypi-package.examplepy", version="0.1.0", hash_value="ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77", modes=use.auto_install)
 => download and import the requested package, version-pinned and hash-checked inline!
 ```
 Version-pinning and hash-checking is the most secure way to install a package. It will ensure that your code will always run as you expect it, but there's a drawback: there is no immediate and automatic way to update code without involving the user (yet). On one side, you won't ever accidentally break your stuff by updating something else, but you also won't benefit from automatic security patches. To fix this shortcoming, it might be feasible to build IDE-plugins that check and update these pins in the code or check some database for security patches every time an auto-installed package is imported - please contact us if you have ideas or better yet, code ;-)
