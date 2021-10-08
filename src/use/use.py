@@ -820,11 +820,7 @@ def _parse_filename(filename) -> dict:
 
 
 def _process(*argv, env={}):
-    _realenv = {
-        k: v
-        for k, v in chain(os.environ.items(), env.items())
-        if isinstance(k, str) and isinstance(v, str)
-    }
+    _realenv = 
     o = run(
         **(
             setup := dict(
@@ -836,7 +832,7 @@ def _process(*argv, env={}):
                 timeout=45000,
                 check=False,
                 close_fds=True,
-                env=_realenv,
+                env={k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)},
                 encoding="UTF-8",
                 errors="ISO-8859-1",
                 text=True,
@@ -877,8 +873,11 @@ def _process(*argv, env={}):
 
 
 def _find_version(package_name, version=None) -> dict:
-    data = _get_filtered_data(_get_package_data(package_name), version)
-    return [*data["releases"].items()][-1][1][0]
+    # NOTE: Don't expose local variable e.g. 'data'
+    return (
+        [*_get_filtered_data(_get_package_data(package_name), version).get("releases").items()]
+        or [(None, ({},))]
+    )[-1][1][0]
 
 
 def _find_exe(venv_root: Path) -> Path:
@@ -1001,7 +1000,7 @@ def _find_or_install(
         )
         sys.stderr.write("\n\n".join((output.stderr, output.stdout)))
 
-    module_paths = [*venv_root.rglob(f"**/{relp}")]
+    module_paths = sorted([*venv_root.rglob(f"**/{relp}")] or [*venv_root.rglob(f"**/{rest}**.py")], key=lambda i: len(str(i)))
     while len(relp) > 2 and not module_paths:
         log.info("relp = %s", relp)
         module_paths = [*venv_root.rglob(f"**/{relp}")]
@@ -1009,25 +1008,23 @@ def _find_or_install(
             break
         relp = "/".join(Path(relp).parts[1:])
         log.info(relp)
-
-    assert module_paths
+    
+    out_info["import_relpath"] = ".".join(relp.split("/")[0:-1])
+    
+    # assert module_paths
     for module_path in module_paths:
-        installation_path = module_path
-        while installation_path.name != "site-packages":
-            installation_path = installation_path.parent
-        log.info("installation_path = %s", installation_path)
-        log.info("module_path = %s", module_path)
-        out_info.update(
-            {
-                **info,
-                "artifact_path": artifact_path,
-                "installation_path": installation_path,
-                "module_path": module_path,
-                "import_relpath": ".".join(relp.split("/")[0:-1]),
-                "info": info,
-            }
-        )
-        return _delete_none(out_info)
+        break
+        
+    out_info.update(
+        {
+            **info,
+            "artifact_path": artifact_path,
+            "installation_path": installation_path,
+            "module_path": module_path,
+            "info": info,
+        }
+    )
+    return _delete_none(out_info)
 
 
 def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
