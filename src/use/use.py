@@ -534,9 +534,12 @@ def _ensure_loader(obj: Union[ModuleType,ModuleSpec]) -> Union[Loader,zipimport.
     loader = None
     if not loader and isinstance(obj, ModuleType):
         loader = obj.__loader__
-    if not loader and isinstance(obj, ModuleType):
-        if (spec := getattr(obj, "__spec__", None)):
-            loader = spec.loader
+    if (
+        not loader
+        and isinstance(obj, ModuleType)
+        and (spec := getattr(obj, "__spec__", None))
+    ):
+        loader = spec.loader
     if not loader and isinstance(obj, ModuleSpec):
         loader = obj.loader
     if not loader and hasattr(importlib.util, "loader_from_spec"):
