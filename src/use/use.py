@@ -548,20 +548,82 @@ def archive_meta(artifact_path):
     return meta
 
 
-def _ensure_loader(spec: ModuleSpec) -> Union[Loader,zipimport.zipimporter]:
-    if spec.loader:
-        return spec.loader
-    return importlib.util.loader_from_spec(spec)
+def _ensure_loader(obj: Union[ModuleType,ModuleSpec]) -> Union[Loader,zipimport.zipimporter]:
+    loader = None
+    if not loader and isinstance(obj, ModuleType):
+        loader = obj.__loader__
+    if not loader and isinstance(obj, ModuleType):
+        if (spec := getattr(obj, "__spec__", None)):
+            loader = spec.loader
+    if not loader and isinstance(obj, ModuleSpec):
+        loader = obj.loader
+    if not loader and hasattr(importlib.util, "loader_from_spec"):
+        loader = importlib.util.loader_from_spec(obj)
+    if not loader and isinstance(obj, ModuleType):
+        name = obj.__name__
+        mod = obj
+        segments = name.split(".")
+        parent_mod = importlib.import_module(".".join(segments[:-1]))
+        parent_spec = parent_mod.__spec__;
+        parent_loader = (
+            parent_mod.__loader__
+            if not parent_spec 
+            or not getattr(parent_spec, "loader")
+            else parent_spec.loader
+        )
+        ctor_args = [
+            (
+                k,
+                getattr(mod, "__name__") 
+                if "name" in k 
+                else (
+                    list(Path(
+                      parent_spec.submodule_search_locations[0]
+                    ).glob(
+                      mod.__name__[len(parent_mod.__name__)+1:]+".*"
+                    )) +
+                    list(Path(
+                      parent_spec.submodule_search_locations[0]
+                    ).glob(
+                      mod.__name__[len(parent_mod.__name__)+1:]
+                        + "/__init__.py"
+                    ))
+                )[0]
+                if ("path" in k or "file" in k or "loc" in k)
+                else k
+            )
+            for k in list(
+                inspect.signature(
+                    type(parent_mod.__loader__).__init__
+                ).parameters
+            )[1:]
+        ]
+        loader = type(parent_mod.__loader__)(*ctor_args)
+    if not loader:
+        if isinstance(obj, ModuleType):
+            name = obj.__name__
+            spec = obj.__spec__
+        if isinstance(obj, ModuleSpec):
+            name = obj.name
+            spec = obj
+        module_path = (
+                   getattr(spec, "origin", None)
+                or getattr(obj, "__file__", None)
+                or getattr(obj, "__path__", None)
+                or inspect.getsourcefile(obj)
+        )
+        loader = SourceFileLoader(name, module_path)
+    return loader
 
 
 def _clean_sys_modules(package_name: str) -> None:
     for k in dict(
         [
-            (k, _ensure_loader(v.__spec__))
+            (k, _ensure_loader(v))
             for k, v in sys.modules.items()
             if (
                 getattr(v, "__spec__", None) is None
-                or isinstance(v.__spec__.loader, (SourceFileLoader, zipimport.zipimporter))
+                or isinstance(_ensure_loader(v), (SourceFileLoader, zipimport.zipimporter))
             )
             and package_name in k.split(".")
         ]

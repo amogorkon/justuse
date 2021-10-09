@@ -1,3 +1,4 @@
+
 import functools
 import os
 import re
@@ -5,6 +6,8 @@ import sys
 import tempfile
 import warnings
 from contextlib import closing
+from importlib.util import find_spec
+from importlib.metadata import distribution, PackageNotFoundError
 from pathlib import Path
 from threading import _shutdown_locks
 
@@ -36,9 +39,9 @@ import logging
 
 log = logging.getLogger(".".join((__package__, __name__)))
 log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)
-
-
 @pytest.fixture()
+
+
 def reuse():
     # making a completely new one each time would take ages (_registry)
     use._using = {}
@@ -379,8 +382,6 @@ def test_use_ugrade_version_warning(reuse):
         )
         assert test_use.test_version == test_use.__version__ == version
         assert w[0].category.__name__ == reuse.VersionWarning.__name__
-
-
 class Restorer:
     def __enter__(self):
         self.locks = set(_shutdown_locks)
@@ -388,9 +389,9 @@ class Restorer:
     def __exit__(self, arg1, arg2, arg3):
         for lock in set(_shutdown_locks).difference(self.locks):
             lock.release()
-
-
 @pytest.mark.skipif(is_win, reason="windows reloading")
+
+
 def test_reloading(reuse):
     fd, file = tempfile.mkstemp(".py", "test_module")
     with Restorer():
@@ -426,6 +427,8 @@ def double_function(func):
     return wrapper
 
 
+
+
 def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     # baseline
     mod = reuse(reuse.Path("simple_funcs.py"))
@@ -452,9 +455,9 @@ def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     assert mod.two() == 4
     assert mod.three() == 3
     assert reuse.ismethod
-
-
 @pytest.mark.parametrize("name, version", (("numpy", "1.19.3"),))
+
+
 def test_86_numpy(reuse, name, version):
     use = reuse  # for the eval() later
     with pytest.raises(RuntimeWarning) as w:
@@ -478,33 +481,72 @@ def test_clear_registry(reuse):
         reuse.registry = reuse._set_up_registry()
 
 
-def test_85_pywt(reuse):
+def installed_or_skip(name, version=None):
+    if not (spec := find_spec(name)):
+        pytest.skip(f"{name} not installed")
+        return False
     try:
-        import pywt
-    except ImportError:
-        pytest.skip("pywt not installed")
-    finally:
-        if "pywt" in sys.modules:
-            del sys.modules["pywt"]
-    mod = reuse("pywt", version="1.1.1")
+        dist = distribution(spec.name)
+    except PackageNotFoundError as pnfe:
+        pytest.skip(f"{name} partially installed: {spec=}, {pnfe}")
+    
+    if not ((ver := dist.metadata["version"])
+       and (version is None or ver == version)):
+        pytest.skip(f"found '{name}' v{ver}, but require v{version}")
+        return False
+    return True
+@pytest.mark.parametrize(
+    "name, version, hashes",
+    (
+        ('packaging', '21.0', {'c86254f9220d55e31cc94d69bade760f0847da8000def4dfe1c6b872fd14ff14'}),
+        ('pytest', '6.2.4', {'91ef2131a9bd6be8f76f1f08eac5c5317221d6ad1e143ae03894b862e8976890'}),
+        # ("pytest-cov", "2.12.1"),
+        # ("pytest-env", "0.6.2"),
+        # ("requests", "2.24.0"),
+        # ("furl", "2.1.2"),
+        # ("wheel", "0.36.2"),
+        # ("icontract", "2.5.4"),
+    )\
+)
+
+
+def test_85(reuse, name, version, hashes):
+    if not installed_or_skip(name, version):
+        return
+    mod = reuse(name, version=reuse.Version(version))
     assert mod
+@pytest.mark.parametrize(
+    "name, version, hashes",
+    (
+        ('pytest', '6.2.5', {'7310f8d27bc79ced999e760ca304d69f6ba6c6649c0b60fb0e04a4a77cacc134'}),
+        ('PyYAML', '5.4.1', {'d483ad4e639292c90170eb6f7783ad19490e7a8defb3e46f97dfe4bacae89122'}),
+        ('pyzmq', '22.2.1', {'b4428302c389fffc0c9c07a78cad5376636b9d096f332acfe66b321ae9ff2c63'}),
+        ('scipy', '1.7.1', {'611f9cb459d0707dd8e4de0c96f86e93f61aac7475fcb225e9ec71fecdc5cebf'}),
+        ('setuptools', '57.4.0', {'a49230977aa6cfb9d933614d2f7b79036e9945c4cdd7583163f4e920b83418d6'}),
+        ('setuptools-scm', '6.0.1', {'c3bd5f701c8def44a5c0bfe8d407bef3f80342217ef3492b951f3777bd2d915c'}),
+        ('terminado', '0.12.1', {'09fdde344324a1c9c6e610ee4ca165c4bb7f5bbf982fceeeb38998a988ef8452'}),
+        ('testpath', '0.5.0', {'8044f9a0bab6567fc644a3593164e872543bb44225b0e24846e2c89237937589'}),
+        ('tornado', '6.1', {'a48900ecea1cbb71b8c71c620dee15b62f85f7c14189bdeee54966fbd9a0c5bd'}),
+        ('traitlets', '5.1.0', {'03f172516916220b58c9f19d7f854734136dd9528103d04e9bf139a92c9f54c4'}),
+        ('typing-extensions', '3.10.0.2', {'f1d25edafde516b146ecd0613dabcc61409817af4766fbbcfb8d1ad4ec441a34'}),
+        # ("pytest-cov", "2.12.1"),
+        # ("pytest-env", "0.6.2"),
+        # ("requests", "2.24.0"),
+        # ("furl", "2.1.2"),
+        # ("wheel", "0.36.2"),
+        # ("icontract", "2.5.4"),
+    )
+)
 
 
-def test_51_sqlalchemy(reuse):
-    try:
-        import sqlalchemy
-
-        if sqlalchemy.__version__ == "1.4.10":
-            pytest.skip("Can't test with exactly version 1.4.10")
-    except ImportError:
-        pytest.skip("sqlalchemy not installed")
-    finally:
-        if "sqlalchemy" in sys.modules:
-            del sys.modules["sqlalchemy"]
+def test_86(reuse, name, version, hashes):
+    if not installed_or_skip(name, version):
+        return
     mod = use(
-        "sqlalchemy",
-        version="1.4.10",
-        hashes="5ef95d19c31a8cd3905c697be0a7e94e70ab1926ecd4159c3e6c1cf01fc3c492",
+        name,
+        version=reuse.Version(version),
+        hashes=hashes,
         modes=use.auto_install,
     )
-    assert mod.__version__ == "1.4.10"
+    assert reuse._get_version(mod=mod) == reuse.Version(version)
+
