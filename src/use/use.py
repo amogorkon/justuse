@@ -116,7 +116,7 @@ from pip._internal.utils import compatibility_tags
 
 cwd = Path("")
 os.chdir(Path(__file__).parent)
-from pypi_model import PyPI_Project, Version
+from pypi_model import *
 
 os.chdir(cwd)
 
@@ -560,7 +560,7 @@ def archive_meta(artifact_path):
     return meta
 
 
-def _ensure_loader(obj: Union[ModuleType,ModuleSpec]) -> Union[Loader,zipimport.zipimporter]:
+def _ensure_loader(obj: Union[ModuleType,ModuleSpec]):
     loader = None
     if not loader and isinstance(obj, ModuleType):
         loader = obj.__loader__
@@ -946,7 +946,7 @@ def _process(*argv, env={}):
     )
 
 
-def _find_version(package_name, version=None) -> dict:
+def _find_version(package_name, version=None) -> PyPI_Release:
     data = _get_filtered_data(_get_package_data(package_name), version)
     return next(iter(reversed(data.releases.items())))[1][-1]
 
@@ -997,7 +997,7 @@ def _pure_python_package(artifact_path, meta):
 
 def _find_or_install(
     name, version=None, artifact_path=None, url=None, out_info=None, force_install=False
-) -> Dict[str, Union[dict, int, list, str, tuple, Path, Version]]:
+):
     log.debug(
         "_find_or_install(name=%s, version=%s, artifact_path=%s, url=%s)",
         name,
@@ -1323,7 +1323,7 @@ def _is_platform_compatible(
 
 
 def _is_compatible(
-    info: PyPI_Project,
+    info: PyPI_Release,
     sys_version,
     platform_tags,
     include_sdist=None,

@@ -421,9 +421,11 @@ def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     assert mod.two() == 4
     assert mod.three() == 3
     assert reuse.ismethod
+
+
+
+@pytest.mark.skipif(True, reason="too slow; moved to the Beast")
 @pytest.mark.parametrize("name, version", (("numpy", "1.19.3"),))
-
-
 def test_86_numpy(reuse, name, version):
     use = reuse  # for the eval() later
     with pytest.raises(RuntimeWarning) as w:
