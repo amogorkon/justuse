@@ -1,3 +1,4 @@
+
 import importlib
 import os
 import re
@@ -5,6 +6,8 @@ import shlex
 import subprocess
 import sys
 import warnings
+from importlib.util import find_spec
+from importlib.metadata import distribution, PackageNotFoundError
 from pathlib import Path
 from shutil import rmtree
 from unittest import skip
@@ -19,6 +22,8 @@ is_win = sys.platform.lower().startswith("win")
 not_win = not is_win
 
 # Add in-progress tests here
+
+
 
 
 def test_template(reuse):
@@ -108,8 +113,6 @@ def test_pure_python_package(reuse):
 
 def test_db_setup(reuse):
     assert reuse.registry
-
-
 @pytest.mark.parametrize(
     "name, floor_version, n_versions",
     [
@@ -121,6 +124,8 @@ def test_db_setup(reuse):
         ("sqlalchemy", None, 2),
     ],
 )
+
+
 def test_load_multi_version(reuse, name, floor_version, n_versions):
     data = reuse._get_filtered_data(reuse._get_package_data(name))
     versions = [*data.releases.keys()]
@@ -142,8 +147,6 @@ def test_load_multi_version(reuse, name, floor_version, n_versions):
         mod_version = getattr(mod, "__version__", reuse._get_version(mod=mod))
         mods.append((version, mod_version, mod))
     return mods
-
-
 @pytest.mark.parametrize(
     "name, floor_version, n_versions",
     [
@@ -155,33 +158,62 @@ def test_load_multi_version(reuse, name, floor_version, n_versions):
         ("sqlalchemy", None, 2),
     ],
 )
+
+
 def test_check_multi_version(reuse, name, floor_version, n_versions):
     mods = test_load_multi_version(reuse, name, floor_version, n_versions)
     for expected_version, actual_version, mod in mods:
         if not hasattr(mod, "__version__"):
             continue
         assert expected_version == actual_version
-
-
 @pytest.mark.skipif(True, reason="broken")
+
+
 def test_no_isolation(reuse):
     assert test_load_multi_version(reuse, "numpy", "1.19.0", 1)
     assert test_load_multi_version(reuse, "numpy", "1.19.0", 1)
 
 
+<<<<<<< HEAD
 @pytest.mark.skipif(not_local, reason="requires matplotlib")
+=======
+def installed_or_skip(name, version=None):
+    if not (spec := find_spec(name)):
+        pytest.skip(f"{name} not installed")
+        return False
+    try:
+        dist = distribution(spec.name)
+    except PackageNotFoundError as pnfe:
+        pytest.skip(f"{name} partially installed: {spec=}, {pnfe}")
+    
+    if not ((ver := dist.metadata["version"])
+       and (version is None or ver == version)):
+        pytest.skip(f"found '{name}' v{ver}, but require v{version}")
+        return False
+    return True
+
+
+>>>>>>> main
 def test_use_str(reuse):
+    if not installed_or_skip("matplotlib"):
+        return
     mod = reuse("matplotlib/matplotlib.pyplot")
     assert mod
 
 
 @pytest.mark.skipif(not_local, reason="requires matplotlib")
 def test_use_tuple(reuse):
+    if not installed_or_skip("matplotlib"):
+        return
     mod = reuse(("matplotlib", "matplotlib.pyplot"))
     assert mod
 
 
 @pytest.mark.skipif(not_local, reason="requires matplotlib")
 def test_use_kwargs(reuse):
+    if not installed_or_skip("matplotlib"):
+        return
     mod = reuse(package_name="matplotlib", module_name="matplotlib.pyplot")
     assert mod
+
+

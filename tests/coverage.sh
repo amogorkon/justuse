@@ -14,11 +14,7 @@ eval "cov_file_opts=($( find -name "*.py" | sed -r -e 's~^\./~~; s~\.py$~~; s~[_
 [ "x${PYTHON: 0:1}" = "x/" ] || PYTHON="$( which ""$PYTHON"" || which "python" || which "python.exe" )"
 export PYTHON
 
-if [ "x$GITHUB_AUTH$GITHUB_PATH$GITHUB_ROOT$GITHUB_USER$GITHUB_AUTHOR$GITHUB_REPO$GITHUB_COMMIT$GITHUB_REF$GITHUB_UID$GITHUB$USERID" != "x" ]; then
-  find . -regextype egrep "(" "(" -name .git -prune -false ")" -o -iregex '.*/\..*cache.*|.*cache.*/\..*' ")" -a -exec rm -vrf -- "{}" +
-  yes y | "$PYTHON" -m pip install --force-reinstall --upgrade -r requirements.txt
-fi
-which apt && ! which busybox && { apt install -y busybox || sudo apt install -y busybox; }
+which apt && ! which busybox && { apt install -y busybox || sudo apt install -y busybox; } || true
 
 
 echo "=== COVERAGE SCRIPT ==="
@@ -123,7 +119,7 @@ if [ "x$FTP_USER" != "x" ]; then
       ;  \
     do
       eval "set -- $variant"
-      cmd=(  busybox ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" \
+      cmd=(  ftpput -v -P 21 -u "$FTP_USER" -p "$FTP_PASS" \
         ftp.pinproject.com "$@"  )
       echo -E "Trying variant:" 1>&2
       if (( ! UID )); then
