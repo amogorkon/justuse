@@ -1,3 +1,6 @@
+from pydantic import BaseModel
+from typing import List, Dict
+import requests
 from packaging.version import Version as PkgVersion
 
 class Version(PkgVersion):
@@ -23,9 +26,22 @@ class Version(PkgVersion):
         yield from self.release
 
     def __repr__(self):
-        return f"use.Version({'.'.join(map(str,self.release))!r})"
+        return (
+            'use.Version("'
+            + ".".join(
+                map(
+                    str,
+                    (
+                        *self.release[0:-1],
+                        str(self.release[-1]) + self.pre[0] + str(self.pre[1]),
+                    ),
+                )
+            )
+            + '")'
+        )
+
+    def __hash__(self):
+        return hash(self._version)
 
 
-v = Version(Version("1"))
-print(v)
-v2 = Version(Version(major=2, minor=0))
+

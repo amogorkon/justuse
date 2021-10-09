@@ -128,15 +128,18 @@ def test_db_setup(reuse):
 
 def test_load_multi_version(reuse, name, floor_version, n_versions):
     data = reuse._get_filtered_data(reuse._get_package_data(name))
-    versions = [*data["releases"].keys()]
+    versions = [*data.releases.keys()]
     mods = []
     for version in versions[0 : min(len(versions), n_versions)]:
         if floor_version and reuse.Version(version) < reuse.Version(floor_version):
             continue
-        info = data["releases"][version][0]
+        import inspect
+        info = dict(inspect.getmembers(
+            data.releases[version][0]
+        ))
         reuse._clean_sys_modules(name.replace("-", "_"))
         mod = reuse(
-            info["distribution"],
+            name,
             version=version,
             hashes=info["digests"]["sha256"],
             modes=reuse.auto_install,
@@ -171,6 +174,7 @@ def test_no_isolation(reuse):
     assert test_load_multi_version(reuse, "numpy", "1.19.0", 1)
 
 
+@pytest.mark.skipif(not_local, reason="requires matplotlib")
 def installed_or_skip(name, version=None):
     if not (spec := find_spec(name)):
         pytest.skip(f"{name} not installed")
@@ -186,7 +190,6 @@ def installed_or_skip(name, version=None):
         return False
     return True
 
-
 def test_use_str(reuse):
     if not installed_or_skip("matplotlib"):
         return
@@ -194,6 +197,7 @@ def test_use_str(reuse):
     assert mod
 
 
+@pytest.mark.skipif(not_local, reason="requires matplotlib")
 def test_use_tuple(reuse):
     if not installed_or_skip("matplotlib"):
         return
@@ -201,6 +205,7 @@ def test_use_tuple(reuse):
     assert mod
 
 
+@pytest.mark.skipif(not_local, reason="requires matplotlib")
 def test_use_kwargs(reuse):
     if not installed_or_skip("matplotlib"):
         return

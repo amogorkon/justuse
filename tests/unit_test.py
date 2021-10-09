@@ -272,10 +272,7 @@ def test_is_version_satisfied(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert reuse._is_version_satisfied(
-        info.get("requires_python", ""),
-        sys_version
-    )
+    assert reuse._is_version_satisfied(info.get("requires_python", ""), sys_version)
 
     # requires >= python 4!
     info = {
@@ -298,10 +295,7 @@ def test_is_version_satisfied(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert False == reuse._is_version_satisfied(
-        info.get("requires_python", ""),
-        sys_version
-    )
+    assert False == reuse._is_version_satisfied(info.get("requires_python", ""), sys_version)
 
     # pure python
     info = {
@@ -324,10 +318,7 @@ def test_is_version_satisfied(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert reuse._is_version_satisfied(
-        info.get("requires_python", ""),
-        sys_version
-    )
+    assert reuse._is_version_satisfied(info.get("requires_python", ""), sys_version)
 
 
 def test_find_windows_artifact(reuse):
@@ -549,4 +540,3 @@ def test_86(reuse, name, version, hashes):
         modes=use.auto_install,
     )
     assert reuse._get_version(mod=mod) == reuse.Version(version)
-
