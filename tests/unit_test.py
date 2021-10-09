@@ -539,9 +539,4 @@ def test_86(reuse, name, version, hashes):
         hashes=hashes,
         modes=use.auto_install,
     )
-<<<<<<< HEAD
-    assert mod.__version__ == "1.4.10"
-=======
     assert reuse._get_version(mod=mod) == reuse.Version(version)
-
->>>>>>> main
