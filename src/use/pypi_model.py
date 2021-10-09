@@ -53,19 +53,33 @@ class Version(PkgVersion):
         return Version(value)
 
 
-class PyPI_Release(BaseModel):
+class QuietModel(BaseModel):
+    def __repr__(self):
+         return "%s()" % type(self).__qualname__
+
+class PyPI_Release(QuietModel):
     comment_text: str = None
     digests: Dict[str, str] = None
     url: str = None
+    ext: str = None
+    packagetype: str = None
+    distribution: str = None
+    requires_python: str = None
+    python_version: str = None
+    python_tag: str = None
+    platform_tag: str = None
+    filename: str = None
+    abi_tag: str = None
 
 
-class PyPI_Downloads(BaseModel):
+
+class PyPI_Downloads(QuietModel):
     last_day: int
     last_month: int
     last_week: int
 
 
-class PyPI_Info(BaseModel):
+class PyPI_Info(QuietModel):
     author: str = None
     author_email: str = None
     bugtrack_url: str = None
@@ -95,7 +109,7 @@ class PyPI_Info(BaseModel):
     yanked_reason: str = None
 
 
-class PyPI_URL(BaseModel):
+class PyPI_URL(QuietModel):
     comment_text: str = None
     digests: Dict[str, str] = None
     downloads: int = -1
@@ -113,7 +127,7 @@ class PyPI_URL(BaseModel):
     yanked_reason: str = None
 
 
-class PyPI_Project(BaseModel):
+class PyPI_Project(QuietModel):
     releases: Dict[Version, List[PyPI_Release]] = None
     urls: List[PyPI_URL] = None
     last_serial: int = None
