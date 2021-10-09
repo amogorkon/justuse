@@ -33,7 +33,7 @@ jobs:
           export PYTHON
           export PYTHON3
           export DEBUG
-          "$PYTHON" -m pip install -r requirements.txt
+          "$PYTHON" -m pip install cython -r requirements.txt
           bash -x -v ./tests/coverage.sh || {
             python3 -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage/ --cov-report annotate:coverage/annotated --cov-report xml:coverage/cov.xml '--cov=setup' '--cov=tests..tests..test1' '--cov=tests..tests..test2' '--cov=tests..tests..test3' '--cov=tests..tests.bar' '--cov=tests..tests.foo' '--cov=tests..tests.modA' '--cov=tests..tests.modA_test' '--cov=tests..tests.modB' '--cov=tests..tests.modD' '--cov=tests..tests.modE' '--cov=tests..tests.sys' '--cov=tests..tests.tests_subdir.modC' '--cov=tests.__init__' '--cov=tests.foo' '--cov=tests.simple_funcs' '--cov=tests.tdd_test' '--cov=tests.test' '--cov=tests.unit_test' '--cov=use..test4' '--cov=use.__init__' '--cov=use.use' -v --cov-append -vv
           }
@@ -77,7 +77,7 @@ jobs:
           $env:DEBUGGING = 1
           $env:ERRORS = 1
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade -r requirements.txt pywavelets sqlalchemy
+          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade cython -r requirements.txt pywavelets sqlalchemy
           & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x86/ --cov-report annotate:coverage-win32-x86/annotated --cov-report xml:coverage-win32-x86/cov.xml --cov=setup --cov=tests..tests..test1 --cov=tests..tests..test2 --cov=tests..tests..test3 --cov=tests..tests.bar --cov=tests..tests.foo --cov=tests..tests.modA --cov=tests..tests.modA_test --cov=tests..tests.modB --cov=tests..tests.modD --cov=tests..tests.modE --cov=tests..tests.sys --cov=tests..tests.tests_subdir.modC --cov=tests.__init__ --cov=tests.foo --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.unit_test --cov=use.__init__ --cov=use.use -v --cov-append -vv
       - name: Windows - Collect Coverage
         run: |
@@ -116,7 +116,7 @@ jobs:
           $env:DEBUGGING = 1
           $env:ERRORS = 1
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade -r requirements.txt pywavelets sqlalchemy
+          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade cython -r requirements.txt pywavelets sqlalchemy
           & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x64/ --cov-report annotate:coverage-win32-x64/annotated --cov-report xml:coverage-win32-x64/cov.xml --cov=setup --cov=tests..tests..test1 --cov=tests..tests..test2 --cov=tests..tests..test3 --cov=tests..tests.bar --cov=tests..tests.foo --cov=tests..tests.modA --cov=tests..tests.modA_test --cov=tests..tests.modB --cov=tests..tests.modD --cov=tests..tests.modE --cov=tests..tests.sys --cov=tests..tests.tests_subdir.modC --cov=tests.__init__ --cov=tests.foo --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.unit_test --cov=use.__init__ --cov=use.use -v --cov-append -vv
       - name: Windows - Collect Coverage
         run: |
