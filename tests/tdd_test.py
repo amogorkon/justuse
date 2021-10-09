@@ -174,9 +174,7 @@ def test_no_isolation(reuse):
     assert test_load_multi_version(reuse, "numpy", "1.19.0", 1)
 
 
-<<<<<<< HEAD
 @pytest.mark.skipif(not_local, reason="requires matplotlib")
-=======
 def installed_or_skip(name, version=None):
     if not (spec := find_spec(name)):
         pytest.skip(f"{name} not installed")
@@ -192,8 +190,6 @@ def installed_or_skip(name, version=None):
         return False
     return True
 
-
->>>>>>> main
 def test_use_str(reuse):
     if not installed_or_skip("matplotlib"):
         return
