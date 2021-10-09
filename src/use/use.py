@@ -364,7 +364,7 @@ To safely reproduce: use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value
     )
     pebkac_missing_hash = (
         lambda name, version, hashes: f"""Failed to auto-install {name!r} because hash_value is missing. This may work:
-use({name!r}, version={version!r}, hashes={hashes!r}, modes=use.auto_install)"""
+use({name!r}, version='{version}', hashes={hashes!r}, modes=use.auto_install)"""
     )
     pebkac_unsupported = (
         lambda package_name: f"We could not find any version or release for {package_name} that could satisfy our requirements!"
@@ -643,7 +643,7 @@ def _pebkac_version_no_hash(
     if not data.urls:
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
     hashes = {
-        entry["digests"].get(hash_algo.name) for entry in all_data["releases"][str(version)]
+        entry.digests.get(hash_algo.name) for entry in all_data.releases[version]
     }
     return RuntimeWarning(Message.pebkac_missing_hash(package_name, version, hashes))
 
@@ -811,10 +811,10 @@ def _parse_filename(filename) -> dict:
     distribution = version = build_tag = python_tag = abi_tag = platform_tag = None
     pp = Path(filename)
     if ".tar" in filename:
-        ext = filename[filename.index(".tar"):]
+        ext = filename[filename.index(".tar")+1:]
     else:
-        ext = pp.name[len(pp.stem):]
-    rest = pp.name[0 : -len(ext)]
+        ext = pp.name[len(pp.stem)+1:]
+    rest = pp.name[0 : -len(ext)-1]
 
     p = rest.split("-")
     np = len(p)
@@ -830,6 +830,8 @@ def _parse_filename(filename) -> dict:
         return {}
     print(p)
     # ['SQLAlchemy', '1.3.19', 'cp27', 'cp27m', 'macosx_10_14_x86_64']
+    
+    try:
     info = _delete_none(
         {
             "distribution": distribution,
@@ -841,6 +843,8 @@ def _parse_filename(filename) -> dict:
             "ext": ext,
         }
     )
+    except packaging.version.InvalidVersion:
+        return {}
     if python_tag:
         info["python_version"] = (
             info["python_tag"].replace("cp", "")[0]
@@ -1161,6 +1165,10 @@ def _filtered_by_platform(
     filtered = {"urls": [], "releases": {}}
     for sdist in (False, True):
       for V, R in data.releases.items():
+            try:
+                Version(V)
+            except packaging.version.InvalidVersion:
+                continue
             if not R:
                 continue
             for info in R:
@@ -1257,7 +1265,7 @@ def _is_platform_compatible(
     )
     # if "aarch64" in str(info):
     #  raise Exception()
-    return (our_python_tag == python_tag or python_tag.startswith("cp3")) and (
+    return (our_python_tag == python_tag or include_sdist) and (
         (is_sdist and include_sdist) or any(cur_platform_tags.intersection(platform_tags))
     )
 
@@ -1539,6 +1547,11 @@ class Use(ModuleType):
             try:
                 response = requests.get("https://pypi.org/pypi/justuse/json")
                 data = response.json()
+                for raw_ver in [*data["releases"].keys()]:
+                    try:
+                        Version(raw_ver)
+                    except packaging.version.InvalidVersion:
+                        del data["releases"][raw_ver]
                 max_version = max(Version(version) for version in data["releases"].keys())
                 target_version = max_version
                 this_version = __version__

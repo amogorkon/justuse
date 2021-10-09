@@ -29,7 +29,7 @@ class Version(PkgVersion):
         yield from self.release
 
     def __repr__(self):
-        return f"Version('{super().__str__()}')"
+        return f"use.Version('{super().__str__()}')"
 
     def __hash__(self):
         return hash(self._version)
