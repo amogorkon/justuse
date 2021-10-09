@@ -538,6 +538,7 @@ def _ensure_loader(spec: ModuleSpec) -> Union[Loader, zipimport.zipimporter]:
         return importlib.util.loader_from_spec(spec)
     return SourceFileLoader(fullname=spec.name, path=spec.origin)
 
+
 def _clean_sys_modules(package_name: str) -> None:
     for k in dict(
         [
@@ -750,9 +751,9 @@ def _parse_filename(filename) -> dict:
     distribution = version = build_tag = python_tag = abi_tag = platform_tag = None
     pp = Path(filename)
     if ".tar" in filename:
-        ext = filename[filename.index(".tar"):]
+        ext = filename[filename.index(".tar") :]
     else:
-        ext = pp.name[len(pp.stem):]
+        ext = pp.name[len(pp.stem) :]
     rest = pp.name[0 : -len(ext)]
 
     p = rest.split("-")
@@ -783,11 +784,11 @@ def _parse_filename(filename) -> dict:
     if python_tag:
         info["python_version"] = (
             info["python_tag"].replace("cp", "")[0]
-              + "."
-              + info["python_tag"].replace("cp", "")[1:]
+            + "."
+            + info["python_tag"].replace("cp", "")[1:]
         )
     return info
-    
+
 
 def _process(*argv, env={}):
     _realenv = {
@@ -910,6 +911,7 @@ def _find_or_install(
     package_name, rest = _parse_name(name)
     if not url:
         import inspect
+
         info = dict(inspect.getmembers(_find_version(package_name, version)))
     else:
         info["url"] = str(url)
@@ -1116,11 +1118,13 @@ def _filtered_by_platform(
                 compat = _is_compatible(
                     as_dict, sys_version=sys_version, platform_tags=tags, include_sdist=sdist
                 )
-                log.info(f"{compat!r}  <-  use._is_compatible({info!r}, {sys_version=!r}, platform_tags={tags!r}, include_sdist={sdist!r}")
+                log.info(
+                    f"{compat!r}  <-  use._is_compatible({info!r}, {sys_version=!r}, platform_tags={tags!r}, include_sdist={sdist!r}"
+                )
 
                 if not compat:
                     continue
-                log.info('found a match: %s', V)
+                log.info("found a match: %s", V)
                 as_dict["version"] = V
                 filtered["urls"].append(as_dict)
                 if V not in filtered["releases"]:
@@ -1136,7 +1140,7 @@ def _filtered_by_platform(
 
 
 @pipes
-def _get_filtered_data(data: PyPI_Project, version: Versio=None) -> PyPI_Project:
+def _get_filtered_data(data: PyPI_Project, version: Version = None) -> PyPI_Project:
     if version:
         return (
             data
@@ -1144,9 +1148,8 @@ def _get_filtered_data(data: PyPI_Project, version: Versio=None) -> PyPI_Project
             >> _filtered_by_platform(tags=get_supported(), sys_version=_sys_version())
         )
     else:
-        return (
-            data
-            >> _filtered_by_platform(tags=get_supported(), sys_version=_sys_version())
+        return data >> _filtered_by_platform(
+            tags=get_supported(), sys_version=_sys_version()
         )
 
 
@@ -1176,9 +1179,7 @@ def _is_platform_compatible(
     if "py2" in info["filename"]:
         return False
     if "platform_tag" not in info or "python_version" not in info:
-        info.update(_parse_filename(
-          URL(info["url"]).path.segments[-1]
-        ))
+        info.update(_parse_filename(URL(info["url"]).path.segments[-1]))
     if not include_sdist and (
         ".tar" in info["filename"]
         or info.get("python_tag", "cpsource") in ("cpsource", "sdist")
@@ -1194,10 +1195,7 @@ def _is_platform_compatible(
     cur_platform_tags = (
         info.get("platform_tag", "any").split(".") << map(PlatformTag) >> frozenset
     )
-    is_sdist = (
-           info["python_version"] == "source"
-        or info.get("abi_tag", "") == "none"
-    )
+    is_sdist = info["python_version"] == "source" or info.get("abi_tag", "") == "none"
     # if "aarch64" in str(info):
     #  raise Exception()
     return (our_python_tag == python_tag or python_tag.startswith("cp3")) and (
