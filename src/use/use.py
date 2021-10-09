@@ -832,17 +832,17 @@ def _parse_filename(filename) -> dict:
     # ['SQLAlchemy', '1.3.19', 'cp27', 'cp27m', 'macosx_10_14_x86_64']
     
     try:
-    info = _delete_none(
-        {
-            "distribution": distribution,
-            "version": Version(version),
-            "build_tag": build_tag,
-            "python_tag": python_tag,
-            "abi_tag": abi_tag,
-            "platform_tag": platform_tag,
-            "ext": ext,
-        }
-    )
+        info = _delete_none(
+            {
+                "distribution": distribution,
+                "version": Version(version),
+                "build_tag": build_tag,
+                "python_tag": python_tag,
+                "abi_tag": abi_tag,
+                "platform_tag": platform_tag,
+                "ext": ext,
+            }
+        )
     except packaging.version.InvalidVersion:
         return {}
     if python_tag:
