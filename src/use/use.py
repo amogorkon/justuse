@@ -470,7 +470,7 @@ class TarFunctions:
         with self.archive.extractfile(m) as f:
             bdata = f.read()
             text = bdata.decode("UTF-8").splitlines() if len(bdata) < 8192 else ""
-            return (Path(entry_name).stem, text.splitlines())
+            return (Path(entry_name).stem, text)
 
 
 class ZipFunctions:
@@ -487,6 +487,7 @@ class ZipFunctions:
             return (Path(entry_name).stem, text)
 
 
+
 @pipes
 def archive_meta(artifact_path):
     DIST_PKG_INFO_REGEX = re.compile("(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$")
@@ -498,7 +499,9 @@ def archive_meta(artifact_path):
         functions = ZipFunctions(artifact_path)
 
     archive, names = functions.get()
-    meta = dict(names << filter(DIST_PKG_INFO_REGEX.search) << map(functions.read_entry))
+    meta = (
+        dict(names << filter(DIST_PKG_INFO_REGEX.search) << map(functions.read_entry))
+    )
     meta.update(
         dict(
             (lp := l.partition(": "), (lp[0].lower().replace("-", "_"), lp[2]))[-1]
@@ -978,9 +981,9 @@ def _find_or_install(
         info = dict(inspect.getmembers(_find_version(package_name, version)))
     else:
         info["url"] = str(url)
-        filename = URL(info["url"]).path.segments[-1]
-        info["filename"] = filename
-        info.update(_parse_filename(filename))
+    filename = URL(info["url"]).path.segments[-1]
+    info["filename"] = filename
+    info.update(_parse_filename(filename))
     filename, url, version = (info["filename"], URL(info["url"]), Version(info["version"]))
     artifact_path = _download_artifact(name, version, filename, url)
     info["artifact_path"] = artifact_path
