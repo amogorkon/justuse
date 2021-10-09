@@ -159,7 +159,7 @@ def test_internet_url(reuse):
     assert mod.test() == 42
 
 
-@pytest.skip
+@pytest.mark.skipif(True, reason="broken")
 def test_module_package_ambiguity(reuse):
     original_cwd = os.getcwd()
     os.chdir(Path("tests/.tests"))

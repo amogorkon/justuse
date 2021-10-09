@@ -30,7 +30,7 @@ def test_template(reuse):
     pass
 
 
-@pytest.skip
+@pytest.mark.skipif(True, reason="broken")
 def test_is_platform_compatible_macos(reuse):
     platform_tags = reuse.use.get_supported()
     platform_tag = next(iter(platform_tags))
