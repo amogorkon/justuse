@@ -78,7 +78,7 @@ if __name__ == "__main__":
     results_dir = Path("results")
 
     clear_cache()
-    run_test(packages, results_dir, 10, max_venv_space=5_000_000_000)
+    run_test(packages, results_dir, 100, max_venv_space=50_000_000_000)
     passed = combine_package_output(results_dir, "pass")
     failed = combine_package_output(results_dir, "fail")
     clear_cache()

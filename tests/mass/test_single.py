@@ -45,19 +45,13 @@ class Packages(BaseModel):
 
 
 def test_package(package: PackageToTest) -> Tuple[bool, Dict]:
-    if len(package.safe_versions) == 0:
-        return (
-            False,
-            {
-                "name": package.name,
-                "stars": package.stars,
-                "err": {"type": "NoSafeVersionsError", "value": package.versions},
-            },
-        )
+    use_version = package.versions[-1]
+    if len(package.safe_versions) != 0:
+        use_version = package.safe_versions[-1]
 
     log1 = start_capture_logs()
     try:
-        use(package.name, version=package.safe_versions[-1], modes=use.auto_install)
+        use(package.name, version=use_version, modes=use.auto_install)
     except RuntimeWarning as e:
         if str(e).startswith("Failed to auto-install "):
             hashes = re.findall("hashes={([a-z0-9A-Z', ]+)}", str(e))[0]
@@ -69,7 +63,7 @@ def test_package(package: PackageToTest) -> Tuple[bool, Dict]:
                 False,
                 {
                     "name": package.name,
-                    "version": package.safe_versions[-1],
+                    "version": use_version,
                     "stars": package.stars,
                     "err": {
                         "type": str(exc_type),
@@ -86,7 +80,7 @@ def test_package(package: PackageToTest) -> Tuple[bool, Dict]:
             {
                 "name": package.name,
                 "stars": package.stars,
-                "err": {"type": "InvalidVersion", "value": package.versions, "picked": package.safe_versions[-1]},
+                "err": {"type": "InvalidVersion", "value": package.versions, "picked": use_version},
             },
         )
 
@@ -97,7 +91,7 @@ def test_package(package: PackageToTest) -> Tuple[bool, Dict]:
             False,
             {
                 "name": package.name,
-                "version": package.safe_versions[-1],
+                "version": use_version,
                 "stars": package.stars,
                 "err": {
                     "type": str(exc_type),
@@ -113,15 +107,15 @@ def test_package(package: PackageToTest) -> Tuple[bool, Dict]:
 
     logs = start_capture_logs()
     try:
-        module = use(package.name, version=package.safe_versions[-1], modes=use.auto_install, hashes=hashes)
+        module = use(package.name, version=use_version, modes=use.auto_install, hashes=hashes)
         assert module
         return (
             True,
             {
                 "name": package.name,
-                "version": package.safe_versions[-1],
+                "version": use_version,
                 "stars": package.stars,
-                "retry": f"""use('{package.name}', version='{package.safe_versions[-1]}', modes=use.auto_install, hashes={hashes})""",
+                "retry": f"""use('{package.name}', version='{use_version}', modes=use.auto_install, hashes={hashes})""",
             },
         )
 
@@ -132,7 +126,7 @@ def test_package(package: PackageToTest) -> Tuple[bool, Dict]:
             False,
             {
                 "name": package.name,
-                "version": package.safe_versions[-1],
+                "version": use_version,
                 "stars": package.stars,
                 "err": {
                     "type": str(exc_type),
@@ -140,7 +134,7 @@ def test_package(package: PackageToTest) -> Tuple[bool, Dict]:
                     "traceback": tb.split("\n"),
                     "logs": get_capture_logs(logs).split("\n"),
                 },
-                "retry": f"""use('{package.name}', version='{package.safe_versions[-1]}', modes=use.auto_install, hashes={hashes})""",
+                "retry": f"""use('{package.name}', version='{use_version}', modes=use.auto_install, hashes={hashes})""",
             },
         )
 
@@ -152,12 +146,16 @@ if __name__ == "__main__":
     fail_dir.mkdir(parents=True, exist_ok=True)
     pass_dir.mkdir(parents=True, exist_ok=True)
 
-    index = int(sys.argv[1])
-
     with open("pypi.json", "r") as f:
         packages = Packages(data=json.load(f)["data"])
 
-    package = packages.data[index]
+    index = sys.argv[1]
+    if index.isdigit():
+        index = int(index)
+        package = packages.data[index]
+    else:
+        package = next((item for item in packages.data if item.name == index), None)
+
     did_work, info = test_package(package)
     out_dir = pass_dir if did_work else fail_dir
 
