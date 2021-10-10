@@ -6,8 +6,11 @@ import re
 import logging
 import traceback
 import contextlib
-
+import subprocess
+import shutil
 import packaging
+from copy import deepcopy
+
 
 import use
 from pydantic import BaseModel
@@ -53,17 +56,46 @@ packages.data.sort(key=lambda p: p.stars or 0, reverse=True)
 
 # Use to test the below code for now
 # packages = Packages(data=[PackageToTest(name="sqlalchemy", versions=["1.4.10"])])
+NAUGHTY_PACKAGES = ["assimp", "metakernel", "pscript"]
 
-NAUGHTY_PACKAGES = ["assimp"]
+# 636/1321
+
+
+def manage_disk(max_size=5_000_000_000):
+    if not any((use.home / "venv").iterdir()):
+        return
+    current_usage = int(subprocess.check_output(["du", "-sb", f"{use.home}/venv"]).split(b"\t")[0])
+    if current_usage > max_size:
+        process = subprocess.Popen(f"du -sb {use.home}/venv/* | sort -n -r", shell=True, stdout=subprocess.PIPE)
+        venv_usages = process.communicate()[0].split(b"\n")
+        for venv in venv_usages:
+            try:
+                size, path = venv.split(b"\t")
+                path = path.decode()
+                size = int(size)
+                venv_package = path.split("/")[-1]
+
+                print(f"Deleting {venv_package} to make extra space, freed {size/1_000_000} MB")
+                shutil.rmtree(path)
+                current_usage -= size
+                if current_usage < max_size:
+                    break
+            except:
+                continue
+
 
 failed_packages = []
 passing_packages = []
+old_modules = deepcopy(list(sys.modules.keys()))
 for i, package in enumerate(packages.data):
-    print(i, len(failed_packages), len(passing_packages))
+    new_imports = [k for k in sys.modules.keys() if k not in old_modules]
+    for new_import in new_imports:
+        del sys.modules[new_import]
     if package.name in NAUGHTY_PACKAGES:
         continue
-    # if len(failed_packages) + len(passing_packages) > 500:
-    #     break
+
+    manage_disk(max_size=1_000)
+    print(i, package.name, len(failed_packages), len(passing_packages))
     if len(package.safe_versions) == 0:
         failed_packages.append(
             {
