@@ -56,6 +56,6 @@ params = [
 
 
 @pytest.mark.parametrize("name,version", params)
-def test_sample(name, version):
+def test_sample(reuse, name, version):
     mod = reuse(name, version=version, modes=reuse.auto_install)
     assert mod

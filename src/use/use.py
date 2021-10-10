@@ -89,7 +89,8 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
+from functools import (partial, partialmethod, reduce, singledispatch,
+                       update_wrapper)
 from importlib import metadata
 from importlib.abc import Finder, Loader
 from importlib.machinery import ModuleSpec, SourceFileLoader
@@ -496,6 +497,7 @@ def archive_meta(artifact_path):
     if ".tar" in str(artifact_path):
         archive = tarfile.open(artifact_path)
         members = [m for m in archive.getmembers() if m.type == b"0"]
+
         def read_entry(entry_name):
             m = archive.getmember(entry_name)
             with archive.extractfile(m) as f:
@@ -505,13 +507,11 @@ def archive_meta(artifact_path):
 
         def get_archive(artifact_path):
             archive = tarfile.open(artifact_path)
-            return (
-                archive,
-                [m.name for m in archive.getmembers()
-                 if m.type == b"0"]
-            )
+            return (archive, [m.name for m in archive.getmembers() if m.type == b"0"])
+
         functions = TarFunctions(artifact_path)
     else:
+
         def read_entry(entry_name):
             with archive.open(entry_name) as m:
                 text = m.read().decode("UTF-8").splitlines()
@@ -519,10 +519,8 @@ def archive_meta(artifact_path):
 
         def get_archive(artifact_path):
             archive = zipfile.ZipFile(artifact_path)
-            return (
-                archive,
-                [e.filename for e in archive.filelist]
-            )
+            return (archive, [e.filename for e in archive.filelist])
+
         functions = ZipFunctions(artifact_path)
 
     archive, names = get_archive(artifact_path)
@@ -560,7 +558,7 @@ def archive_meta(artifact_path):
     return meta
 
 
-def _ensure_loader(obj: Union[ModuleType,ModuleSpec]):
+def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
     loader = None
     if not loader and isinstance(obj, ModuleType):
         loader = obj.__loader__
@@ -579,38 +577,34 @@ def _ensure_loader(obj: Union[ModuleType,ModuleSpec]):
         mod = obj
         segments = name.split(".")
         parent_mod = importlib.import_module(".".join(segments[:-1]))
-        parent_spec = parent_mod.__spec__;
+        parent_spec = parent_mod.__spec__
         parent_loader = (
             parent_mod.__loader__
-            if not parent_spec 
-            or not getattr(parent_spec, "loader")
+            if not parent_spec or not getattr(parent_spec, "loader")
             else parent_spec.loader
         )
         ctor_args = [
             (
                 k,
-                getattr(mod, "__name__") 
-                if "name" in k 
+                getattr(mod, "__name__")
+                if "name" in k
                 else (
-                    list(Path(
-                      parent_spec.submodule_search_locations[0]
-                    ).glob(
-                      mod.__name__[len(parent_mod.__name__)+1:]+".*"
-                    )) +
-                    list(Path(
-                      parent_spec.submodule_search_locations[0]
-                    ).glob(
-                      mod.__name__[len(parent_mod.__name__)+1:]
-                        + "/__init__.py"
-                    ))
+                    list(
+                        Path(parent_spec.submodule_search_locations[0]).glob(
+                            mod.__name__[len(parent_mod.__name__) + 1 :] + ".*"
+                        )
+                    )
+                    + list(
+                        Path(parent_spec.submodule_search_locations[0]).glob(
+                            mod.__name__[len(parent_mod.__name__) + 1 :] + "/__init__.py"
+                        )
+                    )
                 )[0]
                 if ("path" in k or "file" in k or "loc" in k)
-                else k
+                else k,
             )
             for k in list(
-                inspect.signature(
-                    type(parent_mod.__loader__).__init__
-                ).parameters
+                inspect.signature(type(parent_mod.__loader__).__init__).parameters
             )[1:]
         ]
         loader = type(parent_mod.__loader__)(*ctor_args)
@@ -622,10 +616,10 @@ def _ensure_loader(obj: Union[ModuleType,ModuleSpec]):
             name = obj.name
             spec = obj
         module_path = (
-                   getattr(spec, "origin", None)
-                or getattr(obj, "__file__", None)
-                or getattr(obj, "__path__", None)
-                or inspect.getsourcefile(obj)
+            getattr(spec, "origin", None)
+            or getattr(obj, "__file__", None)
+            or getattr(obj, "__path__", None)
+            or inspect.getsourcefile(obj)
         )
         loader = SourceFileLoader(name, module_path)
     return loader
@@ -672,15 +666,15 @@ def _pebkac_version_no_hash(
             return result
     try:
         hashes = {
-            entry.digests.get(hash_algo.name) for entry in (
-                _get_filtered_data(
-                    _get_package_data(package_name),
-                    version=version
-                )
+            entry.digests.get(hash_algo.name)
+            for entry in (
+                _get_filtered_data(_get_package_data(package_name), version=version)
             ).releases[version]
         }
         rw = RuntimeWarning(Message.pebkac_missing_hash(package_name, version, hashes))
-        rw.name = package_name; rw.version = version; rw.hashes = hashes
+        rw.name = package_name
+        rw.version = version
+        rw.hashes = hashes
         return rw
     except (IndexError, KeyError) as ike:
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
@@ -699,7 +693,9 @@ def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Ex
                 hash_value,
             )
         )
-        rw.name = package_name; rw.version = version; rw.hashes = hash_value
+        rw.name = package_name
+        rw.version = version
+        rw.hashes = hash_value
         return rw
 
 
@@ -708,7 +704,6 @@ def _import_public_no_install(
     name,
     spec,
     aspectize,
-    fatal_exceptions=False,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
     # builtin?
@@ -851,10 +846,10 @@ def _parse_filename(filename) -> dict:
     distribution = version = build_tag = python_tag = abi_tag = platform_tag = None
     pp = Path(filename)
     if ".tar" in filename:
-        ext = filename[filename.index(".tar") +1:]
+        ext = filename[filename.index(".tar") + 1 :]
     else:
-        ext = pp.name[len(pp.stem) +1:]
-    rest = pp.name[0 : -len(ext)-1]
+        ext = pp.name[len(pp.stem) + 1 :]
+    rest = pp.name[0 : -len(ext) - 1]
 
     p = rest.split("-")
     np = len(p)
@@ -870,21 +865,17 @@ def _parse_filename(filename) -> dict:
         return {}
     print(p)
     # ['SQLAlchemy', '1.3.19', 'cp27', 'cp27m', 'macosx_10_14_x86_64']
-    info = (
-        {
-            "distribution": distribution,
-            "version": version,
-            "abi_tag": abi_tag,
-            "platform_tag": platform_tag,
-           "python_tag": python_tag,
-            "ext": ext,
-        }
-    )
+    info = {
+        "distribution": distribution,
+        "version": version,
+        "abi_tag": abi_tag,
+        "platform_tag": platform_tag,
+        "python_tag": python_tag,
+        "ext": ext,
+    }
     if python_tag:
         info["python_version"] = (
-            python_tag.replace("cp", "")[0]
-            + "."
-            + python_tag.replace("cp", "")[1:]
+            python_tag.replace("cp", "")[0] + "." + python_tag.replace("cp", "")[1:]
         )
     return info
 
@@ -1010,22 +1001,21 @@ def _find_or_install(
     info = out_info
     package_name, rest = _parse_name(name)
 
-
     if isinstance(url, str):
-      url = URL(url)
+        url = URL(url)
     filename = artifact_path.name if artifact_path else None
     if url:
-      filename = url.asdict()["path"]["segments"][-1]
+        filename = url.asdict()["path"]["segments"][-1]
     else:
-      filename = artifact_path.name if artifact_path else None
+        filename = artifact_path.name if artifact_path else None
     if filename and not artifact_path:
-      artifact_path = sys.modules["use"].home / "packages" / filename
-    
+        artifact_path = sys.modules["use"].home / "packages" / filename
+
     if not url or not artifact_path or (artifact_path and not artigact_path.exists()):
-      info.update(_find_version(package_name, version).dict())
-      url = URL(str(info["url"]))
-      filename = url.asdict()["path"]["segments"][-1]
-      artifact_path = sys.modules["use"].home / "packages" / filename
+        info.update(_find_version(package_name, version).dict())
+        url = URL(str(info["url"]))
+        filename = url.asdict()["path"]["segments"][-1]
+        artifact_path = sys.modules["use"].home / "packages" / filename
     out_info["artifact_path"] = artifact_path
 
     # todo: set info
@@ -1210,7 +1200,8 @@ def _filtered_by_version(data: PyPI_Project, version: Version) -> PyPI_Project:
                 filtered["releases"][V] = []
             filtered["releases"][V].append(as_dict)
     if filtered["releases"]:
-        if "VERBOSE" in os.environ: log.debug("return PyPI_Project(**%s)", repr(filtered))
+        if "VERBOSE" in os.environ:
+            log.debug("return PyPI_Project(**%s)", repr(filtered))
         r = PyPI_Project(**filtered)
         print("return r = %s" % r)
         return r
@@ -1235,9 +1226,10 @@ def _filtered_by_platform(
                 compat = _is_compatible(
                     info, sys_version=sys_version, platform_tags=tags, include_sdist=sdist
                 )
-                if "VERBOSE" in os.environ: log.info(
-                    f"{compat!r}  <-  use._is_compatible({info!r}, {sys_version=!r}, platform_tags={tags!r}, include_sdist={sdist!r}"
-                )
+                if "VERBOSE" in os.environ:
+                    log.info(
+                        f"{compat!r}  <-  use._is_compatible({info!r}, {sys_version=!r}, platform_tags={tags!r}, include_sdist={sdist!r}"
+                    )
 
                 if not compat:
                     continue
@@ -1249,7 +1241,8 @@ def _filtered_by_platform(
                 filtered["releases"][V].append(as_dict)
 
         if filtered["releases"]:
-            if "VERBOSE" in os.environ: log.debug("return PyPI_Project(**%s)", repr(filtered))
+            if "VERBOSE" in os.environ:
+                log.debug("return PyPI_Project(**%s)", repr(filtered))
             r = PyPI_Project(**filtered)
             print("return r = %s" % r)
             return r
@@ -1298,7 +1291,8 @@ def _is_platform_compatible(
         return False
     if "platform_tag" not in info or "python_version" not in info:
         info.update(_parse_filename(URL(info["url"]).path.segments[-1]))
-    if info["platform_tag"] == None: info["platforn_tag"] = "any"
+    if info["platform_tag"] == None:
+        info["platforn_tag"] = "any"
     if not include_sdist and (
         ".tar" in info["filename"]
         or info.get("python_tag", "cpsource") in ("cpsource", "sdist")
@@ -1572,11 +1566,11 @@ class Info(dict):
     def __repr__(self):
         return "<Info of size %d>" % len(self)
 
+
 class Use(ModuleType):
     # MODES to reduce signature complexity
     # enum.Flag wasn't viable, but this alternative is actually pretty cool
     auto_install = 2 ** 0
-    fatal_exceptions = 2 ** 1
     reloading = 2 ** 2
     aspectize_dunders = 2 ** 3
     no_public_installation = 2 ** 4
@@ -2193,7 +2187,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         rest = module_name
 
         # we use boolean flags to reduce the complexity of the call signature
-        fatal_exceptions = bool(Use.fatal_exceptions & modes)
         auto_install = bool(Use.auto_install & modes)
         aspectize_dunders = bool(Use.aspectize_dunders & modes)
         aspectize = aspectize or {}
