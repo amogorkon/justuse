@@ -453,7 +453,7 @@ class TarFunctions:
         m = self.archive.getmember(entry_name)
         with self.archive.extractfile(m) as f:
             bdata = f.read()
-            text = bdata.decode("UTF-8") if len(bdata) < 8192 else ""
+            text = bdata.decode("ISO-8859-1") if len(bdata) < 8192 else ""
             return (Path(entry_name).stem, text.splitlines())
 
 
@@ -467,7 +467,7 @@ class ZipFunctions:
     def read_entry(self, entry_name):
         with self.archive.open(entry_name) as f:
             bdata = f.read()
-            text = bdata.decode("UTF-8").splitlines() if len(bdata) < 8192 else ""
+            text = bdata.decode("ISO-8859-1").splitlines() if len(bdata) < 8192 else ""
             return (Path(entry_name).stem, text)
 
 
@@ -484,7 +484,7 @@ def archive_meta(artifact_path):
             m = archive.getmember(entry_name)
             with archive.extractfile(m) as f:
                 bdata = f.read()
-                text = str(bdata, "UTF-8").splitlines()
+                text = str(bdata, "ISO-8859-1").splitlines()
                 return (Path(entry_name).stem, text)
 
         def get_archive(artifact_path):
@@ -496,7 +496,7 @@ def archive_meta(artifact_path):
 
         def read_entry(entry_name):
             with archive.open(entry_name) as m:
-                text = m.read().decode("UTF-8").splitlines()
+                text = m.read().decode("ISO-8859-1").splitlines()
                 return (Path(entry_name).stem, text)
 
         def get_archive(artifact_path):
@@ -783,7 +783,7 @@ ORDER BY artifacts.id DESC
         if mod:
             use._save_module_info(
                 name=package_name,
-                import_relpath=str(module_path.relative_to(installation_path)),
+                import_relpath=str(_ensure_path(module_path).relative_to(installation_path)),
                 version=version,
                 artifact_path=artifact_path,
                 hash_value=hash_algo.value(artifact_path.read_bytes()).hexdigest(),
