@@ -91,6 +91,8 @@ from enum import Enum
 from functools import lru_cache as cache
 from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
 from importlib import metadata
+from importlib.util import find_spec
+from importlib.metadata import distribution, Distribution, PackageNotFoundError
 from importlib.abc import Finder, Loader
 from importlib.machinery import ModuleSpec, SourceFileLoader
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
@@ -749,6 +751,28 @@ ORDER BY artifacts.id DESC
     assert query["installation_path"]
     installation_path = _ensure_path(query["installation_path"])
     try:
+        exc = None
+        sys.path.insert(0, kwargs["self"].home / "venv" / package_name / str(version))
+        try:
+            dist = Distribution.from_name(package_name)
+            dist_info = dist._path
+            installation_path = dist_info.parent
+            toplev_file = dist_info / "top_level.txt"
+            module_names = toplev_file.read_text().strip().splitlines()
+            for module_name in module_names:
+                try:
+                    mspec = find_spec(module_name)
+                    loader = _ensure_loader(mspec)
+                    module_path = mspec.origin or module_path
+                    mod = _load_venv_entry(mspec.name, module_path=module_path, installation_path=installation_path,)
+                    return mod
+                except BaseException as _berr:
+                    exc = exc or _berr
+        except PackageNotFoundError:
+            traceback.print_exc(exc)
+        if exc:
+            traceback.print_exc(exc)
+        module_path = _ensure_path(query["module_path"])
         os.chdir(installation_path)
         import_name = str(module_path.relative_to(installation_path)).replace("\\", "/").replace("/__init__.py", "")
         return (mod := _load_venv_entry(import_name, module_path=module_path, installation_path=installation_path,))
@@ -759,7 +783,7 @@ ORDER BY artifacts.id DESC
         if mod:
             use._save_module_info(
                 name=package_name,
-                import_relpath=query["import_relpath"],
+                import_relpath=str(module_path.relative_to(installation_path)),
                 version=version,
                 artifact_path=artifact_path,
                 hash_value=hash_algo.value(artifact_path.read_bytes()).hexdigest(),
@@ -949,7 +973,8 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     install_item = artifact_path
     meta = archive_meta(artifact_path)
     import_parts = re.split("[\\\\/]", meta["import_relpath"])
-    import_parts.remove("__init__.py")
+    if "__init__.py" in import_parts:
+        import_parts.remove("__init__.py")
     import_name = ".".join(import_parts)
     name = f"{package_name}.{import_name}"
     relp = meta["import_relpath"]
