@@ -69,6 +69,7 @@ import ast
 import asyncio
 import atexit
 import codecs
+import functools
 import hashlib
 import importlib.util
 import inspect
@@ -91,6 +92,8 @@ from enum import Enum
 from functools import lru_cache as cache
 from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
 from importlib import metadata
+from importlib.util import find_spec
+from importlib.metadata import distribution, Distribution, PackageNotFoundError
 from importlib.abc import Finder, Loader
 from importlib.machinery import ModuleSpec, SourceFileLoader
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
@@ -98,6 +101,7 @@ from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
 from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
+import platform
 from subprocess import PIPE, run
 from textwrap import dedent
 from types import FrameType, ModuleType
@@ -149,9 +153,7 @@ config = {"version_warning": True, "debugging": False, "use_db": True}
 # initialize logging
 root.addHandler(StreamHandler(sys.stderr))
 root.setLevel(NOTSET)
-if "DEBUG" in os.environ or "pytest" in getattr(
-    sys.modules.get("__init__", ""), "__file__", ""
-):
+if "DEBUG" in os.environ or "pytest" in getattr(sys.modules.get("__init__", ""), "__file__", ""):
     root.setLevel(DEBUG)
     test_config["debugging"] = True
 else:
@@ -196,7 +198,8 @@ def signal_handler(sig: int, frame: Optional[FrameType] = None) -> None:
             reloader.stop()
     finally:
         # Invoke the default action, usually KeyboardInterrupt
-        signal.raise_signal(sig)
+        # signal.raise_signal(sig)
+        pass
 
 
 #%% Pipes
@@ -229,9 +232,7 @@ class _PipeTransformer(ast.NodeTransformer):
                     col_offset=node.right.col_offset,
                 )
             )
-        node.right.args.insert(
-            0 if isinstance(node.op, ast.RShift) else len(node.right.args), node.left
-        )
+        node.right.args.insert(0 if isinstance(node.op, ast.RShift) else len(node.right.args), node.left)
         return self.visit(node.right)
 
 
@@ -253,15 +254,10 @@ def pipes(func_or_class):
     tree.body[0].decorator_list = [
         d
         for d in tree.body[0].decorator_list
-        if isinstance(d, ast.Call)
-        and d.func.id != "pipes"
-        or isinstance(d, ast.Name)
-        and d.id != "pipes"
+        if isinstance(d, ast.Call) and d.func.id != "pipes" or isinstance(d, ast.Name) and d.id != "pipes"
     ]
     tree = _PipeTransformer().visit(tree)
-    code = compile(
-        tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec"
-    )
+    code = compile(tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec")
     exec(code, ctx)
     return ctx[tree.body[0].name]
 
@@ -294,10 +290,7 @@ def all_kwargs(func, other_locals):
     d = {
         name: other_locals[name]
         for name, param in inspect.signature(func).parameters.items()
-        if (
-            param.kind is inspect.Parameter.KEYWORD_ONLY
-            or param.kind is inspect.Parameter.VAR_KEYWORD
-        )
+        if (param.kind is inspect.Parameter.KEYWORD_ONLY or param.kind is inspect.Parameter.VAR_KEYWORD)
     }
     d.update(d["kwargs"])
     del d["kwargs"]
@@ -323,9 +316,7 @@ def methdispatch(func) -> Callable:
 # How it works is quite magical - the lambdas prevent the f-strings from being prematuraly evaluated, and are only evaluated once returned.
 # Fun fact: f-strings are firmly rooted in the AST.
 class Message(Enum):
-    not_reloadable = (
-        lambda name: f"Beware {name} also contains non-function objects, it may not be safe to reload!"
-    )
+    not_reloadable = lambda name: f"Beware {name} also contains non-function objects, it may not be safe to reload!"
     couldnt_connect_to_db = (
         lambda e: f"Could not connect to the registry database, please make sure it is accessible. ({e})"
     )
@@ -339,9 +330,7 @@ python -m pip install -U justuse
     cant_use = (
         lambda thing: f"Only pathlib.Path, yarl.URL and str are valid sources of things to import, but got {type(thing)}."
     )
-    web_error = (
-        lambda url, response: f"Could not load {url} from the interwebs, got a {response.status_code} error."
-    )
+    web_error = lambda url, response: f"Could not load {url} from the interwebs, got a {response.status_code} error."
     no_validation = (
         lambda url, hash_algo, this_hash: f"""Attempting to import from the interwebs with no validation whatsoever!
 To safely reproduce:
@@ -379,9 +368,7 @@ If you want to auto-install the latest version:
 use("{name}", version="{version!s}", hashes={set([hash_value])}, modes=use.auto_install)
 """
     )
-    cant_import = (
-        lambda name: f"No package installed named {name} and auto-installation not requested. Aborting."
-    )
+    cant_import = lambda name: f"No package installed named {name} and auto-installation not requested. Aborting."
     cant_import_no_version = (
         lambda package_name: f"Failed to auto-install '{package_name}' because no version was specified."
     )
@@ -428,10 +415,9 @@ def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
     if isinstance(value, (str, bytes)):
         return Path(value).absolute()
     if isinstance(value, furl.Path):
-        return (
-            Path.cwd(),
-            value.segments << map(Path) << tuple << reduce(Path.__truediv__),
-        ) << reduce(Path.__truediv__)
+        return (Path.cwd(), value.segments << map(Path) << tuple << reduce(Path.__truediv__),) << reduce(
+            Path.__truediv__
+        )
     return value
 
 
@@ -459,6 +445,39 @@ def get_supported() -> FrozenSet[PlatformTag]:
     return tags
 
 
+def _filter_by_version(project: PyPI_Project, version: str) -> PyPI_Project:
+    return PyPI_Project(
+        **{
+            **project.dict(),
+            **{
+                "releases": {version: [v.dict() for v in project.releases[version]]}
+                if project.releases.get(version)
+                else {}
+            },
+        }
+    )
+
+
+def _filter_by_platform(project: PyPI_Project, tags: FrozenSet[PlatformTag], sys_version: Version) -> PyPI_Project:
+    filtered = {
+        ver: [
+            rel.dict()
+            for rel in releases
+            if _is_compatible(rel, sys_version=sys_version, platform_tags=tags, include_sdist=True,)
+        ]
+        for ver, releases in project.releases.items()
+    }
+
+    return PyPI_Project(**{**project.dict(), **{"releases": filtered}})
+
+
+@pipes
+def _filter_by_version_and_current_platform(project: PyPI_Project, version: str) -> PyPI_Project:
+    return (
+        project >> _filter_by_version(version) >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
+    )
+
+
 class TarFunctions:
     def __init__(self, artifact_path):
         self.archive = tarfile.open(artifact_path)
@@ -470,7 +489,7 @@ class TarFunctions:
         m = self.archive.getmember(entry_name)
         with self.archive.extractfile(m) as f:
             bdata = f.read()
-            text = bdata.decode("UTF-8").splitlines() if len(bdata) < 8192 else ""
+            text = bdata.decode("ISO-8859-1") if len(bdata) < 8192 else ""
             return (Path(entry_name).stem, text.splitlines())
 
 
@@ -484,7 +503,7 @@ class ZipFunctions:
     def read_entry(self, entry_name):
         with self.archive.open(entry_name) as f:
             bdata = f.read()
-            text = bdata.decode("UTF-8").splitlines() if len(bdata) < 8192 else ""
+            text = bdata.decode("ISO-8859-1").splitlines() if len(bdata) < 8192 else ""
             return (Path(entry_name).stem, text)
 
 
@@ -496,33 +515,30 @@ def archive_meta(artifact_path):
     if ".tar" in str(artifact_path):
         archive = tarfile.open(artifact_path)
         members = [m for m in archive.getmembers() if m.type == b"0"]
+
         def read_entry(entry_name):
             m = archive.getmember(entry_name)
             with archive.extractfile(m) as f:
                 bdata = f.read()
-                text = str(bdata, "UTF-8").splitlines()
+                text = str(bdata, "ISO-8859-1").splitlines()
                 return (Path(entry_name).stem, text)
 
         def get_archive(artifact_path):
             archive = tarfile.open(artifact_path)
-            return (
-                archive,
-                [m.name for m in archive.getmembers()
-                 if m.type == b"0"]
-            )
+            return (archive, [m.name for m in archive.getmembers() if m.type == b"0"])
+
         functions = TarFunctions(artifact_path)
     else:
+
         def read_entry(entry_name):
             with archive.open(entry_name) as m:
-                text = m.read().decode("UTF-8").splitlines()
+                text = m.read().decode("ISO-8859-1").splitlines()
                 return (Path(entry_name).stem, text)
 
         def get_archive(artifact_path):
             archive = zipfile.ZipFile(artifact_path)
-            return (
-                archive,
-                [e.filename for e in archive.filelist]
-            )
+            return (archive, [e.filename for e in archive.filelist])
+
         functions = ZipFunctions(artifact_path)
 
     archive, names = get_archive(artifact_path)
@@ -539,20 +555,13 @@ def archive_meta(artifact_path):
     meta["name"] = name
     if "top_level" not in meta:
         meta["top_level"] = [""]
-    (
-        top_level,
-        name,
-    ) = (meta["top_level"][0], meta["name"])
+    (top_level, name,) = (meta["top_level"][0], meta["name"])
     import_name = (name,) if (top_level == name) else (top_level, name)
     meta["names"] = names
     meta["import_name"] = import_name
     for relpath in sorted(
         [n for n in names if len(n) > 4 and n[-3:] == ".py"],
-        key=lambda n: (
-            not n.startswith(import_name),
-            not n.endswith("__init__.py"),
-            len(n),
-        ),
+        key=lambda n: (not n.startswith(import_name), not n.endswith("__init__.py"), len(n),),
     ):
         meta["import_relpath"] = relpath
         break
@@ -560,15 +569,11 @@ def archive_meta(artifact_path):
     return meta
 
 
-def _ensure_loader(obj: Union[ModuleType,ModuleSpec]):
+def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
     loader = None
     if not loader and isinstance(obj, ModuleType):
         loader = obj.__loader__
-    if (
-        not loader
-        and isinstance(obj, ModuleType)
-        and (spec := getattr(obj, "__spec__", None))
-    ):
+    if not loader and isinstance(obj, ModuleType) and (spec := getattr(obj, "__spec__", None)):
         loader = spec.loader
     if not loader and isinstance(obj, ModuleSpec):
         loader = obj.loader
@@ -579,39 +584,31 @@ def _ensure_loader(obj: Union[ModuleType,ModuleSpec]):
         mod = obj
         segments = name.split(".")
         parent_mod = importlib.import_module(".".join(segments[:-1]))
-        parent_spec = parent_mod.__spec__;
+        parent_spec = parent_mod.__spec__
         parent_loader = (
-            parent_mod.__loader__
-            if not parent_spec 
-            or not getattr(parent_spec, "loader")
-            else parent_spec.loader
+            parent_mod.__loader__ if not parent_spec or not getattr(parent_spec, "loader") else parent_spec.loader
         )
         ctor_args = [
             (
                 k,
-                getattr(mod, "__name__") 
-                if "name" in k 
+                getattr(mod, "__name__")
+                if "name" in k
                 else (
-                    list(Path(
-                      parent_spec.submodule_search_locations[0]
-                    ).glob(
-                      mod.__name__[len(parent_mod.__name__)+1:]+".*"
-                    )) +
-                    list(Path(
-                      parent_spec.submodule_search_locations[0]
-                    ).glob(
-                      mod.__name__[len(parent_mod.__name__)+1:]
-                        + "/__init__.py"
-                    ))
+                    list(
+                        Path(parent_spec.submodule_search_locations[0]).glob(
+                            mod.__name__[len(parent_mod.__name__) + 1 :] + ".*"
+                        )
+                    )
+                    + list(
+                        Path(parent_spec.submodule_search_locations[0]).glob(
+                            mod.__name__[len(parent_mod.__name__) + 1 :] + "/__init__.py"
+                        )
+                    )
                 )[0]
                 if ("path" in k or "file" in k or "loc" in k)
-                else k
+                else k,
             )
-            for k in list(
-                inspect.signature(
-                    type(parent_mod.__loader__).__init__
-                ).parameters
-            )[1:]
+            for k in list(inspect.signature(type(parent_mod.__loader__).__init__).parameters)[1:]
         ]
         loader = type(parent_mod.__loader__)(*ctor_args)
     if not loader:
@@ -622,10 +619,10 @@ def _ensure_loader(obj: Union[ModuleType,ModuleSpec]):
             name = obj.name
             spec = obj
         module_path = (
-                   getattr(spec, "origin", None)
-                or getattr(obj, "__file__", None)
-                or getattr(obj, "__path__", None)
-                or inspect.getsourcefile(obj)
+            getattr(spec, "origin", None)
+            or getattr(obj, "__file__", None)
+            or getattr(obj, "__path__", None)
+            or inspect.getsourcefile(obj)
         )
         loader = SourceFileLoader(name, module_path)
     return loader
@@ -652,9 +649,7 @@ def _venv_root(package_name, version, home) -> Path:
     return home / "venv" / package_name / str(version)
 
 
-def _pebkac_no_version_hash(
-    func=None, *, name: str, **kwargs
-) -> Union[ModuleType, Exception]:
+def _pebkac_no_version_hash(func=None, *, name: str, **kwargs) -> Union[ModuleType, Exception]:
 
     if func:
         result = func(name=name, **kwargs)
@@ -672,44 +667,42 @@ def _pebkac_version_no_hash(
             return result
     try:
         hashes = {
-            entry.digests.get(hash_algo.name) for entry in (
-                _get_filtered_data(
-                    _get_package_data(package_name),
-                    version=version
-                )
-            ).releases[version]
+            entry.digests.get(hash_algo.name)
+            for entry in (_get_filtered_data(_get_package_data(package_name), version=version)).releases[version]
         }
-        rw = RuntimeWarning(Message.pebkac_missing_hash(package_name, version, hashes))
-        rw.name = package_name; rw.version = version; rw.hashes = hashes
+        if not hashes:
+            rw = RuntimeWarning(Message.pebkac_unsupported(package_name))
+        else:
+            rw = RuntimeWarning(Message.pebkac_missing_hash(package_name, version, hashes))
+        rw.name = package_name
+        rw.version = version
+        rw.hashes = hashes
         return rw
     except (IndexError, KeyError) as ike:
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
 
 
+@pipes
 def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Exception:
     # let's try to make an educated guess and give a useful suggestion
-    data = _get_package_data(package_name)
-    for version, infos in data.releases.items():
-        hash_value = infos[0].digests[hash_algo.name]
-        rw = RuntimeWarning(
-            Message.no_version_or_hash_provided(
-                name,
-                package_name,
-                version,
-                hash_value,
-            )
-        )
-        rw.name = package_name; rw.version = version; rw.hashes = hash_value
+    data = _get_package_data(package_name) >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
+    flat = functools.reduce(list.__add__, data.releases.values(), [])
+    priority = sorted(flat, key=lambda r: (not r.is_sdist, r.version), reverse=True)
+
+    for info in priority:
+        hash_value = info.digests[hash_algo.name]
+        rw = RuntimeWarning(Message.no_version_or_hash_provided(name, package_name, info.version, hash_value,))
+        rw.name = package_name
+        rw.version = info.version
+        rw.hashes = hash_value
         return rw
+    rw = RuntimeWarning(Message.pebkac_unsupported(package_name))
+    rw.name = package_name
+    return rw
 
 
 def _import_public_no_install(
-    *,
-    name,
-    spec,
-    aspectize,
-    fatal_exceptions=False,
-    **kwargs,
+    *, name, spec, aspectize, fatal_exceptions=False, **kwargs,
 ) -> Union[ModuleType, Exception]:
     # builtin?
     package_name, rest = _parse_name(name)
@@ -751,14 +744,7 @@ def _parse_name(name) -> Tuple[str, str]:
 
 
 def _auto_install(
-    func=None,
-    *,
-    name,
-    hash_algo,
-    version,
-    package_name,
-    rest,
-    **kwargs,
+    func=None, *, name, hash_algo, version, package_name, rest, **kwargs,
 ) -> Union[ModuleType, BaseException]:
     package_name, rest = _parse_name(name)
 
@@ -811,19 +797,31 @@ ORDER BY artifacts.id DESC
     assert query["installation_path"]
     installation_path = _ensure_path(query["installation_path"])
     try:
+        exc = None
+        sys.path.insert(0, kwargs["self"].home / "venv" / package_name / str(version))
+        try:
+            dist = Distribution.from_name(package_name)
+            dist_info = dist._path
+            installation_path = dist_info.parent
+            toplev_file = dist_info / "top_level.txt"
+            module_names = toplev_file.read_text().strip().splitlines()
+            for module_name in module_names:
+                try:
+                    mspec = find_spec(module_name)
+                    loader = _ensure_loader(mspec)
+                    module_path = mspec.origin or module_path
+                    mod = _load_venv_entry(mspec.name, module_path=module_path, installation_path=installation_path,)
+                    return mod
+                except BaseException as _berr:
+                    exc = exc or _berr
+        except PackageNotFoundError:
+            traceback.print_exc(exc)
+        if exc:
+            traceback.print_exc(exc)
+        module_path = _ensure_path(query["module_path"])
         os.chdir(installation_path)
-        import_name = (
-            str(module_path.relative_to(installation_path))
-            .replace("\\", "/")
-            .replace("/__init__.py", "")
-        )
-        return (
-            mod := _load_venv_entry(
-                import_name,
-                module_path=module_path,
-                installation_path=installation_path,
-            )
-        )
+        import_name = str(module_path.relative_to(installation_path)).replace("\\", "/").replace("/__init__.py", "")
+        return (mod := _load_venv_entry(import_name, module_path=module_path, installation_path=installation_path,))
     finally:
         os.chdir(orig_cwd)
         if "fault_inject" in config:
@@ -831,7 +829,7 @@ ORDER BY artifacts.id DESC
         if mod:
             use._save_module_info(
                 name=package_name,
-                import_relpath=query["import_relpath"],
+                import_relpath=str(_ensure_path(module_path).relative_to(installation_path)),
                 version=version,
                 artifact_path=artifact_path,
                 hash_value=hash_algo.value(artifact_path.read_bytes()).hexdigest(),
@@ -840,61 +838,8 @@ ORDER BY artifacts.id DESC
             )
 
 
-@cache(maxsize=4096, typed=True)
-def _parse_filename(filename) -> dict:
-    """Match the filename and return a dict of parts.
-    >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
-    {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
-    """
-    # Filename as API, seriously WTF...
-    assert isinstance(filename, str)
-    distribution = version = build_tag = python_tag = abi_tag = platform_tag = None
-    pp = Path(filename)
-    if ".tar" in filename:
-        ext = filename[filename.index(".tar") +1:]
-    else:
-        ext = pp.name[len(pp.stem) +1:]
-    rest = pp.name[0 : -len(ext)-1]
-
-    p = rest.split("-")
-    np = len(p)
-    if np == 5:
-        distribution, version, python_tag, abi_tag, platform_tag = p
-    elif np == 6:
-        distribution, version, build_tag, python_tag, abi_tag, platform_tag = p
-    elif np == 3:  # ['SQLAlchemy', '0.1.1', 'py2.4']
-        distribution, version, python_tag = p
-    elif np == 2:
-        distribution, version = p
-    else:
-        return {}
-    print(p)
-    # ['SQLAlchemy', '1.3.19', 'cp27', 'cp27m', 'macosx_10_14_x86_64']
-    info = (
-        {
-            "distribution": distribution,
-            "version": version,
-            "abi_tag": abi_tag,
-            "platform_tag": platform_tag,
-           "python_tag": python_tag,
-            "ext": ext,
-        }
-    )
-    if python_tag:
-        info["python_version"] = (
-            python_tag.replace("cp", "")[0]
-            + "."
-            + python_tag.replace("cp", "")[1:]
-        )
-    return info
-
-
 def _process(*argv, env={}):
-    _realenv = {
-        k: v
-        for k, v in chain(os.environ.items(), env.items())
-        if isinstance(k, str) and isinstance(v, str)
-    }
+    _realenv = {k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)}
     o = run(
         **(
             setup := dict(
@@ -907,7 +852,7 @@ def _process(*argv, env={}):
                 check=False,
                 close_fds=True,
                 env=_realenv,
-                encoding="UTF-8",
+                encoding="ISO-8859-1",
                 errors="ISO-8859-1",
                 text=True,
                 shell=False,
@@ -948,7 +893,10 @@ def _process(*argv, env={}):
 
 def _find_version(package_name, version=None) -> PyPI_Release:
     data = _get_filtered_data(_get_package_data(package_name), version)
-    return next(iter(reversed(data.releases.items())))[1][-1]
+    flat = functools.reduce(list.__add__, data.releases.values(), [])
+    priority = sorted(flat, key=lambda r: (not r.is_sdist, r.version), reverse=True)
+    # print("Selected", priority[0].filename)
+    return priority[0]
 
 
 def _find_exe(venv_root: Path) -> Path:
@@ -983,10 +931,7 @@ def _delete_none(a_dict: Dict[str, object]) -> Dict[str, object]:
 
 
 def _pure_python_package(artifact_path, meta):
-    not_pure_python = any(
-        any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES)
-        for n in meta["names"]
-    )
+    not_pure_python = any(any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES) for n in meta["names"])
 
     if ".tar" in str(artifact_path):
         return False
@@ -995,37 +940,30 @@ def _pure_python_package(artifact_path, meta):
     return True
 
 
-def _find_or_install(
-    name, version=None, artifact_path=None, url=None, out_info=None, force_install=False
-):
+def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=None, force_install=False):
     log.debug(
-        "_find_or_install(name=%s, version=%s, artifact_path=%s, url=%s)",
-        name,
-        version,
-        artifact_path,
-        url,
+        "_find_or_install(name=%s, version=%s, artifact_path=%s, url=%s)", name, version, artifact_path, url,
     )
     if out_info is None:
         out_info = {}
     info = out_info
     package_name, rest = _parse_name(name)
 
-
     if isinstance(url, str):
-      url = URL(url)
+        url = URL(url)
     filename = artifact_path.name if artifact_path else None
     if url:
-      filename = url.asdict()["path"]["segments"][-1]
+        filename = url.asdict()["path"]["segments"][-1]
     else:
-      filename = artifact_path.name if artifact_path else None
+        filename = artifact_path.name if artifact_path else None
     if filename and not artifact_path:
-      artifact_path = sys.modules["use"].home / "packages" / filename
-    
-    if not url or not artifact_path or (artifact_path and not artigact_path.exists()):
-      info.update(_find_version(package_name, version).dict())
-      url = URL(str(info["url"]))
-      filename = url.asdict()["path"]["segments"][-1]
-      artifact_path = sys.modules["use"].home / "packages" / filename
+        artifact_path = sys.modules["use"].home / "packages" / filename
+
+    if not url or not artifact_path or (artifact_path and not artifact_path.exists()):
+        info.update(_find_version(package_name, version).dict())
+        url = URL(str(info["url"]))
+        filename = url.asdict()["path"]["segments"][-1]
+        artifact_path = sys.modules["use"].home / "packages" / filename
     out_info["artifact_path"] = artifact_path
 
     # todo: set info
@@ -1033,7 +971,7 @@ def _find_or_install(
     url = URL(as_dict["url"])
     filename = url.path.segments[-1]
     info["filename"] = filename
-    info.update(_parse_filename(filename))
+    # info.update(_parse_filename(filename))
     info = {**info, "version": Version(version)}
     if not artifact_path.exists():
         artifact_path = _ensure_path(_download_artifact(name, version, filename, url))
@@ -1042,7 +980,8 @@ def _find_or_install(
     install_item = artifact_path
     meta = archive_meta(artifact_path)
     import_parts = re.split("[\\\\/]", meta["import_relpath"])
-    import_parts.remove("__init__.py")
+    if "__init__.py" in import_parts:
+        import_parts.remove("__init__.py")
     import_name = ".".join(import_parts)
     name = f"{package_name}.{import_name}"
     relp = meta["import_relpath"]
@@ -1070,9 +1009,7 @@ def _find_or_install(
             "install",
             "--pre",
             "--root",
-            PureWindowsPath(venv_root).drive
-            if isinstance(venv_root, (WindowsPath, PureWindowsPath))
-            else "/",
+            PureWindowsPath(venv_root).drive if isinstance(venv_root, (WindowsPath, PureWindowsPath)) else "/",
             "--no-user",
             "--prefix",
             str(venv_root),
@@ -1082,7 +1019,6 @@ def _find_or_install(
             "--exists-action",
             "i",
             "--ignore-installed",
-            "--no-use-pep517",
             "--no-build-isolation",
             "--no-warn-script-location",
             "--force-reinstall",
@@ -1124,10 +1060,7 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
     package_name, rest = _parse_name(name)
     _clean_sys_modules(name)
     log.info(
-        "load_venv_entry package_name=%s rest=%s module_path=%s",
-        package_name,
-        rest,
-        module_path,
+        "load_venv_entry package_name=%s rest=%s module_path=%s", package_name, rest, module_path,
     )
     cwd = Path.cwd()
     log.info(f"{cwd=}")
@@ -1189,85 +1122,11 @@ def _sys_version():
     return Version(".".join(map(str, sys.version_info[0:3])))
 
 
-def _filtered_by_version(data: PyPI_Project, version: Version) -> PyPI_Project:
-    filtered = {"urls": [], "releases": {}}
-
-    for V, R in data.releases.items():
-        if V != version:
-            continue
-        if not R:
-            continue
-        log.info(f"found a match for {version}!")
-        for info in R:
-            as_dict = _delete_none(info.dict())
-            url = URL(as_dict["url"])
-            filename = url.path.segments[-1]
-            as_dict["filename"] = filename
-            as_dict.update(_parse_filename(filename))
-            as_dict = {**as_dict, "version": V}
-            filtered["urls"].append(as_dict)
-            if V not in filtered["releases"]:
-                filtered["releases"][V] = []
-            filtered["releases"][V].append(as_dict)
-    if filtered["releases"]:
-        if "VERBOSE" in os.environ: log.debug("return PyPI_Project(**%s)", repr(filtered))
-        r = PyPI_Project(**filtered)
-        print("return r = %s" % r)
-        return r
-    return PyPI_Project(**filtered)
-
-
-def _filtered_by_platform(
-    data: PyPI_Project, *, tags: FrozenSet[PlatformTag], sys_version: Version
-) -> PyPI_Project:
-    filtered = {"urls": [], "releases": {}}
-    for sdist in (False, True):
-        for V, R in data.releases.items():
-            if not R:
-                continue
-            for info in R:
-                as_dict = _delete_none(info.dict())
-                url = URL(as_dict["url"])
-                filename = url.path.segments[-1]
-                as_dict["filename"] = filename
-                as_dict.update(_parse_filename(filename))
-                as_dict = {**as_dict, "version": V}
-                compat = _is_compatible(
-                    info, sys_version=sys_version, platform_tags=tags, include_sdist=sdist
-                )
-                if "VERBOSE" in os.environ: log.info(
-                    f"{compat!r}  <-  use._is_compatible({info!r}, {sys_version=!r}, platform_tags={tags!r}, include_sdist={sdist!r}"
-                )
-
-                if not compat:
-                    continue
-                log.info("found a match: %s", V)
-                as_dict["version"] = V
-                filtered["urls"].append(as_dict)
-                if V not in filtered["releases"]:
-                    filtered["releases"][V] = []
-                filtered["releases"][V].append(as_dict)
-
-        if filtered["releases"]:
-            if "VERBOSE" in os.environ: log.debug("return PyPI_Project(**%s)", repr(filtered))
-            r = PyPI_Project(**filtered)
-            print("return r = %s" % r)
-            return r
-    return PyPI_Project(**filtered)
-
-
 @pipes
 def _get_filtered_data(data: PyPI_Project, version: Version = None) -> PyPI_Project:
     if version:
-        return (
-            data
-            >> _filtered_by_version(version=version)
-            >> _filtered_by_platform(tags=get_supported(), sys_version=_sys_version())
-        )
-    else:
-        return data >> _filtered_by_platform(
-            tags=get_supported(), sys_version=_sys_version()
-        )
+        return _filter_by_version_and_current_platform(data, version)
+    return _filter_by_platform(data, tags=get_supported(), sys_version=_sys_version())
 
 
 @cache
@@ -1287,68 +1146,61 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
 
 
 @pipes
-def _is_platform_compatible(
-    info: Dict[str, object],
-    platform_tags: FrozenSet[PlatformTag],
-    include_sdist=False,
-) -> bool:
-    # TODO: Simplify
-    info.update(_parse_filename(str(info["url"]).split("/")[-1]))
-    if "py2" in info["filename"]:
+def _is_platform_compatible(info: PyPI_Release, platform_tags: FrozenSet[PlatformTag], include_sdist=False) -> bool:
+
+    if "py2" in info.justuse.python_tag and "py3" not in info.justuse.python_tag:
         return False
-    if "platform_tag" not in info or "python_version" not in info:
-        info.update(_parse_filename(URL(info["url"]).path.segments[-1]))
-    if info["platform_tag"] == None: info["platforn_tag"] = "any"
-    if not include_sdist and (
-        ".tar" in info["filename"]
-        or info.get("python_tag", "cpsource") in ("cpsource", "sdist")
-    ):
+
+    if not include_sdist and (".tar" in info.justuse.ext or info.justuse.python_tag in ("cpsource", "sdist")):
+        return False
+
+    if "win" in info.packagetype and sys.platform != "win32":
+        return False
+
+    if "win32" in info.justuse.platform_tag and sys.platform != "win32":
+        return False
+
+    if "macosx" in info.justuse.platform_tag and sys.platform != "darwin":
         return False
 
     our_python_tag = tags.interpreter_name() + tags.interpreter_version()
-    if "python_version" not in info:
-        return False
-    python_tag = info.get("python_tag", "") or "cp" + info["python_version"].replace(".", "")
-    if python_tag in ("py3", "cpsource"):
-        python_tag = our_python_tag
-    cur_platform_tags = (
-        (info.get("platform_tag", "") or "any").split(".") << map(PlatformTag) >> frozenset
+    supported_tags = set(
+        [our_python_tag, "py3", "cp3", f"cp{tags.interpreter_version()}", f"py{tags.interpreter_version()}"]
     )
-    is_sdist = info["python_version"] == "source" or info.get("abi_tag", "") == "none"
-    # if "aarch64" in str(info):
-    #  raise Exception()
-    return (our_python_tag == python_tag or python_tag.startswith("cp3")) and (
-        (is_sdist and include_sdist) or any(cur_platform_tags.intersection(platform_tags))
+
+    given_platform_tags = info.justuse.platform_tag.split(".") << map(PlatformTag) >> frozenset
+
+    if info.is_sdist and info.requires_python is not None:
+        given_python_tag = {
+            our_python_tag
+            for p in info.requires_python.split(",")
+            if Version(platform.python_version()) in SpecifierSet(p)
+        }
+    else:
+        given_python_tag = set(info.justuse.python_tag.split("."))
+
+    # print(supported_tags, given_python_tag)
+
+    return any(supported_tags.intersection(given_python_tag)) and (
+        (info.is_sdist and include_sdist) or any(given_platform_tags.intersection(platform_tags))
     )
 
 
-def _is_compatible(
-    info: PyPI_Release,
-    sys_version,
-    platform_tags,
-    include_sdist=None,
-) -> bool:
+def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist=None) -> bool:
     """Return true if the artifact described by 'info'
     is compatible with the current or specified system."""
     specifier = info.requires_python
-    if not specifier:
-        specifier = f"~= {info.python_version}"
-    if not specifier and include_sdist == False:
-        specifier = f">=3.0; <= {sys_version}"
 
     return (
-        ((not specifier or _is_version_satisfied(specifier, sys_version)))
-        and _is_platform_compatible(_delete_none(info.dict()), platform_tags, include_sdist)
-        and (include_sdist or info.ext not in ("tar", "tar.gz" "zip"))
+        (not specifier or _is_version_satisfied(specifier, sys_version))
+        and _is_platform_compatible(info, platform_tags, include_sdist)
+        and not info.yanked
+        and (include_sdist or info.justuse.ext not in ("tar", "tar.gz" "zip"))
     )
 
 
 def _apply_aspect(
-    thing,
-    check,
-    pattern,
-    decorator: Callable[[Callable[..., Any]], Any],
-    aspectize_dunders=False,
+    thing, check, pattern, decorator: Callable[[Callable[..., Any]], Any], aspectize_dunders=False,
 ) -> Any:
     """Apply the aspect as a side-effect, no copy is created."""
     for name, obj in thing.__dict__.items():
@@ -1360,9 +1212,7 @@ def _apply_aspect(
     return thing
 
 
-def _get_version(
-    name: Optional[str] = None, package_name=None, /, mod=None
-) -> Optional[Version]:
+def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> Optional[Version]:
     version: Optional[Union[Callable[...], Version, Version, str]] = None
     for lookup_name in (name, package_name):
         if not lookup_name:
@@ -1387,13 +1237,7 @@ def _get_version(
 
 
 def _build_mod(
-    *,
-    name,
-    code,
-    initial_globals: Optional[Dict[str, Any]],
-    module_path,
-    aspectize,
-    aspectize_dunders=False,
+    *, name, code, initial_globals: Optional[Dict[str, Any]], module_path, aspectize, aspectize_dunders=False,
 ) -> ModuleType:
 
     package_name, rest = _parse_name(name)
@@ -1408,11 +1252,7 @@ def _build_mod(
     getattr(linecache, "cache")[module_path] = (
         len(code),  # size of source code
         None,  # last modified time; None means there is no physical file
-        [
-            *map(  # a list of lines, including trailing newline on each
-                lambda ln: ln + "\x0a", code_text.splitlines()
-            )
-        ],
+        [*map(lambda ln: ln + "\x0a", code_text.splitlines())],  # a list of lines, including trailing newline on each
         mod.__file__,  # file name, e.g. "<mymodule>" or the actual path to the file
     )
     # not catching this causes the most irritating bugs ever!
@@ -1483,10 +1323,7 @@ class ProxyModule(ModuleType):
             return getattr(self.__implementation, name)
 
     def __setattr__(self, name, value):
-        if name in (
-            "_ProxyModule__implementation",
-            "_ProxyModule__condition",
-        ):
+        if name in ("_ProxyModule__implementation", "_ProxyModule__condition",):
             object.__setattr__(self, name, value)
             return
         with self.__condition:
@@ -1512,9 +1349,7 @@ class ModuleReloader:
     def start_threaded(self):
         self._stopped = False
         atexit.register(self.stop)
-        self._thread = threading.Thread(
-            target=self.run_threaded, name=f"reloader__{self.name}"
-        )
+        self._thread = threading.Thread(target=self.run_threaded, name=f"reloader__{self.name}")
         self._thread.start()
 
     async def run_async(self):
@@ -1572,6 +1407,7 @@ class Info(dict):
     def __repr__(self):
         return "<Info of size %d>" % len(self)
 
+
 class Use(ModuleType):
     # MODES to reduce signature complexity
     # enum.Flag wasn't viable, but this alternative is actually pretty cool
@@ -1612,8 +1448,7 @@ class Use(ModuleType):
                 this_version = __version__
                 if Version(this_version) < target_version:
                     warn(
-                        Message.use_version_warning(target_version),
-                        VersionWarning,
+                        Message.use_version_warning(target_version), VersionWarning,
                     )
             except (KeyError, requests.exceptions.ConnectionError):
                 if test_version:
@@ -1700,9 +1535,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         self.registry.connection.close()
         self.registry = None
         number_of_backups = len(list((self.home / "registry.db").glob("*.bak")))
-        (self.home / "registry.db").rename(
-            self.home / f"registry.db.{number_of_backups + 1}.bak"
-        )
+        (self.home / "registry.db").rename(self.home / f"registry.db.{number_of_backups + 1}.bak")
         (self.home / "registry.db").touch(mode=0o644)
         self.registry = self._set_up_registry()
         self.cleanup()
@@ -1743,9 +1576,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
             "DELETE FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?)",
             (name, version),
         )
-        self.registry.execute(
-            "DELETE FROM distributions WHERE name=? AND version=?", (name, version)
-        )
+        self.registry.execute("DELETE FROM distributions WHERE name=? AND version=?", (name, version))
         self.registry.connection.commit()
 
     def cleanup(self):
@@ -1765,10 +1596,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         for name, version, artifact_path, installation_path in self.registry.execute(
             "SELECT name, version, artifact_path, installation_path FROM distributions JOIN artifacts on distributions.id = distribution_id"
         ).fetchall():
-            if not (
-                _ensure_path(artifact_path).exists()
-                and _ensure_path(installation_path).exists()
-            ):
+            if not (_ensure_path(artifact_path).exists() and _ensure_path(installation_path).exists()):
                 self.del_entry(name, version)
         self.registry.connection.commit()
 
@@ -1842,10 +1670,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if hash_value:
             if this_hash != hash_value:
                 return _fail_or_default(
-                    UnexpectedHash(
-                        f"{this_hash} does not match the expected hash {hash_value} - aborting!"
-                    ),
-                    default,
+                    UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!"), default,
                 )
         else:
             warn(Message.no_validation(url, hash_algo, this_hash), NoValidationWarning)
@@ -1874,15 +1699,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     @require(lambda as_import: as_import.isidentifier())
     @__call__.register(Path)
     def _use_path(
-        self,
-        path,
-        /,
-        *,
-        initial_globals=None,
-        as_import: str = None,
-        default=mode.fastfail,
-        aspectize=None,
-        modes=0,
+        self, path, /, *, initial_globals=None, as_import: str = None, default=mode.fastfail, aspectize=None, modes=0,
     ) -> ProxyModule:
         """Import a module from a path.
 
@@ -1914,9 +1731,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         try:
             if not path.is_absolute():
                 source_dir = getattr(
-                    self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename),
-                    "path",
-                    None,
+                    self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename), "path", None,
                 )
 
             # calling from another use()d module
@@ -1931,11 +1746,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 jupyter = "ipykernel" in sys.modules
                 # we're in jupyter, we use the CWD as set in the notebook
                 if not jupyter and hasattr(main_mod, "__file__"):
-                    source_dir = (
-                        _ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename)
-                        .resolve()
-                        .parent
-                    )
+                    source_dir = _ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename).resolve().parent
             if source_dir is None:
                 if main_mod.__loader__:
                     source_dir = _ensure_path(main_mod.__loader__.path).parent
@@ -1945,10 +1756,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 source_dir = Path.cwd()
             if not source_dir.exists():
                 return _fail_or_default(
-                    NotImplementedError(
-                        "Can't determine a relative path from a virtual file."
-                    ),
-                    default,
+                    NotImplementedError("Can't determine a relative path from a virtual file."), default,
                 )
             path = source_dir.joinpath(path).resolve()
             if not path.exists():
@@ -1973,11 +1781,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     return _fail_or_default(ImportError(exc), default)
                 mod = ProxyModule(mod)
                 reloader = ModuleReloader(
-                    proxy=mod,
-                    name=name,
-                    path=path,
-                    initial_globals=initial_globals,
-                    aspectize=aspectize,
+                    proxy=mod, name=name, path=path, initial_globals=initial_globals, aspectize=aspectize,
                 )
                 _reloaders[mod] = reloader
 
@@ -2009,11 +1813,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 self._set_mod(name=name, mod=mod, frame=frame)
                 try:
                     mod = _build_mod(
-                        name=name,
-                        code=code,
-                        initial_globals=initial_globals,
-                        module_path=path,
-                        aspectize=aspectize,
+                        name=name, code=code, initial_globals=initial_globals, module_path=path, aspectize=aspectize,
                     )
                 except KeyError:
                     del self._using[name]
@@ -2241,9 +2041,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         if isinstance((mod := result), ModuleType):
             for (check, pattern), decorator in aspectize.items():
-                _apply_aspect(
-                    mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders
-                )
+                _apply_aspect(mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders)
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
             return ProxyModule(mod)
