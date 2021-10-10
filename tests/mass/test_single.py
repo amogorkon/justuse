@@ -45,17 +45,16 @@ class Packages(BaseModel):
 
 
 def test_package(package: PackageToTest) -> Tuple[bool, Dict]:
-    use_version = package.versions[-1]
-    if len(package.safe_versions) != 0:
-        use_version = package.safe_versions[-1]
 
     log1 = start_capture_logs()
     try:
-        use(package.name, version=use_version, modes=use.auto_install)
+        use(package.name, modes=use.auto_install)
     except RuntimeWarning as e:
-        if str(e).startswith("Failed to auto-install "):
+        if str(e).startswith("Please specify version and hash for auto-installation of"):
             hashes = re.findall("hashes={([a-z0-9A-Z', ]+)}", str(e))[0]
             hashes = {_hash.strip("'") for _hash in hashes.split(", ")}
+            print(str(e))
+            use_version = re.findall('version="(.*)", ', str(e))[0]
         else:
             exc_type, exc_value, _ = sys.exc_info()
             tb = traceback.format_exc()
@@ -63,7 +62,7 @@ def test_package(package: PackageToTest) -> Tuple[bool, Dict]:
                 False,
                 {
                     "name": package.name,
-                    "version": use_version,
+                    "version": "None",
                     "stars": package.stars,
                     "err": {
                         "type": str(exc_type),
@@ -80,7 +79,7 @@ def test_package(package: PackageToTest) -> Tuple[bool, Dict]:
             {
                 "name": package.name,
                 "stars": package.stars,
-                "err": {"type": "InvalidVersion", "value": package.versions, "picked": use_version},
+                "err": {"type": "InvalidVersion", "value": package.versions, "picked": "None"},
             },
         )
 
