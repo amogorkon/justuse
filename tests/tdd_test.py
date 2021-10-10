@@ -30,7 +30,6 @@ def test_template(reuse):
     pass
 
 
-@pytest.mark.skipif(True, reason="broken")
 def test_is_platform_compatible_macos(reuse):
     platform_tags = reuse.use.get_supported()
     platform_tag = next(iter(platform_tags))
@@ -50,7 +49,7 @@ def test_is_platform_compatible_macos(reuse):
         "size": 15599590,
         "upload_time": "2021-01-05T17:19:38",
         "upload_time_iso_8601": "2021-01-05T17:19:38.152665Z",
-        "url": "https://files.pythonhosted.org/packages/6a/9d/984f87a8d5b28b1d4afc042d8f436a76d6210fb582214f35a0ea1db3be66/numpy-1.19.5-cp3{sys.version_info[1]}-cp3{sys.version_info[1]}m-{platform_tag}.whl",
+        "url": f"https://files.pythonhosted.org/packages/6a/9d/984f87a8d5b28b1d4afc042d8f436a76d6210fb582214f35a0ea1db3be66/numpy-1.19.5-cp3{sys.version_info[1]}-cp3{sys.version_info[1]}m-{platform_tag}.whl",
         "yanked": False,
         "yanked_reason": None,
     }
@@ -114,56 +113,6 @@ def test_pure_python_package(reuse):
 
 def test_db_setup(reuse):
     assert reuse.registry
-@pytest.mark.parametrize(
-    "name, floor_version, n_versions",
-    [
-        ("numpy", "1.19.0", 1),
-        ("numpy", "1.19.0", 2),
-        ("protobuf", None, 1),
-        ("protobuf", None, 2),
-        ("sqlalchemy", None, 1),
-        ("sqlalchemy", None, 2),
-    ],
-)
-
-
-def test_load_multi_version(reuse, name, floor_version, n_versions):
-    data = reuse._get_filtered_data(reuse._get_package_data(name))
-    versions = [*data.releases.keys()]
-    mods = []
-    for version in versions[0 : min(len(versions), n_versions)]:
-        if floor_version and reuse.Version(version) < reuse.Version(floor_version):
-            continue
-        info = data.releases[version][0].dict()
-        reuse._clean_sys_modules(name.replace("-", "_"))
-        mod = reuse(
-            name,
-            version=version,
-            hashes=info["digests"]["sha256"],
-            modes=reuse.auto_install,
-        )
-        mod_version = getattr(mod, "__version__", reuse._get_version(mod=mod))
-        mods.append((version, mod_version, mod))
-    return mods
-@pytest.mark.parametrize(
-    "name, floor_version, n_versions",
-    [
-        ("numpy", "1.19.0", 1),
-        ("numpy", "1.19.0", 2),
-        ("protobuf", None, 1),
-        ("protobuf", None, 2),
-        ("sqlalchemy", None, 1),
-        ("sqlalchemy", None, 2),
-    ],
-)
-
-
-def test_check_multi_version(reuse, name, floor_version, n_versions):
-    mods = test_load_multi_version(reuse, name, floor_version, n_versions)
-    for expected_version, actual_version, mod in mods:
-        if not hasattr(mod, "__version__"):
-            continue
-        assert expected_version == actual_version
 @pytest.mark.skipif(True, reason="broken")
 
 
@@ -172,7 +121,8 @@ def test_no_isolation(reuse):
     assert test_load_multi_version(reuse, "numpy", "1.19.0", 1)
 
 
-def installed_or_skip(name, version=None):
+
+def installed_or_skip(reuse, name, version=None):
     if not (spec := find_spec(name)):
         pytest.skip(f"{name} not installed")
         return False
@@ -182,14 +132,14 @@ def installed_or_skip(name, version=None):
         pytest.skip(f"{name} partially installed: {spec=}, {pnfe}")
     
     if not ((ver := dist.metadata["version"])
-       and (version is None or ver == version)):
+       and (not version or reuse.Version(version)) == (not ver or reuse.Version(ver))):
         pytest.skip(f"found '{name}' v{ver}, but require v{version}")
         return False
     return True
 
-
+@pytest.mark.skipif(not_local, reason="requires matplotlib")
 def test_use_str(reuse):
-    if not installed_or_skip("matplotlib"):
+    if not installed_or_skip(reuse, "matplotlib"):
         return
     mod = reuse("matplotlib/matplotlib.pyplot")
     assert mod
@@ -197,7 +147,7 @@ def test_use_str(reuse):
 
 @pytest.mark.skipif(not_local, reason="requires matplotlib")
 def test_use_tuple(reuse):
-    if not installed_or_skip("matplotlib"):
+    if not installed_or_skip(reuse, "matplotlib"):
         return
     mod = reuse(("matplotlib", "matplotlib.pyplot"))
     assert mod
@@ -205,9 +155,8 @@ def test_use_tuple(reuse):
 
 @pytest.mark.skipif(not_local, reason="requires matplotlib")
 def test_use_kwargs(reuse):
-    if not installed_or_skip("matplotlib"):
+    if not installed_or_skip(reuse, "matplotlib"):
         return
     mod = reuse(package_name="matplotlib", module_name="matplotlib.pyplot")
     assert mod
-
 
