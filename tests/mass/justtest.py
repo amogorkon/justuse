@@ -68,7 +68,7 @@ def combine_package_output(results_dir: PathLike, folder: str):
 
 
 if __name__ == "__main__":
-    NAUGHTY_PACKAGES = ["assimp", "metakernel", "pscript"]
+    NAUGHTY_PACKAGES = ["assimp", "metakernel", "pscript", "airflow"]
 
     with open("pypi.json", "r") as f:
         packages = Packages(data=json.load(f)["data"])

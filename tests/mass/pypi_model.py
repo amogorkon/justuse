@@ -27,9 +27,7 @@ class Version(PkgVersion):
         if isinstance(versionstr, Version):
             return
         if not (versionstr or major or minor or patch):
-            raise ValueError(
-                "Version must be initialized with either a string or major, minor and patch"
-            )
+            raise ValueError("Version must be initialized with either a string or major, minor and patch")
         if major or minor or patch:
             # string as only argument, no way to construct a Version otherwise - WTF
             return super().__init__(".".join((str(major), str(minor), str(patch))))
@@ -55,7 +53,8 @@ class Version(PkgVersion):
 
 class QuietModel(BaseModel):
     def __repr__(self):
-         return "%s()" % type(self).__qualname__
+        return "%s()" % type(self).__qualname__
+
 
 class PyPI_Release(QuietModel):
     comment_text: str = None
@@ -70,7 +69,6 @@ class PyPI_Release(QuietModel):
     platform_tag: str = None
     filename: str = None
     abi_tag: str = None
-
 
 
 class PyPI_Downloads(QuietModel):
@@ -132,3 +130,11 @@ class PyPI_Project(QuietModel):
     urls: List[PyPI_URL] = None
     last_serial: int = None
     info: PyPI_Info = None
+
+    def __init__(self, **kwargs):
+        for version in list(kwargs["releases"].keys()):
+            try:
+                Version(version)
+            except:
+                del kwargs["releases"][version]
+        super().__init__(**kwargs)
