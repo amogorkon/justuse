@@ -56,7 +56,7 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
  
  `use("pprint").pprint(some_dict)`  # corresponds to a one-off `from pprint import pprint; pprint(some_dict)` without importing it into the global namespace
  
- `tools = use(use.Path("/media/sf_Dropbox/code/tools.py"), reloading=True)`  # impossible to realize with classical imports
+ `tools = use(use.Path("/media/sf_Dropbox/code/tools.py"), modes=use.reloading)`  # impossible to realize with classical imports
  
  `test = use("functions", initial_globals={"foo":34, "bar":49})`  # also impossible with the classical import statement, although importlib can help
  
