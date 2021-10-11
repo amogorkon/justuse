@@ -446,16 +446,9 @@ def get_supported() -> FrozenSet[PlatformTag]:
 
 
 def _filter_by_version(project: PyPI_Project, version: str) -> PyPI_Project:
-    return PyPI_Project(
-        **{
-            **project.dict(),
-            **{
-                "releases": {version: [v.dict() for v in project.releases[version]]}
-                if project.releases.get(version)
-                else {}
-            },
-        }
-    )
+    filtered = project.copy()
+    filtered.releases = filtered.releases.get(version, {})
+    return filtered
 
 
 def _filter_by_platform(project: PyPI_Project, tags: FrozenSet[PlatformTag], sys_version: Version) -> PyPI_Project:
@@ -473,9 +466,13 @@ def _filter_by_platform(project: PyPI_Project, tags: FrozenSet[PlatformTag], sys
 
 @pipes
 def _filter_by_version_and_current_platform(project: PyPI_Project, version: str) -> PyPI_Project:
+    # fmt: off
     return (
-        project >> _filter_by_version(version) >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
-    )
+        project >> 
+        _filter_by_version(version) >> 
+        _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
+    ) 
+    # fmt: on
 
 
 class TarFunctions:
@@ -840,25 +837,23 @@ ORDER BY artifacts.id DESC
 
 def _process(*argv, env={}):
     _realenv = {k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)}
-    o = run(
-        **(
-            setup := dict(
-                executable=(exe := argv[0]),
-                args=[*map(str, argv)],
-                bufsize=1024,
-                input="",
-                capture_output=True,
-                timeout=45000,
-                check=False,
-                close_fds=True,
-                env=_realenv,
-                encoding="ISO-8859-1",
-                errors="ISO-8859-1",
-                text=True,
-                shell=False,
-            )
-        )
+    exe = argv[0]
+    setup = dict(
+        executable=exe,
+        args=[*map(str, argv)],
+        bufsize=1024,
+        input="",
+        capture_output=True,
+        timeout=45000,
+        check=False,
+        close_fds=True,
+        env=_realenv,
+        encoding="ISO-8859-1",
+        errors="ISO-8859-1",
+        text=True,
+        shell=False,
     )
+    o = run(**setup)
     if o.returncode == 0:
         return o
     raise RuntimeError(
@@ -1122,7 +1117,6 @@ def _sys_version():
     return Version(".".join(map(str, sys.version_info[0:3])))
 
 
-@pipes
 def _get_filtered_data(data: PyPI_Project, version: Version = None) -> PyPI_Project:
     if version:
         return _filter_by_version_and_current_platform(data, version)
