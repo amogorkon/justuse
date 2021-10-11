@@ -40,10 +40,10 @@ def clear_cache():
 
 
 def run_test(packages: Packages, results_dir: PathLike, max_to_run: int = 1, max_venv_space: int = 5_000_000_000):
-    for i, package in enumerate(packages.data):
+    for i, pkg in enumerate(packages.data):
         if i >= max_to_run:
             break
-        if package.name in NAUGHTY_PACKAGES:
+        if pkg.name in NAUGHTY_PACKAGES:
             continue
 
         manage_disk(max_size=max_venv_space)
@@ -51,7 +51,7 @@ def run_test(packages: Packages, results_dir: PathLike, max_to_run: int = 1, max
         subprocess.call(f"python test_single.py {i}", shell=True)
         n_passed = len(list((results_dir / "pass").glob("*.json")))
         n_failed = len(list((results_dir / "fail").glob("*.json")))
-        print(i, package.name, n_failed + n_passed, n_failed, n_passed, f"{100 * n_passed / (n_failed + n_passed)}%")
+        print(i, pkg.name, n_failed + n_passed, n_failed, n_passed, f"{100 * n_passed / (n_failed + n_passed)}%")
 
 
 def combine_package_output(results_dir: PathLike, folder: str):

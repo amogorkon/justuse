@@ -204,4 +204,3 @@ class PyPI_Project(QuietModel):
         kwargs["releases"] = {k: [{**_v, "version": Version(k)} for _v in v] for k, v in kwargs["releases"].items()}
 
         super().__init__(**kwargs)
-

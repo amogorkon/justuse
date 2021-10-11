@@ -66,8 +66,7 @@ meta = {
     "maintainer_email": "justuse-pypi@anselm.kiefner.de",
     "maintainer": "Anselm Kiefner",
     "platforms": ["any"],
-    "download_url": "https://github.com/amogorkon/justuse/"
-    "archive/refs/heads/main.zip",
+    "download_url": "https://github.com/amogorkon/justuse/" "archive/refs/heads/main.zip",
 }
 
 

@@ -415,9 +415,10 @@ def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
     if isinstance(value, (str, bytes)):
         return Path(value).absolute()
     if isinstance(value, furl.Path):
-        return (Path.cwd(), value.segments << map(Path) << tuple << reduce(Path.__truediv__),) << reduce(
-            Path.__truediv__
-        )
+        return (
+            Path.cwd(),
+            value.segments << map(Path) << tuple << reduce(Path.__truediv__),
+        ) << reduce(Path.__truediv__)
     return value
 
 
@@ -463,7 +464,12 @@ def _filter_by_platform(project: PyPI_Project, tags: FrozenSet[PlatformTag], sys
         ver: [
             rel.dict()
             for rel in releases
-            if _is_compatible(rel, sys_version=sys_version, platform_tags=tags, include_sdist=True,)
+            if _is_compatible(
+                rel,
+                sys_version=sys_version,
+                platform_tags=tags,
+                include_sdist=True,
+            )
         ]
         for ver, releases in project.releases.items()
     }
@@ -555,13 +561,20 @@ def archive_meta(artifact_path):
     meta["name"] = name
     if "top_level" not in meta:
         meta["top_level"] = [""]
-    (top_level, name,) = (meta["top_level"][0], meta["name"])
+    (
+        top_level,
+        name,
+    ) = (meta["top_level"][0], meta["name"])
     import_name = (name,) if (top_level == name) else (top_level, name)
     meta["names"] = names
     meta["import_name"] = import_name
     for relpath in sorted(
         [n for n in names if len(n) > 4 and n[-3:] == ".py"],
-        key=lambda n: (not n.startswith(import_name), not n.endswith("__init__.py"), len(n),),
+        key=lambda n: (
+            not n.startswith(import_name),
+            not n.endswith("__init__.py"),
+            len(n),
+        ),
     ):
         meta["import_relpath"] = relpath
         break
@@ -691,7 +704,14 @@ def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Ex
 
     for info in priority:
         hash_value = info.digests[hash_algo.name]
-        rw = RuntimeWarning(Message.no_version_or_hash_provided(name, package_name, info.version, hash_value,))
+        rw = RuntimeWarning(
+            Message.no_version_or_hash_provided(
+                name,
+                package_name,
+                info.version,
+                hash_value,
+            )
+        )
         rw.name = package_name
         rw.version = info.version
         rw.hashes = hash_value
@@ -702,7 +722,12 @@ def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Ex
 
 
 def _import_public_no_install(
-    *, name, spec, aspectize, fatal_exceptions=False, **kwargs,
+    *,
+    name,
+    spec,
+    aspectize,
+    fatal_exceptions=False,
+    **kwargs,
 ) -> Union[ModuleType, Exception]:
     # builtin?
     package_name, rest = _parse_name(name)
@@ -744,7 +769,14 @@ def _parse_name(name) -> Tuple[str, str]:
 
 
 def _auto_install(
-    func=None, *, name, hash_algo, version, package_name, rest, **kwargs,
+    func=None,
+    *,
+    name,
+    hash_algo,
+    version,
+    package_name,
+    rest,
+    **kwargs,
 ) -> Union[ModuleType, BaseException]:
     package_name, rest = _parse_name(name)
 
@@ -810,7 +842,11 @@ ORDER BY artifacts.id DESC
                     mspec = find_spec(module_name)
                     loader = _ensure_loader(mspec)
                     module_path = mspec.origin or module_path
-                    mod = _load_venv_entry(mspec.name, module_path=module_path, installation_path=installation_path,)
+                    mod = _load_venv_entry(
+                        mspec.name,
+                        module_path=module_path,
+                        installation_path=installation_path,
+                    )
                     return mod
                 except BaseException as _berr:
                     exc = exc or _berr
@@ -821,7 +857,13 @@ ORDER BY artifacts.id DESC
         module_path = _ensure_path(query["module_path"])
         os.chdir(installation_path)
         import_name = str(module_path.relative_to(installation_path)).replace("\\", "/").replace("/__init__.py", "")
-        return (mod := _load_venv_entry(import_name, module_path=module_path, installation_path=installation_path,))
+        return (
+            mod := _load_venv_entry(
+                import_name,
+                module_path=module_path,
+                installation_path=installation_path,
+            )
+        )
     finally:
         os.chdir(orig_cwd)
         if "fault_inject" in config:
@@ -838,6 +880,53 @@ ORDER BY artifacts.id DESC
             )
 
 
+def _parse_filename(filename) -> dict:
+    """Match the filename and return a dict of parts.
+    >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
+    {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
+    """
+    # Filename as API, seriously WTF...
+    assert isinstance(filename, str)
+    distribution = version = build_tag = python_tag = abi_tag = platform_tag = None
+    pp = Path(filename)
+    if ".tar" in filename:
+        ext = filename[filename.index(".tar") :]
+    else:
+        ext = pp.name[len(pp.stem) + 1 :]
+    rest = pp.name[0 : -len(ext) - 1]
+
+    p = rest.split("-")
+    np = len(p)
+    if np == 5:
+        distribution, version, python_tag, abi_tag, platform_tag = p
+    elif np == 6:
+        distribution, version, build_tag, python_tag, abi_tag, platform_tag = p
+    elif np == 3:  # ['SQLAlchemy', '0.1.1', 'py2.4']
+        distribution, version, python_tag = p
+    elif np == 2:
+        distribution, version = p
+    else:
+        return {}
+
+    python_version = None
+    if python_tag:
+        python_version = (
+            python_tag.replace("cp", "")[0]
+            + "."
+            + python_tag.replace("cp", "")[1:]
+        )
+    return _delete_none(
+        {
+            "distribution": distribution,
+            "version": version,
+            "build_tag": build_tag,
+            "python_tag": python_tag,
+            "abi_tag": abi_tag,
+            "platform_tag": platform_tag,
+            "python_version": python_version,
+            "ext": ext,
+        }
+    )
 def _process(*argv, env={}):
     _realenv = {k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)}
     o = run(
@@ -942,7 +1031,11 @@ def _pure_python_package(artifact_path, meta):
 
 def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=None, force_install=False):
     log.debug(
-        "_find_or_install(name=%s, version=%s, artifact_path=%s, url=%s)", name, version, artifact_path, url,
+        "_find_or_install(name=%s, version=%s, artifact_path=%s, url=%s)",
+        name,
+        version,
+        artifact_path,
+        url,
     )
     if out_info is None:
         out_info = {}
@@ -1060,7 +1153,10 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
     package_name, rest = _parse_name(name)
     _clean_sys_modules(name)
     log.info(
-        "load_venv_entry package_name=%s rest=%s module_path=%s", package_name, rest, module_path,
+        "load_venv_entry package_name=%s rest=%s module_path=%s",
+        package_name,
+        rest,
+        module_path,
     )
     cwd = Path.cwd()
     log.info(f"{cwd=}")
@@ -1200,7 +1296,11 @@ def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist
 
 
 def _apply_aspect(
-    thing, check, pattern, decorator: Callable[[Callable[..., Any]], Any], aspectize_dunders=False,
+    thing,
+    check,
+    pattern,
+    decorator: Callable[[Callable[..., Any]], Any],
+    aspectize_dunders=False,
 ) -> Any:
     """Apply the aspect as a side-effect, no copy is created."""
     for name, obj in thing.__dict__.items():
@@ -1237,7 +1337,13 @@ def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> 
 
 
 def _build_mod(
-    *, name, code, initial_globals: Optional[Dict[str, Any]], module_path, aspectize, aspectize_dunders=False,
+    *,
+    name,
+    code,
+    initial_globals: Optional[Dict[str, Any]],
+    module_path,
+    aspectize,
+    aspectize_dunders=False,
 ) -> ModuleType:
 
     package_name, rest = _parse_name(name)
@@ -1323,7 +1429,10 @@ class ProxyModule(ModuleType):
             return getattr(self.__implementation, name)
 
     def __setattr__(self, name, value):
-        if name in ("_ProxyModule__implementation", "_ProxyModule__condition",):
+        if name in (
+            "_ProxyModule__implementation",
+            "_ProxyModule__condition",
+        ):
             object.__setattr__(self, name, value)
             return
         with self.__condition:
@@ -1448,7 +1557,8 @@ class Use(ModuleType):
                 this_version = __version__
                 if Version(this_version) < target_version:
                     warn(
-                        Message.use_version_warning(target_version), VersionWarning,
+                        Message.use_version_warning(target_version),
+                        VersionWarning,
                     )
             except (KeyError, requests.exceptions.ConnectionError):
                 if test_version:
@@ -1670,7 +1780,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if hash_value:
             if this_hash != hash_value:
                 return _fail_or_default(
-                    UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!"), default,
+                    UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!"),
+                    default,
                 )
         else:
             warn(Message.no_validation(url, hash_algo, this_hash), NoValidationWarning)
@@ -1699,7 +1810,15 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     @require(lambda as_import: as_import.isidentifier())
     @__call__.register(Path)
     def _use_path(
-        self, path, /, *, initial_globals=None, as_import: str = None, default=mode.fastfail, aspectize=None, modes=0,
+        self,
+        path,
+        /,
+        *,
+        initial_globals=None,
+        as_import: str = None,
+        default=mode.fastfail,
+        aspectize=None,
+        modes=0,
     ) -> ProxyModule:
         """Import a module from a path.
 
@@ -1731,7 +1850,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         try:
             if not path.is_absolute():
                 source_dir = getattr(
-                    self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename), "path", None,
+                    self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename),
+                    "path",
+                    None,
                 )
 
             # calling from another use()d module
@@ -1756,7 +1877,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 source_dir = Path.cwd()
             if not source_dir.exists():
                 return _fail_or_default(
-                    NotImplementedError("Can't determine a relative path from a virtual file."), default,
+                    NotImplementedError("Can't determine a relative path from a virtual file."),
+                    default,
                 )
             path = source_dir.joinpath(path).resolve()
             if not path.exists():
@@ -1781,7 +1903,11 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     return _fail_or_default(ImportError(exc), default)
                 mod = ProxyModule(mod)
                 reloader = ModuleReloader(
-                    proxy=mod, name=name, path=path, initial_globals=initial_globals, aspectize=aspectize,
+                    proxy=mod,
+                    name=name,
+                    path=path,
+                    initial_globals=initial_globals,
+                    aspectize=aspectize,
                 )
                 _reloaders[mod] = reloader
 
@@ -1813,7 +1939,11 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 self._set_mod(name=name, mod=mod, frame=frame)
                 try:
                     mod = _build_mod(
-                        name=name, code=code, initial_globals=initial_globals, module_path=path, aspectize=aspectize,
+                        name=name,
+                        code=code,
+                        initial_globals=initial_globals,
+                        module_path=path,
+                        aspectize=aspectize,
                     )
                 except KeyError:
                     del self._using[name]
@@ -1986,7 +2116,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hash_algo,
         user_msg=Message,
     ):
-        log.debug(f"use-package: {name}, {package_name}, {module_name}, {version}, {hashes}")
+        log.debug(f"use-pkg: {name}, {package_name}, {module_name}, {version}, {hashes}")
         if isinstance(hashes, str):
             hashes = set([hashes])
         hashes = set(hashes) if hashes else set()
