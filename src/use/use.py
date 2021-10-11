@@ -790,8 +790,6 @@ ORDER BY artifacts.id DESC
     except (ImportError, zipimport.ZipImportError) as zerr:
         if isinstance(zerr.__context__, ModuleNotFoundError):
             missing_modules = zerr.__context__
-    except ModuleNotFoundError as zerr:
-        missing_modules = zerr
     except KeyError:
         if "DEBUG" in os.environ or config["debugging"]:
             log.debug(traceback.format_exc())
