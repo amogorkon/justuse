@@ -8,6 +8,17 @@ import logging
 import traceback
 import packaging
 
+from pathlib import Path
+sys.path.insert(1, str((Path(__file__).parent.parent.parent / "src").absolute()))
+use_py = Path(__file__).parent.parent.parent / "src" / "use" / "use.py"
+assert use_py.exists()
+from importlib.machinery import SourceFileLoader
+ldr = SourceFileLoader("use", use_py.parent)
+__import__("use")
+use_py = Path(__file__).parent.parent.parent / "src" / "use" / "use.py"
+assert use_py.exists()
+print(Path(__file__).parent.parent.parent / "src")
+os.chdir(Path(__file__).parent)
 import use
 from pydantic import BaseModel
 
