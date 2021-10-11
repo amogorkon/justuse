@@ -16,6 +16,7 @@ import requests
 
 from .unit_test import log, reuse
 from use.pypi_model import *
+
 not_local = "GITHUB_REF" in os.environ
 is_win = sys.platform.lower().startswith("win")
 not_win = not is_win
@@ -49,7 +50,7 @@ def test_is_platform_compatible_macos(reuse):
         "url": f"https://files.pythonhosted.org/packages/6a/9d/984f87a8d5b28b1d4afc042d8f436a76d6210fb582214f35a0ea1db3be66/numpy-1.19.5-cp3{sys.version_info[1]}-cp3{sys.version_info[1]}m-{platform_tag}.whl",
         "yanked": False,
         "yanked_reason": None,
-        "version": "1.19.5"
+        "version": "1.19.5",
     }
     assert reuse._is_platform_compatible(PyPI_Release(**info), platform_tags)
 
@@ -76,7 +77,7 @@ def test_is_platform_compatible_win(reuse):
         "url": f"https://files.pythonhosted.org/packages/ea/bc/da526221bc111857c7ef39c3af670bbcf5e69c247b0d22e51986f6d0c5c2/numpy-1.19.5-cp3{sys.version_info[1]}-cp3{sys.version_info[1]}m-{platform_tag}.whl",
         "yanked": False,
         "yanked_reason": None,
-        "version": "1.19.5"
+        "version": "1.19.5",
     }
     assert reuse._is_platform_compatible(PyPI_Release(**info), platform_tags, include_sdist=False)
 

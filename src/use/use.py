@@ -910,11 +910,7 @@ def _parse_filename(filename) -> dict:
 
     python_version = None
     if python_tag:
-        python_version = (
-            python_tag.replace("cp", "")[0]
-            + "."
-            + python_tag.replace("cp", "")[1:]
-        )
+        python_version = python_tag.replace("cp", "")[0] + "." + python_tag.replace("cp", "")[1:]
     return _delete_none(
         {
             "distribution": distribution,
@@ -927,6 +923,8 @@ def _parse_filename(filename) -> dict:
             "ext": ext,
         }
     )
+
+
 def _process(*argv, env={}):
     _realenv = {k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)}
     o = run(
