@@ -1289,7 +1289,7 @@ def _is_platform_compatible(
         return False
     if "platform_tag" not in info or "python_version" not in info:
         info.update(_parse_filename(URL(info["url"]).path.segments[-1]))
-    if info["platform_tag"] == None:
+    if info["platform_tag"] is None:
         info["platforn_tag"] = "any"
     if not include_sdist and (
         ".tar" in info["filename"]
