@@ -201,7 +201,7 @@ def test_autoinstall_PEBKAC(reuse):
             hashes="asdf",
         )
 
-    # non-existing package
+    # non-existing pkg
     with pytest.raises(ImportError):
         reuse(
             "4-^df",

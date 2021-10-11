@@ -9,7 +9,7 @@ Goals/Features:
 - return optional fallback-default object/module if import failed (DONE)
 - aspect-oriented decorators for everything callable on import (DONE)
 - securely auto-install packages (preliminary DONE, still some kinks with C-extensions)
-- support P2P package distribution (TODO)
+- support P2P pkg distribution (TODO)
 - unwrap aspect-decorators on demand (TODO)
 - easy introspection via internal dependency graph (TODO)
 - relative imports on online-sources via URL-aliases (TODO)
@@ -43,7 +43,7 @@ True
 >>> utils = use(use.URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
                     hashes="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")
 
-# to auto-install a certain version (within a virtual env and pip in secure hash-check mode) of a package you can do
+# to auto-install a certain version (within a virtual env and pip in secure hash-check mode) of a pkg you can do
 >>> np = use("numpy", version="1.1.1", modes=use.auto_install, hash_value=["9879de676"])
 
 :author: Anselm Kiefner (amogorkon)
@@ -343,10 +343,10 @@ use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
         lambda package_name, target_version, this_version: f"{package_name} expected to be version {target_version}, but got {this_version} instead"
     )
     ambiguous_name_warning = (
-        lambda package_name: f"Attempting to load the package '{package_name}', if you rather want to use the local module: use(use._ensure_path('{package_name}.py'))"
+        lambda package_name: f"Attempting to load the pkg '{package_name}', if you rather want to use the local module: use(use._ensure_path('{package_name}.py'))"
     )
     no_version_provided = (
-        lambda: "No version was provided, even though auto_install was specified! Trying to load classically installed package instead."
+        lambda: "No version was provided, even though auto_install was specified! Trying to load classically installed pkg instead."
     )
     classically_imported = (
         lambda name, this_version: f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")'
@@ -363,18 +363,18 @@ use({name!r}, version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"
     )
     no_version_or_hash_provided = (
         lambda name, package_name, version, hash_value: f"""Please specify version and hash for auto-installation of '{package_name}'.
-To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/{package_name}
+To get some valuable insight on the health of this pkg, please check out https://snyk.io/advisor/python/{package_name}
 If you want to auto-install the latest version:
 use("{name}", version="{version!s}", hashes={set([hash_value])}, modes=use.auto_install)
 """
     )
-    cant_import = lambda name: f"No package installed named {name} and auto-installation not requested. Aborting."
+    cant_import = lambda name: f"No pkg installed named {name} and auto-installation not requested. Aborting."
     cant_import_no_version = (
         lambda package_name: f"Failed to auto-install '{package_name}' because no version was specified."
     )
     venv_unavailable = (
         lambda python_exe, python_version, python_platform: f"""
-Your system does not have a usable 'venv' package for this version of Python:
+Your system does not have a usable 'venv' pkg for this version of Python:
    Path =     {python_exe}
    Version =  {python_version}
    Platform = {python_platform}
@@ -395,7 +395,7 @@ You can test if your version of venv is working by running:
 
 class StrMessage(Message):
     cant_import = (
-        lambda package_name: f"No package installed named {package_name} and auto-installation not requested. Aborting."
+        lambda package_name: f"No pkg installed named {package_name} and auto-installation not requested. Aborting."
     )
 
 
@@ -1080,7 +1080,7 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     out_info["import_relpath"] = relp
     out_info["import_name"] = import_name
     if not force_install and _pure_python_package(artifact_path, meta):
-        log.info(f"pure python package: {package_name, version, use.home}")
+        log.info(f"pure python pkg: {package_name, version, use.home}")
         return out_info
 
     venv_root = _venv_root(package_name, version, use.home)
@@ -1690,7 +1690,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
     def cleanup(self):
         """Bring registry and downloaded packages in sync.
 
-        First all packages are removed that don't have a matching registry entry, then all registry entries that don't have a matching package.
+        First all packages are removed that don't have a matching registry entry, then all registry entries that don't have a matching pkg.
         """
 
         def delete_folder(path):
@@ -1720,7 +1720,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         import_relpath: str,
         hash_algo=Hash.sha256,
     ):
-        """Update the registry to contain the package's metadata."""
+        """Update the registry to contain the pkg's metadata."""
         if not self.registry.execute(
             f"SELECT * FROM distributions WHERE name='{name}' AND version='{version}'"
         ).fetchone():
@@ -1975,21 +1975,21 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         modes: int = 0,
     ) -> ProxyModule:
         """
-        Import a package by name.
+        Import a pkg by name.
 
         https://github.com/amogorkon/justuse/wiki/Use-String
 
         Args:
-            name (str): The name of the package to import.
-            version (str or Version, optional): The version of the package to import. Defaults to None.
+            name (str): The name of the pkg to import.
+            version (str or Version, optional): The version of the pkg to import. Defaults to None.
             hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
-            hashes (str | [str]), optional): A single hash or list of hashes of the package to import. Defaults to None.
+            hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
             default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
             aspectize (dict, optional): Aspectize callables. Defaults to None.
             modes (int, optional): Any combination of Use.modes . Defaults to 0.
 
         Raises:
-            RuntimeWarning: May be raised if the auto-installation of the package fails for some reason.
+            RuntimeWarning: May be raised if the auto-installation of the pkg fails for some reason.
 
         Returns:
             Optional[ModuleType]: Module if successful, default as specified otherwise.
@@ -2021,21 +2021,21 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         modes: int = 0,
     ) -> ProxyModule:
         """
-        Import a package by name.
+        Import a pkg by name.
 
         https://github.com/amogorkon/justuse/wiki/Use-String
 
         Args:
-            name (str): The name of the package to import.
-            version (str or Version, optional): The version of the package to import. Defaults to None.
+            name (str): The name of the pkg to import.
+            version (str or Version, optional): The version of the pkg to import. Defaults to None.
             hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
-            hashes (str | [str]), optional): A single hash or list of hashes of the package to import. Defaults to None.
+            hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
             default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
             aspectize (dict, optional): Aspectize callables. Defaults to None.
             modes (int, optional): Any combination of Use.modes . Defaults to 0.
 
         Raises:
-            RuntimeWarning: May be raised if the auto-installation of the package fails for some reason.
+            RuntimeWarning: May be raised if the auto-installation of the pkg fails for some reason.
 
         Returns:
             Optional[ModuleType]: Module if successful, default as specified otherwise.
@@ -2068,21 +2068,21 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         modes: int = 0,
     ) -> ProxyModule:
         """
-        Import a package by name.
+        Import a pkg by name.
 
         https://github.com/amogorkon/justuse/wiki/Use-String
 
         Args:
-            name (str): The name of the package to import.
-            version (str or Version, optional): The version of the package to import. Defaults to None.
+            name (str): The name of the pkg to import.
+            version (str or Version, optional): The version of the pkg to import. Defaults to None.
             hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
-            hashes (str | [str]), optional): A single hash or list of hashes of the package to import. Defaults to None.
+            hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
             default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
             aspectize (dict, optional): Aspectize callables. Defaults to None.
             modes (int, optional): Any combination of Use.modes . Defaults to 0.
 
         Raises:
-            RuntimeWarning: May be raised if the auto-installation of the package fails for some reason.
+            RuntimeWarning: May be raised if the auto-installation of the pkg fails for some reason.
 
         Returns:
             Optional[ModuleType]: Module if successful, default as specified otherwise.
@@ -2114,7 +2114,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hash_algo,
         user_msg=Message,
     ):
-        log.debug(f"use-pkg: {name}, {package_name}, {module_name}, {version}, {hashes}")
+        log.debug(f"use-package: {name}, {package_name}, {module_name}, {version}, {hashes}")
         if isinstance(hashes, str):
             hashes = set([hashes])
         hashes = set(hashes) if hashes else set()

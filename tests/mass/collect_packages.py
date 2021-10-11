@@ -20,7 +20,7 @@ def parse_package(soup):
 
 
 def parse_packages(soup):
-    return [parse_package(s) for s in soup.select("td.package-title")]
+    return [parse_package(s) for s in soup.select("td.pkg-title")]
 
 
 def find_all_package_names():
@@ -121,7 +121,7 @@ def try_to_get_github_stars(pkg):
 
 def main():
 
-    ## Step 1 - get all conda package names and dump to file
+    ## Step 1 - get all conda pkg names and dump to file
     # with open("tmp.json", "r") as f:
     #     packages = json.load(f)
     packages = find_all_package_names()
