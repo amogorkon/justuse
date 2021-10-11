@@ -75,6 +75,7 @@ import importlib.util
 import inspect
 import linecache
 import os
+import platform
 import re
 import shlex
 import signal
@@ -92,16 +93,15 @@ from enum import Enum
 from functools import lru_cache as cache
 from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
 from importlib import metadata
-from importlib.util import find_spec
-from importlib.metadata import distribution, Distribution, PackageNotFoundError
 from importlib.abc import Finder, Loader
 from importlib.machinery import ModuleSpec, SourceFileLoader
+from importlib.metadata import Distribution, PackageNotFoundError, distribution
+from importlib.util import find_spec
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
 from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
-import platform
 from subprocess import PIPE, run
 from textwrap import dedent
 from types import FrameType, ModuleType
@@ -112,6 +112,7 @@ import furl
 import packaging
 import requests
 import toml
+from beartype import beartype
 from furl import furl as URL
 from icontract import ensure, invariant, require
 from packaging import tags
@@ -120,7 +121,7 @@ from pip._internal.utils import compatibility_tags
 
 cwd = Path("")
 os.chdir(Path(__file__).parent)
-from pypi_model import *
+from pypi_model import PyPI_Project, PyPI_Release, Version
 
 os.chdir(cwd)
 
@@ -153,7 +154,9 @@ config = {"version_warning": True, "debugging": False, "use_db": True}
 # initialize logging
 root.addHandler(StreamHandler(sys.stderr))
 root.setLevel(NOTSET)
-if "DEBUG" in os.environ or "pytest" in getattr(sys.modules.get("__init__", ""), "__file__", ""):
+if "DEBUG" in os.environ or "pytest" in getattr(
+    sys.modules.get("__init__", ""), "__file__", ""
+):
     root.setLevel(DEBUG)
     test_config["debugging"] = True
 else:
@@ -232,7 +235,9 @@ class _PipeTransformer(ast.NodeTransformer):
                     col_offset=node.right.col_offset,
                 )
             )
-        node.right.args.insert(0 if isinstance(node.op, ast.RShift) else len(node.right.args), node.left)
+        node.right.args.insert(
+            0 if isinstance(node.op, ast.RShift) else len(node.right.args), node.left
+        )
         return self.visit(node.right)
 
 
@@ -254,10 +259,15 @@ def pipes(func_or_class):
     tree.body[0].decorator_list = [
         d
         for d in tree.body[0].decorator_list
-        if isinstance(d, ast.Call) and d.func.id != "pipes" or isinstance(d, ast.Name) and d.id != "pipes"
+        if isinstance(d, ast.Call)
+        and d.func.id != "pipes"
+        or isinstance(d, ast.Name)
+        and d.id != "pipes"
     ]
     tree = _PipeTransformer().visit(tree)
-    code = compile(tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec")
+    code = compile(
+        tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec"
+    )
     exec(code, ctx)
     return ctx[tree.body[0].name]
 
@@ -290,7 +300,10 @@ def all_kwargs(func, other_locals):
     d = {
         name: other_locals[name]
         for name, param in inspect.signature(func).parameters.items()
-        if (param.kind is inspect.Parameter.KEYWORD_ONLY or param.kind is inspect.Parameter.VAR_KEYWORD)
+        if (
+            param.kind is inspect.Parameter.KEYWORD_ONLY
+            or param.kind is inspect.Parameter.VAR_KEYWORD
+        )
     }
     d.update(d["kwargs"])
     del d["kwargs"]
@@ -316,7 +329,9 @@ def methdispatch(func) -> Callable:
 # How it works is quite magical - the lambdas prevent the f-strings from being prematuraly evaluated, and are only evaluated once returned.
 # Fun fact: f-strings are firmly rooted in the AST.
 class Message(Enum):
-    not_reloadable = lambda name: f"Beware {name} also contains non-function objects, it may not be safe to reload!"
+    not_reloadable = (
+        lambda name: f"Beware {name} also contains non-function objects, it may not be safe to reload!"
+    )
     couldnt_connect_to_db = (
         lambda e: f"Could not connect to the registry database, please make sure it is accessible. ({e})"
     )
@@ -330,7 +345,9 @@ python -m pip install -U justuse
     cant_use = (
         lambda thing: f"Only pathlib.Path, yarl.URL and str are valid sources of things to import, but got {type(thing)}."
     )
-    web_error = lambda url, response: f"Could not load {url} from the interwebs, got a {response.status_code} error."
+    web_error = (
+        lambda url, response: f"Could not load {url} from the interwebs, got a {response.status_code} error."
+    )
     no_validation = (
         lambda url, hash_algo, this_hash: f"""Attempting to import from the interwebs with no validation whatsoever!
 To safely reproduce:
@@ -368,7 +385,9 @@ If you want to auto-install the latest version:
 use("{name}", version="{version!s}", hashes={set([hash_value])}, modes=use.auto_install)
 """
     )
-    cant_import = lambda name: f"No pkg installed named {name} and auto-installation not requested. Aborting."
+    cant_import = (
+        lambda name: f"No pkg installed named {name} and auto-installation not requested. Aborting."
+    )
     cant_import_no_version = (
         lambda package_name: f"Failed to auto-install '{package_name}' because no version was specified."
     )
@@ -459,7 +478,9 @@ def _filter_by_version(project: PyPI_Project, version: str) -> PyPI_Project:
     )
 
 
-def _filter_by_platform(project: PyPI_Project, tags: FrozenSet[PlatformTag], sys_version: Version) -> PyPI_Project:
+def _filter_by_platform(
+    project: PyPI_Project, tags: FrozenSet[PlatformTag], sys_version: Version
+) -> PyPI_Project:
     filtered = {
         ver: [
             rel.dict()
@@ -478,9 +499,13 @@ def _filter_by_platform(project: PyPI_Project, tags: FrozenSet[PlatformTag], sys
 
 
 @pipes
-def _filter_by_version_and_current_platform(project: PyPI_Project, version: str) -> PyPI_Project:
+def _filter_by_version_and_current_platform(
+    project: PyPI_Project, version: str
+) -> PyPI_Project:
     return (
-        project >> _filter_by_version(version) >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
+        project
+        >> _filter_by_version(version)
+        >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
     )
 
 
@@ -586,7 +611,11 @@ def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
     loader = None
     if not loader and isinstance(obj, ModuleType):
         loader = obj.__loader__
-    if not loader and isinstance(obj, ModuleType) and (spec := getattr(obj, "__spec__", None)):
+    if (
+        not loader
+        and isinstance(obj, ModuleType)
+        and (spec := getattr(obj, "__spec__", None))
+    ):
         loader = spec.loader
     if not loader and isinstance(obj, ModuleSpec):
         loader = obj.loader
@@ -599,7 +628,9 @@ def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
         parent_mod = importlib.import_module(".".join(segments[:-1]))
         parent_spec = parent_mod.__spec__
         parent_loader = (
-            parent_mod.__loader__ if not parent_spec or not getattr(parent_spec, "loader") else parent_spec.loader
+            parent_mod.__loader__
+            if not parent_spec or not getattr(parent_spec, "loader")
+            else parent_spec.loader
         )
         ctor_args = [
             (
@@ -621,7 +652,9 @@ def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
                 if ("path" in k or "file" in k or "loc" in k)
                 else k,
             )
-            for k in list(inspect.signature(type(parent_mod.__loader__).__init__).parameters)[1:]
+            for k in list(
+                inspect.signature(type(parent_mod.__loader__).__init__).parameters
+            )[1:]
         ]
         loader = type(parent_mod.__loader__)(*ctor_args)
     if not loader:
@@ -662,7 +695,9 @@ def _venv_root(package_name, version, home) -> Path:
     return home / "venv" / package_name / str(version)
 
 
-def _pebkac_no_version_hash(func=None, *, name: str, **kwargs) -> Union[ModuleType, Exception]:
+def _pebkac_no_version_hash(
+    func=None, *, name: str, **kwargs
+) -> Union[ModuleType, Exception]:
 
     if func:
         result = func(name=name, **kwargs)
@@ -681,7 +716,9 @@ def _pebkac_version_no_hash(
     try:
         hashes = {
             entry.digests.get(hash_algo.name)
-            for entry in (_get_filtered_data(_get_package_data(package_name), version=version)).releases[version]
+            for entry in (
+                _get_filtered_data(_get_package_data(package_name), version=version)
+            ).releases[version]
         }
         if not hashes:
             rw = RuntimeWarning(Message.pebkac_unsupported(package_name))
@@ -698,7 +735,9 @@ def _pebkac_version_no_hash(
 @pipes
 def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Exception:
     # let's try to make an educated guess and give a useful suggestion
-    data = _get_package_data(package_name) >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
+    data = _get_package_data(package_name) >> _filter_by_platform(
+        tags=get_supported(), sys_version=_sys_version()
+    )
     flat = functools.reduce(list.__add__, data.releases.values(), [])
     priority = sorted(flat, key=lambda r: (not r.is_sdist, r.version), reverse=True)
 
@@ -854,7 +893,11 @@ ORDER BY artifacts.id DESC
             traceback.print_exc(exc)
         module_path = _ensure_path(query["module_path"])
         os.chdir(installation_path)
-        import_name = str(module_path.relative_to(installation_path)).replace("\\", "/").replace("/__init__.py", "")
+        import_name = (
+            str(module_path.relative_to(installation_path))
+            .replace("\\", "/")
+            .replace("/__init__.py", "")
+        )
         return (
             mod := _load_venv_entry(
                 import_name,
@@ -908,7 +951,9 @@ def _parse_filename(filename) -> dict:
 
     python_version = None
     if python_tag:
-        python_version = python_tag.replace("cp", "")[0] + "." + python_tag.replace("cp", "")[1:]
+        python_version = (
+            python_tag.replace("cp", "")[0] + "." + python_tag.replace("cp", "")[1:]
+        )
     return _delete_none(
         {
             "distribution": distribution,
@@ -924,7 +969,11 @@ def _parse_filename(filename) -> dict:
 
 
 def _process(*argv, env={}):
-    _realenv = {k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)}
+    _realenv = {
+        k: v
+        for k, v in chain(os.environ.items(), env.items())
+        if isinstance(k, str) and isinstance(v, str)
+    }
     o = run(
         **(
             setup := dict(
@@ -1016,7 +1065,10 @@ def _delete_none(a_dict: Dict[str, object]) -> Dict[str, object]:
 
 
 def _pure_python_package(artifact_path, meta):
-    not_pure_python = any(any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES) for n in meta["names"])
+    not_pure_python = any(
+        any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES)
+        for n in meta["names"]
+    )
 
     if ".tar" in str(artifact_path):
         return False
@@ -1025,7 +1077,9 @@ def _pure_python_package(artifact_path, meta):
     return True
 
 
-def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=None, force_install=False):
+def _find_or_install(
+    name, version=None, artifact_path=None, url=None, out_info=None, force_install=False
+):
     log.debug(
         "_find_or_install(name=%s, version=%s, artifact_path=%s, url=%s)",
         name,
@@ -1098,7 +1152,9 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
             "install",
             "--pre",
             "--root",
-            PureWindowsPath(venv_root).drive if isinstance(venv_root, (WindowsPath, PureWindowsPath)) else "/",
+            PureWindowsPath(venv_root).drive
+            if isinstance(venv_root, (WindowsPath, PureWindowsPath))
+            else "/",
             "--no-user",
             "--prefix",
             str(venv_root),
@@ -1238,12 +1294,16 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
 
 
 @pipes
-def _is_platform_compatible(info: PyPI_Release, platform_tags: FrozenSet[PlatformTag], include_sdist=False) -> bool:
+def _is_platform_compatible(
+    info: PyPI_Release, platform_tags: FrozenSet[PlatformTag], include_sdist=False
+) -> bool:
 
     if "py2" in info.justuse.python_tag and "py3" not in info.justuse.python_tag:
         return False
 
-    if not include_sdist and (".tar" in info.justuse.ext or info.justuse.python_tag in ("cpsource", "sdist")):
+    if not include_sdist and (
+        ".tar" in info.justuse.ext or info.justuse.python_tag in ("cpsource", "sdist")
+    ):
         return False
 
     if "win" in info.packagetype and sys.platform != "win32":
@@ -1257,10 +1317,18 @@ def _is_platform_compatible(info: PyPI_Release, platform_tags: FrozenSet[Platfor
 
     our_python_tag = tags.interpreter_name() + tags.interpreter_version()
     supported_tags = set(
-        [our_python_tag, "py3", "cp3", f"cp{tags.interpreter_version()}", f"py{tags.interpreter_version()}"]
+        [
+            our_python_tag,
+            "py3",
+            "cp3",
+            f"cp{tags.interpreter_version()}",
+            f"py{tags.interpreter_version()}",
+        ]
     )
 
-    given_platform_tags = info.justuse.platform_tag.split(".") << map(PlatformTag) >> frozenset
+    given_platform_tags = (
+        info.justuse.platform_tag.split(".") << map(PlatformTag) >> frozenset
+    )
 
     if info.is_sdist and info.requires_python is not None:
         given_python_tag = {
@@ -1274,11 +1342,14 @@ def _is_platform_compatible(info: PyPI_Release, platform_tags: FrozenSet[Platfor
     # print(supported_tags, given_python_tag)
 
     return any(supported_tags.intersection(given_python_tag)) and (
-        (info.is_sdist and include_sdist) or any(given_platform_tags.intersection(platform_tags))
+        (info.is_sdist and include_sdist)
+        or any(given_platform_tags.intersection(platform_tags))
     )
 
 
-def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist=None) -> bool:
+def _is_compatible(
+    info: PyPI_Release, sys_version, platform_tags, include_sdist=None
+) -> bool:
     """Return true if the artifact described by 'info'
     is compatible with the current or specified system."""
     specifier = info.requires_python
@@ -1308,7 +1379,9 @@ def _apply_aspect(
     return thing
 
 
-def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> Optional[Version]:
+def _get_version(
+    name: Optional[str] = None, package_name=None, /, mod=None
+) -> Optional[Version]:
     version: Optional[Union[Callable[...], Version, Version, str]] = None
     for lookup_name in (name, package_name):
         if not lookup_name:
@@ -1354,7 +1427,9 @@ def _build_mod(
     getattr(linecache, "cache")[module_path] = (
         len(code),  # size of source code
         None,  # last modified time; None means there is no physical file
-        [*map(lambda ln: ln + "\x0a", code_text.splitlines())],  # a list of lines, including trailing newline on each
+        [
+            *map(lambda ln: ln + "\x0a", code_text.splitlines())
+        ],  # a list of lines, including trailing newline on each
         mod.__file__,  # file name, e.g. "<mymodule>" or the actual path to the file
     )
     # not catching this causes the most irritating bugs ever!
@@ -1454,7 +1529,9 @@ class ModuleReloader:
     def start_threaded(self):
         self._stopped = False
         atexit.register(self.stop)
-        self._thread = threading.Thread(target=self.run_threaded, name=f"reloader__{self.name}")
+        self._thread = threading.Thread(
+            target=self.run_threaded, name=f"reloader__{self.name}"
+        )
         self._thread.start()
 
     async def run_async(self):
@@ -1641,7 +1718,9 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         self.registry.connection.close()
         self.registry = None
         number_of_backups = len(list((self.home / "registry.db").glob("*.bak")))
-        (self.home / "registry.db").rename(self.home / f"registry.db.{number_of_backups + 1}.bak")
+        (self.home / "registry.db").rename(
+            self.home / f"registry.db.{number_of_backups + 1}.bak"
+        )
         (self.home / "registry.db").touch(mode=0o644)
         self.registry = self._set_up_registry()
         self.cleanup()
@@ -1682,7 +1761,9 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
             "DELETE FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?)",
             (name, version),
         )
-        self.registry.execute("DELETE FROM distributions WHERE name=? AND version=?", (name, version))
+        self.registry.execute(
+            "DELETE FROM distributions WHERE name=? AND version=?", (name, version)
+        )
         self.registry.connection.commit()
 
     def cleanup(self):
@@ -1702,7 +1783,10 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         for name, version, artifact_path, installation_path in self.registry.execute(
             "SELECT name, version, artifact_path, installation_path FROM distributions JOIN artifacts on distributions.id = distribution_id"
         ).fetchall():
-            if not (_ensure_path(artifact_path).exists() and _ensure_path(installation_path).exists()):
+            if not (
+                _ensure_path(artifact_path).exists()
+                and _ensure_path(installation_path).exists()
+            ):
                 self.del_entry(name, version)
         self.registry.connection.commit()
 
@@ -1776,7 +1860,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if hash_value:
             if this_hash != hash_value:
                 return _fail_or_default(
-                    UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!"),
+                    UnexpectedHash(
+                        f"{this_hash} does not match the expected hash {hash_value} - aborting!"
+                    ),
                     default,
                 )
         else:
@@ -1863,7 +1949,11 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 jupyter = "ipykernel" in sys.modules
                 # we're in jupyter, we use the CWD as set in the notebook
                 if not jupyter and hasattr(main_mod, "__file__"):
-                    source_dir = _ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename).resolve().parent
+                    source_dir = (
+                        _ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename)
+                        .resolve()
+                        .parent
+                    )
             if source_dir is None:
                 if main_mod.__loader__:
                     source_dir = _ensure_path(main_mod.__loader__.path).parent
@@ -1873,7 +1963,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 source_dir = Path.cwd()
             if not source_dir.exists():
                 return _fail_or_default(
-                    NotImplementedError("Can't determine a relative path from a virtual file."),
+                    NotImplementedError(
+                        "Can't determine a relative path from a virtual file."
+                    ),
                     default,
                 )
             path = source_dir.joinpath(path).resolve()
@@ -2167,7 +2259,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         if isinstance((mod := result), ModuleType):
             for (check, pattern), decorator in aspectize.items():
-                _apply_aspect(mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders)
+                _apply_aspect(
+                    mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders
+                )
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
             return ProxyModule(mod)
@@ -2176,5 +2270,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
 use = Use()
 use.__dict__.update(globals())
+
+_apply_aspect(use, isfunction, "", beartype)
+
 if not test_version:
     sys.modules["use"] = use
