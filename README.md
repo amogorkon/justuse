@@ -23,16 +23,15 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [x] decorate all specified callables (functions, methods, classes, ..) on import via pattern matching, aspect-orientation made easy
 - [x] return a given default if an exception happened during an import, simplifying optional dependencies
 - [x] safely hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
-- [x] safely auto-install version-tagged pure python packages from PyPI
+- [x] safely auto-install version-tagged pure python packages from PyPI (packages with C-extensions like numpy don't work yet)
 - [x] have multiple versions of the same package installed and loaded in the same program without conflicts
 - [x] auto-install packages with C-extensions and other precompiled stuff
-- [x] no-hassle installation of almost all conda packages
-- [ ] try to pull verified packages from a P2P network before pulling from PyPI directly
+- [ ] try to pull packages from a P2P network before pulling from PyPI or conda directly
 - [ ] provide a visual representation of the internal dependency graph
 - [ ] module-level variable guards aka "module-properties"
 - [ ] isolation of packages via subprocess/subinterpreter for clean un-/reloading
 - [ ] documentation
-- [ ] test everything!
+- [ ] testing everything!
 
 ## The Story
 Over the years, many times I've come across various situations where Python's import statement just didn't work the way I needed.
@@ -56,7 +55,7 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
  
  `use("pprint").pprint(some_dict)`  # corresponds to a one-off `from pprint import pprint; pprint(some_dict)` without importing it into the global namespace
  
- `tools = use(use.Path("/media/sf_Dropbox/code/tools.py"), modes=use.reloading)`  # impossible to realize with classical imports
+ `tools = use(use.Path("/media/sf_Dropbox/code/tools.py"), reloading=True)`  # impossible to realize with classical imports
  
  `test = use("functions", initial_globals={"foo":34, "bar":49})`  # also impossible with the classical import statement, although importlib can help
  

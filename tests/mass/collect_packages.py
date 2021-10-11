@@ -20,7 +20,7 @@ def parse_package(soup):
 
 
 def parse_packages(soup):
-    return [parse_package(s) for s in soup.select("td.package-title")]
+    return [parse_package(s) for s in soup.select("td.pkg-title")]
 
 
 def find_all_package_names():
@@ -42,8 +42,8 @@ def optional_text(soup, default=""):
     return soup.text
 
 
-def find_meta(package: Dict[str, str]):
-    url = f"https://pypi.org/pypi/{package['name']}/json"
+def find_meta(pkg: Dict[str, str]):
+    url = f"https://pypi.org/pypi/{pkg['name']}/json"
     r = requests.get(url)
     if r.status_code != 200:
         return
@@ -53,7 +53,7 @@ def find_meta(package: Dict[str, str]):
         link_options += list(project_urls.values())
     owner, repo, url = get_github(link_options)
     stars = get_stars(owner, repo)
-    base = {"name": package["name"], "versions": [version for version in meta["releases"].keys()]}
+    base = {"name": pkg["name"], "versions": [version for version in meta["releases"].keys()]}
     if stars < 0:
         return base
     return {**base, **{"stars": stars, "repo": url}}
@@ -92,7 +92,9 @@ def get_stars(owner: str, repo: str):
         }}
     }}"""
     r = requests.post(
-        "https://api.github.com/graphql", json={"query": query}, headers={"Authorization": f"token {GITHUB_TOKEN}"},
+        "https://api.github.com/graphql",
+        json={"query": query},
+        headers={"Authorization": f"token {GITHUB_TOKEN}"},
     )
     if r.status_code == 200:
         data = r.json()
@@ -110,8 +112,8 @@ def get_stars(owner: str, repo: str):
     raise Exception(r.text)
 
 
-def try_to_get_github_stars(package):
-    owner, repo = get_github([package["urls"]["dev"], package["urls"]["home"]])
+def try_to_get_github_stars(pkg):
+    owner, repo = get_github([pkg["urls"]["dev"], pkg["urls"]["home"]])
     if owner is None:
         return -1
     return get_stars(owner, repo)
@@ -119,17 +121,17 @@ def try_to_get_github_stars(package):
 
 def main():
 
-    ## Step 1 - get all conda package names and dump to file
+    ## Step 1 - get all conda pkg names and dump to file
     # with open("tmp.json", "r") as f:
     #     packages = json.load(f)
     packages = find_all_package_names()
 
     ## Step 2 - go to pypi and find metadata (try to get stars from github)
     pypi_packages = Packages()
-    for i, package in enumerate(packages):
-        meta = find_meta(package)
+    for i, pkg in enumerate(packages):
+        meta = find_meta(pkg)
         if meta is None:
-            print("Not on Pypi", package)
+            print("Not on Pypi", pkg)
             continue
         pypi_packages.append(PackageToTest(**meta))
         print(i)

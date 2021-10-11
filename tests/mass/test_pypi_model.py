@@ -10,8 +10,8 @@ with open("pypi.json", "r") as f:
     packages = json.load(f)
 
 
-for i, package in enumerate(packages["data"]):
-    r = requests.get(f"https://pypi.org/pypi/{package['name']}/json")
+for i, pkg in enumerate(packages["data"]):
+    r = requests.get(f"https://pypi.org/pypi/{pkg['name']}/json")
     try:
         project = PyPI_Project(**r.json())
         filtered = project.filter_by_version_and_current_platform(project.info.version)
@@ -23,8 +23,12 @@ for i, package in enumerate(packages["data"]):
         exc_type, exc_value, _ = sys.exc_info()
         tb = traceback.format_exc()
         fail = {
-            "name": package["name"],
-            "err": {"type": str(exc_type), "value": str(exc_value), "traceback": tb.split("\n"),},
+            "name": pkg["name"],
+            "err": {
+                "type": str(exc_type),
+                "value": str(exc_value),
+                "traceback": tb.split("\n"),
+            },
         }
 
         print(json.dumps(fail, indent=2, sort_keys=True))
