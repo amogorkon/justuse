@@ -2,3 +2,40 @@
 [report]
 ignore_errors = True
 
+[run]
+omit =
+    # omit anything in a .local directory anywhere
+    */.local/*
+    # omit everything in /usr
+    /usr/*
+    # omit this single file
+    setup.py
+    testpkg.py
+    tests/.tests/.test1.py
+    tests/.tests/.test2.py
+    tests/.tests/.test3.py
+    tests/.tests/.test5.py
+    tests/.tests/bar.py
+    tests/.tests/foo.py
+    tests/.tests/modA.py
+    tests/.tests/modA_test.py
+    tests/.tests/modB.py
+    tests/.tests/modD.py
+    tests/.tests/modE.py
+    tests/.tests/sys.py
+    tests/.tests/tests_subdir/modC.py
+    tests/__init__.py
+    tests/foo.py
+    tests/mass/collect_packages.py
+    tests/mass/justtest.py
+    tests/mass/pypi_model.py
+    tests/mass/test_pypi_model.py
+    tests/mass/test_single.py
+    tests/mass/tmp.py
+    tests/mass/use.py
+    tests/simple_funcs.py
+    tests/tdd_test.py
+    tests/test.py
+    tests/test_beast.py
+    tests/unit_test.py
+
