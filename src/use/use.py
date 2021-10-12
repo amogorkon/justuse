@@ -459,7 +459,7 @@ def get_supported() -> frozenset[PlatformTag]:
         items.append(PlatformTag(platform=str(tag)))
 
     tags = frozenset(items)
-    log.debug("leave get_supported() -> %s", repr(tags))
+    # log.debug("leave get_supported() -> %s", repr(tags))
     return tags
 
 
@@ -480,14 +480,13 @@ def flatten(nested_list: list[list[Any]]) -> list[Any]:
     return reduce(type([]).__add__, nested_list, [])
 
 
-def find_best_release(package_name: str) -> Iterable[tuple[Version, PyPI_Release]]:
+def find_best_release(package_name: str, proj: PyPI_Project) -> Iterable[tuple[Version, PyPI_Release]]:
     cdefs = parse_config_h(io.StringIO(Path(get_config_h_filename()).read_text()))
     cfg = {**cdefs, **gcvs()}
 
     py_version_nodot, py_version_short, py_version = tuple(
         map(cfg.get, ("py_version_nodot", "py_version_short", "py_version"))
     )
-    proj = use._get_package_data(package_name)
 
     rel_pairs = flatten([(r, rel) for rel in proj.releases[r]] for r in proj.releases)
 
@@ -526,7 +525,7 @@ def find_best_release(package_name: str) -> Iterable[tuple[Version, PyPI_Release
         cfg.get("Py_DEBUG", 0) and "d" or "",
         cfg.get("Py_TRACE_REFS", 0) and "d" or "",
         cfg.get("SIZEOF_WCHAR_T", 4) == 4 and "u" or "",
-        cfg.get("WITH_PYMALLOC") and "m" or "",
+        cfg.get("WITH_PYMALLOC") and "m" or "m",
         " ",
     }
     all_soflags = tuple(set(map(lambda i: i.replace(" ", ""), map("".join, permutations(soflags, 2)))))
@@ -535,17 +534,23 @@ def find_best_release(package_name: str) -> Iterable[tuple[Version, PyPI_Release
     )
 
     sys_tags = tuple(packaging.tags.sys_tags())
-
-    r_with_tags = [
-        (
-            interp_tags := r.filename.split("-")[3].split("."),
-            platform_tags := r.filename.replace(".tar.", ".t").rpartition(".")[0].split("-")[-1].split("."),
-            r,
-        )
-        for r in rels
-        if (ext := r.filename.replace(".tar.", ".t").split(".")[-1]) in ("whl", "egg")
-    ]
-
+    r_with_tags = []
+    
+    for r in rels:
+        afn = r.filename.replace(".tar.", ".t")
+        stem = afn.rpartition(".")[0]
+        rparts = stem.split("-")
+        if (ext := afn.split(".")[-1]) not in ("whl", "egg", "tgz", "tbz2", "tlzma", "zip"):
+            continue
+        
+        if len(rparts) > 3:
+            interp_tags = rparts[3].split(".")
+        else:
+            interp_tags = rparts[-2].split(".")
+        platform_tags = rparts[-1].split(".")
+            
+        r_with_tags.append(( interp_tags, platform_tags, r, ))
+    print(r_with_tags)
     ordered_rels = sorted(
         [
             (
@@ -557,7 +562,6 @@ def find_best_release(package_name: str) -> Iterable[tuple[Version, PyPI_Release
             for itags, ptags, r in r_with_tags
         ],
         key=lambda i: i[0:2],
-        reverse=True,
     )
 
     if not ordered_rels:
@@ -575,9 +579,9 @@ def _filter_by_platform(project: PyPI_Project, tags: frozenset[PlatformTag], sys
 
     reldict = {}
     count = 0
-    for (sc0, sc1), (ver, rel, _) in find_best_release(project.info.name):
+    for (sc0, sc1), (ver, rel, _) in find_best_release(project.info.name, project):
         reldict[str(ver)] = [rel.dict()]
-        log.info("Adding %s==%s with name %s", project.info.name, ver, rel.filename)
+        # log.info("Adding %s==%s with name %s", project.info.name, ver, rel.filename)
         count += 1
     # fmt: off
     if count == 0:
@@ -960,20 +964,34 @@ def _auto_install(
                     return mod
                 except BaseException as _berr:
                     exc = exc or _berr
+                    raise PackageNotFoundError(name) from exc
         except PackageNotFoundError:
-            traceback.print_exc(exc)
-        if exc:
-            traceback.print_exc(exc)
+            pass
+        if True:
+            query = _find_or_install(package_name, version, force_install=True)
+            artifact_path = _ensure_path(query["artifact_path"])
+            module_path = _ensure_path(query["module_path"])
+            assert "installation_path" in query
+            assert query["installation_path"]
+            installation_path = _ensure_path(query["installation_path"])
+    
         module_path = _ensure_path(query["module_path"])
         os.chdir(installation_path)
-        import_name = str(module_path.relative_to(installation_path)).replace("\\", "/").replace("/__init__.py", "")
-        return (
-            mod := _load_venv_entry(
-                import_name,
-                module_path=module_path,
-                installation_path=installation_path,
-            )
-        )
+        import_name = str(module_path.relative_to(installation_path)).replace("\\", "/").replace("/__init__.py", "").replace("-", "_")
+        try:
+              return (
+                  mod := _load_venv_entry(
+                      import_name,
+                      module_path=module_path,
+                      installation_path=installation_path,
+                  )
+              )
+        except:
+            try:
+                return (mod:=importlib.import_module(import_name))
+            except:
+                return (mod:= importlib.import_module(".".join(import_name.split(".")[:-1])))
+            
     finally:
         os.chdir(orig_cwd)
         if "fault_inject" in config:
@@ -1661,7 +1679,7 @@ class Use(ModuleType):
         if config["debugging"]:
             root.setLevel(DEBUG)
 
-        if config["version_warning"]:
+        if config["version_warning"] and "TEST" not in os.environ:
             try:
                 response = requests.get("https://pypi.org/pypi/justuse/json")
                 data = response.json()
