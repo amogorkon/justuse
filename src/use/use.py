@@ -458,9 +458,8 @@ def get_supported() -> frozenset[PlatformTag]:
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
 
-    tags = frozenset(items)
     # log.debug("leave get_supported() -> %s", repr(tags))
-    return tags
+    return frozenset(items)
 
 
 def _filter_by_version(project: PyPI_Project, version: str) -> PyPI_Project:
@@ -967,14 +966,13 @@ def _auto_install(
                     raise PackageNotFoundError(name) from exc
         except PackageNotFoundError:
             pass
-        if True:
-            query = _find_or_install(package_name, version, force_install=True)
-            artifact_path = _ensure_path(query["artifact_path"])
-            module_path = _ensure_path(query["module_path"])
-            assert "installation_path" in query
-            assert query["installation_path"]
-            installation_path = _ensure_path(query["installation_path"])
-    
+        query = _find_or_install(package_name, version, force_install=True)
+        artifact_path = _ensure_path(query["artifact_path"])
+        module_path = _ensure_path(query["module_path"])
+        assert "installation_path" in query
+        assert query["installation_path"]
+        installation_path = _ensure_path(query["installation_path"])
+
         module_path = _ensure_path(query["module_path"])
         os.chdir(installation_path)
         import_name = str(module_path.relative_to(installation_path)).replace("\\", "/").replace("/__init__.py", "").replace("-", "_")
@@ -991,7 +989,7 @@ def _auto_install(
                 return (mod:=importlib.import_module(import_name))
             except:
                 return (mod:= importlib.import_module(".".join(import_name.split(".")[:-1])))
-            
+
     finally:
         os.chdir(orig_cwd)
         if "fault_inject" in config:
