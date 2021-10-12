@@ -78,17 +78,12 @@ def test_is_platform_compatible_win(reuse):
         "yanked_reason": None,
         "version": "1.19.5",
     }
-    assert reuse._is_platform_compatible(
-        PyPI_Release(**info), platform_tags, include_sdist=False
-    )
+    assert reuse._is_platform_compatible(PyPI_Release(**info), platform_tags, include_sdist=False)
 
 
 def test_pure_python_package(reuse):
     # https://pypi.org/project/example-pypi-package/
-    file = (
-        reuse.Path.home()
-        / ".justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl"
-    )
+    file = reuse.Path.home() / ".justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl"
     venv_dir = reuse.Path.home() / ".justuse-python/venv/example-pypi-package/0.1.0"
     file.unlink(missing_ok=True)
     if venv_dir.exists():
@@ -103,9 +98,7 @@ def test_pure_python_package(reuse):
         },
         modes=reuse.auto_install,
     )
-    assert (
-        venv_dir.exists() == False
-    ), "Should not have created venv for example-pypi-package"
+    assert venv_dir.exists() == False, "Should not have created venv for example-pypi-package"
 
     assert str(test.Number(2)) == "2"
     if file.exists():
@@ -132,8 +125,7 @@ def installed_or_skip(reuse, name, version=None):
         pytest.skip(f"{name} partially installed: {spec=}, {pnfe}")
 
     if not (
-        (ver := dist.metadata["version"])
-        and (not version or reuse.Version(version)) == (not ver or reuse.Version(ver))
+        (ver := dist.metadata["version"]) and (not version or reuse.Version(version)) == (not ver or reuse.Version(ver))
     ):
         pytest.skip(f"found '{name}' v{ver}, but require v{version}")
         return False
