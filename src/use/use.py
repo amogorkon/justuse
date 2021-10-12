@@ -593,33 +593,6 @@ def _filter_by_platform(project: PyPI_Project, tags: frozenset[PlatformTag], sys
       "releases": reldict
     }})
 
-    # fmt: on
-    """
-    ABI_tags = "cp<SO_ABI>:
-      cp37
-      cp37m
-      cp37dm
-      cp37
-    abi3
-    none
-    
-    filtered = {
-        ver: [
-            rel.dict()
-            for rel in releases
-            if _is_compatible(
-                rel,
-                sys_version=sys_version,
-                platform_tags=tags,
-                include_sdist=True,
-            )
-        ]
-        for ver, releases in project.releases.items()
-    }
-
-    return PyPI_Project(**{**project.dict(), **{"releases": filtered}})
-    """
-
 
 @pipes
 def _filter_by_version_and_current_platform(project: PyPI_Project, version: str) -> PyPI_Project:
@@ -952,11 +925,9 @@ def _auto_install(
     try:
         importer = zipimport.zipimporter(artifact_path)
         return importer.load_module(query["import_name"])
-    except (ImportError, zipimport.ZipImportError, BaseException) as zerr:
+    except BaseException as zerr:
         if isinstance(zerr.__context__, ModuleNotFoundError):
             missing_modules = zerr.__context__
-    except KeyError:
-        log.warning("%s", traceback.format_exc())
     orig_cwd = Path.cwd()
     mod = None
     if "installation_path" not in query or missing_modules:
