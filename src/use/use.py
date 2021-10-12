@@ -105,7 +105,7 @@ from pprint import pformat
 from subprocess import PIPE, run
 from textwrap import dedent
 from types import FrameType, ModuleType
-from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 from warnings import warn
 
 import furl
@@ -121,8 +121,9 @@ from pip._internal.utils import compatibility_tags
 
 cwd = Path("")
 os.chdir(Path(__file__).parent)
+import pypi_model
+use = sys.modules.get(__name__)
 from pypi_model import PyPI_Project, PyPI_Release, Version
-
 os.chdir(cwd)
 
 #% Constants and Initialization
@@ -137,7 +138,7 @@ __spec__ = ModuleSpec("use.use", loader=SourceFileLoader(fullname="use", path=__
 __spec__.submodule_search_locations = [Path(__file__).parent]
 __version__ = test_version or "0.5.0"
 
-_reloaders: Dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
+_reloaders: dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
 _aspects = {}
 _using = {}
 
@@ -195,20 +196,17 @@ class AutoInstallationError(ImportError):
 
 
 # sometimes all you need is a sledge hammer..
-def signal_handler(sig: int, frame: Optional[FrameType] = None) -> None:
-    try:
-        for reloader in _reloaders.values():
-            reloader.stop()
-    finally:
-        # Invoke the default action, usually KeyboardInterrupt
-        # signal.raise_signal(sig)
-        pass
-
-
+_orig_locks = threading._shutdown_locks
+def atexit_hook():
+    global _reloaders
+    for lock in threading._shutdown_locks: lock.unlock()
+    for reloader in _reloaders.values():
+        reloader.stop()
+    for lock in threading._shutdown_locks:
+      lock.unlock()
+from atexit import register
+atexit.register(atexit_hook)
 #%% Pipes
-
-# Register our signal handler
-signal.signal(signal.SIGINT, signal_handler)
 
 # Since we have quite a bit of functional code that black would turn into a sort of arrow antipattern with lots of ((())),
 # we use @pipes to basically enable polish notation which allows us to avoid most parentheses.
@@ -442,7 +440,7 @@ def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
 
 
 @cache
-def get_supported() -> FrozenSet[PlatformTag]:
+def get_supported() -> frozenset[PlatformTag]:
     log.debug("enter get_supported()")
     """
     Results of this function are cached. They are expensive to
@@ -453,7 +451,7 @@ def get_supported() -> FrozenSet[PlatformTag]:
     Returns a set containing all platform _platform_tags
     supported on the current system.
     """
-    items: List[PlatformTag] = []
+    items: list[PlatformTag] = []
 
     for tag in compatibility_tags.get_supported():
         items.append(PlatformTag(platform=tag.platform))
@@ -479,7 +477,7 @@ def _filter_by_version(project: PyPI_Project, version: str) -> PyPI_Project:
 
 
 def _filter_by_platform(
-    project: PyPI_Project, tags: FrozenSet[PlatformTag], sys_version: Version
+    project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version
 ) -> PyPI_Project:
     filtered = {
         ver: [
@@ -800,7 +798,7 @@ def _extracted_from__import_public_no_install_18(name, spec, aspectize):
     return mod
 
 
-def _parse_name(name) -> Tuple[str, str]:
+def _parse_name(name) -> tuple[str, str]:
     match = re.match(r"(?P<package_name>[^/.]+)/?(?P<rest>[a-zA-Z0-9._]+)?$", name)
     assert match, f"Invalid name spec: {name!r}"
     names = match.groupdict()
@@ -811,10 +809,11 @@ def _auto_install(
     func=None,
     *,
     name,
-    hash_algo,
     version,
     package_name,
     rest,
+    hash_algo=Hash.sha256.name,
+    self=None,
     **kwargs,
 ) -> Union[ModuleType, BaseException]:
     package_name, rest = _parse_name(name)
@@ -824,21 +823,18 @@ def _auto_install(
         if isinstance(result, ModuleType):
             return result
 
-    query = (
-        kwargs["self"]
-        .execute_wrapped(
+    query = self.execute_wrapped(
             f"""
-SELECT
-    artifacts.id, import_relpath,
-    artifact_path, installation_path, module_path
-FROM distributions
-JOIN artifacts ON artifacts.id = distributions.id
-WHERE name='{package_name}' AND version='str(version)'
-ORDER BY artifacts.id DESC
+        SELECT
+            artifacts.id, import_relpath,
+            artifact_path, installation_path, module_path
+        FROM distributions
+        JOIN artifacts ON artifacts.id = distributions.id
+        WHERE name='{package_name}' AND version='str(version)'
+        ORDER BY artifacts.id DESC
         """
-        )
-        .fetchone()
-    )
+    ).fetchone()
+    
     if not query or not _ensure_path(query["artifact_path"]).exists():
         query = _find_or_install(package_name, version)
     artifact_path = _ensure_path(query["artifact_path"])
@@ -849,12 +845,12 @@ ORDER BY artifacts.id DESC
     try:
         importer = zipimport.zipimporter(artifact_path)
         return importer.load_module(query["import_name"])
-    except (ImportError, zipimport.ZipImportError) as zerr:
+    except (ImportError, zipimport.ZipImportError,
+            BaseException) as zerr:
         if isinstance(zerr.__context__, ModuleNotFoundError):
             missing_modules = zerr.__context__
     except KeyError:
-        if "DEBUG" in os.environ or config["debugging"]:
-            log.debug(traceback.format_exc())
+        log.warning("%s", traceback.format_exc())
     orig_cwd = Path.cwd()
     mod = None
     if "installation_path" not in query or missing_modules:
@@ -867,7 +863,7 @@ ORDER BY artifacts.id DESC
     installation_path = _ensure_path(query["installation_path"])
     try:
         exc = None
-        sys.path.insert(0, kwargs["self"].home / "venv" / package_name / str(version))
+        sys.path.insert(0, self.home / "venv" / package_name / str(version))
         try:
             dist = Distribution.from_name(package_name)
             dist_info = dist._path
@@ -1037,7 +1033,7 @@ def _find_exe(venv_root: Path) -> Path:
     return Path(sys.executable)
 
 
-def _get_venv_env(venv_root: Path) -> Dict[str, str]:
+def _get_venv_env(venv_root: Path) -> dict[str, str]:
     pathvar = os.environ.get("PATH")
     python_exe = Path(sys.executable)
     if not venv_root.exists():
@@ -1057,7 +1053,7 @@ def _download_artifact(name, version, filename, url) -> Path:
     return artifact_path
 
 
-def _delete_none(a_dict: Dict[str, object]) -> Dict[str, object]:
+def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
     for k, v in tuple(a_dict.items()):
         if v is None or v == "":
             del a_dict[k]
@@ -1142,6 +1138,9 @@ def _find_or_install(
     module_paths = venv_root.rglob(f"**/{relp}")
     if force_install or (not python_exe.exists() or not any(module_paths)):
         log.info("calling pip to install install_item=%s", install_item)
+        
+        
+        
         # If we get here, the venv/pip setup is required.
         output = _process(
             python_exe,
@@ -1155,7 +1154,6 @@ def _find_or_install(
             PureWindowsPath(venv_root).drive
             if isinstance(venv_root, (WindowsPath, PureWindowsPath))
             else "/",
-            "--no-user",
             "--prefix",
             str(venv_root),
             "--progress-bar",
@@ -1164,15 +1162,15 @@ def _find_or_install(
             "--exists-action",
             "i",
             "--ignore-installed",
-            "--no-build-isolation",
             "--no-warn-script-location",
             "--force-reinstall",
             "--no-warn-conflicts",
             install_item,
         )
         sys.stderr.write("\n\n".join((output.stderr, output.stdout)))
-
+    
     module_paths = [*venv_root.rglob(f"**/{relp}")]
+    out_info.update(**meta)
     while len(relp) > 2 and not module_paths:
         log.info("relp = %s", relp)
         module_paths = [*venv_root.rglob(f"**/{relp}")]
@@ -1180,7 +1178,7 @@ def _find_or_install(
             break
         relp = "/".join(Path(relp).parts[1:])
         log.info(relp)
-
+        out_info.update({"import_relpath": relp})
     assert module_paths
     for module_path in module_paths:
         installation_path = module_path
@@ -1295,7 +1293,7 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
 
 @pipes
 def _is_platform_compatible(
-    info: PyPI_Release, platform_tags: FrozenSet[PlatformTag], include_sdist=False
+    info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
 ) -> bool:
 
     if "py2" in info.justuse.python_tag and "py3" not in info.justuse.python_tag:
@@ -1409,7 +1407,7 @@ def _build_mod(
     *,
     name,
     code,
-    initial_globals: Optional[Dict[str, Any]],
+    initial_globals: Optional[dict[str, Any]],
     module_path,
     aspectize,
     aspectize_dunders=False,
@@ -1582,7 +1580,6 @@ class ModuleReloader:
 
     def __del__(self):
         self.stop()
-        atexit.unregister(self.stop)
 
 
 class Info(dict):
@@ -1843,7 +1840,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         *,
         hash_algo=Hash.sha256,
         hash_value=None,
-        initial_globals: Optional[Dict[Any, Any]] = None,
+        initial_globals: Optional[dict[Any, Any]] = None,
         as_import: str = None,
         default=mode.fastfail,
         aspectize=None,
@@ -1908,7 +1905,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         Args:
             path ([type]): must be a pathlib.Path
-            initial_globals ([type], optional): Dict that should be globally available to the module before executing it. Defaults to None.
+            initial_globals ([type], optional): dict that should be globally available to the module before executing it. Defaults to None.
             default ([type], optional): Return instead if an exception is encountered.
             aspectize ([type], optional): Aspectize callables. Defaults to None.
             modes (int, optional): [description]. Defaults to 0; Acceptable mode for this variant: use.reloading.
@@ -1931,11 +1928,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         original_cwd = source_dir = Path.cwd()
         try:
             if not path.is_absolute():
-                source_dir = getattr(
-                    self._using.get(inspect.currentframe().f_back.f_back.f_code.co_filename),
-                    "path",
-                    None,
-                )
+                source_dir = Path.cwd()
 
             # calling from another use()d module
             # let's see where we started
@@ -1955,12 +1948,15 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                         .parent
                     )
             if source_dir is None:
-                if main_mod.__loader__:
+                if main_mod.__loader__ and hasattr(main_mod.__loader__, "path"):
                     source_dir = _ensure_path(main_mod.__loader__.path).parent
                 else:
                     source_dir = Path.cwd()
             if not source_dir.joinpath(path).exists():
-                source_dir = Path.cwd()
+                if (files := [*source_dir.rglob(f"**/{path}")]):
+                    source_dir = _ensure_path(files[0]).parent
+                else:
+                    source_dir = Path.cwd()
             if not source_dir.exists():
                 return _fail_or_default(
                     NotImplementedError(

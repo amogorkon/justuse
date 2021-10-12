@@ -41,7 +41,7 @@ def get_capture_logs(log_capture_string):
 
 class PackageToTest(BaseModel):
     name: str
-    versions: List[str]
+    versions: list[str]
     repo: Optional[str] = None
     stars: Optional[int] = None
 
@@ -51,13 +51,13 @@ class PackageToTest(BaseModel):
 
 
 class Packages(BaseModel):
-    data: List[PackageToTest] = []
+    data: list[PackageToTest] = []
 
     def append(self, item: PackageToTest) -> None:
         self.data.append(item)
 
 
-def test_package(pkg: PackageToTest) -> Tuple[bool, Dict]:
+def test_package(pkg: PackageToTest) -> tuple[bool, Dict]:
 
     log1 = start_capture_logs()
     try:

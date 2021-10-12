@@ -44,6 +44,10 @@ log("Importing modules")
 try:
   import beartype
 except ImportError:
-  install_packages("beartype")
-
+  try:
+    install_packages("beartype")
+  except:
+    import traceback
+    traceback.print_exc()
+__package__ = "use"
 from use import use
