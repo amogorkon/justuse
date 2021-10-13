@@ -391,10 +391,7 @@ def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     assert mod.two() == 2
 
     # all functions, but not classes or methods
-    mod = reuse(
-        reuse.Path("simple_funcs.py"),
-        aspectize={(reuse.isfunction, ""): double_function},
-    )
+    mod = reuse(reuse.Path("simple_funcs.py")) @ (reuse.isfunction, "", double_function)
 
     assert mod.two() == 4
     assert mod.three() == 6
@@ -404,10 +401,7 @@ def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     assert inst.three() == 3
 
     # functions with specific names only
-    mod = reuse(
-        reuse.Path("simple_funcs.py"),
-        aspectize={(reuse.isfunction, "two"): double_function},
-    )
+    mod = reuse(reuse.Path("simple_funcs.py")) @ (reuse.isfunction, "two", double_function)
     assert mod.two() == 4
     assert mod.three() == 3
     assert reuse.ismethod

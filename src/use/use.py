@@ -90,8 +90,7 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import (partial, partialmethod, reduce, singledispatch,
-                       update_wrapper)
+from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.abc import Finder, Loader
 from importlib.machinery import ModuleSpec, SourceFileLoader
@@ -359,9 +358,6 @@ python -m pip install -U justuse
 To safely reproduce:
 use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
     )
-    aspectize_builtins_warning = (
-        lambda: "Applying aspects to builtins may lead to unexpected behaviour, but there you go.."
-    )
     version_warning = (
         lambda package_name, target_version, this_version: f"{package_name} expected to be version {target_version}, but got {this_version} instead"
     )
@@ -471,6 +467,24 @@ def get_supported() -> frozenset[PlatformTag]:
     return tags
 
 
+def sort_releases_by_install_method(project: PyPI_Project) -> PyPI_Project:
+    return PyPI_Project(
+        **{
+            **project.dict(),
+            **{
+                "releases": {
+                    k: [x.dict() for x in sorted(v, key=lambda r: r.is_sdist)]
+                    for k, v in project.releases.items()
+                }
+            },
+        }
+    )
+
+
+def recommend_best_version(project: PyPI_Project) -> list:
+    sorted(project.releases.keys(), reverse=True)
+
+
 def _filter_by_version(project: PyPI_Project, version: str) -> PyPI_Project:
     return PyPI_Project(
         **{
@@ -520,14 +534,6 @@ def archive_meta(artifact_path):
 
     if ".tar" in str(artifact_path):
         archive = tarfile.open(artifact_path)
-        members = [m for m in archive.getmembers() if m.type == b"0"]
-
-        def read_entry(entry_name):
-            m = archive.getmember(entry_name)
-            with archive.extractfile(m) as f:
-                bdata = f.read()
-                text = str(bdata, "ISO-8859-1").splitlines()
-                return (Path(entry_name).stem, text)
 
         def get_archive(artifact_path):
             archive = tarfile.open(artifact_path)
@@ -535,11 +541,6 @@ def archive_meta(artifact_path):
 
         functions = TarFunctions(artifact_path)
     else:
-
-        def read_entry(entry_name):
-            with archive.open(entry_name) as m:
-                text = m.read().decode("ISO-8859-1").splitlines()
-                return (Path(entry_name).stem, text)
 
         def get_archive(artifact_path):
             archive = zipfile.ZipFile(artifact_path)
@@ -735,8 +736,6 @@ def _import_public_no_install(
     package_name,
     module_name,
     spec,
-    aspectize,
-    fatal_exceptions=False,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
     # builtin?
@@ -747,13 +746,13 @@ def _import_public_no_install(
         builtin = True
 
     if builtin:
-        return _extracted_from__import_public_no_install_18(module_name, spec, aspectize)
+        return _extracted_from__import_public_no_install_18(module_name, spec)
     # it seems to be installed in some way, for instance via pip
     return importlib.import_module(module_name)  # ! => cache
 
 
 # TODO Rename this here and in `_import_public_no_install`
-def _extracted_from__import_public_no_install_18(module_name, spec, aspectize):
+def _extracted_from__import_public_no_install_18(module_name, spec):
     if spec.name in sys.modules:
         mod = sys.modules[spec.name]
         importlib.reload(mod)
@@ -764,8 +763,6 @@ def _extracted_from__import_public_no_install_18(module_name, spec, aspectize):
     assert mod
     sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)  # ! => cache
-    if aspectize:
-        warn(Message.aspectize_builtins_warning(), RuntimeWarning)
     return mod
 
 
@@ -1152,7 +1149,6 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
                         code=code_file.read(),
                         module_path=_ensure_path(module_path),
                         initial_globals={},
-                        aspectize={},
                     )
                 except ImportError as ierr0:
                     orig_exc = orig_exc or ierr0
@@ -1351,12 +1347,10 @@ def _get_version(
 
 def _build_mod(
     *,
-    name,
+    name,  # TODO: this should be a package name and module name
     code,
     initial_globals: Optional[dict[str, Any]],
     module_path,
-    aspectize,
-    aspectize_dunders=False,
 ) -> ModuleType:
 
     package_name, rest = _parse_name(name)
@@ -1378,28 +1372,11 @@ def _build_mod(
     )
     # not catching this causes the most irritating bugs ever!
     try:
-        _hacks(rest, module_path, mod)
         codeobj = compile(code, module_path, "exec")
         exec(codeobj, mod.__dict__)
     except:  # reraise anything without handling - clean and simple.
         raise
-    for (check, pattern), decorator in aspectize.items():
-        _apply_aspect(mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders)
     return mod
-
-
-def _hacks(name: str, module_path: Path, mod):
-    """Hacks to load more than one version of numpy at once."""
-    if name != "numpy":
-        return
-    for r in module_path.parent.rglob("**/overrides.py"):
-        code = r.read_bytes()
-        if not code.endswith(b"\n#patched"):
-            code = code.replace(b"add_docstring, ", b"")
-            code = code.replace(b"add_docstring(", b"if False: add_docstring(")
-            code += b"\n#patched"
-            r.write_bytes(code)
-    mod.__dict__["add_docstring"] = lambda *a, **kw: print("Called fake add_docstring")
 
 
 def _ensure_version(func, *, name, version, **kwargs) -> Union[ModuleType, Exception]:
@@ -1453,14 +1430,22 @@ class ProxyModule(ModuleType):
         with self.__condition:
             setattr(self.__implementation, name, value)
 
+    def __matmul__(self, other: tuple):
+        thing = self.__implementation
+        check, pattern, decorator = other
+        return _apply_aspect(thing, check, pattern, decorator, aspectize_dunders=False)
+
+    def __call__(self, *args, **kwargs):
+        with self.__condition:
+            return self.__implementation(*args, **kwargs)
+
 
 class ModuleReloader:
-    def __init__(self, *, proxy, name, path, initial_globals, aspectize):
+    def __init__(self, *, proxy, name, path, initial_globals):
         self.proxy = proxy
         self.name = name
         self.path = path
         self.initial_globals = initial_globals
-        self.aspectize = aspectize
         self._condition = threading.RLock()
         self._stopped = True
         self._thread = None
@@ -1491,7 +1476,6 @@ class ModuleReloader:
                         code=code,
                         initial_globals=self.initial_globals,
                         module_path=self.path.resolve(),
-                        aspectize=self.aspectize,
                     )
                     self.proxy.__implementation = mod
                 except KeyError:
@@ -1513,7 +1497,6 @@ class ModuleReloader:
                             code=code,
                             initial_globals=self.initial_globals,
                             module_path=self.path,
-                            aspectize=self.aspectize,
                         )
                         self.proxy._ProxyModule__implementation = mod
                     except KeyError:
@@ -1539,7 +1522,6 @@ class Use(ModuleType):
     auto_install = 2 ** 0
     fatal_exceptions = 2 ** 1
     reloading = 2 ** 2
-    aspectize_dunders = 2 ** 3
     no_public_installation = 2 ** 4
 
     def __init__(self):
@@ -1789,13 +1771,11 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         initial_globals: Optional[dict[Any, Any]] = None,
         as_import: str = None,
         default=mode.fastfail,
-        aspectize=None,
         modes=0,
     ) -> ProxyModule:
         log.debug(f"use-url: {url}")
         exc = None
 
-        aspectize = aspectize or {}
         response = requests.get(str(url))
         if response.status_code != 200:
             raise ImportError(Message.web_error())
@@ -1818,8 +1798,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 code=response.content,
                 module_path=_ensure_path(url.path),
                 initial_globals=initial_globals,
-                aspectize=aspectize,
-                aspectize_dunders=bool(Use.aspectize_dunders & modes),
             )
         except KeyError:
             raise
@@ -1842,7 +1820,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         initial_globals=None,
         as_import: str = None,
         default=mode.fastfail,
-        aspectize=None,
         modes=0,
     ) -> ProxyModule:
         """Import a module from a path.
@@ -1853,14 +1830,12 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             path ([type]): must be a pathlib.Path
             initial_globals ([type], optional): dict that should be globally available to the module before executing it. Defaults to None.
             default ([type], optional): Return instead if an exception is encountered.
-            aspectize ([type], optional): Aspectize callables. Defaults to None.
             modes (int, optional): [description]. Defaults to 0; Acceptable mode for this variant: use.reloading.
 
         Returns:
             Optional[ModuleType]: The module if it was imported, otherwise whatever was specified as default.
         """
         log.debug(f"use-path: {path}")
-        aspectize = aspectize or {}
         initial_globals = initial_globals or {}
 
         reloading = bool(Use.reloading & modes)
@@ -1925,7 +1900,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                         code=code,
                         initial_globals=initial_globals,
                         module_path=path.resolve(),
-                        aspectize=aspectize,
                     )
                 except KeyError:
                     exc = traceback.format_exc()
@@ -1937,7 +1911,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     name=name,
                     path=path,
                     initial_globals=initial_globals,
-                    aspectize=aspectize,
                 )
                 _reloaders[mod] = reloader
 
@@ -1956,7 +1929,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     reloader.start_threaded()
 
                 if not all(
-                    inspect.isfunction(value)
+                    isfunction(value)
                     for key, value in mod.__dict__.items()
                     if key not in initial_globals.keys() and not key.startswith("__")
                 ):
@@ -1973,7 +1946,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                         code=code,
                         initial_globals=initial_globals,
                         module_path=path,
-                        aspectize=aspectize,
                     )
                 except KeyError:
                     del self._using[name]
@@ -2003,7 +1975,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hash_algo=Hash.sha256,
         hashes: Optional[Union[str, list[str]]] = None,
         default=mode.fastfail,
-        aspectize=None,
         modes: int = 0,
     ) -> ProxyModule:
         """
@@ -2017,7 +1988,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
             hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
             default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
-            aspectize (dict, optional): Aspectize callables. Defaults to None.
             modes (int, optional): Any combination of Use.modes . Defaults to 0.
 
         Raises:
@@ -2035,7 +2005,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
-            aspectize=aspectize,
             modes=modes,
         )
 
@@ -2049,7 +2018,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hash_algo=Hash.sha256,
         hashes: Optional[Union[str, list[str]]] = None,
         default=mode.fastfail,
-        aspectize=None,
         modes: int = 0,
     ) -> ProxyModule:
         """
@@ -2063,7 +2031,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
             hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
             default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
-            aspectize (dict, optional): Aspectize callables. Defaults to None.
             modes (int, optional): Any combination of Use.modes . Defaults to 0.
 
         Raises:
@@ -2082,7 +2049,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
-            aspectize=aspectize,
             modes=modes,
         )
 
@@ -2096,7 +2062,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hash_algo=Hash.sha256,
         hashes: Optional[Union[str, list[str]]] = None,
         default=mode.fastfail,
-        aspectize=None,
         modes: int = 0,
     ) -> ProxyModule:
         """
@@ -2110,7 +2075,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
             hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
             default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
-            aspectize (dict, optional): Aspectize callables. Defaults to None.
             modes (int, optional): Any combination of Use.modes . Defaults to 0.
 
         Raises:
@@ -2128,7 +2092,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
-            aspectize=aspectize,
             modes=modes,
         )
 
@@ -2142,7 +2105,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hashes,
         modes,
         default,
-        aspectize,
         hash_algo,
         user_msg=Message,
     ):
@@ -2153,10 +2115,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         rest = module_name
 
         # we use boolean flags to reduce the complexity of the call signature
-        fatal_exceptions = bool(Use.fatal_exceptions & modes)
         auto_install = bool(Use.auto_install & modes)
-        aspectize_dunders = bool(Use.aspectize_dunders & modes)
-        aspectize = aspectize or {}
 
         version: Version = Version(version) if version else None
 
@@ -2200,10 +2159,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         assert result
 
         if isinstance((mod := result), ModuleType):
-            for (check, pattern), decorator in aspectize.items():
-                _apply_aspect(
-                    mod, check, pattern, decorator, aspectize_dunders=aspectize_dunders
-                )
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
             return ProxyModule(mod)
@@ -2211,7 +2166,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
 
 use = Use()
-use.__dict__.update(globals())
+use.__dict__.update({k: v for k, v in globals().items()})  # to avoid recursion-confusion
+use = ProxyModule(use)
 
 
 def decorator_log_calling_function_and_args(func, *args):
@@ -2233,8 +2189,8 @@ def decorator_log_calling_function_and_args(func, *args):
     return wrapper
 
 
-_apply_aspect(use, isfunction, "", beartype)
-_apply_aspect(use, isfunction, "", decorator_log_calling_function_and_args)
+use @ (isfunction, "", beartype)
+use @ (isfunction, "", decorator_log_calling_function_and_args)
 
 if not test_version:
     sys.modules["use"] = use

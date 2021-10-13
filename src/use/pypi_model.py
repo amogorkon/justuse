@@ -183,22 +183,6 @@ class PyPI_Project(QuietModel):
     last_serial: int = None
     info: PyPI_Info = None
 
-    def sort_releases_by_install_method(self):
-        return PyPI_Project(
-            **{
-                **self.dict(),
-                **{
-                    "releases": {
-                        k: [x.dict() for x in sorted(v, key=lambda r: r.is_sdist)]
-                        for k, v in self.releases.items()
-                    }
-                },
-            }
-        )
-
-    def recommend_best_version(self):
-        sorted(self.releases.keys(), reverse=True)
-
     def __init__(self, **kwargs):
 
         for version in list(kwargs["releases"].keys()):
@@ -217,6 +201,7 @@ class PyPI_Project(QuietModel):
 
 def _parse_filename(filename) -> dict:
     """
+    REFERENCE IMPLEMENTATION - DO NOT USE
     Match the filename and return a dict of parts.
     >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
     {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
