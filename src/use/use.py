@@ -632,11 +632,6 @@ def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
         segments = name.split(".")
         parent_mod = importlib.import_module(".".join(segments[:-1]))
         parent_spec = parent_mod.__spec__
-        parent_loader = (
-            parent_mod.__loader__
-            if not parent_spec or not getattr(parent_spec, "loader")
-            else parent_spec.loader
-        )
         ctor_args = [
             (
                 k,
@@ -767,14 +762,14 @@ def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Ex
 
 def _import_public_no_install(
     *,
-    name,
+    package_name,
+    module_name,
     spec,
     aspectize,
     fatal_exceptions=False,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
     # builtin?
-    package_name, rest = _parse_name(name)
     builtin = False
     try:
         metadata.PathDistribution.from_name(package_name)
@@ -782,21 +777,20 @@ def _import_public_no_install(
         builtin = True
 
     if builtin:
-        return _extracted_from__import_public_no_install_18(name, spec, aspectize)
+        return _extracted_from__import_public_no_install_18(module_name, spec, aspectize)
     # it seems to be installed in some way, for instance via pip
-    return importlib.import_module(rest)  # ! => cache
+    return importlib.import_module(module_name)  # ! => cache
 
 
 # TODO Rename this here and in `_import_public_no_install`
-def _extracted_from__import_public_no_install_18(name, spec, aspectize):
-    package_name, rest = _parse_name(name)
+def _extracted_from__import_public_no_install_18(module_name, spec, aspectize):
     if spec.name in sys.modules:
         mod = sys.modules[spec.name]
         importlib.reload(mod)
     else:
         mod = _ensure_loader(spec).create_module(spec)
     if mod is None:
-        mod = importlib.import_module(rest)
+        mod = importlib.import_module(module_name)
     assert mod
     sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)  # ! => cache
@@ -1035,10 +1029,6 @@ def _find_version(package_name, version=None) -> PyPI_Release:
     return priority[0]
 
 
-def _find_exe(venv_root: Path) -> Path:
-    return Path(sys.executable)
-
-
 def _get_venv_env(venv_root: Path) -> dict[str, str]:
     pathvar = os.environ.get("PATH")
     python_exe = Path(sys.executable)
@@ -1139,7 +1129,7 @@ def _find_or_install(
 
     venv_root = _venv_root(package_name, version, use.home)
     out_info["installation_path"] = venv_root
-    python_exe = _find_exe(venv_root)
+    python_exe = Path(sys.executable)
     env = _get_venv_env(venv_root)
     module_paths = venv_root.rglob(f"**/{relp}")
     if force_install or (not python_exe.exists() or not any(module_paths)):
