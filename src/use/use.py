@@ -917,53 +917,6 @@ def _auto_install(
             )
 
 
-def _parse_filename(filename) -> dict:
-    """Match the filename and return a dict of parts.
-    >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
-    {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
-    """
-    # Filename as API, seriously WTF...
-    assert isinstance(filename, str)
-    distribution = version = build_tag = python_tag = abi_tag = platform_tag = None
-    pp = Path(filename)
-    if ".tar" in filename:
-        ext = filename[filename.index(".tar") :]
-    else:
-        ext = pp.name[len(pp.stem) + 1 :]
-    rest = pp.name[0 : -len(ext) - 1]
-
-    p = rest.split("-")
-    np = len(p)
-    if np == 5:
-        distribution, version, python_tag, abi_tag, platform_tag = p
-    elif np == 6:
-        distribution, version, build_tag, python_tag, abi_tag, platform_tag = p
-    elif np == 3:  # ['SQLAlchemy', '0.1.1', 'py2.4']
-        distribution, version, python_tag = p
-    elif np == 2:
-        distribution, version = p
-    else:
-        return {}
-
-    python_version = None
-    if python_tag:
-        python_version = (
-            python_tag.replace("cp", "")[0] + "." + python_tag.replace("cp", "")[1:]
-        )
-    return _delete_none(
-        {
-            "distribution": distribution,
-            "version": version,
-            "build_tag": build_tag,
-            "python_tag": python_tag,
-            "abi_tag": abi_tag,
-            "platform_tag": platform_tag,
-            "python_version": python_version,
-            "ext": ext,
-        }
-    )
-
-
 def _process(*argv, env={}):
     _realenv = {
         k: v

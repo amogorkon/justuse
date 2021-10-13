@@ -4,13 +4,12 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-from pathlib import Path
 import re
-
-from pydantic import BaseModel
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from packaging.version import Version as PkgVersion
+from pydantic import BaseModel
 
 #%% Version and Packaging
 
@@ -119,79 +118,7 @@ class PyPI_Release(QuietModel):
 
 
 class PyPI_Downloads(QuietModel):
-    last_day: int
-    last_month: int
-    last_week: int
-
-
-class PyPI_Info(QuietModel):
-    author: str = None
-    author_email: str = None
-    bugtrack_url: str = None
-    classifiers: list[str] = None
-    description: str = None
-    description_content_type: str = None
-    docs_url: str = None
-    download_url: str = None
-    downloads: PyPI_Downloads = None
-    home_page: str = None
-    keywords: str = None
-    license: str = None
-    maintainer: str = None
-    maintainer_email: str = None
-    name: str = None
-    package_name: str = None
-    package_url: str = None
-    platform: str = None
-    project_url: str
-    project_urls: dict[str, str] = None
-    release_url: str = None
-    requires_dist: list[str] = None
-    requires_python: str = None
-    summary: str = None
-    version: str = None
-    yanked: bool = False
-    yanked_reason: str = None
-
-
-class PyPI_URL(QuietModel):
-    comment_text: str = None
-    digests: dict[str, str] = None
-    downloads: int = -1
-    filename: str = None
-    has_sig: bool = False
-    md5_digest: str = None
-    packagetype: str = None
-    python_version: str = None
-    requires_python: str = None
-    size: int = -1
-    upload_time: str = None
-    upload_time_iso_8601: str = None
-    url: str = None
-    yanked: bool = False
-    yanked_reason: str = None
-
-
-class PyPI_Project(QuietModel):
-    releases: dict[Version, list[PyPI_Release]] = None
-    urls: list[PyPI_URL] = None
-    last_serial: int = None
-    info: PyPI_Info = None
-
-    def sort_releases_by_install_method(self):
-        return PyPI_Project(
-            **{
-                **self.dict(),
-                **{
-                    "releases": {
-                        k: [x.dict() for x in sorted(v, key=lambda r: r.is_sdist)] for k, v in self.releases.items()
-                    }
-                },
-            }
-        )
-
-    def recommend_best_version(self):
-        sorted(self.releases.keys(), reverse=True)
+    last_day: )
 
     def __init__(self, **kwargs):
 
@@ -204,3 +131,52 @@ class PyPI_Project(QuietModel):
         kwargs["releases"] = {k: [{**_v, "version": Version(k)} for _v in v] for k, v in kwargs["releases"].items()}
 
         super().__init__(**kwargs)
+
+
+def _parse_filename(filename) -> dict:
+    """
+    REFERENCE IMPLEMENTATION - NOT USED
+    Match the filename and return a dict of parts.
+    >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
+    {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
+    """
+    # Filename as API, seriously WTF...
+    assert isinstance(filename, str)
+    distribution = version = build_tag = python_tag = abi_tag = platform_tag = None
+    pp = Path(filename)
+    if ".tar" in filename:
+        ext = filename[filename.index(".tar") :]
+    else:
+        ext = pp.name[len(pp.stem) + 1 :]
+    rest = pp.name[0 : -len(ext) - 1]
+
+    p = rest.split("-")
+    np = len(p)
+    if np == 5:
+        distribution, version, python_tag, abi_tag, platform_tag = p
+    elif np == 6:
+        distribution, version, build_tag, python_tag, abi_tag, platform_tag = p
+    elif np == 3:  # ['SQLAlchemy', '0.1.1', 'py2.4']
+        distribution, version, python_tag = p
+    elif np == 2:
+        distribution, version = p
+    else:
+        return {}
+
+    python_version = None
+    if python_tag:
+        python_version = (
+            python_tag.replace("cp", "")[0] + "." + python_tag.replace("cp", "")[1:]
+        )
+    return _delete_none(
+        {
+            "distribution": distribution,
+            "version": version,
+            "build_tag": build_tag,
+            "python_tag": python_tag,
+            "abi_tag": abi_tag,
+            "platform_tag": platform_tag,
+            "python_version": python_version,
+            "ext": ext,
+        }
+    )
