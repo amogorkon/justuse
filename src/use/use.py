@@ -50,7 +50,7 @@ True
 :author: David Reilly
 :license: MIT
 """
-
+# this is a gitlive test
 #% Preamble
 # we use https://github.com/microsoft/vscode-python/issues/17218 with % syntax to structure the code
 
@@ -90,7 +90,8 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
+from functools import (partial, partialmethod, reduce, singledispatch,
+                       update_wrapper)
 from importlib import metadata
 from importlib.abc import Finder, Loader
 from importlib.machinery import ModuleSpec, SourceFileLoader
