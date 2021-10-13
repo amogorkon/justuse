@@ -834,7 +834,7 @@ def _auto_install(
         ORDER BY artifacts.id DESC
         """
     ).fetchone()
-    
+
     if not query or not _ensure_path(query["artifact_path"]).exists():
         query = _find_or_install(package_name, version)
     artifact_path = _ensure_path(query["artifact_path"])
@@ -845,12 +845,9 @@ def _auto_install(
     try:
         importer = zipimport.zipimporter(artifact_path)
         return importer.load_module(query["import_name"])
-    except (ImportError, zipimport.ZipImportError,
-            BaseException) as zerr:
+    except BaseException as zerr:
         if isinstance(zerr.__context__, ModuleNotFoundError):
             missing_modules = zerr.__context__
-    except KeyError:
-        log.warning("%s", traceback.format_exc())
     orig_cwd = Path.cwd()
     mod = None
     if "installation_path" not in query or missing_modules:
