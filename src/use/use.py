@@ -69,7 +69,6 @@ import ast
 import asyncio
 import atexit
 import codecs
-import functools
 import hashlib
 import importlib.util
 import inspect
@@ -122,8 +121,10 @@ from pip._internal.utils import compatibility_tags
 cwd = Path("")
 os.chdir(Path(__file__).parent)
 import pypi_model
+
 use = sys.modules.get(__name__)
 from pypi_model import PyPI_Project, PyPI_Release, Version
+
 os.chdir(cwd)
 
 #% Constants and Initialization
@@ -197,14 +198,20 @@ class AutoInstallationError(ImportError):
 
 # sometimes all you need is a sledge hammer..
 _orig_locks = threading._shutdown_locks
+
+
 def atexit_hook():
     global _reloaders
-    for lock in threading._shutdown_locks: lock.unlock()
+    for lock in threading._shutdown_locks:
+        lock.unlock()
     for reloader in _reloaders.values():
         reloader.stop()
     for lock in threading._shutdown_locks:
-      lock.unlock()
+        lock.unlock()
+
+
 from atexit import register
+
 atexit.register(atexit_hook)
 #%% Pipes
 
@@ -736,7 +743,7 @@ def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Ex
     data = _get_package_data(package_name) >> _filter_by_platform(
         tags=get_supported(), sys_version=_sys_version()
     )
-    flat = functools.reduce(list.__add__, data.releases.values(), [])
+    flat = reduce(list.__add__, data.releases.values(), [])
     priority = sorted(flat, key=lambda r: (not r.is_sdist, r.version), reverse=True)
 
     for info in priority:
@@ -824,7 +831,7 @@ def _auto_install(
             return result
 
     query = self.execute_wrapped(
-            f"""
+        f"""
         SELECT
             artifacts.id, import_relpath,
             artifact_path, installation_path, module_path
@@ -834,7 +841,7 @@ def _auto_install(
         ORDER BY artifacts.id DESC
         """
     ).fetchone()
-    
+
     if not query or not _ensure_path(query["artifact_path"]).exists():
         query = _find_or_install(package_name, version)
     artifact_path = _ensure_path(query["artifact_path"])
@@ -845,8 +852,7 @@ def _auto_install(
     try:
         importer = zipimport.zipimporter(artifact_path)
         return importer.load_module(query["import_name"])
-    except (ImportError, zipimport.ZipImportError,
-            BaseException) as zerr:
+    except (ImportError, zipimport.ZipImportError, BaseException) as zerr:
         if isinstance(zerr.__context__, ModuleNotFoundError):
             missing_modules = zerr.__context__
     except KeyError:
@@ -1023,7 +1029,7 @@ def _process(*argv, env={}):
 
 def _find_version(package_name, version=None) -> PyPI_Release:
     data = _get_filtered_data(_get_package_data(package_name), version)
-    flat = functools.reduce(list.__add__, data.releases.values(), [])
+    flat = reduce(list.__add__, data.releases.values(), [])
     priority = sorted(flat, key=lambda r: (not r.is_sdist, r.version), reverse=True)
     # print("Selected", priority[0].filename)
     return priority[0]
@@ -1138,9 +1144,7 @@ def _find_or_install(
     module_paths = venv_root.rglob(f"**/{relp}")
     if force_install or (not python_exe.exists() or not any(module_paths)):
         log.info("calling pip to install install_item=%s", install_item)
-        
-        
-        
+
         # If we get here, the venv/pip setup is required.
         output = _process(
             python_exe,
@@ -1168,7 +1172,7 @@ def _find_or_install(
             install_item,
         )
         sys.stderr.write("\n\n".join((output.stderr, output.stdout)))
-    
+
     module_paths = [*venv_root.rglob(f"**/{relp}")]
     out_info.update(**meta)
     while len(relp) > 2 and not module_paths:
@@ -1953,7 +1957,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 else:
                     source_dir = Path.cwd()
             if not source_dir.joinpath(path).exists():
-                if (files := [*source_dir.rglob(f"**/{path}")]):
+                if files := [*source_dir.rglob(f"**/{path}")]:
                     source_dir = _ensure_path(files[0]).parent
                 else:
                     source_dir = Path.cwd()
