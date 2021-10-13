@@ -28,7 +28,9 @@ class Version(PkgVersion):
         if isinstance(versionstr, Version):
             return
         if not (versionstr or major or minor or patch):
-            raise ValueError("Version must be initialized with either a string or major, minor and patch")
+            raise ValueError(
+                "Version must be initialized with either a string or major, minor and patch"
+            )
         if major or minor or patch:
             # string as only argument, no way to construct a Version otherwise - WTF
             return super().__init__(".".join((str(major), str(minor), str(patch))))
@@ -95,7 +97,11 @@ class PyPI_Release(QuietModel):
 
     @property
     def is_sdist(self):
-        return self.packagetype == "sdist" or self.python_version == "source" or self.justuse.abi_tag == "none"
+        return (
+            self.packagetype == "sdist"
+            or self.python_version == "source"
+            or self.justuse.abi_tag == "none"
+        )
 
     @property
     def justuse(self) -> JustUse_Info:
@@ -118,7 +124,80 @@ class PyPI_Release(QuietModel):
 
 
 class PyPI_Downloads(QuietModel):
-    last_day: )
+    last_day: int
+    last_month: int
+    last_week: int
+
+
+class PyPI_Info(QuietModel):
+    author: str = None
+    author_email: str = None
+    bugtrack_url: str = None
+    classifiers: list[str] = None
+    description: str = None
+    description_content_type: str = None
+    docs_url: str = None
+    download_url: str = None
+    downloads: PyPI_Downloads = None
+    home_page: str = None
+    keywords: str = None
+    license: str = None
+    maintainer: str = None
+    maintainer_email: str = None
+    name: str = None
+    package_name: str = None
+    package_url: str = None
+    platform: str = None
+    project_url: str
+    project_urls: dict[str, str] = None
+    release_url: str = None
+    requires_dist: list[str] = None
+    requires_python: str = None
+    summary: str = None
+    version: str = None
+    yanked: bool = False
+    yanked_reason: str = None
+
+
+class PyPI_URL(QuietModel):
+    comment_text: str = None
+    digests: dict[str, str] = None
+    downloads: int = -1
+    filename: str = None
+    has_sig: bool = False
+    md5_digest: str = None
+    packagetype: str = None
+    python_version: str = None
+    requires_python: str = None
+    size: int = -1
+    upload_time: str = None
+    upload_time_iso_8601: str = None
+    url: str = None
+    yanked: bool = False
+    yanked_reason: str = None
+
+
+class PyPI_Project(QuietModel):
+    releases: dict[Version, list[PyPI_Release]] = None
+    urls: list[PyPI_URL] = None
+    last_serial: int = None
+    info: PyPI_Info = None
+
+    def sort_releases_by_install_method(self):
+        return PyPI_Project(
+            **{
+                **self.dict(),
+                **{
+                    "releases": {
+                        k: [x.dict() for x in sorted(v, key=lambda r: r.is_sdist)]
+                        for k, v in self.releases.items()
+                    }
+                },
+            }
+        )
+
+    def recommend_best_version(self):
+        sorted(self.releases.keys(), reverse=True)
 
     def __init__(self, **kwargs):
 
@@ -128,14 +207,16 @@ class PyPI_Downloads(QuietModel):
             except:
                 del kwargs["releases"][version]
 
-        kwargs["releases"] = {k: [{**_v, "version": Version(k)} for _v in v] for k, v in kwargs["releases"].items()}
+        kwargs["releases"] = {
+            k: [{**_v, "version": Version(k)} for _v in v]
+            for k, v in kwargs["releases"].items()
+        }
 
         super().__init__(**kwargs)
 
 
 def _parse_filename(filename) -> dict:
     """
-    REFERENCE IMPLEMENTATION - NOT USED
     Match the filename and return a dict of parts.
     >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
     {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}

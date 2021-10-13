@@ -305,18 +305,6 @@ def test_find_windows_artifact(reuse):
     assert reuse.Version("3.17.3") in reuse._get_package_data("protobuf").releases
 
 
-def test_parse_filename(reuse):
-    assert reuse._parse_filename("protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl") == {
-        "distribution": "protobuf",
-        "version": "1.19.5",
-        "python_tag": "cp36",
-        "python_version": "3.6",
-        "abi_tag": "cp36m",
-        "platform_tag": "macosx_10_9_x86_64",
-        "ext": "whl",
-    }
-
-
 def test_classic_import_same_version(reuse):
     version = reuse.Version(__import__("furl").__version__)
     with warnings.catch_warnings(record=True) as w:

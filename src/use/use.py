@@ -90,7 +90,8 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
+from functools import (partial, partialmethod, reduce, singledispatch,
+                       update_wrapper)
 from importlib import metadata
 from importlib.abc import Finder, Loader
 from importlib.machinery import ModuleSpec, SourceFileLoader
@@ -483,37 +484,6 @@ def _filter_by_version(project: PyPI_Project, version: str) -> PyPI_Project:
     )
 
 
-def _filter_by_platform(
-    project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version
-) -> PyPI_Project:
-    filtered = {
-        ver: [
-            rel.dict()
-            for rel in releases
-            if _is_compatible(
-                rel,
-                sys_version=sys_version,
-                platform_tags=tags,
-                include_sdist=True,
-            )
-        ]
-        for ver, releases in project.releases.items()
-    }
-
-    return PyPI_Project(**{**project.dict(), **{"releases": filtered}})
-
-
-@pipes
-def _filter_by_version_and_current_platform(
-    project: PyPI_Project, version: str
-) -> PyPI_Project:
-    return (
-        project
-        >> _filter_by_version(version)
-        >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
-    )
-
-
 class TarFunctions:
     def __init__(self, artifact_path):
         self.archive = tarfile.open(artifact_path)
@@ -717,7 +687,7 @@ def _pebkac_version_no_hash(
         hashes = {
             entry.digests.get(hash_algo.name)
             for entry in (
-                _get_filtered_data(_get_package_data(package_name), version=version)
+                _filtered_and_ordered_data(_get_package_data(package_name), version=version)
             ).releases[version]
         }
         if not hashes:
@@ -873,7 +843,6 @@ def _auto_install(
             for module_name in module_names:
                 try:
                     mspec = find_spec(module_name)
-                    loader = _ensure_loader(mspec)
                     module_path = mspec.origin or module_path
                     mod = _load_venv_entry(
                         mspec.name,
@@ -975,7 +944,7 @@ def _process(*argv, env={}):
 
 
 def _find_version(package_name, version=None) -> PyPI_Release:
-    data = _get_filtered_data(_get_package_data(package_name), version)
+    data = _filtered_and_ordered_data(_get_package_data(package_name), version)
     flat = reduce(list.__add__, data.releases.values(), [])
     priority = sorted(flat, key=lambda r: (not r.is_sdist, r.version), reverse=True)
     # print("Selected", priority[0].filename)
@@ -1048,7 +1017,7 @@ def _find_or_install(
         artifact_path = sys.modules["use"].home / "packages" / filename
 
     if not url or not artifact_path or (artifact_path and not artifact_path.exists()):
-        info.update(_find_version(package_name, version).dict())
+        info.update(_filtered_and_ordered_data(package_name, version)[0].dict())
         url = URL(str(info["url"]))
         filename = url.asdict()["path"]["segments"][-1]
         artifact_path = sys.modules["use"].home / "packages" / filename
@@ -1215,11 +1184,41 @@ def _sys_version():
     return Version(".".join(map(str, sys.version_info[0:3])))
 
 
+def _filter_by_platform(
+    project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version
+) -> PyPI_Project:
+    filtered = {
+        ver: [
+            rel.dict()
+            for rel in releases
+            if _is_compatible(
+                rel,
+                sys_version=sys_version,
+                platform_tags=tags,
+                include_sdist=True,
+            )
+        ]
+        for ver, releases in project.releases.items()
+    }
+
+    return PyPI_Project(**{**project.dict(), **{"releases": filtered}})
+
+
 @pipes
-def _get_filtered_data(data: PyPI_Project, version: Version = None) -> PyPI_Project:
+def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> PyPI_Project:
     if version:
-        return _filter_by_version_and_current_platform(data, version)
-    return _filter_by_platform(data, tags=get_supported(), sys_version=_sys_version())
+        filtered = (
+            data
+            >> _filter_by_version(version)
+            >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
+        )
+    else:
+        filtered = _filter_by_platform(
+            data, tags=get_supported(), sys_version=_sys_version()
+        )
+
+    flat = reduce(list.__add__, filtered.releases.values(), [])
+    return sorted(flat, key=lambda r: (not r.is_sdist, r.version), reverse=True)
 
 
 @cache
@@ -2214,7 +2213,28 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 use = Use()
 use.__dict__.update(globals())
 
+
+def decorator_log_calling_function_and_args(func, *args):
+    """
+    Decorator to log the calling function and its arguments.
+
+    Args:
+        func (function): The function to decorate.
+        *args: The arguments to pass to the function.
+
+    Returns:
+        function: The decorated function.
+    """
+
+    def wrapper(*args, **kwargs):
+        log.debug(f"{func.__name__}({args}, {kwargs})")
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
 _apply_aspect(use, isfunction, "", beartype)
+_apply_aspect(use, isfunction, "", decorator_log_calling_function_and_args)
 
 if not test_version:
     sys.modules["use"] = use
