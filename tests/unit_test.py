@@ -305,6 +305,18 @@ def test_find_windows_artifact(reuse):
     assert reuse.Version("3.17.3") in reuse._get_package_data("protobuf").releases
 
 
+def test_parse_filename(reuse):
+    assert reuse._parse_filename("protobuf-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl") == {
+        "distribution": "protobuf",
+        "version": "1.19.5",
+        "python_tag": "cp36",
+        "python_version": "3.6",
+        "abi_tag": "cp36m",
+        "platform_tag": "macosx_10_9_x86_64",
+        "ext": "whl",
+    }
+
+
 def test_classic_import_same_version(reuse):
     version = reuse.Version(__import__("furl").__version__)
     with warnings.catch_warnings(record=True) as w:
@@ -391,7 +403,10 @@ def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     assert mod.two() == 2
 
     # all functions, but not classes or methods
-    mod = reuse(reuse.Path("simple_funcs.py")) @ (reuse.isfunction, "", double_function)
+    mod = reuse(
+        reuse.Path("simple_funcs.py"),
+        aspectize={(reuse.isfunction, ""): double_function},
+    )
 
     assert mod.two() == 4
     assert mod.three() == 6
@@ -401,7 +416,10 @@ def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     assert inst.three() == 3
 
     # functions with specific names only
-    mod = reuse(reuse.Path("simple_funcs.py")) @ (reuse.isfunction, "two", double_function)
+    mod = reuse(
+        reuse.Path("simple_funcs.py"),
+        aspectize={(reuse.isfunction, "two"): double_function},
+    )
     assert mod.two() == 4
     assert mod.three() == 3
     assert reuse.ismethod

@@ -4,12 +4,13 @@
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
 from typing import Dict, List, Optional
+from pathlib import Path
+import re
+
+from pydantic import BaseModel
 
 from packaging.version import Version as PkgVersion
-from pydantic import BaseModel
 
 #%% Version and Packaging
 
@@ -28,9 +29,7 @@ class Version(PkgVersion):
         if isinstance(versionstr, Version):
             return
         if not (versionstr or major or minor or patch):
-            raise ValueError(
-                "Version must be initialized with either a string or major, minor and patch"
-            )
+            raise ValueError("Version must be initialized with either a string or major, minor and patch")
         if major or minor or patch:
             # string as only argument, no way to construct a Version otherwise - WTF
             return super().__init__(".".join((str(major), str(minor), str(patch))))
@@ -97,11 +96,7 @@ class PyPI_Release(QuietModel):
 
     @property
     def is_sdist(self):
-        return (
-            self.packagetype == "sdist"
-            or self.python_version == "source"
-            or self.justuse.abi_tag == "none"
-        )
+        return self.packagetype == "sdist" or self.python_version == "source" or self.justuse.abi_tag == "none"
 
     @property
     def justuse(self) -> JustUse_Info:
@@ -183,6 +178,21 @@ class PyPI_Project(QuietModel):
     last_serial: int = None
     info: PyPI_Info = None
 
+    def sort_releases_by_install_method(self):
+        return PyPI_Project(
+            **{
+                **self.dict(),
+                **{
+                    "releases": {
+                        k: [x.dict() for x in sorted(v, key=lambda r: r.is_sdist)] for k, v in self.releases.items()
+                    }
+                },
+            }
+        )
+
+    def recommend_best_version(self):
+        sorted(self.releases.keys(), reverse=True)
+
     def __init__(self, **kwargs):
 
         for version in list(kwargs["releases"].keys()):
@@ -191,58 +201,6 @@ class PyPI_Project(QuietModel):
             except:
                 del kwargs["releases"][version]
 
-        kwargs["releases"] = {
-            k: [{**_v, "version": Version(k)} for _v in v]
-            for k, v in kwargs["releases"].items()
-        }
+        kwargs["releases"] = {k: [{**_v, "version": Version(k)} for _v in v] for k, v in kwargs["releases"].items()}
 
         super().__init__(**kwargs)
-
-
-def _parse_filename(filename) -> dict:
-    """
-    REFERENCE IMPLEMENTATION - DO NOT USE
-    Match the filename and return a dict of parts.
-    >>> parse_filename("numpy-1.19.5-cp36-cp36m-macosx_10_9_x86_64.whl")
-    {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
-    """
-    # Filename as API, seriously WTF...
-    assert isinstance(filename, str)
-    distribution = version = build_tag = python_tag = abi_tag = platform_tag = None
-    pp = Path(filename)
-    if ".tar" in filename:
-        ext = filename[filename.index(".tar") :]
-    else:
-        ext = pp.name[len(pp.stem) + 1 :]
-    rest = pp.name[0 : -len(ext) - 1]
-
-    p = rest.split("-")
-    np = len(p)
-    if np == 5:
-        distribution, version, python_tag, abi_tag, platform_tag = p
-    elif np == 6:
-        distribution, version, build_tag, python_tag, abi_tag, platform_tag = p
-    elif np == 3:  # ['SQLAlchemy', '0.1.1', 'py2.4']
-        distribution, version, python_tag = p
-    elif np == 2:
-        distribution, version = p
-    else:
-        return {}
-
-    python_version = None
-    if python_tag:
-        python_version = (
-            python_tag.replace("cp", "")[0] + "." + python_tag.replace("cp", "")[1:]
-        )
-    return _delete_none(
-        {
-            "distribution": distribution,
-            "version": version,
-            "build_tag": build_tag,
-            "python_tag": python_tag,
-            "abi_tag": abi_tag,
-            "platform_tag": platform_tag,
-            "python_version": python_version,
-            "ext": ext,
-        }
-    )
