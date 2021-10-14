@@ -883,10 +883,21 @@ def _extracted_from__import_public_no_install_18(name, spec, aspectize):
 
 
 def _parse_name(name) -> tuple[str, str]:
-    match = re.match(r"(?P<package_name>[^/.]+)/?(?P<rest>[a-zA-Z0-9._]+)?$", name)
-    assert match, f"Invalid name spec: {name!r}"
-    names = match.groupdict()
-    return names["package_name"], names["rest"] or name
+    ret = name, name
+    try:
+        match = re.match(r"(?P<package_name>[^/.]+)/?(?P<rest>[a-zA-Z0-9._]+)?$", name)
+        assert match, f"Invalid name spec: {name!r}"
+        names = match.groupdict()
+        package_name = names["package_name"]
+        rest = names["rest"]
+        if not package_name:
+          package_name = rest
+        if not rest:
+          rest = package_name
+        ret = (package_name, rest)
+        return ret
+    finally:
+        log.info("_parse_name(%s) -> %s", repr(name), repr(ret)) 
 
 
 def _auto_install(
@@ -921,7 +932,11 @@ def _auto_install(
 
     if not query or not _ensure_path(query["artifact_path"]).exists():
         query = _find_or_install(package_name, version)
+        assert query["module_path"] != Path("/data/media/0/src/use/src/twisted/__init__.py")
+        
     artifact_path = _ensure_path(query["artifact_path"])
+    if _ensure_path(query["module_path"]) == Path("/data/media/0/src/use/src/twisted/__init__.py"):
+      raise BaseException("module_path")
     module_path = _ensure_path(query["module_path"])
     # trying to import directly from zip
     _clean_sys_modules(rest)
@@ -934,9 +949,12 @@ def _auto_install(
             missing_modules = zerr.__context__
     orig_cwd = Path.cwd()
     mod = None
-    if "installation_path" not in query or missing_modules:
+    if "installation_path" not in query:
         query = _find_or_install(package_name, version, force_install=True)
         artifact_path = _ensure_path(query["artifact_path"])
+        if _ensure_path(query["module_path"]) == Path("/data/media/0/src/use/src/twisted/__init__.py"):
+          raise BaseException("module_path")
+        fi
         module_path = _ensure_path(query["module_path"])
 
     assert "installation_path" in query
@@ -944,53 +962,17 @@ def _auto_install(
     installation_path = _ensure_path(query["installation_path"])
     try:
         exc = None
-        sys.path.insert(0, self.home / "venv" / package_name / str(version))
-        try:
-            dist = Distribution.from_name(package_name)
-            dist_info = dist._path
-            installation_path = dist_info.parent
-            toplev_file = dist_info / "top_level.txt"
-            module_names = toplev_file.read_text().strip().splitlines()
-            for module_name in module_names:
-                try:
-                    mspec = find_spec(module_name)
-                    loader = _ensure_loader(mspec)
-                    module_path = mspec.origin or module_path
-                    mod = _load_venv_entry(
-                        mspec.name,
-                        module_path=module_path,
-                        installation_path=installation_path,
-                    )
-                    return mod
-                except BaseException as _berr:
-                    exc = exc or _berr
-                    raise PackageNotFoundError(name) from exc
-        except PackageNotFoundError:
-            pass
-        if True:
-            query = _find_or_install(package_name, version, force_install=True)
-            artifact_path = _ensure_path(query["artifact_path"])
-            module_path = _ensure_path(query["module_path"])
-            assert "installation_path" in query
-            assert query["installation_path"]
-            installation_path = _ensure_path(query["installation_path"])
-    
         module_path = _ensure_path(query["module_path"])
         os.chdir(installation_path)
         import_name = str(module_path.relative_to(installation_path)).replace("\\", "/").replace("/__init__.py", "").replace("-", "_")
-        try:
-              return (
+        return (
                   mod := _load_venv_entry(
+                      package_name,
                       import_name,
                       module_path=module_path,
                       installation_path=installation_path,
                   )
               )
-        except:
-            try:
-                return (mod:=importlib.import_module(import_name))
-            except:
-                return (mod:= importlib.import_module(".".join(import_name.split(".")[:-1])))
             
     finally:
         os.chdir(orig_cwd)
@@ -1155,6 +1137,51 @@ def _pure_python_package(artifact_path, meta):
     return True
 
 
+def _find_module_in_venv(package_name, version, relp):
+    ret = None, None
+    try:
+        site_dirs = list(
+            (
+                sys.modules["use"].home / "venv" / package_name 
+                / str(version)
+            
+            ).rglob("**/site-packages")
+        )
+        if not site_dirs:
+            return ret
+        
+        dist = None
+        mod_relative_to_site = None
+        osp = None
+        for site_dir in site_dirs:
+            osp = list(sys.path)
+            sys.path.clear()
+            sys.path.insert(0, str(site_dir))
+            try:
+                dist = importlib.metadata.Distribution.from_name(package_name)
+                while not mod_relative_to_site:
+                    pps = [
+                        pp for pp in dist.files if pp.as_posix() == relp
+                    ]
+                    if pps:
+                        mod_relative_to_site = pps[0]
+                        break
+                    if len(relp.split("/")) == 0:
+                        break
+                    relp = "/".join(relp.split("/")[1:])
+            except PackageNotFoundError:
+                continue
+            finally:
+                sys.path.remove(str(site_dir))
+                sys.path += osp
+        if mod_relative_to_site:
+            module_path = site_dir / mod_relative_to_site.as_posix()
+            return (ret := site_dir, module_path)
+        return ret
+    finally:
+        log.info("_find_module_in_venv(package_name=%s, version=%s, relp=%s) -> %s", repr(package_name), repr(version), repr(relp), repr(ret))
+    
+
 def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=None, force_install=False):
     log.debug(
         "_find_or_install(name=%s, version=%s, artifact_path=%s, url=%s)",
@@ -1202,23 +1229,23 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     if "__init__.py" in import_parts:
         import_parts.remove("__init__.py")
     import_name = ".".join(import_parts)
-    name = f"{package_name}.{import_name}"
     relp = meta["import_relpath"]
-    out_info["module_path"] = relp
     out_info["import_relpath"] = relp
     out_info["import_name"] = import_name
-    if not force_install and _pure_python_package(artifact_path, meta):
-        log.info(f"pure python pkg: {package_name, version, use.home}")
-        return out_info
 
     venv_root = _venv_root(package_name, version, use.home)
-    out_info["installation_path"] = venv_root
-    python_exe = _find_exe(venv_root)
+    
+    python_exe = sys.executable
     env = _get_venv_env(venv_root)
-    module_paths = venv_root.rglob(f"**/{relp}")
-    if force_install or (not python_exe.exists() or not any(module_paths)):
-        log.info("calling pip to install install_item=%s", install_item)
-
+    
+    site_dir, module_path = _find_module_in_venv(package_name, version, relp)
+    module_paths = []
+    if module_path:
+        module_paths.append(module_path)
+        out_info["installation_path"] = installation_path = site_dir
+    else:
+        log.info("calling pip to install install_item=%s (for relp=%s)", install_item, repr(relp))
+    
         # If we get here, the venv/pip setup is required.
         output = _process(
             python_exe,
@@ -1245,24 +1272,18 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
         )
         sys.stderr.write("\n\n".join((output.stderr, output.stdout)))
 
-    module_paths = [*venv_root.rglob(f"**/{relp}")]
+    site_dir, module_path = _find_module_in_venv(package_name, version, relp)
+    module_paths = []
+    if module_path:
+        module_paths.append(module_path)
+        installation_path = site_dir
+    
     out_info.update(**meta)
-    while len(relp) > 2 and not module_paths:
-        log.info("relp = %s", relp)
-        module_paths = [*venv_root.rglob(f"**/{relp}")]
-        if module_paths:
-            break
-        relp = "/".join(Path(relp).parts[1:])
-        log.info(relp)
-        out_info.update({"import_relpath": relp})
     assert module_paths
-    for module_path in module_paths:
-        installation_path = module_path
-        while installation_path.name != "site-packages":
-            installation_path = installation_path.parent
-        log.info("installation_path = %s", installation_path)
-        log.info("module_path = %s", module_path)
-        out_info.update(
+    
+    log.info("installation_path = %s", installation_path)
+    log.info("module_path = %s", module_path)
+    out_info.update(
             {
                 **info,
                 "artifact_path": artifact_path,
@@ -1271,13 +1292,11 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
                 "import_relpath": ".".join(relp.split("/")[0:-1]),
                 "info": info,
             }
-        )
-        return _delete_none(out_info)
+    )
+    return _delete_none(out_info)
 
 
-def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
-    package_name, rest = _parse_name(name)
-    _clean_sys_modules(name)
+def _load_venv_entry(package_name, rest, installation_path, module_path) -> ModuleType:
     log.info(
         "load_venv_entry package_name=%s rest=%s module_path=%s",
         package_name,
@@ -1287,7 +1306,6 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
     cwd = Path.cwd()
     log.info(f"{cwd=}")
     log.info(f"{sys.path=}")
-    package_name, rest = _parse_name(name)
     orig_exc = None
     old_sys_path = list(sys.path)
     if sys.path[0] != "":
@@ -1308,7 +1326,8 @@ def _load_venv_entry(name, installation_path, module_path) -> ModuleType:
                     os.chdir(cwd)
                     os.chdir(variant)
                     return _build_mod(
-                        name=rest,
+                        name=(
+                          package_name + "/" + rest.replace("/", ".")),
                         code=code_file.read(),
                         module_path=_ensure_path(module_path),
                         initial_globals={},
@@ -1483,7 +1502,8 @@ def _build_mod(
 
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = str(module_path)
-    mod.__package__ = rest
+    mod.__path__ = [str(module_path.parent)]
+    mod.__package__ = package_name
     mod.__name__ = rest
     code_text = codecs.decode(code)
     # module file "<", ">" chars are specially handled by inspect
@@ -1509,7 +1529,7 @@ def _hacks(name: str, module_path: Path, mod):
     """Hacks to load more than one version of numpy at once."""
     if name != "numpy":
         return
-    for r in module_path.parent.rglob("**/overrides.py"):
+    for r in [*module_path.parent.rglob("**/overrides.py")]:
         code = r.read_bytes()
         if not code.endswith(b"\n#patched"):
             code = code.replace(b"add_docstring, ", b"")
@@ -2001,7 +2021,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 else:
                     source_dir = Path.cwd()
             if not source_dir.joinpath(path).exists():
-                if files := [*source_dir.rglob(f"**/{path}")]:
+                if files := [*[*source_dir.rglob(f"**/{path}")]]:
                     source_dir = _ensure_path(files[0]).parent
                 else:
                     source_dir = Path.cwd()
