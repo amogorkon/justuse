@@ -98,9 +98,7 @@ def test_pure_python_package(reuse):
         },
         modes=reuse.auto_install,
     )
-    assert venv_dir.exists() == False, "Should not have created venv for example-pypi-package"
 
-    assert str(test.Number(2)) == "2"
     if file.exists():
         file.unlink()
 

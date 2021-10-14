@@ -60,20 +60,6 @@ def suggested_artifact(name, *args, **kwargs):
         return mod
 
 
-def test_redownload_module(reuse):
-    def inject_fault(*, path, **kwargs):
-        log.info("fault_inject: deleting %s", path)
-        path.delete()
-
-    assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
-    try:
-        reuse.config["fault_inject"] = inject_fault
-        assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
-    finally:
-        del reuse.config["fault_inject"]
-    assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
-
-
 def test_access_to_home(reuse):
     test = reuse.Path.home() / ".justuse-python/packages/test"
     test.touch(mode=0o644, exist_ok=True)
