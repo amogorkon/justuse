@@ -491,9 +491,8 @@ def get_supported() -> frozenset[PlatformTag]:
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
 
-    tags = frozenset(items)
     # log.debug("leave get_supported() -> %s", repr(tags))
-    return tags
+    return frozenset(items)
 
 
 def _filter_by_version(project: PyPI_Project, version: str) -> PyPI_Project:

@@ -78,91 +78,90 @@ class Packages(BaseModel):
 
 
 def test_package(pkg: PackageToTest) -> tuple[bool, Dict]:
-    use_version = None
-    log1 = start_capture_logs()
-    first_logs = None
-    with capture_stdout() as outstream:
-      try:
-        use(pkg.name, modes=use.auto_install)
-      except RuntimeWarning as e:
-        if str(e).__contains__("hashes="):
-            hashes = re.findall("hashes={([a-z0-9A-Z', ]+)}", str(e))[0]
-            hashes = {_hash.strip("'") for _hash in hashes.split(", ")}
-            print(str(e))
-            use_version = re.findall('version="(.*)", ', str(e))[0]
-        else:
-            exc_type, exc_value, _ = sys.exc_info()
-            tb = traceback.format_exc()
-            return (
-                False,
-                {
-                    "name": pkg.name,
-                    "version": "None",
-                    "stars": pkg.stars,
-                    "err": {
-                        "type": str(exc_type),
-                        "value": str(exc_value),
-                        "traceback": tb.split("\n"),
-                        "logs": get_capture_logs(log1).split("\n"),
-                        "stdout": outstream.getvalue().split("\n")
-                    },
-                },
-            )
-
-      except packaging.version.InvalidVersion:
-        return (
-            False,
-            {
-                "name": pkg.name,
-                "stars": pkg.stars,
-                "err": {"type": "InvalidVersion", "value": pkg.versions, "picked": "None", "stdout": outstream.getvalue().split("\n")},
-            },
-        )
-
-      except Exception as e:
-        exc_type, exc_value, _ = sys.exc_info()
-        tb = traceback.format_exc()
-        import pythonrc
-        _it = list(printException(e))[0]
-        pythonrc.printdict3(_it)
-        
-        
-        return (
-            False,
-            {
-                "name": pkg.name,
-                "version": use_version,
-                "stars": pkg.stars,
-                "err": {
-                    "values": {k: try_str(v) for k,v in _it.items()},
-                    "type": str(exc_type),
-                    "value": str(exc_value),
-                    "traceback": tb.split("\n"),
-                    "logs": get_capture_logs(log1).split("\n"),
-                    "stdout": outstream.getvalue().split("\n")
-                },
-            },
-        )
-
+  use_version = None
+  log1 = start_capture_logs()
+  first_logs = None
+  with capture_stdout() as outstream:
+    try:
+      use(pkg.name, modes=use.auto_install)
+    except RuntimeWarning as e:
+      if str(e).__contains__("hashes="):
+          hashes = re.findall("hashes={([a-z0-9A-Z', ]+)}", str(e))[0]
+          hashes = {_hash.strip("'") for _hash in hashes.split(", ")}
+          print(str(e))
+          use_version = re.findall('version="(.*)", ', str(e))[0]
       else:
-        get_capture_logs(log1)
+          exc_type, exc_value, _ = sys.exc_info()
+          tb = traceback.format_exc()
+          return (
+              False,
+              {
+                  "name": pkg.name,
+                  "version": "None",
+                  "stars": pkg.stars,
+                  "err": {
+                      "type": str(exc_type),
+                      "value": str(exc_value),
+                      "traceback": tb.split("\n"),
+                      "logs": get_capture_logs(log1).split("\n"),
+                      "stdout": outstream.getvalue().split("\n")
+                  },
+              },
+          )
 
-    logs = start_capture_logs()
-    if True:
-        module = use(pkg.name, version=use_version, modes=use.auto_install, hashes=hashes)
-        assert module is not None
-        print(module)
-        return (
-            True,
-            {
-                "name": pkg.name,
-                "version": use_version,
-                "stars": pkg.stars,
-                "stdout": outstream.getvalue().split("\n"),
-                "logs": outstream.getvalue().split("\n"),
-                "retry": f"""use('{pkg.name}', version='{use_version}', modes=use.auto_install, hashes={hashes})""",
-            },
-        )
+    except packaging.version.InvalidVersion:
+      return (
+          False,
+          {
+              "name": pkg.name,
+              "stars": pkg.stars,
+              "err": {"type": "InvalidVersion", "value": pkg.versions, "picked": "None", "stdout": outstream.getvalue().split("\n")},
+          },
+      )
+
+    except Exception as e:
+      exc_type, exc_value, _ = sys.exc_info()
+      tb = traceback.format_exc()
+      import pythonrc
+      _it = list(printException(e))[0]
+      pythonrc.printdict3(_it)
+
+
+      return (
+          False,
+          {
+              "name": pkg.name,
+              "version": use_version,
+              "stars": pkg.stars,
+              "err": {
+                  "values": {k: try_str(v) for k,v in _it.items()},
+                  "type": str(exc_type),
+                  "value": str(exc_value),
+                  "traceback": tb.split("\n"),
+                  "logs": get_capture_logs(log1).split("\n"),
+                  "stdout": outstream.getvalue().split("\n")
+              },
+          },
+      )
+
+    else:
+      get_capture_logs(log1)
+
+  logs = start_capture_logs()
+  module = use(pkg.name, version=use_version, modes=use.auto_install, hashes=hashes)
+  assert module is not None
+  print(module)
+  return (
+      True,
+      {
+          "name": pkg.name,
+          "version": use_version,
+          "stars": pkg.stars,
+          "stdout": outstream.getvalue().split("\n"),
+          "logs": outstream.getvalue().split("\n"),
+          "retry": f"""use('{pkg.name}', version='{use_version}', modes=use.auto_install, hashes={hashes})""",
+      },
+  )
 
 
 
