@@ -1,3 +1,4 @@
+#/usr/bin/python3
 import io
 import json
 import logging
@@ -24,12 +25,31 @@ os.chdir(Path(__file__).parent)
 import use
 from pydantic import BaseModel
 
+import contextlib
+import operator
+@contextlib.contextmanager
+def redirect_stream(io_obj, what="stdout"):
+  old_stream = getattr(sys, what)
+  try:
+    setattr(sys, what, io_obj)
+    yield io_obj
+  finally:
+    setattr(sys, what, old_stream)
+
+@contextlib.contextmanager
+def capture_stdout():
+  with redirect_stream(io.StringIO()) as sio:
+    try:
+      yield sio
+    finally:
+      sio.flush()
+      
 
 def start_capture_logs():
     log_capture_string = io.StringIO()
     ch = logging.StreamHandler(log_capture_string)
     ch.setLevel(logging.DEBUG)
-    logging.root.handlers = [ch]
+    logging.root.handlers.append(ch)
     return log_capture_string
 
 
@@ -58,12 +78,14 @@ class Packages(BaseModel):
 
 
 def test_package(pkg: PackageToTest) -> tuple[bool, Dict]:
-
+    use_version = None
     log1 = start_capture_logs()
-    try:
+    first_logs = None
+    with capture_stdout() as outstream:
+      try:
         use(pkg.name, modes=use.auto_install)
-    except RuntimeWarning as e:
-        if str(e).startswith("Please specify version and hash for auto-installation of"):
+      except RuntimeWarning as e:
+        if str(e).__contains__("hashes="):
             hashes = re.findall("hashes={([a-z0-9A-Z', ]+)}", str(e))[0]
             hashes = {_hash.strip("'") for _hash in hashes.split(", ")}
             print(str(e))
@@ -82,23 +104,29 @@ def test_package(pkg: PackageToTest) -> tuple[bool, Dict]:
                         "value": str(exc_value),
                         "traceback": tb.split("\n"),
                         "logs": get_capture_logs(log1).split("\n"),
+                        "stdout": outstream.getvalue().split("\n")
                     },
                 },
             )
 
-    except packaging.version.InvalidVersion:
+      except packaging.version.InvalidVersion:
         return (
             False,
             {
                 "name": pkg.name,
                 "stars": pkg.stars,
-                "err": {"type": "InvalidVersion", "value": pkg.versions, "picked": "None"},
+                "err": {"type": "InvalidVersion", "value": pkg.versions, "picked": "None", "stdout": outstream.getvalue().split("\n")},
             },
         )
 
-    except Exception as e:
+      except Exception as e:
         exc_type, exc_value, _ = sys.exc_info()
         tb = traceback.format_exc()
+        import pythonrc
+        _it = list(printException(e))[0]
+        pythonrc.printdict3(_it)
+        
+        
         return (
             False,
             {
@@ -106,49 +134,36 @@ def test_package(pkg: PackageToTest) -> tuple[bool, Dict]:
                 "version": use_version,
                 "stars": pkg.stars,
                 "err": {
+                    "values": {k: try_str(v) for k,v in _it.items()},
                     "type": str(exc_type),
                     "value": str(exc_value),
                     "traceback": tb.split("\n"),
                     "logs": get_capture_logs(log1).split("\n"),
+                    "stdout": outstream.getvalue().split("\n")
                 },
             },
         )
 
-    else:
+      else:
         get_capture_logs(log1)
 
     logs = start_capture_logs()
-    try:
+    if True:
         module = use(pkg.name, version=use_version, modes=use.auto_install, hashes=hashes)
-        assert module
+        assert module is not None
+        print(module)
         return (
             True,
             {
                 "name": pkg.name,
                 "version": use_version,
                 "stars": pkg.stars,
+                "stdout": outstream.getvalue().split("\n"),
+                "logs": outstream.getvalue().split("\n"),
                 "retry": f"""use('{pkg.name}', version='{use_version}', modes=use.auto_install, hashes={hashes})""",
             },
         )
 
-    except Exception as e:
-        exc_type, exc_value, _ = sys.exc_info()
-        tb = traceback.format_exc()
-        return (
-            False,
-            {
-                "name": pkg.name,
-                "version": use_version,
-                "stars": pkg.stars,
-                "err": {
-                    "type": str(exc_type),
-                    "value": str(exc_value),
-                    "traceback": tb.split("\n"),
-                    "logs": get_capture_logs(logs).split("\n"),
-                },
-                "retry": f"""use('{pkg.name}', version='{use_version}', modes=use.auto_install, hashes={hashes})""",
-            },
-        )
 
 
 if __name__ == "__main__":
@@ -173,5 +188,3 @@ if __name__ == "__main__":
 
     with open(out_dir / f"{pkg.name}.json", "w") as f:
         json.dump(info, f, indent=4, sort_keys=True)
-
-
