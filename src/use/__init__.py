@@ -40,7 +40,7 @@ def install_packages(*packages):
    finally:
      sys.exit = __oldexit
 
-log("Importing modules")
+ 
 try:
   import beartype
 except ImportError:
@@ -49,5 +49,10 @@ except ImportError:
   except:
     import traceback
     traceback.print_exc()
+
+import warnings
+from beartype.roar._roarwarn import BeartypeDecorHintPepDeprecatedWarning
+warnings.filterwarnings(action="ignore", category=BeartypeDecorHintPepDeprecatedWarning)
+
 __package__ = "use"
 from use import use
