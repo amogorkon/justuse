@@ -371,8 +371,8 @@ use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
         lambda name, this_version: f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")'
     )
     pebkac_missing_hash = (
-        lambda name, version, hashes: f"""Failed to auto-install {name!r} because hash_value is missing. This may work:
-use({name!r}, version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
+        lambda name, package_name, version, hashes: f"""Failed to auto-install {package_name!r} because hashes is missing. This may work:
+use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
     )
     pebkac_unsupported = (
         lambda package_name: f"We could not find any version or release for {package_name} that could satisfy our requirements!"
@@ -381,11 +381,10 @@ use({name!r}, version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"
         lambda package_name, target_version: f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI."
     )
     no_version_or_hash_provided = (
-        lambda name, package_name, version, hash_value: f"""Please specify version and hash for auto-installation of '{package_name}'.
+        lambda name, package_name, version, hashes: f"""Please specify version and hash for auto-installation of {package_name!r}.
 To get some valuable insight on the health of this pkg, please check out https://snyk.io/advisor/python/{package_name}
 If you want to auto-install the latest version:
-use("{name}", version="{version!s}", hashes={set([hash_value])}, modes=use.auto_install)
-"""
+use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
     )
     cant_import = (
         lambda name: f"No pkg installed named {name} and auto-installation not requested. Aborting."
@@ -678,7 +677,7 @@ def _pebkac_no_version_hash(
 
 
 def _pebkac_version_no_hash(
-    func=None, *, version: Version, hash_algo, package_name: str, **kwargs
+    func=None, *, name: str, version: Version, hash_algo, package_name: str, message_formatter: Callable[[str, str, Version, set[str]], str]=Message.pebkac_missing_hash, **kwargs
 ) -> Union[Exception, ModuleType]:
     if func:
         result = func(**all_kwargs(_pebkac_version_no_hash, locals()))
@@ -694,8 +693,8 @@ def _pebkac_version_no_hash(
         if not hashes:
             rw = RuntimeWarning(Message.pebkac_unsupported(package_name))
         else:
-            rw = RuntimeWarning(Message.pebkac_missing_hash(package_name, version, hashes))
-        rw.name = package_name
+            rw = RuntimeWarning(message_formatter(name, package_name, version, hashes))
+        rw.name = name
         rw.version = version
         rw.hashes = hashes
         return rw
@@ -711,21 +710,17 @@ def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Ex
     )
     flat = reduce(list.__add__, data.releases.values(), [])
     priority = sorted(flat, key=lambda r: (not r.is_sdist, r.version), reverse=True)
-
+    
     for info in priority:
-        hash_value = info.digests[hash_algo.name]
-        rw = RuntimeWarning(
-            Message.no_version_or_hash_provided(
-                name,
-                package_name,
-                info.version,
-                hash_value,
-            )
+        return _pebkac_version_no_hash(
+            func=None,
+            name=name,
+            version=info.version,
+            hash_algo=hash_algo,
+            package_name=package_name,
+            message_formatter=Message.no_version_or_hash_provided
         )
-        rw.name = package_name
-        rw.version = info.version
-        rw.hashes = hash_value
-        return rw
+        
     rw = RuntimeWarning(Message.pebkac_unsupported(package_name))
     rw.name = package_name
     return rw
