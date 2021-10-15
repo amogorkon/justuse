@@ -173,10 +173,9 @@ if __name__ == "__main__":
 
     with open(out_dir / f"{pkg.name}.json", "w") as f:
         json.dump(info, f, indent=4, sort_keys=True)
-        if True:
-            sys.stderr = open(2, "w")
-            sys.stderr.write(json.dumps(info, indent=4, sort_keys=True))
-            sys.stderr.write("\n")
-            sys.stderr.flush()
+        sys.stderr = open(2, "w")
+        sys.stderr.write(json.dumps(info, indent=4, sort_keys=True))
+        sys.stderr.write("\n")
+        sys.stderr.flush()
 
 
