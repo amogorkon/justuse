@@ -162,3 +162,11 @@ def test_use_kwargs(reuse):
         return
     mod = reuse(package_name="matplotlib", module_name="matplotlib.pyplot")
     assert mod
+    
+def test_use_use(reuse):
+    mod = reuse("justuse/use.use", version="0.5.0", hashes={'4b3d8cbccb1c254cc6724a8b56c03507fa9b93ac26d0fce8345ba12b38d6a745'}, modes=reuse.auto_install)
+    assert mod
+    assert mod.__version__ == "0.5.0"
+    assert mod.__name__ == "use.use"
+    assert mod.__file__.replace("\\", "/").endswith("/use/use.py")
+
