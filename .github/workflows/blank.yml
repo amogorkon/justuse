@@ -22,11 +22,6 @@ jobs:
           architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified
       - name: Ubuntu - Run Unit Tests with Coverage
         run: |
-          set -x -v
-          export FTP_USER="${{ secrets.FTP_USER }}" FTP_PASS="${{ secrets.FTP_PASS }}"
-          mkdir -p ~/.justuse-python/;
-          typeset -p | grep -vFe PASS;
-          echo -E $'debug=true\ndebugging=true\n' > ~/.justuse-python/config.toml;
           DEBUG=1
           PYTHON="$( which python3; )"
           PYTHON3="$( which python3; )"
@@ -38,16 +33,6 @@ jobs:
           "$PYTHON" -m pip install cython -r requirements.txt
           python3 -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage/ --cov-report annotate:coverage/annotated --cov-report xml:coverage/cov.xml '--cov=setup' '--cov=tests..tests..test1' '--cov=tests..tests..test2' '--cov=tests..tests..test3' '--cov=tests..tests.bar' '--cov=tests..tests.foo' '--cov=tests..tests.modA' '--cov=tests..tests.modA_test' '--cov=tests..tests.modB' '--cov=tests..tests.modD' '--cov=tests..tests.modE' '--cov=tests..tests.sys' '--cov=tests..tests.tests_subdir.modC' '--cov=tests.__init__' '--cov=tests.foo' '--cov=tests.simple_funcs' '--cov=tests.tdd_test' '--cov=tests.test' '--cov=tests.unit_test' '--cov=use..test4' '--cov=use.__init__' '--cov=use.use' -v --cov-append -vv && \
           ( cd tests/mass; seq 1 50 | xargs -d $'\n' -n 1 "$PYTHON"  -m coverage run --branch  --rcfile ../../.coveragerc --parallel-mode ./test_single.py  ; cd ../..; find "(" -name ".coverage" -o -name ".coverage*" ")" -exec "$PYTHON" -m coverage combine --append --rcfile=.coveragerc "{}" +;  passed=$( ls ./results/pass/* | wc -l; ); echo "$passed / 50 passed"; ) 
-      - name: Collect Coverage
-        run: |
-          set -x -v
-          find . -regextype egrep -type f -a -iregex ".*cov.*" \
-            | sort | cut -c 3- | tar -zcvf coverage-ubuntu.tar.gz --files-from=-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: coverage
-          path: coverage-ubuntu.tar.gz
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v2
         with:
@@ -81,24 +66,17 @@ jobs:
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade cython -r requirements.txt pywavelets sqlalchemy
           & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x86/ --cov-report annotate:coverage-win32-x86/annotated --cov-report xml:coverage-win32-x86/cov.xml --cov=setup --cov=tests..tests..test1 --cov=tests..tests..test2 --cov=tests..tests..test3 --cov=tests..tests.bar --cov=tests..tests.foo --cov=tests..tests.modA --cov=tests..tests.modA_test --cov=tests..tests.modB --cov=tests..tests.modD --cov=tests..tests.modE --cov=tests..tests.sys --cov=tests..tests.tests_subdir.modC --cov=tests.__init__ --cov=tests.foo --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.unit_test --cov=use.__init__ --cov=use.use -v --cov-append -vv
-      - name: Windows - Collect Coverage
-        run: |
-          & "xcopy.exe" ".\.coverage" ".\coverage-win32-x86"
-      - name: Collect Coverage
-        uses: master-atul/tar-action@v1.0.2
-        id: compress
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v2
         with:
-          command: c
-          cwd: .
-          files: |
-            ./.coverage
-            ./coverage-win32-x86
-          outPath: coverage-win32-x86.tar.gz
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: coverage
-          path: coverage-win32-x86.tar.gz
+          token: 20fb71ba-3e2b-46db-b86d-e1666d56665b
+          CODECOV_TOKEN: 20fb71ba-3e2b-46db-b86d-e1666d56665b
+          fail_ci_if_error: false # optional (default = false)
+          files: ./.coverage,./coverage/cov.xml # optional
+          flags: unittests # optional
+          name: codecov-justuse # optional
+          verbose: true # optional (default = false)
+
 
   test-windows-x64:
     runs-on: windows-latest
@@ -121,21 +99,13 @@ jobs:
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade cython -r requirements.txt pywavelets sqlalchemy
           & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x64/ --cov-report annotate:coverage-win32-x64/annotated --cov-report xml:coverage-win32-x64/cov.xml --cov=setup --cov=tests..tests..test1 --cov=tests..tests..test2 --cov=tests..tests..test3 --cov=tests..tests.bar --cov=tests..tests.foo --cov=tests..tests.modA --cov=tests..tests.modA_test --cov=tests..tests.modB --cov=tests..tests.modD --cov=tests..tests.modE --cov=tests..tests.sys --cov=tests..tests.tests_subdir.modC --cov=tests.__init__ --cov=tests.foo --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.unit_test --cov=use.__init__ --cov=use.use -v --cov-append -vv
-      - name: Windows - Collect Coverage
-        run: |
-          & "xcopy.exe" ".\.coverage" ".\coverage-win32-x64"
-      - name: Collect Coverage
-        uses: master-atul/tar-action@v1.0.2
-        id: compress
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v2
         with:
-          command: c
-          cwd: .
-          files: |
-            ./.coverage
-            ./coverage-win32-x64
-          outPath: coverage-win32-x64.tar.gz
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: coverage
-          path: coverage-win32-x64.tar.gz
+          token: 20fb71ba-3e2b-46db-b86d-e1666d56665b
+          CODECOV_TOKEN: 20fb71ba-3e2b-46db-b86d-e1666d56665b
+          fail_ci_if_error: false # optional (default = false)
+          files: ./.coverage,./coverage/cov.xml # optional
+          flags: unittests # optional
+          name: codecov-justuse # optional
+          verbose: true # optional (default = false)
