@@ -688,7 +688,7 @@ def _pebkac_version_no_hash(
         hashes = {
             entry.digests.get(hash_algo.name)
             for entry in (
-                _filtered_and_ordered_data(_get_package_data(package_name), version=version)
+                _get_package_data(package_name).releases[version]
             )
         }
         if not hashes:
