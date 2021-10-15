@@ -1330,6 +1330,7 @@ def _apply_aspect(
         if not aspectize_dunders and name.startswith("__") and name.endswith("__"):
             continue
         if check(obj) and re.match(pattern, name):
+            if "VERBOSE" in os.environ: \
             log.debug(f"Applying aspect to {thing}.{name}")
             thing.__dict__[name] = decorator(obj)
     return thing
