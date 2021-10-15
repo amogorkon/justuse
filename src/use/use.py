@@ -810,7 +810,7 @@ def _auto_install(
     ).fetchone()
 
     if not query or "installation_path" not in query:
-        query = _find_or_install(name, version)
+        query = _find_or_install(package_name, version, force_install=True)
     
     artifact_path = _ensure_path(query["artifact_path"])
     module_path = _ensure_path(query["module_path"])
@@ -825,6 +825,9 @@ def _auto_install(
     
     orig_cwd = Path.cwd()
     mod = None
+    
+    if not query or "installation_path" not in query:
+        query = _find_or_install(package_name, version, force_install=True)
     
     assert "installation_path" in query
     assert query["installation_path"]
@@ -2216,5 +2219,3 @@ use @ (isfunction, "", decorator_log_calling_function_and_args)
 
 if not test_version:
     sys.modules["use"] = use
-
-
