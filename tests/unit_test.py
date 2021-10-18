@@ -5,6 +5,7 @@ import sys
 import tempfile
 import warnings
 from contextlib import closing
+from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, distribution
 from importlib.util import find_spec
 from pathlib import Path
@@ -23,6 +24,7 @@ cwd = Path().cwd()
 os.chdir(src)
 sys.path.insert(0, "") if "" not in sys.path else None
 import use
+import use.hash_alphabet
 from use import PyPI_Release, Version
 
 os.chdir(cwd)
@@ -272,9 +274,7 @@ def test_is_version_satisfied(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert False == reuse._is_version_satisfied(
-        info.get("requires_python", ""), reuse.Version(sys_version)
-    )
+    assert False == reuse._is_version_satisfied(info.get("requires_python", ""), reuse.Version(sys_version))
 
     # pure python
     info = {
@@ -441,8 +441,7 @@ def installed_or_skip(reuse, name, version=None):
         pytest.skip(f"{name} partially installed: {spec=}, {pnfe}")
 
     if not (
-        (ver := dist.metadata["version"])
-        and (not version or reuse.Version(ver) == reuse.Version(version))
+        (ver := dist.metadata["version"]) and (not version or reuse.Version(ver) == reuse.Version(version))
     ):
         pytest.skip(f"found '{name}' v{ver}, but require v{version}")
         return False
@@ -552,6 +551,13 @@ def test_86(reuse, name, version, hashes):
         hashes=hashes,
         modes=use.auto_install,
     )
-    assert (
-        reuse.Version(modver) if (modver := reuse._get_version(mod=mod)) else version
-    ) == reuse.Version(version)
+    assert (reuse.Version(modver) if (modver := reuse._get_version(mod=mod)) else version) == reuse.Version(
+        version
+    )
+
+
+def test_hash_alphabet():
+    H = sha256("hello world".encode("utf-8")).hexdigest()
+    assert H == use.hash_alphabet.num_as_hexdigest(
+        use.hash_alphabet.CJK_as_num(use.hash_alphabet.hexdigest_as_CJK(H))
+    )

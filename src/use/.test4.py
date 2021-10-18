@@ -1,15 +1,12 @@
-from hash_alphabet import alphabet as E
+from hash_alphabet import CJK_as_num, hexdigest_as_CJK, reverse_alphabet
 import hash_alphabet as alph
-from hashlib import sha256
+from hashlib import sha256, sha3_512
 
-def represent_num_as_base(num, base):
-    if num == 0:
-        return [0]
-    digits = []
-    while num:
-        digits.append(num % base)
-        num //= base
-    return digits[::-1]
+H = sha256("hello world".encode("utf8")).hexdigest()
+K = hexdigest_as_CJK(H)
+N = CJK_as_num(K)
 
-print(''.join(E[c] for c in represent_num_as_base(int(sha256("hello world".encode("utf8")).hexdigest(), 16), len(E))))
-
+print(H)
+print(int(H, 16))
+print(K)
+print(N)
