@@ -6,9 +6,8 @@ from hash_alphabet_emojis import emojis
 from hash_alphabet_japanese import japanese_characters
 from hash_alphabet_korean import korean_characters
 
-ascii_characters = (
-    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!#$%&()*+,-./:;<=>?@[]^_`{|}~"
-)
+ascii_characters = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+# ascii chars aren't really needed for the number of characters but highlighting algos break on special chars
 # emojis only cause interoperability issues
 alphabet = list(ascii_characters) + chinese_characters + korean_characters
 alphabet = sorted(list(set(alphabet)))
