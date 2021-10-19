@@ -90,7 +90,8 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
+from functools import (partial, partialmethod, reduce, singledispatch,
+                       update_wrapper)
 from importlib import metadata
 from importlib.abc import Finder, Loader
 from importlib.machinery import ModuleSpec, SourceFileLoader
@@ -119,6 +120,7 @@ from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
 
 from use import hash_alphabet, pypi_model
+
 os.chdir(Path(__file__).parent)
 
 use = sys.modules.get(__name__)
@@ -667,7 +669,7 @@ def _pebkac_version_no_hash(
             return result
     try:
         hashes = {
-            hash_alphabet.hexdigest_as_CJK(entry.digests.get(hash_algo.name))
+            hash_alphabet.hexdigest_as_JACK(entry.digests.get(hash_algo.name))
             for entry in (_get_package_data(package_name).releases[version])
         }
         if not hashes:
@@ -2081,7 +2083,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if not hashes:
             hashes = set()
         hashes = {
-            H if len(H) == 64 else hash_alphabet.num_as_hexdigest(hash_alphabet.CJK_as_num(H)) for H in hashes
+            H if len(H) == 64 else hash_alphabet.num_as_hexdigest(hash_alphabet.JACK_as_num(H)) for H in hashes
         }
         rest = module_name
 

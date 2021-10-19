@@ -559,5 +559,5 @@ def test_86(reuse, name, version, hashes):
 def test_hash_alphabet():
     H = sha256("hello world".encode("utf-8")).hexdigest()
     assert H == use.hash_alphabet.num_as_hexdigest(
-        use.hash_alphabet.CJK_as_num(use.hash_alphabet.hexdigest_as_CJK(H))
+        use.hash_alphabet.JACK_as_num(use.hash_alphabet.hexdigest_as_JACK(H))
     )
