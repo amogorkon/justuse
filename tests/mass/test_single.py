@@ -65,7 +65,7 @@ def test_package(pkg: PackageToTest) -> tuple[bool, Dict]:
         use(pkg.name, modes=use.auto_install)
     except RuntimeWarning as e:
         if str(e).startswith("Please specify version and hash for auto-installation of"):
-            hashes = re.findall("hashes={([a-z0-9A-Z', ]+)}", str(e))[0]
+            hashes = re.findall("hashes={([^}]+)}", str(e))[0]
             hashes = {_hash.strip("'") for _hash in hashes.split(", ")}
             print(str(e))
             use_version = re.findall('version="(.*)", ', str(e))[0]
