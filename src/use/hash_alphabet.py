@@ -1,10 +1,11 @@
 # korean characters: https://github.com/arcsecw/wubi/blob/master/wubi/cw.py
 # chinese characters: https://github.com/tsroten/zhon/blob/develop/zhon/cedict/all.py
 
-from hash_alphabet_chinese import chinese_characters
-from hash_alphabet_emojis import emojis
-from hash_alphabet_japanese import japanese_characters
-from hash_alphabet_korean import korean_characters
+__package__ = "use"
+from use.hash_alphabet_chinese import chinese_characters
+from use.hash_alphabet_emojis import emojis
+from use.hash_alphabet_japanese import japanese_characters
+from use.hash_alphabet_korean import korean_characters
 
 ascii_characters = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # ascii chars aren't really needed for the number of characters but highlighting algos break on special chars

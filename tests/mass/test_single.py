@@ -20,6 +20,7 @@ __import__("use")
 use_py = Path(__file__).parent.parent.parent / "src" / "use" / "use.py"
 assert use_py.exists()
 print(Path(__file__).parent.parent.parent / "src")
+sys.path.append(str(Path(__file__).parent.parent.parent / "src"))
 os.chdir(Path(__file__).parent)
 import use
 from pydantic import BaseModel
@@ -173,5 +174,4 @@ if __name__ == "__main__":
 
     with open(out_dir / f"{pkg.name}.json", "w") as f:
         json.dump(info, f, indent=4, sort_keys=True)
-
 

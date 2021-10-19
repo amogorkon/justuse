@@ -118,15 +118,11 @@ from packaging import tags
 from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
 
-cwd = Path("")
+from use import hash_alphabet, pypi_model
 os.chdir(Path(__file__).parent)
-import hash_alphabet
-import pypi_model
 
 use = sys.modules.get(__name__)
 from pypi_model import PyPI_Project, PyPI_Release, Version
-
-os.chdir(cwd)
 
 #% Constants and Initialization
 
