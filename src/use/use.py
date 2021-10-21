@@ -119,6 +119,7 @@ from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
 
 from use import hash_alphabet, pypi_model
+from modules import Decorators as D
 
 os.chdir(Path(__file__).parent)
 
@@ -162,7 +163,6 @@ else:
 
 # TODO: log to file
 log = getLogger(__name__)
-
 
 class Hash(Enum):
     sha256 = hashlib.sha256
@@ -209,61 +209,6 @@ def atexit_hook():
 from atexit import register
 
 atexit.register(atexit_hook)
-#%% Pipes
-
-# Since we have quite a bit of functional code that black would turn into a sort of arrow antipattern with lots of ((())),
-# we use @pipes to basically enable polish notation which allows us to avoid most parentheses.
-# source >> func(args) is equivalent to func(source, args) and
-# source << func(args) is equivalent to func(args, source), which can be chained arbitrarily.
-# Rules:
-# 1) apply pipes only to 3 or more nested function calls
-# 2) no pipes on single lines, since mixing << and >> is just confusing (also, having pipes on different lines has other benefits beside better readability)
-# 3) don't mix pipes with regular parenthesized function calls, that's just confusing
-# See https://github.com/robinhilliard/pipes/blob/master/pipeop/__init__.py for details and credit.
-class _PipeTransformer(ast.NodeTransformer):
-    def visit_BinOp(self, node):
-        if not isinstance(node.op, (ast.LShift, ast.RShift)):
-            return node
-        if not isinstance(node.right, ast.Call):
-            return self.visit(
-                ast.Call(
-                    func=node.right,
-                    args=[node.left],
-                    keywords=[],
-                    starargs=None,
-                    kwargs=None,
-                    lineno=node.right.lineno,
-                    col_offset=node.right.col_offset,
-                )
-            )
-        node.right.args.insert(0 if isinstance(node.op, ast.RShift) else len(node.right.args), node.left)
-        return self.visit(node.right)
-
-
-def pipes(func_or_class):
-    if inspect.isclass(func_or_class):
-        decorator_frame = inspect.stack()[1]
-        ctx = decorator_frame[0].f_locals
-        first_line_number = decorator_frame[2]
-    else:
-        ctx = func_or_class.__globals__
-        first_line_number = func_or_class.__code__.co_firstlineno
-    source = inspect.getsource(func_or_class)
-    tree = ast.parse(dedent(source))
-    ast.increment_lineno(tree, first_line_number - 1)
-    source_indent = sum(1 for _ in takewhile(str.isspace, source)) + 1
-    for node in ast.walk(tree):
-        if hasattr(node, "col_offset"):
-            node.col_offset += source_indent
-    tree.body[0].decorator_list = [
-        d
-        for d in tree.body[0].decorator_list
-        if isinstance(d, ast.Call) and d.func.id != "pipes" or isinstance(d, ast.Name) and d.id != "pipes"
-    ]
-    tree = _PipeTransformer().visit(tree)
-    code = compile(tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec")
-    exec(code, ctx)
-    return ctx[tree.body[0].name]
 
 
 #%% Version and Packaging
@@ -414,7 +359,7 @@ class KwargsMessage(Message):
 #% Installation and Import Functions
 
 
-@pipes
+@D.pipes
 def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
     if isinstance(value, (str, bytes)):
         return Path(value).absolute()
@@ -510,7 +455,7 @@ class ZipFunctions:
             return (Path(entry_name).stem, text)
 
 
-@pipes
+@D.pipes
 def archive_meta(artifact_path):
     DIST_PKG_INFO_REGEX = re.compile("(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$")
     meta = archive = names = functions = None
@@ -683,7 +628,7 @@ def _pebkac_version_no_hash(
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
 
 
-@pipes
+@D.pipes
 def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Exception:
     # let's try to make an educated guess and give a useful suggestion
     data = _get_package_data(package_name) >> _filter_by_platform(
@@ -1192,7 +1137,7 @@ def _filter_by_platform(
     return PyPI_Project(**{**project.dict(), **{"releases": filtered}})
 
 
-@pipes
+@D.pipes
 def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> list[PyPI_Release]:
     if version:
         filtered = (
@@ -1223,7 +1168,7 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
     return is_match
 
 
-@pipes
+@D.pipes
 def _is_platform_compatible(
     info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
 ) -> bool:
