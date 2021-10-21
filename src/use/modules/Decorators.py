@@ -14,7 +14,7 @@ from textwrap import dedent
 from functools import singledispatch, update_wrapper
 from typing import Callable
 
-from private._PipeTransformer import _PipeTransformer
+from .private._PipeTransformer import _PipeTransformer
 
 
 # singledispatch for methods

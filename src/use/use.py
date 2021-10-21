@@ -119,7 +119,7 @@ from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
 
 from use import hash_alphabet, pypi_model
-from modules import Decorators as D
+from .modules import Decorators as D
 
 os.chdir(Path(__file__).parent)
 
