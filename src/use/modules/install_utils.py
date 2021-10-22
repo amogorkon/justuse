@@ -12,7 +12,8 @@ import tarfile
 import zipfile
 import zipimport
 from enum import Enum
-from functools import cache, reduce
+from functools import lru_cache as cache
+from functools import reduce
 from importlib import metadata
 from importlib.machinery import ModuleSpec, SourceFileLoader
 from importlib.metadata import PackageNotFoundError
@@ -33,7 +34,7 @@ from packaging import tags
 from pip._internal.utils import compatibility_tags
 from packaging.specifiers import SpecifierSet
 
-import hash_alphabet
+from .. import hash_alphabet
 from . import Decorators as D
 from .Hashish import Hash
 from .init_conf import config, use
@@ -837,7 +838,7 @@ def _load_venv_entry(package_name, rest, installation_path, module_path) -> Modu
                 sys.path.append(p)
 
 
-@cache(maxsize=512, typed=True)
+@cache(maxsize=512)
 def _get_package_data(package_name) -> PyPI_Project:
     json_url = f"https://pypi.org/pypi/{package_name}/json"
     response = requests.get(json_url)

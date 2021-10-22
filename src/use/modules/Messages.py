@@ -3,7 +3,7 @@
 # Fun fact: f-strings are firmly rooted in the AST.
 from enum import Enum
 
-from pypi_model import Version
+from ..pypi_model import Version
 from .init_conf import __version__
 
 

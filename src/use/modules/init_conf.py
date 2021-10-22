@@ -7,8 +7,6 @@ from logging import getLogger, DEBUG, INFO, NOTSET, StreamHandler, root
 from typing import Any
 from pathlib import Path
 
-from .Mod import ProxyModule
-
 
 log = getLogger(__name__)
 
