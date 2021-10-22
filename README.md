@@ -31,7 +31,7 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [ ] provide a visual representation of the internal dependency graph
 - [ ] module-level variable guards aka "module-properties"
 - [ ] isolation of packages via subprocess/subinterpreter for clean un-/reloading
-- [ ] documentation
+- [ ] document everything!
 - [ ] testing everything!
 
 ## The Story
