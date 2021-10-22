@@ -85,9 +85,9 @@ To auto-install packages, the simplest way is to try to import the package simpl
 RuntimeWarning: Please specify version and hash for auto-installation of 'example-pypi-package'. 
 To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/example-pypi-package
 If you want to auto-install the latest version: 
-use("example-pypi-package/examplepy", version="0.1.0", hashes={"ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77"}, modes=use.auto_install)
+use("example-pypi-package/examplepy", version="0.1.0", hashes={'S㵈蛴瞙绽㡃鸡㜖僼池梵鰼䯐朠鉂䤜坠葆', '7易搻倐㺍䚡儙琟陻㿷匦䗯闍脷䇅㫄烶匆'}, modes=use.auto_install)  
 
->>> test = use("example-pypi-package/examplepy", version="0.1.0", hashes={"ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77"}, modes=use.auto_install)
+>>> test = use("example-pypi-package/examplepy", version="0.1.0", hashes={"S㵈蛴瞙绽㡃鸡㜖僼池梵鰼䯐朠鉂䤜坠葆"}, modes=use.auto_install)
 => download and import the requested package, version-pinned and hash-checked inline!
 ```
 Version-pinning and hash-checking is the most secure way to install a package. It will ensure that your code will always run as you expect it, but there's a drawback: there is no immediate and automatic way to update code without involving the user (yet). On one side, you won't ever accidentally break your stuff by updating something else, but you also won't benefit from automatic security patches. To fix this shortcoming, it might be feasible to build IDE-plugins that check and update these pins in the code or check some database for security patches every time an auto-installed package is imported - please contact us if you have ideas or better yet, code ;-)
