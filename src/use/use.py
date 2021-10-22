@@ -124,6 +124,7 @@ __version__ = "0.5.0"  # IMPORTANT; Must leave exactly as-is for setup
 mode = Modes
 auto_install = mode.auto_install
 
+
 from .modules import Decorators as D
 from .modules.Hashish import Hash
 from .modules.Mod import ProxyModule, ModuleReloader
@@ -162,6 +163,7 @@ use = sys.modules.get(__name__)
 home = Path(
     os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))
 ).absolute()
+
 
 # sometimes all you need is a sledge hammer..
 def releaser(cls: Callable[Type["ShutdownLockReleaser"], NoneType]):
@@ -207,6 +209,7 @@ class PlatformTag:
     @require(lambda self, other: isinstance(other, self.__class__))
     def __eq__(self, other):
         return self.platform == other.platform
+
 
 
 class Use(ModuleType):
@@ -264,6 +267,7 @@ class Use(ModuleType):
     def _set_up_files_and_directories(self):
         global home
         self.home = home
+
         try:
             self.home.mkdir(mode=0o755, parents=True, exist_ok=True)
         except PermissionError:
@@ -826,6 +830,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         
         modes |= mode.fastfail
         
+
         if isinstance(hashes, str):
             hashes = set([hashes])
         if not hashes:
@@ -834,6 +839,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             H
             if len(H) == 64
             else num_as_hexdigest(JACK_as_num(H))
+
             for H in hashes
         }
         callstr = (
