@@ -68,47 +68,34 @@ from __future__ import annotations
 import ast
 import asyncio
 import atexit
-import codecs
 import hashlib
 import importlib.util
 import inspect
-import linecache
 import os
-import platform
-import re
-import shlex
 import signal
 import sqlite3
 import sys
-import tarfile
 import tempfile
 import threading
 import time
 import traceback
-import zipfile
-import zipimport
-from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
 from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.abc import Finder, Loader
-from importlib.machinery import ModuleSpec, SourceFileLoader
 from importlib.metadata import Distribution, PackageNotFoundError, distribution
 from importlib.util import find_spec
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
 from pathlib import Path, PureWindowsPath, WindowsPath
-from pprint import pformat
 from subprocess import PIPE, run
 from textwrap import dedent
 from types import FrameType, ModuleType
 from typing import Any, Callable, Optional, Union
 from warnings import warn
 
-import furl
-import packaging
 import requests
 import toml
 from beartype import beartype
@@ -117,78 +104,48 @@ from icontract import ensure, invariant, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
+from .modules import Decorators as D
+from .modules.Hashish import Hash
+from .modules.Mod import ProxyModule, ModuleReloader
+from .modules.Messages import (
+    AmbiguityWarning,
+    Message,
+    NoValidationWarning,
+    NotReloadableWarning,
+    UnexpectedHash,
+    VersionWarning,
+)
+from .modules.init_conf import (
+    config,
+    log,
+    mode,
+    ModInUse,
+    test_config,
+    test_version,
+    _reloaders,
+    _using,
+    __version__,
+)
+from .modules.install_utils import (
+    _apply_aspect,
+    _auto_install,
+    _build_mod,
+    _ensure_path,
+    _ensure_version,
+    _fail_or_default,
+    _import_public_no_install,
+    _parse_name,
+    _pebkac_version_no_hash,
+    _pebkac_no_version_hash,
+    _pebkac_no_version_no_hash,
+)
 
 from use import hash_alphabet, pypi_model
-from .modules import Decorators as D
-from .modules.ModuleReloader import ModuleReloader
-from .modules.Warnings import (
-    VersionWarning,
-    NotReloadableWarning,
-    NoValidationWarning,
-    AmbiguityWarning,
-    UnexpectedHash,
-    AutoInstallationError,
-)
-from .modules.ProxyModule import ProxyModule
-from .modules.TarFunctions import TarFunctions
-from .modules.ZipFunctions import ZipFunctions
-from .modules.private._build_mod import _build_mod
-from .modules.private._ensure_path import _ensure_path
-from .modules.private._parse_name import _parse_name
-from .modules.get_supported import get_supported
-from .modules.private._versioning import (
-    _sys_version,
-    _filter_by_platform,
-    _filter_by_version,
-    _filtered_and_ordered_data,
-)
-from .modules.private._logging import log
 
 os.chdir(Path(__file__).parent)
 
 use = sys.modules.get(__name__)
 from pypi_model import PyPI_Project, PyPI_Release, Version
-
-#% Constants and Initialization
-
-# injected via initial_globals for testing, you can safely ignore this
-test_config: str = locals().get("test_config", {})
-test_version: str = locals().get("test_version", None)
-__name__ = "use.use"
-__package__ = "use"
-__path__ = __file__
-__spec__ = ModuleSpec("use.use", loader=SourceFileLoader(fullname="use", path=__file__))
-__spec__.submodule_search_locations = [Path(__file__).parent]
-__version__ = test_version or "0.5.0"
-
-_reloaders: dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
-_aspects = {}
-_using = {}
-
-ModInUse = namedtuple("ModInUse", "name mod path spec frame")
-NoneType = type(None)
-
-
-# Really looking forward to actual builtin sentinel values..
-mode = Enum("Mode", "fastfail")
-
-# defaults
-config = {"version_warning": True, "debugging": False, "use_db": True}
-
-# initialize logging
-root.addHandler(StreamHandler(sys.stderr))
-root.setLevel(NOTSET)
-if "DEBUG" in os.environ or "pytest" in getattr(
-    sys.modules.get("__init__", ""), "__file__", ""
-):
-    root.setLevel(DEBUG)
-    test_config["debugging"] = True
-else:
-    root.setLevel(INFO)
-
-
-class Hash(Enum):
-    sha256 = hashlib.sha256
 
 
 # sometimes all you need is a sledge hammer..
@@ -210,855 +167,25 @@ from atexit import register
 atexit.register(atexit_hook)
 
 
-#% Helper Functions
+#%% Version and Packaging
 
-# keyword args from inside the called function!
-def all_kwargs(func, other_locals):
-    d = {
-        name: other_locals[name]
-        for name, param in inspect.signature(func).parameters.items()
-        if (
-            param.kind is inspect.Parameter.KEYWORD_ONLY
-            or param.kind is inspect.Parameter.VAR_KEYWORD
-        )
-    }
-    d.update(d["kwargs"])
-    del d["kwargs"]
-    return d
 
+class PlatformTag:
+    def __init__(self, platform: str):
+        self.platform = platform
 
-# This is a collection of the messages directed to the user.
-# How it works is quite magical - the lambdas prevent the f-strings from being prematuraly evaluated, and are only evaluated once returned.
-# Fun fact: f-strings are firmly rooted in the AST.
-class Message(Enum):
-    not_reloadable = (
-        lambda name: f"Beware {name} also contains non-function objects, it may not be safe to reload!"
-    )
-    couldnt_connect_to_db = (
-        lambda e: f"Could not connect to the registry database, please make sure it is accessible. ({e})"
-    )
-    use_version_warning = (
-        lambda max_version: f"""Justuse is version {Version(__version__)}, but there is a newer version {max_version} available on PyPI.
-To find out more about the changes check out https://github.com/amogorkon/justuse/wiki/What's-new
-Please consider upgrading via
-python -m pip install -U justuse
-"""
-    )
-    cant_use = (
-        lambda thing: f"Only pathlib.Path, yarl.URL and str are valid sources of things to import, but got {type(thing)}."
-    )
-    web_error = (
-        lambda url, response: f"Could not load {url} from the interwebs, got a {response.status_code} error."
-    )
-    no_validation = (
-        lambda url, hash_algo, this_hash: f"""Attempting to import from the interwebs with no validation whatsoever!
-To safely reproduce:
-use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
-    )
-    version_warning = (
-        lambda package_name, target_version, this_version: f"{package_name} expected to be version {target_version}, but got {this_version} instead"
-    )
-    ambiguous_name_warning = (
-        lambda package_name: f"Attempting to load the pkg '{package_name}', if you rather want to use the local module: use(use._ensure_path('{package_name}.py'))"
-    )
-    no_version_provided = (
-        lambda: "No version was provided, even though auto_install was specified! Trying to load classically installed pkg instead."
-    )
-    classically_imported = (
-        lambda name, this_version: f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")'
-    )
-    pebkac_missing_hash = (
-        lambda name, package_name, version, hashes: f"""Failed to auto-install {package_name!r} because hashes is missing. This may work:
-use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
-    )
-    pebkac_unsupported = (
-        lambda package_name: f"We could not find any version or release for {package_name} that could satisfy our requirements!"
-    )
-    pip_json_mess = (
-        lambda package_name, target_version: f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI."
-    )
-    no_version_or_hash_provided = (
-        lambda name, package_name, version, hashes: f"""Please specify version and hash for auto-installation of {package_name!r}.
-To get some valuable insight on the health of this pkg, please check out https://snyk.io/advisor/python/{package_name}
-If you want to auto-install the latest version:
-use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
-    )
-    cant_import = (
-        lambda name: f"No pkg installed named {name} and auto-installation not requested. Aborting."
-    )
-    cant_import_no_version = (
-        lambda package_name: f"Failed to auto-install '{package_name}' because no version was specified."
-    )
-    venv_unavailable = (
-        lambda python_exe, python_version, python_platform: f"""
-Your system does not have a usable 'venv' pkg for this version of Python:
-   Path =     {python_exe}
-   Version =  {python_version}
-   Platform = {python_platform}
+    def __str__(self):
+        return self.platform
 
-Please run:
-   sudo apt update
-   sudo apt install python3-venv
-to install the necessary packages.
+    def __repr__(self):
+        return f"use.PlatformTag({self.platform!r})"
 
-You can test if your version of venv is working by running:
-  {python_exe} -m venv testenv && ls -lA testenv/bin/python
-"""
-    )
-    no_distribution_found = (
-        lambda package_name, version: f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
-    )
+    def __hash__(self):
+        return hash(self.platform)
 
-
-class StrMessage(Message):
-    cant_import = (
-        lambda package_name: f"No pkg installed named {package_name} and auto-installation not requested. Aborting."
-    )
-
-
-class TupleMessage(Message):
-    pass
-
-
-class KwargsMessage(Message):
-    pass
-
-
-#% Installation and Import Functions
-
-
-def sort_releases_by_install_method(project: PyPI_Project) -> PyPI_Project:
-    return PyPI_Project(
-        **{
-            **project.dict(),
-            **{
-                "releases": {
-                    k: [x.dict() for x in sorted(v, key=lambda r: r.is_sdist)]
-                    for k, v in project.releases.items()
-                }
-            },
-        }
-    )
-
-
-def recommend_best_version(project: PyPI_Project) -> list:
-    sorted(project.releases.keys(), reverse=True)
-
-
-@D.pipes
-def archive_meta(artifact_path):
-    DIST_PKG_INFO_REGEX = re.compile("(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$")
-    meta = archive = names = functions = None
-
-    if ".tar" in str(artifact_path):
-        archive = tarfile.open(artifact_path)
-
-        def get_archive(artifact_path):
-            archive = tarfile.open(artifact_path)
-            return (archive, [m.name for m in archive.getmembers() if m.type == b"0"])
-
-        functions = TarFunctions(artifact_path)
-    else:
-
-        def get_archive(artifact_path):
-            archive = zipfile.ZipFile(artifact_path)
-            return (archive, [e.filename for e in archive.filelist])
-
-        functions = ZipFunctions(artifact_path)
-
-    archive, names = get_archive(artifact_path)
-    archive, names = functions.get()
-    meta = dict(
-        names << filter(DIST_PKG_INFO_REGEX.search) << map(functions.read_entry)
-    )
-    meta.update(
-        dict(
-            (lp := l.partition(": "), (lp[0].lower().replace("-", "_"), lp[2]))[-1]
-            for l in meta.get("METADATA", meta.get("PKG-INFO"))
-            if ": " in l
-        )
-    )
-    name = meta.get("name", Path(artifact_path).stem.split("-")[0])
-    meta["name"] = name
-    if "top_level" not in meta:
-        meta["top_level"] = [""]
-    (
-        top_level,
-        name,
-    ) = (meta["top_level"][0], meta["name"])
-    import_name = (name,) if (top_level == name) else (top_level, name)
-    meta["names"] = names
-    meta["import_name"] = import_name
-    for relpath in sorted(
-        [n for n in names if len(n) > 4 and n[-3:] == ".py"],
-        key=lambda n: (
-            not n.startswith(import_name),
-            not n.endswith("__init__.py"),
-            len(n),
-        ),
-    ):
-        meta["import_relpath"] = relpath
-        break
-    archive.close()
-    return meta
-
-
-def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
-    loader = None
-    if not loader and isinstance(obj, ModuleType):
-        loader = obj.__loader__
-    if (
-        not loader
-        and isinstance(obj, ModuleType)
-        and (spec := getattr(obj, "__spec__", None))
-    ):
-        loader = spec.loader
-    if not loader and isinstance(obj, ModuleSpec):
-        loader = obj.loader
-    if not loader and hasattr(importlib.util, "loader_from_spec"):
-        loader = importlib.util.loader_from_spec(obj)
-    if not loader and isinstance(obj, ModuleType):
-        name = obj.__name__
-        mod = obj
-        segments = name.split(".")
-        parent_mod = importlib.import_module(".".join(segments[:-1]))
-        parent_spec = parent_mod.__spec__
-        ctor_args = [
-            (
-                k,
-                getattr(mod, "__name__")
-                if "name" in k
-                else (
-                    list(
-                        Path(parent_spec.submodule_search_locations[0]).glob(
-                            mod.__name__[len(parent_mod.__name__) + 1 :] + ".*"
-                        )
-                    )
-                    + list(
-                        Path(parent_spec.submodule_search_locations[0]).glob(
-                            mod.__name__[len(parent_mod.__name__) + 1 :]
-                            + "/__init__.py"
-                        )
-                    )
-                )[0]
-                if ("path" in k or "file" in k or "loc" in k)
-                else k,
-            )
-            for k in list(
-                inspect.signature(type(parent_mod.__loader__).__init__).parameters
-            )[1:]
-        ]
-        loader = type(parent_mod.__loader__)(*ctor_args)
-    if not loader:
-        if isinstance(obj, ModuleType):
-            name = obj.__name__
-            spec = obj.__spec__
-        if isinstance(obj, ModuleSpec):
-            name = obj.name
-            spec = obj
-        module_path = (
-            getattr(spec, "origin", None)
-            or getattr(obj, "__file__", None)
-            or getattr(obj, "__path__", None)
-            or inspect.getsourcefile(obj)
-        )
-        loader = SourceFileLoader(name, module_path)
-    return loader
-
-
-def _clean_sys_modules(package_name: str) -> None:
-    for k in dict(
-        [
-            (k, _ensure_loader(v))
-            for k, v in sys.modules.items()
-            if (
-                getattr(v, "__spec__", None) is None
-                or isinstance(
-                    _ensure_loader(v), (SourceFileLoader, zipimport.zipimporter)
-                )
-            )
-            and package_name in k.split(".")
-        ]
-    ):
-        if k in sys.modules:
-            del sys.modules[k]
-
-
-def _venv_root(package_name, version, home) -> Path:
-    assert version
-    return home / "venv" / package_name / str(version)
-
-
-def _pebkac_no_version_hash(
-    func=None, *, name: str, **kwargs
-) -> Union[ModuleType, Exception]:
-
-    if func:
-        result = func(name=name, **kwargs)
-        if isinstance(result, ModuleType):
-            return result
-    return RuntimeWarning(Message.cant_import_no_version(name))
-
-
-def _pebkac_version_no_hash(
-    func=None,
-    *,
-    name: str,
-    version: Version,
-    hash_algo,
-    package_name: str,
-    message_formatter: Callable[
-        [str, str, Version, set[str]], str
-    ] = Message.pebkac_missing_hash,
-    **kwargs,
-) -> Union[Exception, ModuleType]:
-    if func:
-        result = func(**all_kwargs(_pebkac_version_no_hash, locals()))
-        if isinstance(result, ModuleType):
-            return result
-    try:
-        hashes = {
-            hash_alphabet.hexdigest_as_JACK(entry.digests.get(hash_algo.name))
-            for entry in (_get_package_data(package_name).releases[version])
-        }
-        if not hashes:
-            rw = RuntimeWarning(Message.pebkac_unsupported(package_name))
-        else:
-            rw = RuntimeWarning(message_formatter(name, package_name, version, hashes))
-        rw.name = name
-        rw.version = version
-        rw.hashes = hashes
-        return rw
-    except (IndexError, KeyError) as ike:
-        return RuntimeWarning(Message.no_distribution_found(package_name, version))
-
-
-@D.pipes
-def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Exception:
-    # let's try to make an educated guess and give a useful suggestion
-    data = _get_package_data(package_name) >> _filter_by_platform(
-        tags=get_supported(), sys_version=_sys_version()
-    )
-    flat = reduce(list.__add__, data.releases.values(), [])
-    priority = sorted(flat, key=lambda r: (not r.is_sdist, r.version), reverse=True)
-
-    for info in priority:
-        return _pebkac_version_no_hash(
-            func=None,
-            name=name,
-            version=info.version,
-            hash_algo=hash_algo,
-            package_name=package_name,
-            message_formatter=Message.no_version_or_hash_provided,
-        )
-
-    rw = RuntimeWarning(Message.pebkac_unsupported(package_name))
-    rw.name = package_name
-    return rw
-
-
-def _import_public_no_install(
-    *,
-    package_name,
-    module_name,
-    spec,
-    **kwargs,
-) -> Union[ModuleType, Exception]:
-    # builtin?
-    builtin = False
-    try:
-        metadata.PathDistribution.from_name(package_name)
-    except metadata.PackageNotFoundError:  # indeed builtin!
-        builtin = True
-
-    if builtin:
-        return _extracted_from__import_public_no_install_18(module_name, spec)
-    # it seems to be installed in some way, for instance via pip
-    return importlib.import_module(module_name)  # ! => cache
-
-
-# TODO Rename this here and in `_import_public_no_install`
-def _extracted_from__import_public_no_install_18(module_name, spec):
-    if spec.name in sys.modules:
-        mod = sys.modules[spec.name]
-        importlib.reload(mod)
-    else:
-        mod = _ensure_loader(spec).create_module(spec)
-    if mod is None:
-        mod = importlib.import_module(module_name)
-    assert mod
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)  # ! => cache
-    return mod
-
-
-def _auto_install(
-    func=None,
-    *,
-    name,
-    version,
-    package_name,
-    rest,
-    hash_algo=Hash.sha256.name,
-    self=None,
-    **kwargs,
-) -> Union[ModuleType, BaseException]:
-    package_name, rest = _parse_name(name)
-
-    if func:
-        result = func(**all_kwargs(_auto_install, locals()))
-        if isinstance(result, ModuleType):
-            return result
-
-    query = self.execute_wrapped(
-        f"""
-        SELECT
-            artifacts.id, import_relpath,
-            artifact_path, installation_path, module_path
-        FROM distributions
-        JOIN artifacts ON artifacts.id = distributions.id
-        WHERE name='{package_name}' AND version='str(version)'
-        ORDER BY artifacts.id DESC
-        """
-    ).fetchone()
-
-    if not query or not _ensure_path(query["artifact_path"]).exists():
-        query = _find_or_install(package_name, version)
-
-    artifact_path = _ensure_path(query["artifact_path"])
-    if _ensure_path(query["module_path"]) == Path(
-        "/data/media/0/src/use/src/twisted/__init__.py"
-    ):
-        raise BaseException("module_path")
-    module_path = _ensure_path(query["module_path"])
-    # trying to import directly from zip
-    _clean_sys_modules(rest)
-    try:
-        importer = zipimport.zipimporter(artifact_path)
-        return importer.load_module(query["import_name"])
-    except BaseException as zerr:
-        pass
-    orig_cwd = Path.cwd()
-    mod = None
-    if "installation_path" not in query:
-        query = _find_or_install(package_name, version, force_install=True)
-        artifact_path = _ensure_path(query["artifact_path"])
-        module_path = _ensure_path(query["module_path"])
-    assert "installation_path" in query
-    assert query["installation_path"]
-    installation_path = _ensure_path(query["installation_path"])
-    try:
-        module_path = _ensure_path(query["module_path"])
-        os.chdir(installation_path)
-        import_name = (
-            str(module_path.relative_to(installation_path))
-            .replace("\\", "/")
-            .replace("/__init__.py", "")
-            .replace("-", "_")
-        )
-        return (
-            mod := _load_venv_entry(
-                package_name,
-                import_name,
-                module_path=module_path,
-                installation_path=installation_path,
-            )
-        )
-
-    finally:
-        os.chdir(orig_cwd)
-        if "fault_inject" in config:
-            config["fault_inject"](**locals())
-        if mod:
-            use._save_module_info(
-                name=package_name,
-                import_relpath=str(
-                    _ensure_path(module_path).relative_to(installation_path)
-                ),
-                version=version,
-                artifact_path=artifact_path,
-                hash_value=hash_algo.value(artifact_path.read_bytes()).hexdigest(),
-                module_path=module_path,
-                installation_path=installation_path,
-            )
-
-
-def _process(*argv, env={}):
-    _realenv = {
-        k: v
-        for k, v in chain(os.environ.items(), env.items())
-        if isinstance(k, str) and isinstance(v, str)
-    }
-    o = run(
-        **(
-            setup := dict(
-                executable=(exe := argv[0]),
-                args=[*map(str, argv)],
-                bufsize=1024,
-                input="",
-                capture_output=True,
-                timeout=45000,
-                check=False,
-                close_fds=True,
-                env=_realenv,
-                encoding="ISO-8859-1",
-                errors="ISO-8859-1",
-                text=True,
-                shell=False,
-            )
-        )
-    )
-    if o.returncode == 0:
-        return o
-    raise RuntimeError(
-        "\x0a".join(
-            (
-                "\x1b[1;41;37m",
-                "Problem running--command exited with non-zero: %d",
-                "%s",
-                "---[  Errors  ]---",
-                "%s",
-                "\x1b[0;1;37m",
-                "Arguments to subprocess.run(**setup):",
-                "%s",
-                "---[  STDOUT  ]---",
-                "%s",
-                "---[  STDERR  ]---",
-                "%s\x1b[0m",
-            )
-        )
-        % (
-            o.returncode,
-            shlex.join(map(str, setup["args"])),
-            o.stderr or o.stdout,
-            pformat(setup, indent=2, width=70, compact=False),
-            o.stdout,
-            o.stderr,
-        )
-        if o.returncode != 0
-        else ("%s\n\n%s") % (o.stdout, o.stderr)
-    )
-
-
-def _find_version(package_name, version=None) -> PyPI_Release:
-    data = _filtered_and_ordered_data(_get_package_data(package_name), version)
-    return data[0]
-
-
-def _get_venv_env(venv_root: Path) -> dict[str, str]:
-    pathvar = os.environ.get("PATH")
-    python_exe = Path(sys.executable)
-    if not venv_root.exists():
-        venv_root.mkdir(parents=True)
-    exe_dir = python_exe.parent.absolute()
-    return {}
-
-
-@ensure(lambda url: str(url).startswith("http"))
-def _download_artifact(name, version, filename, url) -> Path:
-    artifact_path = (sys.modules["use"].home / "packages" / filename).absolute()
-    if not artifact_path.exists():
-        log.info("Downloading %s==%s from %s", name, version, url)
-        data = requests.get(url).content
-        artifact_path.write_bytes(data)
-        log.debug("Wrote %d bytes to %s", len(data), artifact_path)
-    return artifact_path
-
-
-def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
-    for k, v in tuple(a_dict.items()):
-        if v is None or v == "":
-            del a_dict[k]
-    return a_dict
-
-
-def _pure_python_package(artifact_path, meta):
-    not_pure_python = any(
-        any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES)
-        for n in meta["names"]
-    )
-
-    if ".tar" in str(artifact_path):
-        return False
-    if not_pure_python:
-        return False
-    return True
-
-
-def _find_module_in_venv(package_name, version, relp):
-    ret = None, None
-    try:
-        site_dirs = list(
-            (sys.modules["use"].home / "venv" / package_name / str(version)).rglob(
-                "**/site-packages"
-            )
-        )
-        if not site_dirs:
-            return ret
-
-        dist = None
-        mod_relative_to_site = None
-        osp = None
-        for site_dir in site_dirs:
-            osp = list(sys.path)
-            sys.path.clear()
-            sys.path.insert(0, str(site_dir))
-            try:
-                dist = importlib.metadata.Distribution.from_name(package_name)
-                while not mod_relative_to_site:
-                    pps = [pp for pp in dist.files if pp.as_posix() == relp]
-                    if pps:
-                        mod_relative_to_site = pps[0]
-                        break
-                    if len(relp.split("/")) == 0:
-                        break
-                    relp = "/".join(relp.split("/")[1:])
-            except PackageNotFoundError:
-                continue
-            finally:
-                sys.path.remove(str(site_dir))
-                sys.path += osp
-        if mod_relative_to_site:
-            module_path = site_dir / mod_relative_to_site.as_posix()
-            return (ret := site_dir, module_path)
-        return ret
-    finally:
-        log.info(
-            "_find_module_in_venv(package_name=%s, version=%s, relp=%s) -> %s",
-            repr(package_name),
-            repr(version),
-            repr(relp),
-            repr(ret),
-        )
-
-
-def _find_or_install(
-    name, version=None, artifact_path=None, url=None, out_info=None, force_install=False
-):
-    log.debug(
-        "_find_or_install(name=%s, version=%s, artifact_path=%s, url=%s)",
-        name,
-        version,
-        artifact_path,
-        url,
-    )
-    if out_info is None:
-        out_info = {}
-    info = out_info
-    package_name, rest = _parse_name(name)
-
-    if isinstance(url, str):
-        url = URL(url)
-    filename = artifact_path.name if artifact_path else None
-    if url:
-        filename = url.asdict()["path"]["segments"][-1]
-    else:
-        filename = artifact_path.name if artifact_path else None
-    if filename and not artifact_path:
-        artifact_path = sys.modules["use"].home / "packages" / filename
-
-    if not url or not artifact_path or (artifact_path and not artifact_path.exists()):
-        info.update(
-            _filtered_and_ordered_data(_get_package_data(package_name), version)[
-                0
-            ].dict()
-        )
-        url = URL(str(info["url"]))
-        filename = url.asdict()["path"]["segments"][-1]
-        artifact_path = sys.modules["use"].home / "packages" / filename
-    out_info["artifact_path"] = artifact_path
-
-    # todo: set info
-    as_dict = info
-    url = URL(as_dict["url"])
-    filename = url.path.segments[-1]
-    info["filename"] = filename
-    # info.update(_parse_filename(filename))
-    info = {**info, "version": Version(version)}
-    if not artifact_path.exists():
-        artifact_path = _ensure_path(_download_artifact(name, version, filename, url))
-
-    out_info.update(info)
-    install_item = artifact_path
-    meta = archive_meta(artifact_path)
-    import_parts = re.split("[\\\\/]", meta["import_relpath"])
-    if "__init__.py" in import_parts:
-        import_parts.remove("__init__.py")
-    import_name = ".".join(import_parts)
-    name = f"{package_name}.{import_name}"
-    relp = meta["import_relpath"]
-    out_info["module_path"] = relp
-    out_info["import_relpath"] = relp
-    out_info["import_name"] = import_name
-    if not force_install and _pure_python_package(artifact_path, meta):
-        log.info(f"pure python pkg: {package_name, version, use.home}")
-        return out_info
-
-    venv_root = _venv_root(package_name, version, use.home)
-    out_info["installation_path"] = venv_root
-    python_exe = Path(sys.executable)
-    env = _get_venv_env(venv_root)
-    module_paths = venv_root.rglob(f"**/{relp}")
-    if force_install or (not python_exe.exists() or not any(module_paths)):
-        log.info("calling pip to install install_item=%s", install_item)
-
-        # If we get here, the venv/pip setup is required.
-        output = _process(
-            python_exe,
-            "-m",
-            "pip",
-            "--disable-pip-version-check",
-            "--no-color",
-            "install",
-            "--pre",
-            "--root",
-            PureWindowsPath(venv_root).drive
-            if isinstance(venv_root, (WindowsPath, PureWindowsPath))
-            else "/",
-            "--prefix",
-            str(venv_root),
-            "--progress-bar",
-            "ascii",
-            "--prefer-binary",
-            "--exists-action",
-            "i",
-            "--ignore-installed",
-            "--no-warn-script-location",
-            "--force-reinstall",
-            "--no-warn-conflicts",
-            install_item,
-        )
-        sys.stderr.write("\n\n".join((output.stderr, output.stdout)))
-
-    site_dir, module_path = _find_module_in_venv(package_name, version, relp)
-    module_paths = []
-    if module_path:
-        module_paths.append(module_path)
-        installation_path = site_dir
-
-    out_info.update(**meta)
-    assert module_paths
-
-    log.info("installation_path = %s", installation_path)
-    log.info("module_path = %s", module_path)
-    out_info.update(
-        {
-            **info,
-            "artifact_path": artifact_path,
-            "installation_path": installation_path,
-            "module_path": module_path,
-            "import_relpath": ".".join(relp.split("/")[0:-1]),
-            "info": info,
-        }
-    )
-    return _delete_none(out_info)
-
-
-def _load_venv_entry(package_name, rest, installation_path, module_path) -> ModuleType:
-    log.info(
-        "load_venv_entry package_name=%s rest=%s module_path=%s",
-        package_name,
-        rest,
-        module_path,
-    )
-    cwd = Path.cwd()
-    log.info(f"{cwd=}")
-    log.info(f"{sys.path=}")
-    orig_exc = None
-    old_sys_path = list(sys.path)
-    if sys.path[0] != "":
-        sys.path.insert(0, "")
-    with open(module_path, "rb") as code_file:
-        try:
-            for variant in (
-                installation_path,
-                Path(str(str(installation_path).replace("lib64/", "lib/"))),
-                Path(str(str(installation_path).replace("lib/", "lib64/"))),
-                None,
-            ):
-                if not variant:
-                    raise RuntimeError()
-                if not variant.exists():
-                    continue
-                try:
-                    os.chdir(cwd)
-                    os.chdir(variant)
-                    return _build_mod(
-                        name=(package_name + "/" + rest.replace("/", ".")),
-                        code=code_file.read(),
-                        module_path=_ensure_path(module_path),
-                        initial_globals={},
-                    )
-                except ImportError as ierr0:
-                    orig_exc = orig_exc or ierr0
-                    continue
-        except RuntimeError as ierr:
-            try:
-                return importlib.import_module(rest)
-            except BaseException as ierr2:
-                raise ierr from orig_exc
-        finally:
-            os.chdir(cwd)
-            sys.path.clear()
-            for p in old_sys_path:
-                sys.path.append(p)
-
-
-@cache(maxsize=512, typed=True)
-def _get_package_data(package_name) -> PyPI_Project:
-    json_url = f"https://pypi.org/pypi/{package_name}/json"
-    response = requests.get(json_url)
-    if response.status_code == 404:
-        raise ImportError(Message.pebkac_unsupported(package_name))
-    elif response.status_code != 200:
-        raise RuntimeWarning(Message.web_error(json_url, response))
-    return PyPI_Project(**response.json())
-
-
-def _get_version(
-    name: Optional[str] = None, package_name=None, /, mod=None
-) -> Optional[Version]:
-    version: Optional[Union[Callable[...], Version, Version, str]] = None
-    for lookup_name in (name, package_name):
-        if not lookup_name:
-            continue
-        try:
-            if lookup_name is not None:
-                meta = metadata.distribution(lookup_name)
-                return Version(meta.version)
-        except metadata.PackageNotFoundError:
-            continue
-    if not mod:
-        return None
-    version = getattr(mod, "__version__", version)
-    if isinstance(version, str):
-        return Version(version)
-    version = getattr(mod, "version", version)
-    if callable(version):
-        version = version.__call__()
-    if isinstance(version, str):
-        return Version(version)
-    return Version(version)
-
-
-def _ensure_version(func, *, name, version, **kwargs) -> Union[ModuleType, Exception]:
-    result = func(**all_kwargs(_ensure_version, locals()))
-    if not isinstance(result, ModuleType):
-        return result
-
-    this_version = _get_version(mod=result)
-
-    if this_version == version:
-        return result
-    else:
-        return AmbiguityWarning(Message.version_warning(name, version, this_version))
-
-
-def _fail_or_default(exception: BaseException, default: Any):
-    if default is not mode.fastfail:
-        return default  # TODO: write test for default
-    else:
-        raise exception
+    @require(lambda self, other: isinstance(other, self.__class__))
+    def __eq__(self, other):
+        return self.platform == other.platform
 
 
 #% Main Classes
