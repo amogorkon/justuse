@@ -130,9 +130,13 @@ from .modules.Warnings import (
     AutoInstallationError,
 )
 from .modules.ProxyModule import ProxyModule
+from .modules.TarFunctions import TarFunctions
+from .modules.ZipFunctions import ZipFunctions
 from .modules.private._build_mod import _build_mod
 from .modules.private._ensure_path import _ensure_path
 from .modules.private._parse_name import _parse_name
+from .modules.private._sys_version import _sys_version
+from .modules.get_supported import get_supported
 from .modules.private._filter_by_version import _filter_by_version
 from .modules.private._filter_by_platform import _filter_by_platform
 from .modules.private._filtered_and_ordered_data import _filtered_and_ordered_data
@@ -206,27 +210,6 @@ from atexit import register
 atexit.register(atexit_hook)
 
 
-#%% Version and Packaging
-
-
-class PlatformTag:
-    def __init__(self, platform: str):
-        self.platform = platform
-
-    def __str__(self):
-        return self.platform
-
-    def __repr__(self):
-        return f"use.PlatformTag({self.platform!r})"
-
-    def __hash__(self):
-        return hash(self.platform)
-
-    @require(lambda self, other: isinstance(other, self.__class__))
-    def __eq__(self, other):
-        return self.platform == other.platform
-
-
 #% Helper Functions
 
 # keyword args from inside the called function!
@@ -242,21 +225,6 @@ def all_kwargs(func, other_locals):
     d.update(d["kwargs"])
     del d["kwargs"]
     return d
-
-
-# singledispatch for methods
-def methdispatch(func) -> Callable:
-    dispatcher = singledispatch(func)
-
-    def wrapper(*args, **kw):
-        # so we can dispatch on None
-        if len(args) == 1:
-            args = args + (None,)
-        return dispatcher.dispatch(args[1].__class__)(*args, **kw)
-
-    wrapper.register = dispatcher.register
-    update_wrapper(wrapper, func)
-    return wrapper
 
 
 # This is a collection of the messages directed to the user.
@@ -359,30 +327,6 @@ class KwargsMessage(Message):
 #% Installation and Import Functions
 
 
-@cache
-def get_supported() -> frozenset[PlatformTag]:
-    log.debug("enter get_supported()")
-    """
-    Results of this function are cached. They are expensive to
-    compute, thanks to some heavyweight usual players
-    (*ahem* pip, package_resources, packaging.tags *cough*)
-    whose modules are notoriously resource-hungry.
-
-    Returns a set containing all platform _platform_tags
-    supported on the current system.
-    """
-    items: list[PlatformTag] = []
-
-    for tag in compatibility_tags.get_supported():
-        items.append(PlatformTag(platform=tag.platform))
-    for tag in packaging.tags._platform_tags():
-        items.append(PlatformTag(platform=str(tag)))
-
-    tags = frozenset(items)
-    log.debug("leave get_supported() -> %s", repr(tags))
-    return tags
-
-
 def sort_releases_by_install_method(project: PyPI_Project) -> PyPI_Project:
     return PyPI_Project(
         **{
@@ -399,38 +343,6 @@ def sort_releases_by_install_method(project: PyPI_Project) -> PyPI_Project:
 
 def recommend_best_version(project: PyPI_Project) -> list:
     sorted(project.releases.keys(), reverse=True)
-
-
-class TarFunctions:
-    def __init__(self, artifact_path):
-        self.archive = tarfile.open(artifact_path)
-
-    def get(self):
-        return (
-            self.archive,
-            [m.name for m in self.archive.getmembers() if m.type == b"0"],
-        )
-
-    def read_entry(self, entry_name):
-        m = self.archive.getmember(entry_name)
-        with self.archive.extractfile(m) as f:
-            bdata = f.read()
-            text = bdata.decode("ISO-8859-1") if len(bdata) < 8192 else ""
-            return (Path(entry_name).stem, text.splitlines())
-
-
-class ZipFunctions:
-    def __init__(self, artifact_path):
-        self.archive = zipfile.ZipFile(artifact_path)
-
-    def get(self):
-        return (self.archive, [e.filename for e in self.archive.filelist])
-
-    def read_entry(self, entry_name):
-        with self.archive.open(entry_name) as f:
-            bdata = f.read()
-            text = bdata.decode("ISO-8859-1").splitlines() if len(bdata) < 8192 else ""
-            return (Path(entry_name).stem, text)
 
 
 @D.pipes
@@ -1103,10 +1015,6 @@ def _get_package_data(package_name) -> PyPI_Project:
     return PyPI_Project(**response.json())
 
 
-def _sys_version():
-    return Version(".".join(map(str, sys.version_info[0:3])))
-
-
 def _get_version(
     name: Optional[str] = None, package_name=None, /, mod=None
 ) -> Optional[Version]:
@@ -1403,7 +1311,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         """Helper to get the order right."""
         self._using[name] = ModInUse(name, mod, path, spec, frame)
 
-    @methdispatch
+    @D.methdispatch
     def __call__(self, thing, /, *args, **kwargs):
         raise NotImplementedError(Message.cant_use(thing))
 
