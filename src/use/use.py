@@ -120,10 +120,22 @@ from pip._internal.utils import compatibility_tags
 
 from use import hash_alphabet, pypi_model
 from .modules import Decorators as D
+from .modules.ModuleReloader import ModuleReloader
+from .modules.Warnings import (
+    VersionWarning,
+    NotReloadableWarning,
+    NoValidationWarning,
+    AmbiguityWarning,
+    UnexpectedHash,
+    AutoInstallationError,
+)
 from .modules.ProxyModule import ProxyModule
 from .modules.private._build_mod import _build_mod
 from .modules.private._ensure_path import _ensure_path
 from .modules.private._parse_name import _parse_name
+from .modules.private._filter_by_version import _filter_by_version
+from .modules.private._filter_by_platform import _filter_by_platform
+from .modules.private._filtered_and_ordered_data import _filtered_and_ordered_data
 
 os.chdir(Path(__file__).parent)
 
@@ -173,30 +185,6 @@ log = getLogger(__name__)
 
 class Hash(Enum):
     sha256 = hashlib.sha256
-
-
-class VersionWarning(Warning):
-    pass
-
-
-class NotReloadableWarning(Warning):
-    pass
-
-
-class NoValidationWarning(Warning):
-    pass
-
-
-class AmbiguityWarning(Warning):
-    pass
-
-
-class UnexpectedHash(ImportError):
-    pass
-
-
-class AutoInstallationError(ImportError):
-    pass
 
 
 # sometimes all you need is a sledge hammer..
@@ -411,19 +399,6 @@ def sort_releases_by_install_method(project: PyPI_Project) -> PyPI_Project:
 
 def recommend_best_version(project: PyPI_Project) -> list:
     sorted(project.releases.keys(), reverse=True)
-
-
-def _filter_by_version(project: PyPI_Project, version: str) -> PyPI_Project:
-    return PyPI_Project(
-        **{
-            **project.dict(),
-            **{
-                "releases": {version: [v.dict() for v in project.releases[version]]}
-                if project.releases.get(version)
-                else {}
-            },
-        }
-    )
 
 
 class TarFunctions:
@@ -1132,130 +1107,6 @@ def _sys_version():
     return Version(".".join(map(str, sys.version_info[0:3])))
 
 
-def _filter_by_platform(
-    project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version
-) -> PyPI_Project:
-    filtered = {
-        ver: [
-            rel.dict()
-            for rel in releases
-            if _is_compatible(
-                rel,
-                sys_version=sys_version,
-                platform_tags=tags,
-                include_sdist=True,
-            )
-        ]
-        for ver, releases in project.releases.items()
-    }
-
-    return PyPI_Project(**{**project.dict(), **{"releases": filtered}})
-
-
-@D.pipes
-def _filtered_and_ordered_data(
-    data: PyPI_Project, version: Version = None
-) -> list[PyPI_Release]:
-    if version:
-        filtered = (
-            data
-            >> _filter_by_version(version)
-            >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
-        )
-    else:
-        filtered = _filter_by_platform(
-            data, tags=get_supported(), sys_version=_sys_version()
-        )
-
-    flat = reduce(list.__add__, filtered.releases.values(), [])
-    return sorted(flat, key=lambda r: (not r.is_sdist, r.version), reverse=True)
-
-
-@cache
-def _is_version_satisfied(specifier: str, sys_version) -> bool:
-    """
-    SpecifierSet("") matches anything, no need to artificially
-    lock down versions at this point
-
-    @see https://warehouse.readthedocs.io/api-reference/json.html
-    @see https://packaging.pypa.io/en/latest/specifiers.html
-    """
-    specifiers = SpecifierSet(specifier or "")
-    is_match = sys_version in specifiers
-
-    log.debug("is_version_satisfied(info=i)%s in %s", sys_version, specifiers)
-    return is_match
-
-
-@D.pipes
-def _is_platform_compatible(
-    info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
-) -> bool:
-
-    if "py2" in info.justuse.python_tag and "py3" not in info.justuse.python_tag:
-        return False
-
-    if not include_sdist and (
-        ".tar" in info.justuse.ext or info.justuse.python_tag in ("cpsource", "sdist")
-    ):
-        return False
-
-    if "win" in info.packagetype and sys.platform != "win32":
-        return False
-
-    if "win32" in info.justuse.platform_tag and sys.platform != "win32":
-        return False
-
-    if "macosx" in info.justuse.platform_tag and sys.platform != "darwin":
-        return False
-
-    our_python_tag = tags.interpreter_name() + tags.interpreter_version()
-    supported_tags = set(
-        [
-            our_python_tag,
-            "py3",
-            "cp3",
-            f"cp{tags.interpreter_version()}",
-            f"py{tags.interpreter_version()}",
-        ]
-    )
-
-    given_platform_tags = (
-        info.justuse.platform_tag.split(".") << map(PlatformTag) >> frozenset
-    )
-
-    if info.is_sdist and info.requires_python is not None:
-        given_python_tag = {
-            our_python_tag
-            for p in info.requires_python.split(",")
-            if Version(platform.python_version()) in SpecifierSet(p)
-        }
-    else:
-        given_python_tag = set(info.justuse.python_tag.split("."))
-
-    # print(supported_tags, given_python_tag)
-
-    return any(supported_tags.intersection(given_python_tag)) and (
-        (info.is_sdist and include_sdist)
-        or any(given_platform_tags.intersection(platform_tags))
-    )
-
-
-def _is_compatible(
-    info: PyPI_Release, sys_version, platform_tags, include_sdist=None
-) -> bool:
-    """Return true if the artifact described by 'info'
-    is compatible with the current or specified system."""
-    specifier = info.requires_python
-
-    return (
-        (not specifier or _is_version_satisfied(specifier, sys_version))
-        and _is_platform_compatible(info, platform_tags, include_sdist)
-        and not info.yanked
-        and (include_sdist or info.justuse.ext not in ("tar", "tar.gz" "zip"))
-    )
-
-
 def _get_version(
     name: Optional[str] = None, package_name=None, /, mod=None
 ) -> Optional[Version]:
@@ -1303,77 +1154,6 @@ def _fail_or_default(exception: BaseException, default: Any):
 
 
 #% Main Classes
-
-
-class ModuleReloader:
-    def __init__(self, *, proxy, name, path, initial_globals):
-        self.proxy = proxy
-        self.name = name
-        self.path = path
-        self.initial_globals = initial_globals
-        self._condition = threading.RLock()
-        self._stopped = True
-        self._thread = None
-
-    def start_async(self):
-        loop = asyncio.get_running_loop()
-        loop.create_task(self.run_async())
-
-    @require(lambda self: self._thread is None or self._thread.is_alive())
-    def start_threaded(self):
-        self._stopped = False
-        atexit.register(self.stop)
-        self._thread = threading.Thread(
-            target=self.run_threaded, name=f"reloader__{self.name}"
-        )
-        self._thread.start()
-
-    async def run_async(self):
-        last_filehash = None
-        while not self._stopped:
-            with open(self.path, "rb") as file:
-                code = file.read()
-            current_filehash = hashlib.blake2b(code).hexdigest()
-            if current_filehash != last_filehash:
-                try:
-                    mod = _build_mod(
-                        name=self.name,
-                        code=code,
-                        initial_globals=self.initial_globals,
-                        module_path=self.path.resolve(),
-                    )
-                    self.proxy.__implementation = mod
-                except KeyError:
-                    print(traceback.format_exc())
-            last_filehash = current_filehash
-            await asyncio.sleep(1)
-
-    def run_threaded(self):
-        last_filehash = None
-        while not self._stopped:
-            with self._condition:
-                with open(self.path, "rb") as file:
-                    code = file.read()
-                current_filehash = hashlib.blake2b(code).hexdigest()
-                if current_filehash != last_filehash:
-                    try:
-                        mod = _build_mod(
-                            name=self.name,
-                            code=code,
-                            initial_globals=self.initial_globals,
-                            module_path=self.path,
-                        )
-                        self.proxy._ProxyModule__implementation = mod
-                    except KeyError:
-                        print(traceback.format_exc())
-                last_filehash = current_filehash
-            time.sleep(1)
-
-    def stop(self):
-        self._stopped = True
-
-    def __del__(self):
-        self.stop()
 
 
 class Info(dict):
