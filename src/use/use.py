@@ -138,7 +138,7 @@ __spec__ = ModuleSpec("use.use", loader=SourceFileLoader(fullname="use", path=__
 __spec__.submodule_search_locations = [Path(__file__).parent]
 __version__ = test_version or "0.5.0"
 
-_reloaders: dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
+_reloaders: Dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
 _aspects = {}
 _using = {}
 
@@ -428,7 +428,7 @@ def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
 
 
 @cache
-def get_supported() -> frozenset[PlatformTag]:
+def get_supported() -> FrozenSet[PlatformTag]:
     log.debug("enter get_supported()")
     """
     Results of this function are cached. They are expensive to
@@ -439,7 +439,7 @@ def get_supported() -> frozenset[PlatformTag]:
     Returns a set containing all platform _platform_tags
     supported on the current system.
     """
-    items: list[PlatformTag] = []
+    items: List[PlatformTag] = []
 
     for tag in compatibility_tags.get_supported():
         items.append(PlatformTag(platform=tag.platform))
@@ -660,7 +660,7 @@ def _pebkac_version_no_hash(
     version: Version,
     hash_algo,
     package_name: str,
-    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
+    message_formatter: Callable[[str, str, Version, Set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     if func:
@@ -743,7 +743,7 @@ def _extracted_from__import_public_no_install_18(module_name, spec):
     return mod
 
 
-def _parse_name(name) -> tuple[str, str]:
+def _parse_name(name) -> Tuple[str, str]:
     ret = name, name
     try:
         match = re.match(r"(?P<package_name>[^/.]+)/?(?P<rest>[a-zA-Z0-9._]+)?$", name)
@@ -908,7 +908,7 @@ def _find_version(package_name, version=None) -> PyPI_Release:
     return data[0]
 
 
-def _get_venv_env(venv_root: Path) -> dict[str, str]:
+def _get_venv_env(venv_root: Path) -> Dict[str, str]:
     pathvar = os.environ.get("PATH")
     python_exe = Path(sys.executable)
     if not venv_root.exists():
@@ -928,7 +928,7 @@ def _download_artifact(name, version, filename, url) -> Path:
     return artifact_path
 
 
-def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
+def _delete_none(a_dict: Dict[str, object]) -> Dict[str, object]:
     for k, v in tuple(a_dict.items()):
         if v is None or v == "":
             del a_dict[k]
@@ -1174,7 +1174,7 @@ def _sys_version():
 
 
 def _filter_by_platform(
-    project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version
+    project: PyPI_Project, tags: FrozenSet[PlatformTag], sys_version: Version
 ) -> PyPI_Project:
     filtered = {
         ver: [
@@ -1194,7 +1194,7 @@ def _filter_by_platform(
 
 
 @pipes
-def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> list[PyPI_Release]:
+def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> List[PyPI_Release]:
     if version:
         filtered = (
             data
@@ -1226,7 +1226,7 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
 
 @pipes
 def _is_platform_compatible(
-    info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
+    info: PyPI_Release, platform_tags: FrozenSet[PlatformTag], include_sdist=False
 ) -> bool:
 
     if "py2" in info.justuse.python_tag and "py3" not in info.justuse.python_tag:
@@ -1332,7 +1332,7 @@ def _build_mod(
     *,
     name,  # TODO: this should be a package name and module name
     code,
-    initial_globals: Optional[dict[str, Any]],
+    initial_globals: Optional[Dict[str, Any]],
     module_path,
 ) -> ModuleType:
 
@@ -1743,7 +1743,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         *,
         hash_algo=Hash.sha256,
         hash_value=None,
-        initial_globals: Optional[dict[Any, Any]] = None,
+        initial_globals: Optional[Dict[Any, Any]] = None,
         as_import: str = None,
         default=mode.fastfail,
         modes=0,
@@ -1942,7 +1942,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         module_name: str = None,
         version: str = None,
         hash_algo=Hash.sha256,
-        hashes: Optional[Union[str, list[str]]] = None,
+        hashes: Optional[Union[str, List[str]]] = None,
         default=mode.fastfail,
         modes: int = 0,
     ) -> ProxyModule:
@@ -1985,7 +1985,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         *,
         version: str = None,
         hash_algo=Hash.sha256,
-        hashes: Optional[Union[str, list[str]]] = None,
+        hashes: Optional[Union[str, List[str]]] = None,
         default=mode.fastfail,
         modes: int = 0,
     ) -> ProxyModule:
@@ -2029,7 +2029,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         *,
         version: str = None,
         hash_algo=Hash.sha256,
-        hashes: Optional[Union[str, list[str]]] = None,
+        hashes: Optional[Union[str, List[str]]] = None,
         default=mode.fastfail,
         modes: int = 0,
     ) -> ProxyModule:

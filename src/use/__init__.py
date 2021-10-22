@@ -1,6 +1,12 @@
 import logging
 import os, re, shlex, sys
-from typing import Iterator
+
+# Workaround for 3.8 - 3.9 incompatibility
+import builtins, typing
+for name in (
+    "Dict", "FrozenSet", "Iterator", "List", "Mapping", "Set", "Tuple"
+):
+    setattr(builtins, name, getattr(typing, name))
 
 logging.root.setLevel(logging.DEBUG)
 logger = logging.getLogger("air")
