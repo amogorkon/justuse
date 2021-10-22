@@ -5,8 +5,7 @@ from logging import getLogger
 from pip._internal.utils import compatibility_tags
 
 from .PlatformTag import PlatformTag
-
-log = getLogger(__name__)
+from .private._logging import log
 
 
 @cache

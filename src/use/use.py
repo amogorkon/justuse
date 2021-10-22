@@ -135,11 +135,14 @@ from .modules.ZipFunctions import ZipFunctions
 from .modules.private._build_mod import _build_mod
 from .modules.private._ensure_path import _ensure_path
 from .modules.private._parse_name import _parse_name
-from .modules.private._sys_version import _sys_version
 from .modules.get_supported import get_supported
-from .modules.private._filter_by_version import _filter_by_version
-from .modules.private._filter_by_platform import _filter_by_platform
-from .modules.private._filtered_and_ordered_data import _filtered_and_ordered_data
+from .modules.private._versioning import (
+    _sys_version,
+    _filter_by_platform,
+    _filter_by_version,
+    _filtered_and_ordered_data,
+)
+from .modules.private._logging import log
 
 os.chdir(Path(__file__).parent)
 
@@ -182,9 +185,6 @@ if "DEBUG" in os.environ or "pytest" in getattr(
     test_config["debugging"] = True
 else:
     root.setLevel(INFO)
-
-# TODO: log to file
-log = getLogger(__name__)
 
 
 class Hash(Enum):
