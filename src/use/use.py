@@ -90,8 +90,7 @@ import zipimport
 from collections import namedtuple
 from enum import Enum
 from functools import lru_cache as cache
-from functools import (partial, partialmethod, reduce, singledispatch,
-                       update_wrapper)
+from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
 from importlib import metadata
 from importlib.abc import Finder, Loader
 from importlib.machinery import ModuleSpec, SourceFileLoader
@@ -2083,7 +2082,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if not hashes:
             hashes = set()
         hashes = {
-            H if len(H) == 64 else hash_alphabet.num_as_hexdigest(hash_alphabet.JACK_as_num(H)) for H in hashes
+            H if len(H) == 64 else hash_alphabet.num_as_hexdigest(hash_alphabet.JACK_as_num(H))
+            for H in hashes
         }
         rest = module_name
 
