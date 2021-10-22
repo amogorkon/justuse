@@ -45,7 +45,7 @@ def optional_text(soup, default=""):
     return soup.text
 
 
-def find_meta(pkg: dict[str, str]):
+def find_meta(pkg: Dict[str, str]):
     url = f"https://pypi.org/pypi/{pkg['name']}/json"
     r = requests.get(url)
     if r.status_code != 200:
@@ -62,7 +62,7 @@ def find_meta(pkg: dict[str, str]):
     return {**base, **{"stars": stars, "repo": url}}
 
 
-def get_github(urls: list[str]):
+def get_github(urls: List[str]):
     for url in urls:
         if not isinstance(url, str):
             continue
@@ -146,13 +146,13 @@ def main():
 
 class PackageToTest(BaseModel):
     name: str
-    versions: list[str]
+    versions: List[str]
     repo: Optional[str] = None
     stars: Optional[int] = None
 
 
 class Packages(BaseModel):
-    data: list[PackageToTest] = []
+    data: List[PackageToTest] = []
 
     def append(self, item: PackageToTest) -> None:
         self.data.append(item)

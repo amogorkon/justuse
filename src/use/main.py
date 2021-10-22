@@ -56,7 +56,7 @@ log = getLogger(__name__)
 test_config: str = locals().get("test_config", {})
 test_version: str = locals().get("test_version", None)
 
-_reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
+_reloaders: Dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
 _using = {}
 
 # sometimes all you need is a sledge hammer..
@@ -436,7 +436,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         *,
         hash_algo=Hash.sha256,
         hash_value=None,
-        initial_globals: Optional[dict[Any, Any]] = None,
+        initial_globals: Optional[Dict[Any, Any]] = None,
         as_import: str = None,
         default=Modes.fastfail,
         modes=0,
@@ -635,7 +635,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         module_name: str = None,
         version: str = None,
         hash_algo=Hash.sha256,
-        hashes: Optional[Union[str, list[str]]] = None,
+        hashes: Optional[Union[str, List[str]]] = None,
         default=Modes.fastfail,
         modes: int = 0,
     ) -> ProxyModule:
@@ -678,7 +678,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         *,
         version: str = None,
         hash_algo=Hash.sha256,
-        hashes: Optional[Union[str, list[str]]] = None,
+        hashes: Optional[Union[str, List[str]]] = None,
         default=Modes.fastfail,
         modes: int = 0,
     ) -> ProxyModule:
@@ -722,7 +722,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         *,
         version: str = None,
         hash_algo=Hash.sha256,
-        hashes: Optional[Union[str, list[str]]] = None,
+        hashes: Optional[Union[str, List[str]]] = None,
         default=Modes.fastfail,
         modes: int = 0,
     ) -> ProxyModule:
