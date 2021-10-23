@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 import codecs
 import importlib.util
 import inspect
@@ -38,13 +39,13 @@ from typing import ForwardRef
 __package__ = "use.modules"
 __name__ = "use.modules.install_utils"
 
-import modules.Decorators as D
-from modules.Decorators import pipes
-from modules.Hashish import Hash
-from modules.init_conf import config, Modes
-from modules.Messages import AmbiguityWarning, Message
-from modules.PlatformTag import PlatformTag
-from modules.init_conf import log
+from use.modules import Decorators as D
+from use.modules.Decorators import pipes
+from use.modules.Hashish import Hash
+from use.modules.init_conf import config, Modes
+from use.modules.Messages import AmbiguityWarning, Message
+from use.modules.PlatformTag import PlatformTag
+from use.modules.init_conf import log
 
 
 def all_kwargs(func, other_locals):

@@ -11,6 +11,7 @@ from importlib.metadata import PackageNotFoundError, distribution
 from importlib.util import find_spec
 from pathlib import Path
 from threading import _shutdown_locks
+from typing import ForwardRef
 from unittest.mock import patch
 
 import packaging.tags
@@ -26,8 +27,6 @@ cwd = Path().cwd()
 os.chdir(src)
 sys.path.insert(0, "") if "" not in sys.path else None
 import use
-from use import PyPI_Release, Version
-from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 
 os.chdir(cwd)
 

@@ -80,4 +80,6 @@ from beartype.roar._roarwarn import BeartypeDecorHintPepDeprecationWarning
 warnings.filterwarnings(action="ignore", category=BeartypeDecorHintPepDeprecationWarning)
 
 __package__ = "use"
+__name__ = "use"
+__path__ = [str(Path(__file__).parent.absolute())]
 from use import use

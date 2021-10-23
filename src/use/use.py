@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 __name__ = "use.use"
 __package__ = "use"
 """
@@ -99,7 +100,7 @@ __package__ = "use"
 __name__ = "use.use"
 
 # internal subpackage imports
-from modules.init_conf import (Modes, ModInUse, NoneType, _reloaders, _using,
+from use.modules.init_conf import (Modes, ModInUse, NoneType, _reloaders, _using,
                                 config, log)
 
 # !!! SEE NOTE !!!
@@ -116,12 +117,12 @@ test_version: str = locals().get("test_version", None)
 
 
 
-from modules import Decorators as D
+from use.modules import Decorators as D
 from icontract import require
-from modules.Decorators import methdispatch
-from modules.Hashish import Hash
-from modules.Mod import ProxyModule, ModuleReloader
-from modules.install_utils import (
+from use.modules.Decorators import methdispatch
+from use.modules.Hashish import Hash
+from use.modules.Mod import ProxyModule, ModuleReloader
+from use.modules.install_utils import (
     _auto_install,
     _build_mod,
     _ensure_path,
@@ -140,7 +141,7 @@ from modules.install_utils import (
     _pebkac_no_version_no_hash,
     get_supported,
 )
-from hash_alphabet import JACK_as_num, num_as_hexdigest
+from use.hash_alphabet import JACK_as_num, num_as_hexdigest
 from packaging.version import Version as PkgVersion
 
 #%% Version and Packaging
@@ -151,13 +152,13 @@ from packaging.version import Version as PkgVersion
 
 class Version(PkgVersion):
     def __new__(cls, *args, **kwargs):
-        if args and isinstance(args[0], ForwardRef("Version")):
+        if args and isinstance(args[0], Version):
             return args[0]
         else:
-            return super(cls, ForwardRef("Version")).__new__(cls)
+            return super(cls, Version).__new__(cls)
 
     def __init__(self, versionobj: Optional[Union[PkgVersion, ForwardRef("__class__"), str]]=None, *, major=0, minor=0, patch=0):
-        if isinstance(versionobj, ForwardRef("Version")):
+        if isinstance(versionobj, Version):
             return
         
         if versionobj:
@@ -194,7 +195,7 @@ class Version(PkgVersion):
         return Version(value)
 
 
-from modules.Messages import (
+from use.modules.Messages import (
     AmbiguityWarning,
     Message,
     NoValidationWarning,
