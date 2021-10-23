@@ -160,6 +160,7 @@ home = Path(
 
 
 
+
 # sometimes all you need is a sledge hammer..
 def releaser(cls: Callable[Type["ShutdownLockReleaser"], NoneType]):
   old_locks = [*threading._shutdown_locks]
@@ -228,11 +229,11 @@ class Use(ModuleType):
         self._user_registry = toml.load(self.home / "user_registry.toml")
 
         # for the user to copy&paste
-        with open(self.home / "default_config.toml", "w") as file:
-            toml.dump(config, file)
+        with open(self.home / "default_config.toml", "w") as rfile:
+            toml.dump(config, rfile)
 
-        with open(self.home / "config.toml") as file:
-            config.update(toml.load(file))
+        with open(self.home / "config.toml") as rfile:
+            config.update(toml.load(rfile))
 
         config.update(test_config)
 
@@ -587,8 +588,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             name = path.stem
             if reloading:
                 try:
-                    with open(path, "rb") as file:
-                        code = file.read()
+                    with open(path, "rb") as rfile:
+                        code = rfile.read()
                     # initial instance, if this doesn't work, just throw the towel
                     mod = _build_mod(
                         name=name,
@@ -630,8 +631,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 ):
                     warn(Message.not_reloadable(name), NotReloadableWarning)
             else:  # NOT reloading
-                with open(path, "rb") as file:
-                    code = file.read()
+                with open(path, "rb") as rfile:
+                    code = rfile.read()
                 # the path needs to be set before attempting to load the new module - recursion confusing ftw!
                 frame = inspect.getframeinfo(inspect.currentframe())
                 self._set_mod(name=name, mod=mod, frame=frame)
