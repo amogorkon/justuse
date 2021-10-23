@@ -31,8 +31,7 @@ jobs:
           export PYTHON3
           export DEBUG
           "$PYTHON" -m pip install cython -r requirements.txt
-          python3 -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage/ --cov-report annotate:coverage/annotated --cov-report xml:coverage/cov.xml '--cov=setup' '--cov=tests..tests..test1' '--cov=tests..tests..test2' '--cov=tests..tests..test3' '--cov=tests..tests.bar' '--cov=tests..tests.foo' '--cov=tests..tests.modA' '--cov=tests..tests.modA_test' '--cov=tests..tests.modB' '--cov=tests..tests.modD' '--cov=tests..tests.modE' '--cov=tests..tests.sys' '--cov=tests..tests.tests_subdir.modC' '--cov=tests.__init__' '--cov=tests.foo' '--cov=tests.simple_funcs' '--cov=tests.tdd_test' '--cov=tests.test' '--cov=tests.unit_test' '--cov=use..test4' '--cov=use.__init__' '--cov=use.use' -v --cov-append -vv && \
-          ( cd tests/mass; seq 1 50 | xargs -d $'\n' -n 1 "$PYTHON"  -m coverage run --branch  --rcfile ../../.coveragerc --parallel-mode ./test_single.py  ; cd ../..; find "(" -name ".coverage" -o -name ".coverage*" ")" -exec "$PYTHON" -m coverage combine --append --rcfile=.coveragerc "{}" +;  cd tests/mass; passed=$( ls ./results/pass/* | wc -l; ); echo "$passed / 50 passed"; ) 
+          python3 -m coverage run --rcfile=.coveragerc --source=.,./src/use,./src/use/modules,./tests,./tests/.tests,./tests/.tests/tests_subdir,./tests/mass --append --branch -m pytest
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v2
         with:
