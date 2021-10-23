@@ -527,7 +527,7 @@ def _auto_install(
         query = _find_or_install(package_name, version, force_install=True)
         artifact_path = _ensure_path(query["artifact_path"])
         module_path = _ensure_path(query["module_path"])
-    assert "installation_path" in query
+    assert "installation_path" in query  # why redundant assertions?
     assert query["installation_path"]
     installation_path = _ensure_path(query["installation_path"])
     try:
@@ -597,29 +597,21 @@ def _process(*argv, env={}):
         "\x0a".join(
             (
                 "\x1b[1;41;37m",
-                "Problem running--command exited with non-zero: %d",
-                "%s",
+                f"Problem running--command exited with non-zero: {o.returncode}",
+                f"{shlex.join(map(str, setup['args']))}",
                 "---[  Errors  ]---",
-                "%s",
+                f"{o.stderr or o.stdout}",
                 "\x1b[0;1;37m",
                 "Arguments to subprocess.run(**setup):",
-                "%s",
+                f"{pformat(setup, indent=2, width=70, compact=False)}",
                 "---[  STDOUT  ]---",
-                "%s",
+                f"{o.stdout}",
                 "---[  STDERR  ]---",
-                "%s\x1b[0m",
+                f"{o.stderr}\x1b[0m",
             )
         )
-        % (
-            o.returncode,
-            shlex.join(map(str, setup["args"])),
-            o.stderr or o.stdout,
-            pformat(setup, indent=2, width=70, compact=False),
-            o.stdout,
-            o.stderr,
-        )
         if o.returncode != 0
-        else ("%s\n\n%s") % (o.stdout, o.stderr)
+        else (f"{o.stdout}\n\n{o.stderr}")
     )
 
 
