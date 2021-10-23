@@ -493,19 +493,15 @@ def _auto_install(
         result = func()
         if isinstance(result, (Exception, ModuleType)):
             return result
-    
+
     query = execute_wrapped(
-        f"""
-        SELECT
-            artifacts.id, import_relpath,
-            artifact_path, installation_path, module_path
-        FROM distributions
-        JOIN artifacts ON artifacts.id = distributions.id
-        WHERE name=? AND version=?
-        ORDER BY artifacts.id DESC
-        """,
-        (package_name, str(version), ),
+        '\x1f        SELECT\x1f            artifacts.id, import_relpath,\x1f            artifact_path, installation_path, module_path\x1f        FROM distributions\x1f        JOIN artifacts ON artifacts.id = distributions.id\x1f        WHERE name=? AND version=?\x1f        ORDER BY artifacts.id DESC\x1f        ',
+        (
+            package_name,
+            str(version),
+        ),
     ).fetchone()
+
 
     if not query or not _ensure_path(query["artifact_path"]).exists():
         query = _find_or_install(package_name, version)
