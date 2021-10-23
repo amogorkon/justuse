@@ -75,13 +75,13 @@ def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
 
 
 def execute_wrapped(sql: str, params: tuple):
-    use = sys.modules["use"]
+    ___use = getattr(sys, "modules").get("use")
     try:
-        return use.registry.execute(sql, params)
+        return getattr(___use, "registry").execute(sql, params)
     except sqlite3.OperationalError as _oe:
         pass
-    use.recreate_registry()
-    return use.registry.execute(sql, params)
+    getattr(___use, "recreate_registry")()
+    return getattr(___use, "registry").execute(sql, params)
 
 @cache
 def get_supported() -> frozenset[PlatformTag]:
@@ -315,13 +315,24 @@ def _venv_root(package_name, version, home) -> Path:
 
 
 def _pebkac_no_version_hash(
-    *, name: str, func=None, **kwargs
+    *,
+    name: str,
+    func: Callable[[...], Union[Exception, ModuleType]]=None,
+    version: Version=None,
+    hash_algo=None,
+    package_name: str=None,
+    module_name: str=None,
+    message_formatter: Callable[
+        [str, str, Version, set[str]], str
+    ] = Message.pebkac_missing_hash,
+    **kwargs,
 ) -> Union[ModuleType, Exception]:
 
     if func:
-        result = func(name=name, **kwargs)
-        if isinstance(result, ModuleType):
+        result = func()
+        if isinstance(result, (Exception, ModuleType)):
             return result
+    
     return RuntimeWarning(Message.cant_import_no_version(name))
 
 
@@ -329,9 +340,10 @@ def _pebkac_version_no_hash(
     *,
     name: str,
     func: Callable[[...], Union[Exception, ModuleType]]=None,
-    version: Version,
-    hash_algo,
-    package_name: str,
+    version: Version=None,
+    hash_algo=None,
+    package_name: str=None,
+    module_name: str=None,
     message_formatter: Callable[
         [str, str, Version, set[str]], str
     ] = Message.pebkac_missing_hash,
@@ -339,7 +351,7 @@ def _pebkac_version_no_hash(
 ) -> Union[Exception, ModuleType]:
     if func:
         result = func()
-        if isinstance(result, ModuleType):
+        if isinstance(result, (Exception, ModuleType)):
             return result
     try:
         hashes = {
@@ -359,7 +371,23 @@ def _pebkac_version_no_hash(
 
 
 @D.pipes
-def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Exception:
+def _pebkac_no_version_no_hash(
+    *,
+    name: str,
+    func: Callable[[...], Union[Exception, ModuleType]]=None,
+    version: Version=None,
+    hash_algo=None,
+    package_name: str=None,
+    module_name: str=None,
+    message_formatter: Callable[
+        [str, str, Version, set[str]], str
+    ] = Message.pebkac_missing_hash,
+    **kwargs,
+) -> Union[Exception, ModuleType]:
+    if func:
+        result = func()
+        if isinstance(result, (Exception, ModuleType)):
+            return result
     # let's try to make an educated guess and give a useful suggestion
     data = _get_package_data(package_name) >> _filter_by_platform(
         tags=get_supported(), sys_version=_sys_version()
@@ -384,11 +412,22 @@ def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Ex
 
 def _import_public_no_install(
     *,
-    package_name,
-    module_name,
-    spec,
+    name: str,
+    func: Callable[[...], Union[Exception, ModuleType]]=None,
+    version: Version=None,
+    hash_algo=None,
+    package_name: str=None,
+    module_name: str=None,
+    spec=None,
+    message_formatter: Callable[
+        [str, str, Version, set[str]], str
+    ] = Message.pebkac_missing_hash,
     **kwargs,
-) -> Union[ModuleType, Exception]:
+) -> Union[Exception, ModuleType]:
+    if func:
+        result = func()
+        if isinstance(result, (Exception, ModuleType)):
+            return result
     # builtin?
     builtin = False
     try:
@@ -436,23 +475,25 @@ def _parse_name(name) -> tuple[str, str]:
 
 
 def _auto_install(
-    func=None,
     *,
-    name,
-    version,
-    package_name,
-    rest,
-    hash_algo=Hash.sha256.name,
-    self=None,
+    name: str,
+    func: Callable[[...], Union[Exception, ModuleType]]=None,
+    version: Version=None,
+    hash_algo=None,
+    package_name: str=None,
+    module_name: str=None,
+    message_formatter: Callable[
+        [str, str, Version, set[str]], str
+    ] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, BaseException]:
     package_name, rest = _parse_name(name)
 
     if func:
-        result = func(**all_kwargs(_auto_install, locals()))
-        if isinstance(result, ModuleType):
+        result = func()
+        if isinstance(result, (Exception, ModuleType)):
             return result
-
+    
     query = execute_wrapped(
         f"""
         SELECT
@@ -470,10 +511,6 @@ def _auto_install(
         query = _find_or_install(package_name, version)
 
     artifact_path = _ensure_path(query["artifact_path"])
-    if _ensure_path(query["module_path"]) == Path(
-        "/data/media/0/src/use/src/twisted/__init__.py"
-    ):
-        raise BaseException("module_path")
     module_path = _ensure_path(query["module_path"])
     # trying to import directly from zip
     _clean_sys_modules(rest)
@@ -630,12 +667,15 @@ def _pure_python_package(artifact_path, meta):
 
 
 def _find_module_in_venv(package_name, version, relp):
+    ___use = getattr(sys, "modules").get("use")
     ret = None, None
     try:
         site_dirs = list(
-            (sys.modules["use"].home / "venv" / package_name / str(version)).rglob(
-                "**/site-packages"
-            )
+            (
+                getattr(___use, "home") 
+                / "venv" / package_name 
+                / str(version)
+            ).rglob("**/site-packages")
         )
         if not site_dirs:
             return ret
@@ -735,7 +775,6 @@ def _find_or_install(
     out_info["import_relpath"] = relp
     out_info["import_name"] = import_name
     if not force_install and _pure_python_package(artifact_path, meta):
-        log.info(f"pure python pkg: {package_name, version, use.home}")
         return out_info
 
     venv_root = _venv_root(package_name, version, use.home)
