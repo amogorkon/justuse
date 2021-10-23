@@ -7,6 +7,7 @@ import platform
 import re
 import requests
 import shlex
+import sqlite3
 import sys
 import tarfile
 import zipfile
@@ -33,18 +34,14 @@ from packaging import tags
 from pip._internal.utils import compatibility_tags
 from packaging.specifiers import SpecifierSet
 
-<<<<<<< HEAD
 from .. import hash_alphabet
 from . import Decorators as D
-=======
-import hash_alphabet
 from .Decorators import pipes
->>>>>>> 962755f (more cleaning and reestablishing consistency)
 from .Hashish import Hash
 from .init_conf import config, use
 from .Messages import AmbiguityWarning, Message
 from .PlatformTag import PlatformTag
-from .init_conf import log, mode
+from .init_conf import log
 from ..pypi_model import PyPI_Release, PyPI_Project, Version
 
 
@@ -371,8 +368,7 @@ def _pebkac_version_no_hash(
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
 
 
-<<<<<<< HEAD
-@D.pipes
+@pipes
 def _pebkac_no_version_no_hash(
     *,
     name: str,
@@ -390,10 +386,6 @@ def _pebkac_no_version_no_hash(
         result = func()
         if isinstance(result, (Exception, ModuleType)):
             return result
-=======
-@pipes
-def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Exception:
->>>>>>> 962755f (more cleaning and reestablishing consistency)
     # let's try to make an educated guess and give a useful suggestion
     data = _get_package_data(package_name) >> _filter_by_platform(
         tags=get_supported(), sys_version=_sys_version()
@@ -501,7 +493,15 @@ def _auto_install(
             return result
 
     query = execute_wrapped(
-        '\x1f        SELECT\x1f            artifacts.id, import_relpath,\x1f            artifact_path, installation_path, module_path\x1f        FROM distributions\x1f        JOIN artifacts ON artifacts.id = distributions.id\x1f        WHERE name=? AND version=?\x1f        ORDER BY artifacts.id DESC\x1f        ',
+        """
+        SELECT
+            artifacts.id, import_relpath,
+            artifact_path, installation_path, module_path
+        FROM distributions
+        JOIN artifacts ON artifacts.id = distributions.id
+        WHERE name=? AND version=?
+        ORDER BY artifacts.id DESC
+        """,
         (
             package_name,
             str(version),
