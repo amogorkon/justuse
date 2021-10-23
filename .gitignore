@@ -149,5 +149,9 @@ coverage/
 /coverage
 coverage/**
 coverage/*
+coverage.json
+?_*.sql
+*.db
+core.*
 
 
