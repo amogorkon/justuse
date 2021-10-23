@@ -629,14 +629,14 @@ def _get_venv_env(venv_root: Path) -> dict[str, str]:
     return {}
 
 
-@ensure(lambda url: str(url).startswith("http"))
+@ensure(lambda url: str(url).startswith("http"))  # should we be enforcing 443 > 80?
 def _download_artifact(name, version, filename, url) -> Path:
     artifact_path = (sys.modules["use"].home / "packages" / filename).absolute()
     if not artifact_path.exists():
-        log.info("Downloading %s==%s from %s", name, version, url)
+        log.info(f"Downloading {name}=={version} from {url}")
         data = requests.get(url).content
         artifact_path.write_bytes(data)
-        log.debug("Wrote %d bytes to %s", len(data), artifact_path)
+        log.debug(f"Wrote {len(data)} bytes to {artifact_path}")
     return artifact_path
 
 
@@ -702,11 +702,10 @@ def _find_module_in_venv(package_name, version, relp):
         return ret
     finally:
         log.info(
-            "_find_module_in_venv(package_name=%s, version=%s, relp=%s) -> %s",
-            repr(package_name),
-            repr(version),
-            repr(relp),
-            repr(ret),
+            f"_find_module_in_venv(package_name={repr(package_name)}, \
+                                    version={repr(version)}, \
+                                    relp={repr(relp)}) \
+                                    -> {repr(ret)}"
         )
 
 
@@ -714,11 +713,10 @@ def _find_or_install(
     name, version=None, artifact_path=None, url=None, out_info=None, force_install=False
 ):
     log.debug(
-        "_find_or_install(name=%s, version=%s, artifact_path=%s, url=%s)",
-        name,
-        version,
-        artifact_path,
-        url,
+        f"_find_or_install(name={name}, \
+                            version={version}, \
+                            artifact_path={artifact_path}, \
+                            url={url})"
     )
     if out_info is None:
         out_info = {}
@@ -777,7 +775,7 @@ def _find_or_install(
     env = _get_venv_env(venv_root)
     module_paths = venv_root.rglob(f"**/{relp}")
     if force_install or (not python_exe.exists() or not any(module_paths)):
-        log.info("calling pip to install install_item=%s", install_item)
+        log.info(f"calling pip to install install_item={install_item}")
 
         # If we get here, the venv/pip setup is required.
         output = _process(
@@ -816,8 +814,8 @@ def _find_or_install(
     out_info.update(**meta)
     assert module_paths
 
-    log.info("installation_path = %s", installation_path)
-    log.info("module_path = %s", module_path)
+    log.info(f"installation_path = {installation_path}")
+    log.info(f"module_path = {module_path}")
     out_info.update(
         {
             **info,
@@ -833,10 +831,9 @@ def _find_or_install(
 
 def _load_venv_entry(package_name, rest, installation_path, module_path) -> ModuleType:
     log.info(
-        "load_venv_entry package_name=%s rest=%s module_path=%s",
-        package_name,
-        rest,
-        module_path,
+        f"load_venv_entry package_name={package_name} \
+                            rest={rest} \
+                            ]module_path={module_path}"
     )
     cwd = Path.cwd()
     log.info(f"{cwd=}")
@@ -948,7 +945,7 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
     specifiers = SpecifierSet(specifier or "")
     is_match = sys_version in specifiers
 
-    log.debug("is_version_satisfied(info=i)%s in %s", sys_version, specifiers)
+    log.debug(f"is_version_satisfied(info=i){sys_version} in {specifiers}")
     return is_match
 
 
