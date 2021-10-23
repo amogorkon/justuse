@@ -927,6 +927,7 @@ def _filtered_and_ordered_data(
     data: PyPI_Project, version: Version = None
 ) -> list[PyPI_Release]:
     if version:
+        version = Version(str(version))
         filtered = (
             data
             >> _filter_by_version(version)
