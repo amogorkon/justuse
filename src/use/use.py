@@ -63,26 +63,18 @@ True
 #% Imports
 
 import ast
+
 import asyncio
 import atexit
-import hashlib
 import importlib.util
 import inspect
 import os
-import signal
 import sqlite3
 import sys
 import tempfile
 import threading
 import time
 import traceback
-from enum import Enum
-from functools import lru_cache as cache
-from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
-from importlib import metadata
-from importlib.abc import Finder, Loader
-from importlib.metadata import Distribution, PackageNotFoundError, distribution
-from importlib.util import find_spec
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
@@ -91,6 +83,7 @@ from subprocess import PIPE, run
 from textwrap import dedent
 from types import FrameType, ModuleType
 from typing import Any, Callable, Optional, Type, Union
+
 from warnings import warn
 
 import requests
@@ -125,6 +118,7 @@ mode = Modes
 auto_install = mode.auto_install
 
 
+
 from .modules import Decorators as D
 from .modules.Hashish import Hash
 from .modules.Mod import ProxyModule, ModuleReloader
@@ -137,7 +131,6 @@ from .modules.Messages import (
     VersionWarning,
 )
 from .modules.install_utils import (
-    _apply_aspect,
     _auto_install,
     _build_mod,
     _ensure_path,
@@ -163,6 +156,7 @@ use = sys.modules.get(__name__)
 home = Path(
     os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))
 ).absolute()
+
 
 
 # sometimes all you need is a sledge hammer..

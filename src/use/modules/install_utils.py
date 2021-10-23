@@ -17,7 +17,6 @@ from functools import reduce
 from importlib import metadata
 from importlib.machinery import ModuleSpec, SourceFileLoader
 from importlib.metadata import PackageNotFoundError
-from importlib.util import find_spec
 from itertools import chain
 from pathlib import PureWindowsPath, WindowsPath
 from pprint import pformat
