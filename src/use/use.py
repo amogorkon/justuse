@@ -824,6 +824,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         )
         log.debug("Entering %s", callstr)
         
+        modes |= mode.fastfail
+        
         if isinstance(hashes, str):
             hashes = set([hashes])
         if not hashes:
@@ -874,15 +876,15 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             if not isinstance(result, ModuleType):
                 return result
             result_version = _get_version(mod=result)
-            if result_version != version: return AmbiguityWarning(
+            if result_version != version: raise AmbiguityWarning(
                 Message.version_warning(name, version, result_version)
             )
             return result
         
         case_func = {
             (0, 0, 0, 0): lambda: ImportError(Message.cant_import(name)),
-            (0, 0, 0, 1): _pebkac_no_version_no_hash,
-            (0, 0, 1, 0): _import_public_no_install,
+            (0, 0, 0, 1): lambda: _pebkac_no_version_no_hash(**kwargs),
+            (0, 0, 1, 0): lambda: _import_public_no_install(**kwargs),
             (0, 1, 0, 0): lambda: ImportError(Message.cant_import(name)),
             (1, 0, 0, 0): lambda: ImportError(Message.cant_import(name)),
             (0, 0, 1, 1): lambda: _auto_install(
@@ -917,6 +919,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         log.info("result = %s", repr(result))
         # fmt: on
         assert result
+        if isinstance(result, BaseException):
+            raise result
 
         if isinstance((mod := result), ModuleType):
             frame = inspect.getframeinfo(inspect.currentframe())
