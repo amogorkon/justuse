@@ -3,7 +3,12 @@ import os
 import re
 import shlex
 import sys
+from pathlib import Path
 from typing import Iterator
+
+__package__ = "use"
+__name__ = "use"
+__path__ = [Path(__file__).parent.absolute()]
 
 logging.root.setLevel(logging.DEBUG)
 logger = logging.getLogger("air")
