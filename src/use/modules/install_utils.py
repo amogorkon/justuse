@@ -107,37 +107,6 @@ def get_supported() -> frozenset[PlatformTag]:
     return tags
 
 
-def sort_releases_by_install_method(project: PyPI_Project) -> PyPI_Project:
-    return PyPI_Project(
-        **{
-            **project.dict(),
-            **{
-                "releases": {
-                    k: [x.dict() for x in sorted(v, key=lambda r: r.is_sdist)]
-                    for k, v in project.releases.items()
-                }
-            },
-        }
-    )
-
-
-def recommend_best_version(project: PyPI_Project) -> list:
-    sorted(project.releases.keys(), reverse=True)
-
-
-def _filter_by_version(project: PyPI_Project, version: str) -> PyPI_Project:
-    return PyPI_Project(
-        **{
-            **project.dict(),
-            **{
-                "releases": {version: [v.dict() for v in project.releases[version]]}
-                if project.releases.get(version)
-                else {}
-            },
-        }
-    )
-
-
 class TarFunctions:
     def __init__(self, artifact_path):
         self.archive = tarfile.open(artifact_path)
