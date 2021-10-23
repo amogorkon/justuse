@@ -1,11 +1,13 @@
+__name__ = "use.modules.Messages"
+__package__ = "use.modules"
 # This is a collection of the messages directed to the user.
 # How it works is quite magical - the lambdas prevent the f-strings from being prematuraly evaluated, and are only evaluated once returned.
 # Fun fact: f-strings are firmly rooted in the AST.
 import webbrowser
 from enum import Enum
+import sys
 
-from ..pypi_model import Version
-from ..use import __version__  # use  # TODO: need access to use.home !!
+use = sys.modules["use"]
 
 
 def _web_no_version_or_hash_provided(name, package_name, version, hashes):

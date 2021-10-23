@@ -8,60 +8,7 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
-from packaging.version import Version as PkgVersion
 from pydantic import BaseModel
-
-#%% Version and Packaging
-
-# Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
-# This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
-
-
-class Version(PkgVersion):
-    def __new__(cls, *args, **kwargs):
-        if args and isinstance(args[0], Version):
-            return args[0]
-        else:
-            return super(cls, Version).__new__(cls)
-
-    def __init__(self, versionobj: Optional[Union[PkgVersion, __class__, str]]=None, *, major=0, minor=0, patch=0):
-        if isinstance(versionobj, Version):
-            return
-        
-        if versionobj:
-            super(Version, self).__init__(versionobj)
-            return
-        
-        if major is None or minor is None or patch is None:
-            raise ValueError(
-                f"Either 'Version' must be initialized with either a string, packaging.version.Verson, {__class__.__qualname__}, or else keyword arguments for 'major', 'minor' and 'patch' must be provided. Actual invocation was: {__class__.__qualname__}({versionobj!r}, {major=!r}, {minor=!r}, {path=!r})"
-            )
-        
-        # string as only argument 
-        # no way to construct a Version otherwise - WTF
-        versionobj = ".".join(
-            map(str, (major, minor, patch))
-        )
-        super(Version, self).__init__(versionobj)
-
-    def __iter__(self):
-        yield from self.release
-
-    def __repr__(self):
-        return f"Version('{super().__str__()}')"
-
-    def __hash__(self):
-        return hash(self._version)
-
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, value):
-        return Version(value)
-
-
 def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
     for k, v in tuple(a_dict.items()):
         if v is None or v == "":

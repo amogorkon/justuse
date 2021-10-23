@@ -33,6 +33,7 @@ from icontract import ensure
 from packaging import tags
 from pip._internal.utils import compatibility_tags
 from packaging.specifiers import SpecifierSet
+from typing import ForwardRef
 
 __package__ = "use.modules"
 __name__ = "use.modules.install_utils"
@@ -44,7 +45,6 @@ from modules.init_conf import config, Modes
 from modules.Messages import AmbiguityWarning, Message
 from modules.PlatformTag import PlatformTag
 from modules.init_conf import log
-from ..pypi_model import PyPI_Release, PyPI_Project, Version
 
 
 def all_kwargs(func, other_locals):
@@ -318,12 +318,12 @@ def _pebkac_no_version_hash(
     *,
     name: str,
     func: Callable[[...], Union[Exception, ModuleType]]=None,
-    version: Version=None,
+    version: ForwardRef("use.Version")=None,
     hash_algo=None,
     package_name: str=None,
     module_name: str=None,
     message_formatter: Callable[
-        [str, str, Version, set[str]], str
+        [str, str, ForwardRef("use.Version"), set[str]], str
     ] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
@@ -340,12 +340,12 @@ def _pebkac_version_no_hash(
     *,
     name: str,
     func: Callable[[...], Union[Exception, ModuleType]]=None,
-    version: Version=None,
+    version: ForwardRef("use.Version")=None,
     hash_algo=None,
     package_name: str=None,
     module_name: str=None,
     message_formatter: Callable[
-        [str, str, Version, set[str]], str
+        [str, str, ForwardRef("use.Version"), set[str]], str
     ] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
@@ -375,12 +375,12 @@ def _pebkac_no_version_no_hash(
     *,
     name: str,
     func: Callable[[...], Union[Exception, ModuleType]]=None,
-    version: Version=None,
+    version: ForwardRef("use.Version")=None,
     hash_algo=None,
     package_name: str=None,
     module_name: str=None,
     message_formatter: Callable[
-        [str, str, Version, set[str]], str
+        [str, str, ForwardRef("use.Version"), set[str]], str
     ] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
@@ -414,13 +414,13 @@ def _import_public_no_install(
     *,
     name: str,
     func: Callable[[...], Union[Exception, ModuleType]]=None,
-    version: Version=None,
+    version: ForwardRef("use.Version")=None,
     hash_algo=None,
     package_name: str=None,
     module_name: str=None,
     spec=None,
     message_formatter: Callable[
-        [str, str, Version, set[str]], str
+        [str, str, ForwardRef("use.Version"), set[str]], str
     ] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
@@ -478,12 +478,12 @@ def _auto_install(
     *,
     name: str,
     func: Callable[[...], Union[Exception, ModuleType]]=None,
-    version: Version=None,
+    version: ForwardRef("use.Version")=None,
     hash_algo=None,
     package_name: str=None,
     module_name: str=None,
     message_formatter: Callable[
-        [str, str, Version, set[str]], str
+        [str, str, ForwardRef("use.Version"), set[str]], str
     ] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, BaseException]:
@@ -617,7 +617,7 @@ def _process(*argv, env={}):
     )
 
 
-def _find_version(package_name, version=None) -> PyPI_Release:
+def _find_version(package_name, version=None) -> ForwardRef("PyPI_Release"):
     data = _filtered_and_ordered_data(_get_package_data(package_name), version)
     return data[0]
 
@@ -752,7 +752,7 @@ def _find_or_install(
     filename = url.path.segments[-1]
     info["filename"] = filename
     # info.update(_parse_filename(filename))
-    info = {**info, "version": Version(version)}
+    info = {**info, "version": ForwardRef("use.Version")(version)}
     if not artifact_path.exists():
         artifact_path = _ensure_path(_download_artifact(name, version, filename, url))
 
@@ -881,7 +881,7 @@ def _load_venv_entry(package_name, rest, installation_path, module_path) -> Modu
 
 
 @cache(maxsize=512)
-def _get_package_data(package_name) -> PyPI_Project:
+def _get_package_data(package_name) -> ForwardRef("PyPI_Project"):
     json_url = f"https://pypi.org/pypi/{package_name}/json"
     response = requests.get(json_url)
     if response.status_code == 404:
@@ -896,8 +896,8 @@ def _sys_version():
 
 
 def _filter_by_platform(
-    project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version
-) -> PyPI_Project:
+    project: ForwardRef("PyPI_Project"), tags: frozenset[PlatformTag], sys_version: ForwardRef("use.Version")
+) -> ForwardRef("PyPI_Project"):
     filtered = {
         ver: [
             rel.dict()
@@ -917,8 +917,8 @@ def _filter_by_platform(
 
 @pipes
 def _filtered_and_ordered_data(
-    data: PyPI_Project, version: Version = None
-) -> list[PyPI_Release]:
+    data: ForwardRef("PyPI_Project"), version: ForwardRef("use.Version") = None
+) -> list[ForwardRef("PyPI_Release")]:
     if version:
         version = Version(str(version))
         filtered = (
@@ -953,7 +953,7 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
 
 @pipes
 def _is_platform_compatible(
-    info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
+    info: ForwardRef("PyPI_Release"), platform_tags: frozenset[PlatformTag], include_sdist=False
 ) -> bool:
 
     if "py2" in info.justuse.python_tag and "py3" not in info.justuse.python_tag:
@@ -1006,7 +1006,7 @@ def _is_platform_compatible(
 
 
 def _is_compatible(
-    info: PyPI_Release, sys_version, platform_tags, include_sdist=None
+    info: ForwardRef("PyPI_Release"), sys_version, platform_tags, include_sdist=None
 ) -> bool:
     """Return true if the artifact described by 'info'
     is compatible with the current or specified system."""
@@ -1040,8 +1040,8 @@ def _apply_aspect(
 
 def _get_version(
     name: Optional[str] = None, package_name=None, /, mod=None
-) -> Optional[Version]:
-    version: Optional[Union[Callable[...], Version, Version, str]] = None
+) -> Optional[ForwardRef("Version")]:
+    version: Optional[Union[Callable[...], ForwardRef("use.Version"), ForwardRef("use.Version"), str]] = None
     for lookup_name in (name, package_name):
         if not lookup_name:
             continue

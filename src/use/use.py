@@ -1,3 +1,5 @@
+__name__ = "use.use"
+__package__ = "use"
 """
 Just use() python code from anywhere - a functional import alternative with advanced features.
 
@@ -81,7 +83,7 @@ from pathlib import Path, PureWindowsPath, WindowsPath
 from subprocess import PIPE, run
 from textwrap import dedent
 from types import FrameType, ModuleType
-from typing import Any, Callable, Optional, Type, Union
+from typing import Any, Callable, List, Tuple, Set, Dict, FrozenSet, ForwardRef, Optional, Type, Union
 from warnings import warn
 
 import requests
@@ -97,7 +99,7 @@ __package__ = "use"
 __name__ = "use.use"
 
 # internal subpackage imports
-from .modules.init_conf import (Modes, ModInUse, NoneType, _reloaders, _using,
+from modules.init_conf import (Modes, ModInUse, NoneType, _reloaders, _using,
                                 config, log)
 
 # !!! SEE NOTE !!!
@@ -119,14 +121,6 @@ from icontract import require
 from modules.Decorators import methdispatch
 from modules.Hashish import Hash
 from modules.Mod import ProxyModule, ModuleReloader
-from modules.Messages import (
-    AmbiguityWarning,
-    Message,
-    NoValidationWarning,
-    NotReloadableWarning,
-    UnexpectedHash,
-    VersionWarning,
-)
 from modules.install_utils import (
     _auto_install,
     _build_mod,
@@ -147,39 +141,72 @@ from modules.install_utils import (
     get_supported,
 )
 from hash_alphabet import JACK_as_num, num_as_hexdigest
-from pypi_model import *
+from packaging.version import Version as PkgVersion
 
+#%% Version and Packaging
+
+# Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
+# This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
+
+
+class Version(PkgVersion):
+    def __new__(cls, *args, **kwargs):
+        if args and isinstance(args[0], ForwardRef("Version")):
+            return args[0]
+        else:
+            return super(cls, ForwardRef("Version")).__new__(cls)
+
+    def __init__(self, versionobj: Optional[Union[PkgVersion, ForwardRef("__class__"), str]]=None, *, major=0, minor=0, patch=0):
+        if isinstance(versionobj, ForwardRef("Version")):
+            return
+        
+        if versionobj:
+            super(Version, self).__init__(versionobj)
+            return
+        
+        if major is None or minor is None or patch is None:
+            raise ValueError(
+                f"Either 'Version' must be initialized with either a string, packaging.version.Verson, {__class__.__qualname__}, or else keyword arguments for 'major', 'minor' and 'patch' must be provided. Actual invocation was: {__class__.__qualname__}({versionobj!r}, {major=!r}, {minor=!r}, {path=!r})"
+            )
+        
+        # string as only argument 
+        # no way to construct a Version otherwise - WTF
+        versionobj = ".".join(
+            map(str, (major, minor, patch))
+        )
+        super(Version, self).__init__(versionobj)
+
+    def __iter__(self):
+        yield from self.release
+
+    def __repr__(self):
+        return f"Version('{super().__str__()}')"
+
+    def __hash__(self):
+        return hash(self._version)
+
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, value):
+        return Version(value)
+
+
+from modules.Messages import (
+    AmbiguityWarning,
+    Message,
+    NoValidationWarning,
+    NotReloadableWarning,
+    UnexpectedHash,
+    VersionWarning,
+)
 use = sys.modules.get(__name__)
 home = Path(
     os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))
 ).absolute()
 
-
-
-
-# sometimes all you need is a sledge hammer..
-def releaser(cls: Callable[Type["ShutdownLockReleaser"], NoneType]):
-  old_locks = [*threading._shutdown_locks]
-  new_locks =   threading._shutdown_locks
-  reloaders = use._reloaders.values()
-  releaser = cls()
-  def release():
-    return releaser(
-      locks=set(new_locks).difference(old_locks),
-      reloaders=reloaders
-    )
-  atexit.register(release)
-  return cls
-
-@releaser
-class ShutdownLockReleaser:
-    def __call__(cls, *, locks: List["MutexLock"], reloaders: list):
-        for lock in locks:
-            lock.unlock()
-        for reloader in reloaders:
-            reloader.stop()
-        for lock in locks:
-            lock.unlock()
 
 
 
@@ -406,7 +433,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
     def _save_module_info(
         self,
         *,
-        version: Version,
+        version: ForwardRef("Version"),
         artifact_path: Optional[Path],
         hash_value=Optional[str],
         installation_path=Path,
@@ -849,7 +876,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         global auto_install
         is_auto_install = bool(auto_install & modes)
 
-        version: Version = Version(version) if version else None
+        version: ForwardRef("Version") = Version(version) if version else None
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
