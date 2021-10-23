@@ -175,41 +175,41 @@ def test_classical_install_no_version(reuse):
     assert mod is pytest or mod._ProxyModule__implementation is pytest
 
 
-@patch("webbrowser.open")
 def test_autoinstall_PEBKAC(reuse):
-    # auto-install requested, but no version or hashes specified
-    with pytest.raises(RuntimeWarning):
-        reuse("pytest", modes=reuse.auto_install)
+    with patch("webbrowser.open"):
+        # auto-install requested, but no version or hashes specified
+        with pytest.raises(RuntimeWarning):
+            reuse("pytest", modes=reuse.auto_install)
 
-    # forgot hashes
-    with pytest.raises(packaging.version.InvalidVersion):
-        reuse("pytest", version="-1", modes=reuse.auto_install)
+        # forgot hashes
+        with pytest.raises(packaging.version.InvalidVersion):
+            reuse("pytest", version="-1", modes=reuse.auto_install)
 
-    # forgot version
-    with pytest.raises(RuntimeWarning):
-        reuse(
-            "pytest",
-            hashes="asdf",
-            modes=reuse.auto_install,
-        )
+        # forgot version
+        with pytest.raises(RuntimeWarning):
+            reuse(
+                "pytest",
+                hashes="asdf",
+                modes=reuse.auto_install,
+            )
 
-    # impossible version
-    with pytest.raises(TypeError):  # version must be either str or tuple
-        reuse(
-            "pytest",
-            modes=reuse.auto_install,
-            version=-1,
-            hashes="asdf",
-        )
+        # impossible version
+        with pytest.raises(TypeError):  # version must be either str or tuple
+            reuse(
+                "pytest",
+                modes=reuse.auto_install,
+                version=-1,
+                hashes="asdf",
+            )
 
-    # non-existing pkg
-    with pytest.raises(ImportError):
-        reuse(
-            "4-^df",
-            modes=reuse.auto_install,
-            version="0.0.1",
-            hashes="asdf",
-        )
+        # non-existing pkg
+        with pytest.raises(ImportError):
+            reuse(
+                "4-^df",
+                modes=reuse.auto_install,
+                version="0.0.1",
+                hashes="asdf",
+            )
 
 
 def test_version_warning(reuse):
@@ -377,10 +377,10 @@ def test_reloading(reuse):
                 pass
 
 
-@patch("webbrowser.open")
 def test_suggestion_works(reuse):
-    sugg = suggested_artifact(reuse, "example-pypi-package/examplepy", modes=reuse.auto_install)
-    assert sugg
+    with patch("webbrowser.open"):
+        sugg = suggested_artifact(reuse, "example-pypi-package/examplepy", modes=reuse.auto_install)
+        assert sugg
 
 
 def double_function(func):

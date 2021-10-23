@@ -1,14 +1,14 @@
-import emoji
-from hashlib import sha256
+from unittest.mock import patch
+import webbrowser
 
-def represent_num_as_base(num, base):
-    if num == 0:
-        return [0]
-    digits = []
-    while num:
-        digits.append(num % base)
-        num //= base
-    return digits[::-1]
 
-E = list(emoji.EMOJI_UNICODE_ENGLISH.values())
-print(''.join(E[c] for c in represent_num_as_base(int(sha256("hello world".encode("utf8")).hexdigest(), 16), len(E))))
+def test():
+    with patch("webbrowser.open"):
+        return foobar() == 43
+    
+
+def foobar():
+    webbrowser.open("google.com")
+    return 43
+
+print(test())
