@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from packaging.version import Version as PkgVersion
 from pydantic import BaseModel
@@ -24,17 +24,25 @@ class Version(PkgVersion):
         else:
             return super(cls, Version).__new__(cls)
 
-    def __init__(self, versionstr=None, *, major=0, minor=0, patch=0):
-        if isinstance(versionstr, Version):
+    def __init__(self, versionobj: Optional[Union[PkgVersion, __class__, str]]=None, *, major=0, minor=0, patch=0):
+        if isinstance(versionobj, Version):
             return
-        if not (versionstr or major or minor or patch):
+        
+        if versionobj:
+            super(Version, self).__init__(versionobj)
+            return
+        
+        if major is None or minor is None or patch is None:
             raise ValueError(
-                "Version must be initialized with either a string or major, minor and patch"
+                f"Either 'Version' must be initialized with either a string, packaging.version.Verson, {__class__.__qualname__}, or else keyword arguments for 'major', 'minor' and 'patch' must be provided. Actual invocation was: {__class__.__qualname__}({versionobj!r}, {major=!r}, {minor=!r}, {path=!r})"
             )
-        if major or minor or patch:
-            # string as only argument, no way to construct a Version otherwise - WTF
-            return super().__init__(".".join((str(major), str(minor), str(patch))))
-        return super().__init__(versionstr)
+        
+        # string as only argument 
+        # no way to construct a Version otherwise - WTF
+        versionobj = ".".join(
+            map(str, (major, minor, patch))
+        )
+        super(Version, self).__init__(versionobj)
 
     def __iter__(self):
         yield from self.release
@@ -183,20 +191,35 @@ class PyPI_Project(QuietModel):
     last_serial: int = None
     info: PyPI_Info = None
 
-    def __init__(self, **kwargs):
+    def __init__(self, *, releases, urls, info, **kwargs):
 
-        for version in list(kwargs["releases"].keys()):
+        for version in list(releases.keys()):
+            if not isinstance(version, str): continue
             try:
                 Version(version)
-            except:
-                del kwargs["releases"][version]
+            except packaging.version.InvalidVersion:
+                del releases[version]
 
-        kwargs["releases"] = {
-            k: [{**_v, "version": Version(k)} for _v in v]
-            for k, v in kwargs["releases"].items()
+        releases2 = {
+            str(ver_str): [
+                {
+                    **(
+                        rel_info 
+                        if isinstance(rel_info, dict)
+                        else rel_info.dict()
+                    ),
+                    "version": Version(str(ver_str))
+                } for rel_info in release_infos
+            ]
+            for ver_str, release_infos
+            in releases.items()
         }
-
-        super().__init__(**kwargs)
+        super(PyPI_Project, self).__init__(
+            releases=releases2,
+            urls=urls,
+            info=info,
+            **kwargs
+        )
 
 
 def _parse_filename(filename) -> dict:

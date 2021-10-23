@@ -40,11 +40,10 @@ True
 
 # it is possible to import standalone modules from online sources
 # with immediate sha1-hash-verificiation before execution of the code like
->>> utils = use(use.URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
-                    hashes="95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8")
+>>> utils = use(use.URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"), hashes={"95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8"})
 
 # to auto-install a certain version (within a virtual env and pip in secure hash-check mode) of a pkg you can do
->>> np = use("numpy", version="1.1.1", modes=use.auto_install, hash_value=["9879de676"])
+>>> np = use("numpy", version="1.1.1", hashes={"9879de676"}, modes=use.auto_install)
 
 :author: Anselm Kiefner (amogorkon)
 :author: David Reilly
@@ -63,29 +62,19 @@ True
 
 #% Imports
 
-from __future__ import annotations
-
 import ast
+
 import asyncio
 import atexit
-import hashlib
 import importlib.util
 import inspect
 import os
-import signal
 import sqlite3
 import sys
 import tempfile
 import threading
 import time
 import traceback
-from enum import Enum
-from functools import lru_cache as cache
-from functools import partial, partialmethod, reduce, singledispatch, update_wrapper
-from importlib import metadata
-from importlib.abc import Finder, Loader
-from importlib.metadata import Distribution, PackageNotFoundError, distribution
-from importlib.util import find_spec
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from itertools import chain, takewhile
 from logging import DEBUG, INFO, NOTSET, WARN, StreamHandler, getLogger, root
@@ -93,7 +82,8 @@ from pathlib import Path, PureWindowsPath, WindowsPath
 from subprocess import PIPE, run
 from textwrap import dedent
 from types import FrameType, ModuleType
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional, Type, Union
+
 from warnings import warn
 
 import requests
@@ -104,7 +94,34 @@ from icontract import ensure, invariant, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
+
+# internal subpackage imports
+from .modules.init_conf import (
+    config,
+    log,
+    ModInUse,
+    Modes,
+    NoneType,
+    _reloaders,
+    _using,
+)
+# !!! SEE NOTE !!!
+# IMPORTANT; The setup.py script must be able to read the
+# current use __version__ variable **AS A STRING LITERAL** from
+# this file. If you do anything except updating the version,
+# please check that setup.py can still be executed.
+__version__ = "0.5.0"  # IMPORTANT; Must leave exactly as-is for setup
+# !!! SEE NOTE !!!
+mode = Modes
+auto_install = mode.auto_install
+test_config: str = locals().get("test_config", {})
+test_version: str = locals().get("test_version", None)
+
+
+
 from .modules import Decorators as D
+from icontract import require
+from .modules.Decorators import methdispatch
 from .modules.Hashish import Hash
 from .modules.Mod import ProxyModule, ModuleReloader
 from .modules.Messages import (
@@ -115,56 +132,60 @@ from .modules.Messages import (
     UnexpectedHash,
     VersionWarning,
 )
-from .modules.init_conf import (
-    config,
-    log,
-    mode,
-    ModInUse,
-    test_config,
-    test_version,
-    _reloaders,
-    _using,
-    __version__,
-)
 from .modules.install_utils import (
-    _apply_aspect,
     _auto_install,
     _build_mod,
     _ensure_path,
-    _ensure_version,
     _fail_or_default,
+    _find_or_install,
+    _find_version,
+    _get_package_data,
+    _get_version,
     _import_public_no_install,
+    _is_compatible,
+    _is_platform_compatible,
+    _is_version_satisfied,
     _parse_name,
     _pebkac_version_no_hash,
     _pebkac_no_version_hash,
     _pebkac_no_version_no_hash,
+    get_supported,
 )
-
-from use import hash_alphabet, pypi_model
-
-os.chdir(Path(__file__).parent)
+from .hash_alphabet import JACK_as_num, num_as_hexdigest
+from .pypi_model import *
 
 use = sys.modules.get(__name__)
-from pypi_model import PyPI_Project, PyPI_Release, Version
+home = Path(
+    os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))
+).absolute()
+
+
 
 
 # sometimes all you need is a sledge hammer..
-_orig_locks = threading._shutdown_locks
+def releaser(cls: Callable[Type["ShutdownLockReleaser"], NoneType]):
+  old_locks = [*threading._shutdown_locks]
+  new_locks =   threading._shutdown_locks
+  reloaders = use._reloaders.values()
+  releaser = cls()
+  def release():
+    return releaser(
+      locks=set(new_locks).difference(old_locks),
+      reloaders=reloaders
+    )
+  atexit.register(release)
+  return cls
 
+@releaser
+class ShutdownLockReleaser:
+    def __call__(cls, *, locks: List["MutexLock"], reloaders: list):
+        for lock in locks:
+            lock.unlock()
+        for reloader in reloaders:
+            reloader.stop()
+        for lock in locks:
+            lock.unlock()
 
-def atexit_hook():
-    global _reloaders
-    for lock in threading._shutdown_locks:
-        lock.unlock()
-    for reloader in _reloaders.values():
-        reloader.stop()
-    for lock in threading._shutdown_locks:
-        lock.unlock()
-
-
-from atexit import register
-
-atexit.register(atexit_hook)
 
 
 #%% Version and Packaging
@@ -188,21 +209,15 @@ class PlatformTag:
         return self.platform == other.platform
 
 
-#% Main Classes
-
-
-class Info(dict):
-    def __repr__(self):
-        return "<Info of size %d>" % len(self)
-
 
 class Use(ModuleType):
     # MODES to reduce signature complexity
     # enum.Flag wasn't viable, but this alternative is actually pretty cool
-    auto_install = 2 ** 0
-    fatal_exceptions = 2 ** 1
-    reloading = 2 ** 2
-    no_public_installation = 2 ** 4
+    auto_install = Modes.auto_install
+    fatal_exceptions = Modes.fatal_exceptions
+    reloading = Modes.reloading
+    no_public_installation = Modes.no_public_installation
+    
 
     def __init__(self):
         # TODO for some reason removing self._using isn't as straight forward..
@@ -215,11 +230,11 @@ class Use(ModuleType):
         self._user_registry = toml.load(self.home / "user_registry.toml")
 
         # for the user to copy&paste
-        with open(self.home / "default_config.toml", "w") as file:
-            toml.dump(config, file)
+        with open(self.home / "default_config.toml", "w") as rfile:
+            toml.dump(config, rfile)
 
-        with open(self.home / "config.toml") as file:
-            config.update(toml.load(file))
+        with open(self.home / "config.toml") as rfile:
+            config.update(toml.load(rfile))
 
         config.update(test_config)
 
@@ -248,14 +263,15 @@ class Use(ModuleType):
                 )  # we really don't need to bug the user about this (either pypi is down or internet is broken)
 
     def _set_up_files_and_directories(self):
-        self.home = Path(
-            os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))
-        )
+        global home
+        self.home = home
+
         try:
             self.home.mkdir(mode=0o755, parents=True, exist_ok=True)
         except PermissionError:
             # this should fix the permission issues on android #80
-            self.home = _ensure_path(tempfile.mkdtemp(prefix="justuse_"))
+            
+            self.home = home = _ensure_path(tempfile.mkdtemp(prefix="justuse_"))
         (self.home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
         for file in (
             "config.toml",
@@ -333,13 +349,6 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         (self.home / "registry.db").touch(mode=0o644)
         self.registry = self._set_up_registry()
         self.cleanup()
-
-    def execute_wrapped(self, *args, **kwargs):
-        try:
-            return self.registry.execute(*args, **kwargs)
-        except sqlite3.OperationalError as _oe:
-            self.recreate_registry()
-            return self.registry.execute(*args, **kwargs)
 
     def install(self):
         # yeah, really.. __builtins__ sometimes appears as a dict and other times as a module, don't ask me why
@@ -438,7 +447,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         """Helper to get the order right."""
         self._using[name] = ModInUse(name, mod, path, spec, frame)
 
-    @D.methdispatch
+    @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
         raise NotImplementedError(Message.cant_use(thing))
 
@@ -580,8 +589,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             name = path.stem
             if reloading:
                 try:
-                    with open(path, "rb") as file:
-                        code = file.read()
+                    with open(path, "rb") as rfile:
+                        code = rfile.read()
                     # initial instance, if this doesn't work, just throw the towel
                     mod = _build_mod(
                         name=name,
@@ -623,8 +632,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 ):
                     warn(Message.not_reloadable(name), NotReloadableWarning)
             else:  # NOT reloading
-                with open(path, "rb") as file:
-                    code = file.read()
+                with open(path, "rb") as rfile:
+                    code = rfile.read()
                 # the path needs to be set before attempting to load the new module - recursion confusing ftw!
                 frame = inspect.getframeinfo(inspect.currentframe())
                 self._set_mod(name=name, mod=mod, frame=frame)
@@ -798,9 +807,28 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hash_algo,
         user_msg=Message,
     ):
-        log.debug(
-            f"use-package: {name}, {package_name}, {module_name}, {version}, {hashes}"
+        kwargs = {
+            "name": name,
+            "package_name": package_name,
+            "module_name": module_name,
+            "version": version,
+            "hashes": hashes,
+            "modes": modes,
+            "default": default,
+            "hash_algo": hash_algo,
+            "user_msg": user_msg,
+        }
+        callstr = (
+            f"use._use_package({name}, {package_name=!r}, "
+            f"{module_name=!r}, {version=!r}, {hashes=!r}, "
+            f"{modes=!r}, {default=!r}, {hash_algo=!r}, "
+            f"{user_msg=!r})"
         )
+        log.debug("Entering %s", callstr)
+        
+        modes |= mode.fastfail
+        
+
         if isinstance(hashes, str):
             hashes = set([hashes])
         if not hashes:
@@ -808,14 +836,23 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hashes = {
             H
             if len(H) == 64
-            else hash_alphabet.num_as_hexdigest(hash_alphabet.JACK_as_num(H))
+            else num_as_hexdigest(JACK_as_num(H))
 
             for H in hashes
         }
+        callstr = (
+            f"use._use_package({name}, {package_name=!r}, "
+            f"{module_name=!r}, {version=!r}, {hashes=!r}, "
+            f"{modes=!r}, {default=!r}, {hash_algo=!r}, "
+            f"{user_msg=!r})"
+        )
+        log.debug("Normalized hashes=%s", repr(hashes))
+        
         rest = module_name
-
+        kwargs["rest"] = rest
         # we use boolean flags to reduce the complexity of the call signature
-        auto_install = bool(Use.auto_install & modes)
+        global auto_install
+        is_auto_install = bool(auto_install & modes)
 
         version: Version = Version(version) if version else None
 
@@ -828,35 +865,66 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         if name in self._using:
             spec = self._using[name].spec
-        elif not auto_install:
+        elif not is_auto_install:
             spec = importlib.util.find_spec(package_name)
-
+        kwargs["spec"] = spec
+        
         # welcome to the buffet table, where everything is a lie
         # fmt: off
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
         log.info("case = %s", case)
+        
+        def _ensure_version(
+            result: Union[ModuleType, Exception]
+        ) -> Union[ModuleType, Exception]:
+            if not isinstance(result, ModuleType):
+                return result
+            result_version = _get_version(mod=result)
+            if result_version != version: raise AmbiguityWarning(
+                Message.version_warning(name, version, result_version)
+            )
+            return result
+        
         case_func = {
-            (0, 0, 0, 0): lambda **kwargs: ImportError(Message.cant_import(name)),
-            (0, 0, 0, 1): _pebkac_no_version_no_hash,
-            (0, 0, 1, 0): _import_public_no_install,
-            (0, 1, 0, 0): lambda **kwargs: ImportError(Message.cant_import(name)),
-            (1, 0, 0, 0): lambda **kwargs: ImportError(Message.cant_import(name)),
-            (0, 0, 1, 1): lambda **kwargs: _auto_install(_import_public_no_install, **kwargs),
-            (0, 1, 1, 0): _import_public_no_install,
-            (1, 1, 0, 0): lambda **kwargs: ImportError(Message.cant_import(name)),
-            (1, 0, 0, 1): _pebkac_version_no_hash,
-            (1, 0, 1, 0): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
-            (0, 1, 0, 1): _pebkac_no_version_hash,
-            (0, 1, 1, 1): lambda **kwargs: _pebkac_no_version_hash(_import_public_no_install, **kwargs),
-            (1, 0, 1, 1): lambda **kwargs: _pebkac_version_no_hash(_ensure_version(_import_public_no_install, **kwargs), **kwargs),
-            (1, 1, 0, 1): _auto_install,
-            (1, 1, 1, 0): lambda **kwargs: _ensure_version(_import_public_no_install, **kwargs),
-            (1, 1, 1, 1): lambda **kwargs: _auto_install(_ensure_version(_import_public_no_install, **kwargs), **kwargs),
+            (0, 0, 0, 0): lambda: ImportError(Message.cant_import(name)),
+            (0, 0, 0, 1): lambda: _pebkac_no_version_no_hash(**kwargs),
+            (0, 0, 1, 0): lambda: _import_public_no_install(**kwargs),
+            (0, 1, 0, 0): lambda: ImportError(Message.cant_import(name)),
+            (1, 0, 0, 0): lambda: ImportError(Message.cant_import(name)),
+            (0, 0, 1, 1): lambda: _auto_install(
+                func=lambda: _import_public_no_install(**kwargs),
+                **kwargs
+            ),
+            (0, 1, 1, 0): lambda: _import_public_no_install(**kwargs),
+            (1, 1, 0, 0): lambda: ImportError(Message.cant_import(name)),
+            (1, 0, 0, 1): lambda: _pebkac_version_no_hash(**kwargs),
+            (1, 0, 1, 0): lambda: _ensure_version(_import_public_no_install(**kwargs)),
+            (0, 1, 0, 1): lambda: _pebkac_no_version_hash(**kwargs),
+            (0, 1, 1, 1): lambda: _pebkac_no_version_hash(_import_public_no_install, **kwargs),
+            (1, 0, 1, 1): lambda: _ensure_version(
+              _pebkac_version_no_hash(
+                func=lambda: _import_public_no_install(**kwargs),
+                **kwargs
+              ),
+            ),
+            (1, 1, 0, 1): lambda: _auto_install(**kwargs),
+            (1, 1, 1, 0): lambda: _ensure_version(_import_public_no_install(**kwargs)),
+            (1, 1, 1, 1): lambda: _auto_install(
+                func=lambda: _ensure_version(
+                    _import_public_no_install(**kwargs)
+                ),
+                **kwargs
+            ),
         }[case]
-        result = case_func(**locals())
-        log.info("result = %s", result)
+        log.info("case_func = '%s' %s",
+            case_func.__qualname__, case_func)
+        log.info("kwargs = %s", repr(kwargs))
+        result = case_func()
+        log.info("result = %s", repr(result))
         # fmt: on
         assert result
+        if isinstance(result, BaseException):
+            raise result
 
         if isinstance((mod := result), ModuleType):
             frame = inspect.getframeinfo(inspect.currentframe())

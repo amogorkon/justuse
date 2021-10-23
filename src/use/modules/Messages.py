@@ -5,7 +5,7 @@ import webbrowser
 from enum import Enum
 
 from ..pypi_model import Version
-from .init_conf import __version__
+from ..use import __version__
 
 
 def _web_no_version_or_hash_provided(name, package_name, version, hashes):
