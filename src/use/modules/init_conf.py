@@ -42,7 +42,6 @@ if "DEBUG" in os.environ or "pytest" in getattr(
     sys.modules.get("__init__", ""), "__file__", ""
 ):
     root.setLevel(DEBUG)
-    test_config["debugging"] = True
 else:
     root.setLevel(INFO)
 
