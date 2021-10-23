@@ -97,3 +97,4 @@ setup(
     zip_safe=True,
     **meta
 )
+
