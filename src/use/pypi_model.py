@@ -191,20 +191,35 @@ class PyPI_Project(QuietModel):
     last_serial: int = None
     info: PyPI_Info = None
 
-    def __init__(self, **kwargs):
+    def __init__(self, *, releases, urls, info, **kwargs):
 
-        for version in list(kwargs["releases"].keys()):
+        for version in list(releases.keys()):
+            if not isinstance(version, str): continue
             try:
                 Version(version)
-            except:
-                del kwargs["releases"][version]
+            except packaging.version.InvalidVersion:
+                del releases[version]
 
-        kwargs["releases"] = {
-            k: [{**_v, "version": Version(k)} for _v in v]
-            for k, v in kwargs["releases"].items()
+        releases2 = {
+            str(ver_str): [
+                {
+                    **(
+                        rel_info 
+                        if isinstance(rel_info, dict)
+                        else rel_info.dict()
+                    ),
+                    "version": Version(str(ver_str))
+                } for rel_info in release_infos
+            ]
+            for ver_str, release_infos
+            in releases.items()
         }
-
-        super().__init__(**kwargs)
+        super(PyPI_Project, self).__init__(
+            releases=releases2,
+            urls=urls,
+            info=info,
+            **kwargs
+        )
 
 
 def _parse_filename(filename) -> dict:

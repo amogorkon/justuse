@@ -107,6 +107,38 @@ def get_supported() -> frozenset[PlatformTag]:
     return tags
 
 
+def sort_releases_by_install_method(project__: "PyPI_Project") -> "PyPI_Project":
+    return PyPI_Project(
+        **{
+            **__project.dict(),
+            **{
+                "releases": {
+                    k: [x.dict() for x in sorted(v, key=lambda r: r.is_sdist)]
+                    for k, v in project__.releases.items()
+                }
+            },
+        }
+    )
+
+
+def _filter_by_version(project_: "PyPI_Project", version: str) -> "PyPI_Project":
+    
+    for_version = (project_.releases.get(version)
+    or  project_.releases.get(str(version))
+    or  project_.releases.get(Version(str(version))))
+    if not for_version:
+        raise BaseException("Invalid version: {version!r}", project_)
+    
+    new_data = {
+      "urls": for_version,
+      "releases": {
+         Version(str(version)): for_version
+       },
+       "info": project_.info.dict()
+    }
+    return PyPI_Project(**new_data)
+
+
 class TarFunctions:
     def __init__(self, artifact_path):
         self.archive = tarfile.open(artifact_path)
