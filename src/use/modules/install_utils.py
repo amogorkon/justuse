@@ -34,14 +34,16 @@ from packaging import tags
 from pip._internal.utils import compatibility_tags
 from packaging.specifiers import SpecifierSet
 
-from .. import hash_alphabet
-from . import Decorators as D
-from .Decorators import pipes
-from .Hashish import Hash
-from .init_conf import config, Modes, use
-from .Messages import AmbiguityWarning, Message
-from .PlatformTag import PlatformTag
-from .init_conf import log
+__package__ = "use.modules"
+__name__ = "use.modules.install_utils"
+
+import modules.Decorators as D
+from modules.Decorators import pipes
+from modules.Hashish import Hash
+from modules.init_conf import config, Modes
+from modules.Messages import AmbiguityWarning, Message
+from modules.PlatformTag import PlatformTag
+from modules.init_conf import log
 from ..pypi_model import PyPI_Release, PyPI_Project, Version
 
 
