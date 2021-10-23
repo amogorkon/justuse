@@ -90,7 +90,6 @@ import requests
 import toml
 from beartype import beartype
 from furl import furl as URL
-<<<<<<< HEAD
 from icontract import ensure, invariant, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
@@ -122,10 +121,8 @@ auto_install = mode.auto_install
 
 
 from .modules import Decorators as D
-=======
 from icontract import require
 from .modules.Decorators import methdispatch
->>>>>>> 962755f (more cleaning and reestablishing consistency)
 from .modules.Hashish import Hash
 from .modules.Mod import ProxyModule, ModuleReloader
 from .modules.Messages import (
