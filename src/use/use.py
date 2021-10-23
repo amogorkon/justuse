@@ -63,7 +63,6 @@ True
 #% Imports
 
 import ast
-
 import asyncio
 import atexit
 import importlib.util
@@ -83,7 +82,6 @@ from subprocess import PIPE, run
 from textwrap import dedent
 from types import FrameType, ModuleType
 from typing import Any, Callable, Optional, Type, Union
-
 from warnings import warn
 
 import requests
@@ -96,21 +94,15 @@ from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
 
 # internal subpackage imports
-from .modules.init_conf import (
-    config,
-    log,
-    ModInUse,
-    Modes,
-    NoneType,
-    _reloaders,
-    _using,
-)
+from .modules.init_conf import (Modes, ModInUse, NoneType, _reloaders, _using,
+                                config, log)
+
 # !!! SEE NOTE !!!
 # IMPORTANT; The setup.py script must be able to read the
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.5.0"  # IMPORTANT; Must leave exactly as-is for setup
+__version__ = "0.6.0"  # IMPORTANT; Must leave exactly as-is for setup
 # !!! SEE NOTE !!!
 mode = Modes
 auto_install = mode.auto_install
@@ -119,39 +111,25 @@ test_version: str = locals().get("test_version", None)
 
 
 
-from .modules import Decorators as D
 from icontract import require
+
+from .hash_alphabet import JACK_as_num, num_as_hexdigest
+from .modules import Decorators as D
 from .modules.Decorators import methdispatch
 from .modules.Hashish import Hash
-from .modules.Mod import ProxyModule, ModuleReloader
-from .modules.Messages import (
-    AmbiguityWarning,
-    Message,
-    NoValidationWarning,
-    NotReloadableWarning,
-    UnexpectedHash,
-    VersionWarning,
-)
-from .modules.install_utils import (
-    _auto_install,
-    _build_mod,
-    _ensure_path,
-    _fail_or_default,
-    _find_or_install,
-    _find_version,
-    _get_package_data,
-    _get_version,
-    _import_public_no_install,
-    _is_compatible,
-    _is_platform_compatible,
-    _is_version_satisfied,
-    _parse_name,
-    _pebkac_version_no_hash,
-    _pebkac_no_version_hash,
-    _pebkac_no_version_no_hash,
-    get_supported,
-)
-from .hash_alphabet import JACK_as_num, num_as_hexdigest
+from .modules.install_utils import (_auto_install, _build_mod, _ensure_path,
+                                    _fail_or_default, _find_or_install,
+                                    _find_version, _get_package_data,
+                                    _get_version, _import_public_no_install,
+                                    _is_compatible, _is_platform_compatible,
+                                    _is_version_satisfied, _parse_name,
+                                    _pebkac_no_version_hash,
+                                    _pebkac_no_version_no_hash,
+                                    _pebkac_version_no_hash, get_supported)
+from .modules.Messages import (AmbiguityWarning, Message, NotReloadableWarning,
+                               NoValidationWarning, UnexpectedHash,
+                               VersionWarning)
+from .modules.Mod import ModuleReloader, ProxyModule
 from .pypi_model import *
 
 use = sys.modules.get(__name__)

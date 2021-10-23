@@ -11,7 +11,7 @@ from importlib.metadata import PackageNotFoundError, distribution
 from importlib.util import find_spec
 from pathlib import Path
 from threading import _shutdown_locks
-from unittest import mock
+from unittest.mock import patch
 
 import packaging.tags
 import packaging.version
@@ -26,8 +26,8 @@ cwd = Path().cwd()
 os.chdir(src)
 sys.path.insert(0, "") if "" not in sys.path else None
 import use
-from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use import PyPI_Release, Version
+from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 
 os.chdir(cwd)
 
@@ -175,7 +175,7 @@ def test_classical_install_no_version(reuse):
     assert mod is pytest or mod._ProxyModule__implementation is pytest
 
 
-@mock.patch.object(webbrowser, "open")
+@patch("webbrowser.open")
 def test_autoinstall_PEBKAC(reuse):
     # auto-install requested, but no version or hashes specified
     with pytest.raises(RuntimeWarning):
@@ -377,12 +377,9 @@ def test_reloading(reuse):
                 pass
 
 
-@mock.patch.object(webbrowser, "open")
+@patch("webbrowser.open")
 def test_suggestion_works(reuse):
-    sugg = suggested_artifact(
-        reuse, "example-pypi-package/examplepy",
-        modes=reuse.auto_install
-    )
+    sugg = suggested_artifact(reuse, "example-pypi-package/examplepy", modes=reuse.auto_install)
     assert sugg
 
 
@@ -516,6 +513,4 @@ def test_86(reuse, name, version, hashes):
 
 def test_hash_alphabet():
     H = sha256("hello world".encode("utf-8")).hexdigest()
-    assert H == num_as_hexdigest(
-        JACK_as_num(hexdigest_as_JACK(H))
-    )
+    assert H == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(H)))

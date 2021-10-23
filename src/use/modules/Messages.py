@@ -5,7 +5,7 @@ import webbrowser
 from enum import Enum
 
 from ..pypi_model import Version
-from ..use import __version__
+from ..use import __version__  # use  # TODO: need access to use.home !!
 
 
 def _web_no_version_or_hash_provided(name, package_name, version, hashes):
@@ -14,6 +14,13 @@ def _web_no_version_or_hash_provided(name, package_name, version, hashes):
 A webbrowser will open to the Snyk Advisor page to check whether the package is vulnerable.
 If you want to auto-install the latest version:
 use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
+
+
+def _web_pebkac_missing_hash(name, package_name, version, hashes):
+    f"""Failed to auto-install {package_name!r} because hashes aren't specified.
+        A webbrowser will open with a list of available hashes for different platforms.
+        If you only want to use the package on this platform, this may work:
+    use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
 
 
 class Message(Enum):
@@ -53,10 +60,7 @@ use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
     classically_imported = (
         lambda name, this_version: f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")'
     )
-    pebkac_missing_hash = (
-        lambda name, package_name, version, hashes: f"""Failed to auto-install {package_name!r} because hashes is missing. This may work:
-use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
-    )
+    pebkac_missing_hash = _web_pebkac_missing_hash
     pebkac_unsupported = (
         lambda package_name: f"We could not find any version or release for {package_name} that could satisfy our requirements!"
     )
