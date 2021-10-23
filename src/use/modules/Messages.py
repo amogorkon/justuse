@@ -1,10 +1,19 @@
 # This is a collection of the messages directed to the user.
 # How it works is quite magical - the lambdas prevent the f-strings from being prematuraly evaluated, and are only evaluated once returned.
 # Fun fact: f-strings are firmly rooted in the AST.
+import webbrowser
 from enum import Enum
 
 from ..pypi_model import Version
 from .init_conf import __version__
+
+
+def _web_no_version_or_hash_provided(name, package_name, version, hashes):
+    webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
+    return f"""Please specify version and hash for auto-installation of {package_name!r}.
+A webbrowser will open to the Snyk Advisor page to check whether the package is vulnerable.
+If you want to auto-install the latest version:
+use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
 
 
 class Message(Enum):
@@ -54,15 +63,8 @@ use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"
     pip_json_mess = (
         lambda package_name, target_version: f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI."
     )
-    no_version_or_hash_provided = (
-        lambda name, package_name, version, hashes: f"""Please specify version and hash for auto-installation of {package_name!r}.
-To get some valuable insight on the health of this pkg, please check out https://snyk.io/advisor/python/{package_name}
-If you want to auto-install the latest version:
-use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
-    )
-    cant_import = (
-        lambda name: f"No pkg installed named {name} and auto-installation not requested. Aborting."
-    )
+    no_version_or_hash_provided = _web_no_version_or_hash_provided
+    cant_import = lambda name: f"No pkg installed named {name} and auto-installation not requested. Aborting."
     cant_import_no_version = (
         lambda package_name: f"Failed to auto-install '{package_name}' because no version was specified."
     )

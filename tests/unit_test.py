@@ -4,12 +4,14 @@ import re
 import sys
 import tempfile
 import warnings
+import webbrowser
 from contextlib import closing
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, distribution
 from importlib.util import find_spec
 from pathlib import Path
 from threading import _shutdown_locks
+from unittest import mock
 
 import packaging.tags
 import packaging.version
@@ -172,6 +174,7 @@ def test_classical_install_no_version(reuse):
     assert mod is pytest or mod._ProxyModule__implementation is pytest
 
 
+@mock.patch.object(webbrowser, "open")
 def test_autoinstall_PEBKAC(reuse):
     # auto-install requested, but no version or hashes specified
     with pytest.raises(RuntimeWarning):
@@ -372,6 +375,7 @@ def test_reloading(reuse):
                 pass
 
 
+@mock.patch.object(webbrowser, "open")
 def test_suggestion_works(reuse):
     sugg = suggested_artifact("example-pypi-package/examplepy")
     assert sugg
