@@ -3,12 +3,7 @@ import os
 import re
 import shlex
 import sys
-from pathlib import Path
 from typing import Iterator
-
-__package__ = "use"
-__name__ = "use"
-__path__ = [Path(__file__).parent.absolute()]
 
 logging.root.setLevel(logging.DEBUG)
 logger = logging.getLogger("air")
@@ -80,6 +75,4 @@ from beartype.roar._roarwarn import BeartypeDecorHintPepDeprecationWarning
 warnings.filterwarnings(action="ignore", category=BeartypeDecorHintPepDeprecationWarning)
 
 __package__ = "use"
-__name__ = "use"
-__path__ = [str(Path(__file__).parent.absolute())]
 from use import use
