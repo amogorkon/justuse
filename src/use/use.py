@@ -90,6 +90,7 @@ import requests
 import toml
 from beartype import beartype
 from furl import furl as URL
+<<<<<<< HEAD
 from icontract import ensure, invariant, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
@@ -121,6 +122,10 @@ auto_install = mode.auto_install
 
 
 from .modules import Decorators as D
+=======
+from icontract import require
+from .modules.Decorators import methdispatch
+>>>>>>> 962755f (more cleaning and reestablishing consistency)
 from .modules.Hashish import Hash
 from .modules.Mod import ProxyModule, ModuleReloader
 from .modules.Messages import (
@@ -446,7 +451,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         """Helper to get the order right."""
         self._using[name] = ModInUse(name, mod, path, spec, frame)
 
-    @D.methdispatch
+    @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
         raise NotImplementedError(Message.cant_use(thing))
 
