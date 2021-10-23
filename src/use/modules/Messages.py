@@ -4,7 +4,7 @@
 from enum import Enum
 
 from ..pypi_model import Version
-from .init_conf import __version__
+from ..use import __version__
 
 
 class Message(Enum):

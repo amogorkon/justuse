@@ -74,6 +74,15 @@ def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
     return value
 
 
+def execute_wrapped(sql: str, params: tuple):
+    use = sys.modules["use"]
+    try:
+        return use.registry.execute(sql, params)
+    except sqlite3.OperationalError as _oe:
+        pass
+    use.recreate_registry()
+    return use.registry.execute(sql, params)
+
 @cache
 def get_supported() -> frozenset[PlatformTag]:
     log.debug("enter get_supported()")
@@ -306,7 +315,7 @@ def _venv_root(package_name, version, home) -> Path:
 
 
 def _pebkac_no_version_hash(
-    func=None, *, name: str, **kwargs
+    *, name: str, func=None, **kwargs
 ) -> Union[ModuleType, Exception]:
 
     if func:
@@ -317,9 +326,9 @@ def _pebkac_no_version_hash(
 
 
 def _pebkac_version_no_hash(
-    func=None,
     *,
     name: str,
+    func: Callable[[...], Union[Exception, ModuleType]]=None,
     version: Version,
     hash_algo,
     package_name: str,
@@ -329,7 +338,7 @@ def _pebkac_version_no_hash(
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     if func:
-        result = func(**all_kwargs(_pebkac_version_no_hash, locals()))
+        result = func()
         if isinstance(result, ModuleType):
             return result
     try:
@@ -444,16 +453,17 @@ def _auto_install(
         if isinstance(result, ModuleType):
             return result
 
-    query = self.execute_wrapped(
+    query = execute_wrapped(
         f"""
         SELECT
             artifacts.id, import_relpath,
             artifact_path, installation_path, module_path
         FROM distributions
         JOIN artifacts ON artifacts.id = distributions.id
-        WHERE name='{package_name}' AND version='str(version)'
+        WHERE name=? AND version=?
         ORDER BY artifacts.id DESC
-        """
+        """,
+        (package_name, str(version), ),
     ).fetchone()
 
     if not query or not _ensure_path(query["artifact_path"]).exists():
@@ -1055,18 +1065,6 @@ def _build_mod(
         raise
     return mod
 
-
-def _ensure_version(func, *, name, version, **kwargs) -> Union[ModuleType, Exception]:
-    result = func(**all_kwargs(_ensure_version, locals()))
-    if not isinstance(result, ModuleType):
-        return result
-
-    this_version = _get_version(mod=result)
-
-    if this_version == version:
-        return result
-    else:
-        return AmbiguityWarning(Message.version_warning(name, version, this_version))
 
 
 def _fail_or_default(exception: BaseException, default: Any):

@@ -1,7 +1,7 @@
 import sys
 import os
 from collections import namedtuple
-from enum import Enum
+from enum import Enum, IntEnum
 from importlib.machinery import ModuleSpec, SourceFileLoader
 from logging import getLogger, DEBUG, INFO, NOTSET, StreamHandler, root
 from typing import Any
@@ -14,12 +14,9 @@ log = getLogger(__name__)
 # injected via initial_globals for testing, you can safely ignore this
 test_config: str = locals().get("test_config", {})
 test_version: str = locals().get("test_version", None)
-__name__ = "use.use"
-__package__ = "use"
+__name__ = "use.modules.init_conf"
+__package__ = "use.modules"
 __path__ = __file__
-__spec__ = ModuleSpec("use.use", loader=SourceFileLoader(fullname="use", path=__file__))
-__spec__.submodule_search_locations = [Path(__file__).parent]
-__version__ = test_version or "0.5.0"
 
 _reloaders: dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
 _aspects = {}
@@ -30,7 +27,12 @@ NoneType = type(None)
 
 
 # Really looking forward to actual builtin sentinel values..
-mode = Enum("Mode", "fastfail")
+class Modes(IntEnum):
+    auto_install = 2 ** 0
+    fatal_exceptions = 2 ** 1
+    reloading = 2 ** 2
+    no_public_installation = 2 ** 4
+    fastfail = 2 ** 5
 
 config = {"version_warning": True, "debugging": False, "use_db": True}
 
@@ -47,4 +49,3 @@ else:
     root.setLevel(INFO)
 
 
-use = sys.modules.get(__name__)

@@ -61,10 +61,12 @@ class Packages(BaseModel):
 def test_package(pkg: PackageToTest) -> tuple[bool, Dict]:
 
     log1 = start_capture_logs()
+    retry = None
     try:
         use(pkg.name, modes=use.auto_install)
     except RuntimeWarning as e:
         if str(e).startswith("Please specify version and hash for auto-installation of"):
+            retry = str(e.args[0]).strip().strip(".").splitlines()[-1]
             hashes = re.findall("hashes={([^}]+)}", str(e))[0]
             hashes = {_hash.strip("'") for _hash in hashes.split(", ")}
             print(str(e))
@@ -128,7 +130,7 @@ def test_package(pkg: PackageToTest) -> tuple[bool, Dict]:
                 "name": pkg.name,
                 "version": use_version,
                 "stars": pkg.stars,
-                "retry": f"""use('{pkg.name}', version='{use_version}', modes=use.auto_install, hashes={hashes})""",
+                "retry": retry,
             },
         )
 
@@ -141,13 +143,13 @@ def test_package(pkg: PackageToTest) -> tuple[bool, Dict]:
                 "name": pkg.name,
                 "version": use_version,
                 "stars": pkg.stars,
+                "retry": retry,
                 "err": {
                     "type": str(exc_type),
                     "value": str(exc_value),
                     "traceback": tb.split("\n"),
                     "logs": get_capture_logs(logs).split("\n"),
                 },
-                "retry": f"""use('{pkg.name}', version='{use_version}', modes=use.auto_install, hashes={hashes})""",
             },
         )
 
@@ -174,4 +176,3 @@ if __name__ == "__main__":
 
     with open(out_dir / f"{pkg.name}.json", "w") as f:
         json.dump(info, f, indent=4, sort_keys=True)
-

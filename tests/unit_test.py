@@ -24,7 +24,7 @@ cwd = Path().cwd()
 os.chdir(src)
 sys.path.insert(0, "") if "" not in sys.path else None
 import use
-import use.hash_alphabet
+from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use import PyPI_Release, Version
 
 os.chdir(cwd)
@@ -48,9 +48,9 @@ def reuse():
     return use
 
 
-def suggested_artifact(name, *args, **kwargs):
+def suggested_artifact(reuse, *args, **kwargs):
     try:
-        mod = use(name, *args, modes=1, **kwargs)
+        mod = reuse(*args, **kwargs)
         assert False, f"Actually returned mod: {mod}"
     except (RuntimeWarning, RuntimeError) as rw:
         last_line = rw.args[0].strip().splitlines()[-1]
@@ -373,7 +373,10 @@ def test_reloading(reuse):
 
 
 def test_suggestion_works(reuse):
-    sugg = suggested_artifact("example-pypi-package/examplepy")
+    sugg = suggested_artifact(
+        reuse, "example-pypi-package/examplepy",
+        modes=reuse.auto_install
+    )
     assert sugg
 
 
@@ -485,61 +488,10 @@ def test_85(reuse, name, version, hashes):
             {"7310f8d27bc79ced999e760ca304d69f6ba6c6649c0b60fb0e04a4a77cacc134"},
         ),
         (
-            "PyYAML",
-            "5.4.1",
-            {"d483ad4e639292c90170eb6f7783ad19490e7a8defb3e46f97dfe4bacae89122"},
-        ),
-        (
-            "pyzmq",
-            "22.2.1",
-            {"b4428302c389fffc0c9c07a78cad5376636b9d096f332acfe66b321ae9ff2c63"},
-        ),
-        (
-            "scipy",
-            "1.7.1",
-            {"611f9cb459d0707dd8e4de0c96f86e93f61aac7475fcb225e9ec71fecdc5cebf"},
-        ),
-        (
             "setuptools",
             "57.4.0",
             {"a49230977aa6cfb9d933614d2f7b79036e9945c4cdd7583163f4e920b83418d6"},
         ),
-        (
-            "setuptools-scm",
-            "6.0.1",
-            {"c3bd5f701c8def44a5c0bfe8d407bef3f80342217ef3492b951f3777bd2d915c"},
-        ),
-        (
-            "terminado",
-            "0.12.1",
-            {"09fdde344324a1c9c6e610ee4ca165c4bb7f5bbf982fceeeb38998a988ef8452"},
-        ),
-        (
-            "testpath",
-            "0.5.0",
-            {"8044f9a0bab6567fc644a3593164e872543bb44225b0e24846e2c89237937589"},
-        ),
-        (
-            "tornado",
-            "6.1",
-            {"a48900ecea1cbb71b8c71c620dee15b62f85f7c14189bdeee54966fbd9a0c5bd"},
-        ),
-        (
-            "traitlets",
-            "5.1.0",
-            {"03f172516916220b58c9f19d7f854734136dd9528103d04e9bf139a92c9f54c4"},
-        ),
-        (
-            "typing-extensions",
-            "3.10.0.2",
-            {"f1d25edafde516b146ecd0613dabcc61409817af4766fbbcfb8d1ad4ec441a34"},
-        ),
-        # ("pytest-cov", "2.12.1"),
-        # ("pytest-env", "0.6.2"),
-        # ("requests", "2.24.0"),
-        # ("furl", "2.1.2"),
-        # ("wheel", "0.36.2"),
-        # ("icontract", "2.5.4"),
     ),
 )
 def test_86(reuse, name, version, hashes):
@@ -558,6 +510,6 @@ def test_86(reuse, name, version, hashes):
 
 def test_hash_alphabet():
     H = sha256("hello world".encode("utf-8")).hexdigest()
-    assert H == use.hash_alphabet.num_as_hexdigest(
-        use.hash_alphabet.JACK_as_num(use.hash_alphabet.hexdigest_as_JACK(H))
+    assert H == num_as_hexdigest(
+        JACK_as_num(hexdigest_as_JACK(H))
     )
