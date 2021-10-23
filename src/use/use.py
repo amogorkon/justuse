@@ -885,7 +885,10 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             (0, 0, 1, 0): _import_public_no_install,
             (0, 1, 0, 0): lambda: ImportError(Message.cant_import(name)),
             (1, 0, 0, 0): lambda: ImportError(Message.cant_import(name)),
-            (0, 0, 1, 1): lambda: _auto_install(_import_public_no_install, **kwargs),
+            (0, 0, 1, 1): lambda: _auto_install(
+                func=lambda: _import_public_no_install(**kwargs),
+                **kwargs
+            ),
             (0, 1, 1, 0): lambda: _import_public_no_install(**kwargs),
             (1, 1, 0, 0): lambda: ImportError(Message.cant_import(name)),
             (1, 0, 0, 1): lambda: _pebkac_version_no_hash(**kwargs),
@@ -900,7 +903,12 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             ),
             (1, 1, 0, 1): lambda: _auto_install(**kwargs),
             (1, 1, 1, 0): lambda: _ensure_version(_import_public_no_install(**kwargs)),
-            (1, 1, 1, 1): lambda: _auto_install(_ensure_version(_import_public_no_install(**kwargs)), **kwargs),
+            (1, 1, 1, 1): lambda: _auto_install(
+                func=lambda: _ensure_version(
+                    _import_public_no_install(**kwargs)
+                ),
+                **kwargs
+            ),
         }[case]
         log.info("case_func = '%s' %s",
             case_func.__qualname__, case_func)
