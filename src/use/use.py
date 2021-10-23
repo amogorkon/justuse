@@ -102,8 +102,6 @@ from .modules.init_conf import (
     ModInUse,
     Modes,
     NoneType,
-    test_config,
-    test_version,
     _reloaders,
     _using,
 )
@@ -116,6 +114,10 @@ __version__ = "0.5.0"  # IMPORTANT; Must leave exactly as-is for setup
 # !!! SEE NOTE !!!
 mode = Modes
 auto_install = mode.auto_install
+test_config: str = locals().get("test_config", {})
+test_version: str = locals().get("test_version", None)
+
+
 
 
 

@@ -38,7 +38,7 @@ from .. import hash_alphabet
 from . import Decorators as D
 from .Decorators import pipes
 from .Hashish import Hash
-from .init_conf import config, use
+from .init_conf import config, Modes, use
 from .Messages import AmbiguityWarning, Message
 from .PlatformTag import PlatformTag
 from .init_conf import log
@@ -1099,7 +1099,7 @@ def _build_mod(
 
 
 def _fail_or_default(exception: BaseException, default: Any):
-    if default is not mode.fastfail:
+    if default is not Modes.fastfail:
         return default  # TODO: write test for default
     else:
         raise exception

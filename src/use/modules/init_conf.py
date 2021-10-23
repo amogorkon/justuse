@@ -12,8 +12,6 @@ log = getLogger(__name__)
 
 
 # injected via initial_globals for testing, you can safely ignore this
-test_config: str = locals().get("test_config", {})
-test_version: str = locals().get("test_version", None)
 __name__ = "use.modules.init_conf"
 __package__ = "use.modules"
 __path__ = __file__
