@@ -33,18 +33,19 @@ from packaging import tags
 from pip._internal.utils import compatibility_tags
 from packaging.specifiers import SpecifierSet
 
+<<<<<<< HEAD
 from .. import hash_alphabet
 from . import Decorators as D
+=======
+import hash_alphabet
+from .Decorators import pipes
+>>>>>>> 962755f (more cleaning and reestablishing consistency)
 from .Hashish import Hash
 from .init_conf import config, use
 from .Messages import AmbiguityWarning, Message
 from .PlatformTag import PlatformTag
-from .init_conf import log
-from ..pypi_model import PyPI_Release
-
-from ..pypi_model import PyPI_Project, Version
-
-mode = Enum("Mode", "fastfail")
+from .init_conf import log, mode
+from ..pypi_model import PyPI_Release, PyPI_Project, Version
 
 
 def all_kwargs(func, other_locals):
@@ -61,7 +62,7 @@ def all_kwargs(func, other_locals):
     return d
 
 
-@D.pipes
+@pipes
 def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
     if isinstance(value, (str, bytes)):
         return Path(value).absolute()
@@ -170,7 +171,7 @@ class ZipFunctions:
             return (Path(entry_name).stem, text)
 
 
-@D.pipes
+@pipes
 def archive_meta(artifact_path):
     DIST_PKG_INFO_REGEX = re.compile("(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$")
     meta = archive = names = functions = None
@@ -370,6 +371,7 @@ def _pebkac_version_no_hash(
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
 
 
+<<<<<<< HEAD
 @D.pipes
 def _pebkac_no_version_no_hash(
     *,
@@ -388,6 +390,10 @@ def _pebkac_no_version_no_hash(
         result = func()
         if isinstance(result, (Exception, ModuleType)):
             return result
+=======
+@pipes
+def _pebkac_no_version_no_hash(*, name, package_name, hash_algo, **kwargs) -> Exception:
+>>>>>>> 962755f (more cleaning and reestablishing consistency)
     # let's try to make an educated guess and give a useful suggestion
     data = _get_package_data(package_name) >> _filter_by_platform(
         tags=get_supported(), sys_version=_sys_version()
@@ -918,7 +924,7 @@ def _filter_by_platform(
     return PyPI_Project(**{**project.dict(), **{"releases": filtered}})
 
 
-@D.pipes
+@pipes
 def _filtered_and_ordered_data(
     data: PyPI_Project, version: Version = None
 ) -> list[PyPI_Release]:
@@ -954,7 +960,7 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
     return is_match
 
 
-@D.pipes
+@pipes
 def _is_platform_compatible(
     info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
 ) -> bool:
