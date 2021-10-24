@@ -4,6 +4,7 @@ import re
 import shlex
 import sys
 from typing import Iterator
+from pathlib import Path
 
 logging.root.setLevel(logging.DEBUG)
 logger = logging.getLogger("air")
@@ -75,4 +76,7 @@ from beartype.roar._roarwarn import BeartypeDecorHintPepDeprecationWarning
 warnings.filterwarnings(action="ignore", category=BeartypeDecorHintPepDeprecationWarning)
 
 __package__ = "use"
+home = Path(
+    os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))
+).absolute()
 from use import use

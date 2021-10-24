@@ -126,16 +126,13 @@ from .modules.install_utils import (_auto_install, _build_mod, _ensure_path,
                                     _pebkac_no_version_hash,
                                     _pebkac_no_version_no_hash,
                                     _pebkac_version_no_hash, get_supported)
+from use import home
 from .modules.Messages import (AmbiguityWarning, Message, NotReloadableWarning,
                                NoValidationWarning, UnexpectedHash,
                                VersionWarning)
 from .modules.Mod import ModuleReloader, ProxyModule
 from .pypi_model import *
 
-use = sys.modules.get(__name__)
-home = Path(
-    os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))
-).absolute()
 
 
 
@@ -144,7 +141,7 @@ home = Path(
 def releaser(cls: Callable[Type["ShutdownLockReleaser"], NoneType]):
   old_locks = [*threading._shutdown_locks]
   new_locks =   threading._shutdown_locks
-  reloaders = use._reloaders.values()
+  reloaders = sys.modules["use.modules.init_conf"]._reloaders
   releaser = cls()
   def release():
     return releaser(

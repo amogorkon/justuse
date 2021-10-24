@@ -6,7 +6,8 @@ from enum import Enum
 
 from ..pypi_model import Version
 from ..use import __version__  # use  # TODO: need access to use.home !!
-
+import use.use
+print(f"Home is {use.home}")
 
 def _web_no_version_or_hash_provided(name, package_name, version, hashes):
     webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
