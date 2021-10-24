@@ -28,6 +28,7 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [x] auto-install packages with C-extensions and other precompiled stuff
 - [x] no-hassle installation of almost all conda packages
 - [ ] try to pull packages from a P2P network before pulling from PyPI or conda directly
+- [ ] all justuse-code is compiled to single .py files, with and without dependencies, just drop it into your own code without installation
 - [ ] provide a visual representation of the internal dependency graph
 - [ ] module-level variable guards aka "module-properties"
 - [ ] isolation of packages via subprocess/subinterpreter for clean un-/reloading
@@ -92,6 +93,9 @@ use("example-pypi-package/examplepy", version="0.1.0", hashes={'S㵈蛴瞙绽㡃
 ```
 Version-pinning and hash-checking is the most secure way to install a package. It will ensure that your code will always run as you expect it, but there's a drawback: there is no immediate and automatic way to update code without involving the user (yet). On one side, you won't ever accidentally break your stuff by updating something else, but you also won't benefit from automatic security patches. To fix this shortcoming, it might be feasible to build IDE-plugins that check and update these pins in the code or check some database for security patches every time an auto-installed package is imported - please contact us if you have ideas or better yet, code ;-)
 
+
+## There are strange chinese symbols in my hashes, am I being hacked?
+Nope. SHA256 hashes normally are pretty long (64 characters per hexdigest) and we require them defined within regular python code. Additionally, if you want to support multiple platforms, you need to supply a hash for every platform - which can add up to huge blocks of visual noise. Since Python 3 supports unicode by default, why not use the whole range of printable characters to encode those hashes? It's easier said than done - turns out emojis don't work well across different systems and editors - however, it *is* feasible to merge the Japanese, ASCII, Chinese and Korean alphabets into a single, big one we call JACK - which can be used to reliably encode those hashes in merely 18 characters. Since humans aren't supposed to manually type those hashes but simply copy&paste them anyway, there is only the question how to get them if you only have hexdigests at hand for some reason. Simply do `use.hexdigest_as_JACK(H)` and you're ready to go. Of course we also support classical hexdigests as fallback.
 
 ## Beware of Magic!
 Inspired by the q package/module, use() is a subclass of ModuleType, which is a callable class that replaces the module on import, so that only 'import use' is needed to be able to call use() on things.
