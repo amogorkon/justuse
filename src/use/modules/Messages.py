@@ -4,10 +4,13 @@
 import webbrowser
 from enum import Enum
 
-from ..pypi_model import Version
-from ..use import __version__  # use  # TODO: need access to use.home !!
 import use.use
+
+from ..pypi_model import Version
+from ..use import __version__
+
 print(f"Home is {use.home}")
+
 
 def _web_no_version_or_hash_provided(name, package_name, version, hashes):
     webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
@@ -18,6 +21,18 @@ use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"
 
 
 def _web_pebkac_missing_hash(name, package_name, version, hashes):
+    with open(use.home / "web_exception.html", "w") as f:
+        f.write(
+            f"""<html><body>
+<h1>{package_name!r}</h1>
+<p>
+Please specify the hash for auto-installation.
+</p>
+<p>
+</p>
+</body></html>"""
+        )
+    webbrowser.open(f"file://{use.home / 'web_exception.html'}")
     f"""Failed to auto-install {package_name!r} because hashes aren't specified.
         A webbrowser will open with a list of available hashes for different platforms.
         If you only want to use the package on this platform, this may work:

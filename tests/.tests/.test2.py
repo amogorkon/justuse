@@ -1,14 +1,3 @@
-from unittest.mock import patch
-import webbrowser
+from hashlib import sha256
 
-
-def test():
-    with patch("webbrowser.open"):
-        return foobar() == 43
-    
-
-def foobar():
-    webbrowser.open("google.com")
-    return 43
-
-print(test())
+print(len(sha256("hello world".encode("utf8")).hexdigest()))
