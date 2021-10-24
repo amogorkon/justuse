@@ -28,7 +28,7 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [x] auto-install packages with C-extensions and other precompiled stuff
 - [x] no-hassle installation of almost all conda packages
 - [ ] try to pull packages from a P2P network before pulling from PyPI or conda directly
-- [ ] have all of the justuse-code compiled to single .py files, with and without all dependencies, easy to drop into projects without extra installations 
+- [ ] have all of the justuse-code compiled to single .py files, with and without all dependencies, ready to drop it in (thus solving the issue with bootstrapping) 
 - [ ] provide a visual representation of the internal dependency graph
 - [ ] module-level variable guards aka "module-properties"
 - [ ] isolation of packages via subprocess/subinterpreter for clean un-/reloading
