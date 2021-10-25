@@ -347,6 +347,7 @@ def _pebkac_version_no_hash(
     ] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
+    version = Version(version)
     if func:
         result = func()
         if isinstance(result, (Exception, ModuleType)):
@@ -365,8 +366,7 @@ def _pebkac_version_no_hash(
         rw.hashes = hashes
         return rw
     except (IndexError, KeyError) as ike:
-        return RuntimeWarning(Message.no_distribution_found(package_name, version))
-
+        return RuntimeWarning(Message.no_distribution_found(package_name, version ))
 
 @pipes
 def _pebkac_no_version_no_hash(

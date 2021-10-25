@@ -16,7 +16,7 @@ try:
     try:
         from beartype.roar._roarwarn import BeartypeDecorHintPepWarning
 
-        warnings.filterwarnings(action="ignore", category=AnnoyingBeartypeWarning)
+        warnings.filterwarnings(action="ignore", category=BeartypeDecorHintPepWarning)
     except (NameError, ImportError):
         pass
 except ImportError:

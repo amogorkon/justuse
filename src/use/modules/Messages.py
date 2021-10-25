@@ -33,7 +33,7 @@ Please specify the hash for auto-installation.
 </body></html>"""
         )
     webbrowser.open(f"file://{use.home / 'web_exception.html'}")
-    f"""Failed to auto-install {package_name!r} because hashes aren't specified.
+    return f"""Failed to auto-install {package_name!r} because hashes aren't specified.
         A webbrowser will open with a list of available hashes for different platforms.
         If you only want to use the package on this platform, this may work:
     use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
