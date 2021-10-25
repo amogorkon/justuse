@@ -3,8 +3,8 @@ import os
 import re
 import shlex
 import sys
-from typing import Iterator
 from pathlib import Path
+from typing import Iterator
 
 logging.root.setLevel(logging.DEBUG)
 logger = logging.getLogger("air")
@@ -32,15 +32,15 @@ home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).abs
 __version__ = "0.6.0"  # IMPORTANT; Must leave exactly as-is for setup
 # !!! SEE NOTE !!!
 
-import sys
+import hashlib
 import os
+import sys
 from collections import namedtuple
 from enum import Enum, IntEnum
 from importlib.machinery import ModuleSpec, SourceFileLoader
-from logging import getLogger, DEBUG, INFO, NOTSET, StreamHandler, root
-from typing import Any
+from logging import DEBUG, INFO, NOTSET, StreamHandler, getLogger, root
 from pathlib import Path
-
+from typing import Any
 
 log = getLogger(__name__)
 
@@ -55,6 +55,10 @@ _using = {}
 
 ModInUse = namedtuple("ModInUse", "name mod path spec frame")
 NoneType = type(None)
+
+
+class Hash(Enum):
+    sha256 = hashlib.sha256
 
 
 # Really looking forward to actual builtin sentinel values..
@@ -82,20 +86,20 @@ print("Startong submod imports: use.hash_alphabet")
 from use.hash_alphabet import *
 
 print("Startong submod imports: use.modules")
-from use.modules.Decorators import *
-from use.modules.Hashish import *
-from use.modules.PlatformTag import *
-from use.modules.install_utils import *
+from use.decorators import *
+from use.install_utils import *
+from use.platformtag import *
 
 print("Startong submod imports: use.pypi_model")
 from use.pypi_model import *
 
-print("Startong submod imports: use.modules.Messages")
-from use.modules.Messages import *
+print("Starting submod imports: use.modules.Messages")
+from use.messages import *
 
 print("Startong submod imports: use.use")
-from use.use import *
 import inspect
+
+from use.main import *
 
 print("Finished importing modules")
 for k, v in inspect.getmembers(use):

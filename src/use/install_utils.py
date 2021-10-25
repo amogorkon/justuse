@@ -5,7 +5,6 @@ import linecache
 import os
 import platform
 import re
-import requests
 import shlex
 import sqlite3
 import sys
@@ -19,40 +18,34 @@ from importlib import metadata
 from importlib.machinery import ModuleSpec, SourceFileLoader
 from importlib.metadata import PackageNotFoundError
 from itertools import chain
-from pathlib import PureWindowsPath, WindowsPath
+from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
 from subprocess import run
 from types import ModuleType
 from typing import Any, Callable, Optional, Union
-from pathlib import Path
 
 import furl
 import packaging
+import requests
 from furl import furl as URL
 from icontract import ensure
 from packaging import tags
-from pip._internal.utils import compatibility_tags
 from packaging.specifiers import SpecifierSet
+from pip._internal.utils import compatibility_tags
 
-from .. import hash_alphabet
-from . import Decorators as D
-from .Decorators import pipes
-from .Hashish import Hash
-from use import config, Modes
-from .Messages import AmbiguityWarning, Message
-from .PlatformTag import PlatformTag
-from use import log
-from ..pypi_model import PyPI_Release, PyPI_Project, Version
+from use import Hash, Modes, config, log
+from use.decorators import pipes
+from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
+from use.messages import AmbiguityWarning, Message
+from use.platformtag import PlatformTag
+from use.pypi_model import PyPI_Project, PyPI_Release, Version
 
 
 def all_kwargs(func, other_locals):
     d = {
         name: other_locals[name]
         for name, param in inspect.signature(func).parameters.items()
-        if (
-            param.kind is inspect.Parameter.KEYWORD_ONLY
-            or param.kind is inspect.Parameter.VAR_KEYWORD
-        )
+        if (param.kind is inspect.Parameter.KEYWORD_ONLY or param.kind is inspect.Parameter.VAR_KEYWORD)
     }
     d.update(d["kwargs"])
     del d["kwargs"]
@@ -79,6 +72,7 @@ def execute_wrapped(sql: str, params: tuple):
         pass
     getattr(___use, "recreate_registry")()
     return getattr(___use, "registry").execute(sql, params)
+
 
 @cache
 def get_supported() -> frozenset[PlatformTag]:
@@ -119,19 +113,19 @@ def sort_releases_by_install_method(project__: "PyPI_Project") -> "PyPI_Project"
 
 
 def _filter_by_version(project_: "PyPI_Project", version: str) -> "PyPI_Project":
-    
-    for_version = (project_.releases.get(version)
-    or  project_.releases.get(str(version))
-    or  project_.releases.get(Version(str(version))))
+
+    for_version = (
+        project_.releases.get(version)
+        or project_.releases.get(str(version))
+        or project_.releases.get(Version(str(version)))
+    )
     if not for_version:
         raise BaseException("Invalid version: {version!r}", project_)
-    
+
     new_data = {
-      "urls": for_version,
-      "releases": {
-         Version(str(version)): for_version
-       },
-       "info": project_.info.dict()
+        "urls": for_version,
+        "releases": {Version(str(version)): for_version},
+        "info": project_.info.dict(),
     }
     return PyPI_Project(**new_data)
 
@@ -191,9 +185,7 @@ def archive_meta(artifact_path):
 
     archive, names = get_archive(artifact_path)
     archive, names = functions.get()
-    meta = dict(
-        names << filter(DIST_PKG_INFO_REGEX.search) << map(functions.read_entry)
-    )
+    meta = dict(names << filter(DIST_PKG_INFO_REGEX.search) << map(functions.read_entry))
     meta.update(
         dict(
             (lp := l.partition(": "), (lp[0].lower().replace("-", "_"), lp[2]))[-1]
@@ -230,11 +222,7 @@ def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
     loader = None
     if not loader and isinstance(obj, ModuleType):
         loader = obj.__loader__
-    if (
-        not loader
-        and isinstance(obj, ModuleType)
-        and (spec := getattr(obj, "__spec__", None))
-    ):
+    if not loader and isinstance(obj, ModuleType) and (spec := getattr(obj, "__spec__", None)):
         loader = spec.loader
     if not loader and isinstance(obj, ModuleSpec):
         loader = obj.loader
@@ -259,17 +247,14 @@ def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
                     )
                     + list(
                         Path(parent_spec.submodule_search_locations[0]).glob(
-                            mod.__name__[len(parent_mod.__name__) + 1 :]
-                            + "/__init__.py"
+                            mod.__name__[len(parent_mod.__name__) + 1 :] + "/__init__.py"
                         )
                     )
                 )[0]
                 if ("path" in k or "file" in k or "loc" in k)
                 else k,
             )
-            for k in list(
-                inspect.signature(type(parent_mod.__loader__).__init__).parameters
-            )[1:]
+            for k in list(inspect.signature(type(parent_mod.__loader__).__init__).parameters)[1:]
         ]
         loader = type(parent_mod.__loader__)(*ctor_args)
     if not loader:
@@ -296,9 +281,7 @@ def _clean_sys_modules(package_name: str) -> None:
             for k, v in sys.modules.items()
             if (
                 getattr(v, "__spec__", None) is None
-                or isinstance(
-                    _ensure_loader(v), (SourceFileLoader, zipimport.zipimporter)
-                )
+                or isinstance(_ensure_loader(v), (SourceFileLoader, zipimport.zipimporter))
             )
             and package_name in k.split(".")
         ]
@@ -315,14 +298,12 @@ def _venv_root(package_name, version, home) -> Path:
 def _pebkac_no_version_hash(
     *,
     name: str,
-    func: Callable[[...], Union[Exception, ModuleType]]=None,
-    version: Version=None,
+    func: Callable[..., Union[Exception, ModuleType]] = None,
+    version: Version = None,
     hash_algo=None,
-    package_name: str=None,
-    module_name: str=None,
-    message_formatter: Callable[
-        [str, str, Version, set[str]], str
-    ] = Message.pebkac_missing_hash,
+    package_name: str = None,
+    module_name: str = None,
+    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
 
@@ -330,21 +311,19 @@ def _pebkac_no_version_hash(
         result = func()
         if isinstance(result, (Exception, ModuleType)):
             return result
-    
+
     return RuntimeWarning(Message.cant_import_no_version(name))
 
 
 def _pebkac_version_no_hash(
     *,
     name: str,
-    func: Callable[[...], Union[Exception, ModuleType]]=None,
-    version: Version=None,
+    func: Callable[[Any], Union[Exception, ModuleType]] = None,
+    version: Version = None,
     hash_algo=None,
-    package_name: str=None,
-    module_name: str=None,
-    message_formatter: Callable[
-        [str, str, Version, set[str]], str
-    ] = Message.pebkac_missing_hash,
+    package_name: str = None,
+    module_name: str = None,
+    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     version = Version(version)
@@ -354,7 +333,7 @@ def _pebkac_version_no_hash(
             return result
     try:
         hashes = {
-            hash_alphabet.hexdigest_as_JACK(entry.digests.get(hash_algo.name))
+            hexdigest_as_JACK(entry.digests.get(hash_algo.name))
             for entry in (_get_package_data(package_name).releases[version])
         }
         if not hashes:
@@ -372,14 +351,12 @@ def _pebkac_version_no_hash(
 def _pebkac_no_version_no_hash(
     *,
     name: str,
-    func: Callable[[...], Union[Exception, ModuleType]]=None,
-    version: Version=None,
+    func: Callable[..., Union[Exception, ModuleType]] = None,
+    version: Version = None,
     hash_algo=None,
-    package_name: str=None,
-    module_name: str=None,
-    message_formatter: Callable[
-        [str, str, Version, set[str]], str
-    ] = Message.pebkac_missing_hash,
+    package_name: str = None,
+    module_name: str = None,
+    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     if func:
@@ -411,15 +388,13 @@ def _pebkac_no_version_no_hash(
 def _import_public_no_install(
     *,
     name: str,
-    func: Callable[[...], Union[Exception, ModuleType]]=None,
-    version: Version=None,
+    func: Callable[..., Union[Exception, ModuleType]] = None,
+    version: Version = None,
     hash_algo=None,
-    package_name: str=None,
-    module_name: str=None,
+    package_name: str = None,
+    module_name: str = None,
     spec=None,
-    message_formatter: Callable[
-        [str, str, Version, set[str]], str
-    ] = Message.pebkac_missing_hash,
+    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     if func:
@@ -475,14 +450,12 @@ def _parse_name(name) -> tuple[str, str]:
 def _auto_install(
     *,
     name: str,
-    func: Callable[[...], Union[Exception, ModuleType]]=None,
-    version: Version=None,
+    func: Callable[..., Union[Exception, ModuleType]] = None,
+    version: Version = None,
     hash_algo=None,
-    package_name: str=None,
-    module_name: str=None,
-    message_formatter: Callable[
-        [str, str, Version, set[str]], str
-    ] = Message.pebkac_missing_hash,
+    package_name: str = None,
+    module_name: str = None,
+    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, BaseException]:
     package_name, rest = _parse_name(name)
@@ -507,7 +480,6 @@ def _auto_install(
             str(version),
         ),
     ).fetchone()
-
 
     if not query or not _ensure_path(query["artifact_path"]).exists():
         query = _find_or_install(package_name, version)
@@ -555,9 +527,7 @@ def _auto_install(
         if mod:
             use._save_module_info(
                 name=package_name,
-                import_relpath=str(
-                    _ensure_path(module_path).relative_to(installation_path)
-                ),
+                import_relpath=str(_ensure_path(module_path).relative_to(installation_path)),
                 version=version,
                 artifact_path=artifact_path,
                 hash_value=hash_algo.value(artifact_path.read_bytes()).hexdigest(),
@@ -568,9 +538,7 @@ def _auto_install(
 
 def _process(*argv, env={}):
     _realenv = {
-        k: v
-        for k, v in chain(os.environ.items(), env.items())
-        if isinstance(k, str) and isinstance(v, str)
+        k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)
     }
     o = run(
         **(
@@ -649,8 +617,7 @@ def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
 
 def _pure_python_package(artifact_path, meta):
     not_pure_python = any(
-        any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES)
-        for n in meta["names"]
+        any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES) for n in meta["names"]
     )
 
     if ".tar" in str(artifact_path):
@@ -665,11 +632,7 @@ def _find_module_in_venv(package_name, version, relp):
     ret = None, None
     try:
         site_dirs = list(
-            (
-                getattr(___use, "home") 
-                / "venv" / package_name 
-                / str(version)
-            ).rglob("**/site-packages")
+            (getattr(___use, "home") / "venv" / package_name / str(version)).rglob("**/site-packages")
         )
         if not site_dirs:
             return ret
@@ -709,9 +672,7 @@ def _find_module_in_venv(package_name, version, relp):
         )
 
 
-def _find_or_install(
-    name, version=None, artifact_path=None, url=None, out_info=None, force_install=False
-):
+def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=None, force_install=False):
     log.debug(
         f"_find_or_install(name={name}, \
                             version={version}, \
@@ -734,11 +695,7 @@ def _find_or_install(
         artifact_path = sys.modules["use"].home / "packages" / filename
 
     if not url or not artifact_path or (artifact_path and not artifact_path.exists()):
-        info.update(
-            _filtered_and_ordered_data(_get_package_data(package_name), version)[
-                0
-            ].dict()
-        )
+        info.update(_filtered_and_ordered_data(_get_package_data(package_name), version)[0].dict())
         url = URL(str(info["url"]))
         filename = url.asdict()["path"]["segments"][-1]
         artifact_path = sys.modules["use"].home / "packages" / filename
@@ -914,9 +871,7 @@ def _filter_by_platform(
 
 
 @pipes
-def _filtered_and_ordered_data(
-    data: PyPI_Project, version: Version = None
-) -> list[PyPI_Release]:
+def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> list[PyPI_Release]:
     if version:
         version = Version(str(version))
         filtered = (
@@ -925,9 +880,7 @@ def _filtered_and_ordered_data(
             >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
         )
     else:
-        filtered = _filter_by_platform(
-            data, tags=get_supported(), sys_version=_sys_version()
-        )
+        filtered = _filter_by_platform(data, tags=get_supported(), sys_version=_sys_version())
 
     flat = reduce(list.__add__, filtered.releases.values(), [])
     return sorted(flat, key=lambda r: (not r.is_sdist, r.version), reverse=True)
@@ -957,9 +910,7 @@ def _is_platform_compatible(
     if "py2" in info.justuse.python_tag and "py3" not in info.justuse.python_tag:
         return False
 
-    if not include_sdist and (
-        ".tar" in info.justuse.ext or info.justuse.python_tag in ("cpsource", "sdist")
-    ):
+    if not include_sdist and (".tar" in info.justuse.ext or info.justuse.python_tag in ("cpsource", "sdist")):
         return False
 
     if "win" in info.packagetype and sys.platform != "win32":
@@ -982,9 +933,7 @@ def _is_platform_compatible(
         ]
     )
 
-    given_platform_tags = (
-        info.justuse.platform_tag.split(".") << map(PlatformTag) >> frozenset
-    )
+    given_platform_tags = info.justuse.platform_tag.split(".") << map(PlatformTag) >> frozenset
 
     if info.is_sdist and info.requires_python is not None:
         given_python_tag = {
@@ -998,14 +947,11 @@ def _is_platform_compatible(
     # print(supported_tags, given_python_tag)
 
     return any(supported_tags.intersection(given_python_tag)) and (
-        (info.is_sdist and include_sdist)
-        or any(given_platform_tags.intersection(platform_tags))
+        (info.is_sdist and include_sdist) or any(given_platform_tags.intersection(platform_tags))
     )
 
 
-def _is_compatible(
-    info: PyPI_Release, sys_version, platform_tags, include_sdist=None
-) -> bool:
+def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist=None) -> bool:
     """Return true if the artifact described by 'info'
     is compatible with the current or specified system."""
     specifier = info.requires_python
@@ -1036,9 +982,7 @@ def _apply_aspect(
     return thing
 
 
-def _get_version(
-    name: Optional[str] = None, package_name=None, /, mod=None
-) -> Optional[Version]:
+def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> Optional[Version]:
     version: Optional[Union[Callable[...], Version, Version, str]] = None
     for lookup_name in (name, package_name):
         if not lookup_name:
@@ -1095,7 +1039,6 @@ def _build_mod(
     except:  # reraise anything without handling - clean and simple.
         raise
     return mod
-
 
 
 def _fail_or_default(exception: BaseException, default: Any):
