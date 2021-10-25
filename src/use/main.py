@@ -889,7 +889,7 @@ def decorator_log_calling_function_and_args(func, *args):
     return wrapper
 
 
-if not "NO_BEARTYPE" in os.environ:
+if "NO_BEARTYPE" not in os.environ:
     use @ (isfunction, "", beartype)
     use @ (isfunction, "", decorator_log_calling_function_and_args)
 
