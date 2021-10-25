@@ -103,28 +103,10 @@ test_config: str = locals().get("test_config", {})
 test_version: str = locals().get("test_version", None)
 from icontract import require
 
+import install_utils as IU
 from use import __version__, _reloaders, _using, config, home
 from use.decorators import methdispatch
 from use.hash_alphabet import JACK_as_num, num_as_hexdigest
-from use.install_utils import (
-    _auto_install,
-    _build_mod,
-    _ensure_path,
-    _fail_or_default,
-    _find_or_install,
-    _find_version,
-    _get_package_data,
-    _get_version,
-    _import_public_no_install,
-    _is_compatible,
-    _is_platform_compatible,
-    _is_version_satisfied,
-    _parse_name,
-    _pebkac_no_version_hash,
-    _pebkac_no_version_no_hash,
-    _pebkac_version_no_hash,
-    get_supported,
-)
 from use.messages import (
     AmbiguityWarning,
     Message,
@@ -218,7 +200,9 @@ class Use(ModuleType):
             try:
                 response = requests.get("https://pypi.org/pypi/justuse/json")
                 data = response.json()
-                max_version = max(Version(version) for version in data["releases"].keys())
+                max_version = max(
+                    Version(version) for version in data["releases"].keys()
+                )
                 target_version = max_version
                 this_version = __version__
                 if Version(this_version) < target_version:
@@ -242,7 +226,7 @@ class Use(ModuleType):
         except PermissionError:
             # this should fix the permission issues on android #80
 
-            self.home = home = _ensure_path(tempfile.mkdtemp(prefix="justuse_"))
+            self.home = home = IU._ensure_path(tempfile.mkdtemp(prefix="justuse_"))
         (self.home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
         for file in (
             "config.toml",
@@ -314,7 +298,9 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         self.registry.connection.close()
         self.registry = None
         number_of_backups = len(list((self.home / "registry.db").glob("*.bak")))
-        (self.home / "registry.db").rename(self.home / f"registry.db.{number_of_backups + 1}.bak")
+        (self.home / "registry.db").rename(
+            self.home / f"registry.db.{number_of_backups + 1}.bak"
+        )
         (self.home / "registry.db").touch(mode=0o644)
         self.registry = self._set_up_registry()
         self.cleanup()
@@ -348,7 +334,9 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
             "DELETE FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?)",
             (name, version),
         )
-        self.registry.execute("DELETE FROM distributions WHERE name=? AND version=?", (name, version))
+        self.registry.execute(
+            "DELETE FROM distributions WHERE name=? AND version=?", (name, version)
+        )
         self.registry.connection.commit()
 
     def cleanup(self):
@@ -368,7 +356,10 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         for name, version, artifact_path, installation_path in self.registry.execute(
             "SELECT name, version, artifact_path, installation_path FROM distributions JOIN artifacts on distributions.id = distribution_id"
         ).fetchall():
-            if not (_ensure_path(artifact_path).exists() and _ensure_path(installation_path).exists()):
+            if not (
+                IU._ensure_path(artifact_path).exists()
+                and IU._ensure_path(installation_path).exists()
+            ):
                 self.del_entry(name, version)
         self.registry.connection.commit()
 
@@ -439,8 +430,10 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         this_hash = hash_algo.value(response.content).hexdigest()
         if hash_value:
             if this_hash != hash_value:
-                return _fail_or_default(
-                    UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!"),
+                return IU._fail_or_default(
+                    UnexpectedHash(
+                        f"{this_hash} does not match the expected hash {hash_value} - aborting!"
+                    ),
                     default,
                 )
         else:
@@ -448,16 +441,16 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         name = url.path.segments[-1]
         try:
-            mod = _build_mod(
+            mod = IU._build_mod(
                 name=name,
                 code=response.content,
-                module_path=_ensure_path(url.path),
+                module_path=IU._ensure_path(url.path),
                 initial_globals=initial_globals,
             )
         except KeyError:
             raise
         if exc:
-            return _fail_or_default(ImportError(exc), default)
+            return IU._fail_or_default(ImportError(exc), default)
 
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
@@ -499,7 +492,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         mod = None
 
         if path.is_dir():
-            return _fail_or_default(ImportError(f"Can't import directory {path}"), default)
+            return IU._fail_or_default(
+                ImportError(f"Can't import directory {path}"), default
+            )
 
         original_cwd = source_dir = Path.cwd()
         try:
@@ -519,26 +514,34 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 # we're in jupyter, we use the CWD as set in the notebook
                 if not jupyter and hasattr(main_mod, "__file__"):
                     source_dir = (
-                        _ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename).resolve().parent
+                        IU._ensure_path(
+                            inspect.currentframe().f_back.f_back.f_code.co_filename
+                        )
+                        .resolve()
+                        .parent
                     )
             if source_dir is None:
                 if main_mod.__loader__ and hasattr(main_mod.__loader__, "path"):
-                    source_dir = _ensure_path(main_mod.__loader__.path).parent
+                    source_dir = IU._ensure_path(main_mod.__loader__.path).parent
                 else:
                     source_dir = Path.cwd()
             if not source_dir.joinpath(path).exists():
                 if files := [*[*source_dir.rglob(f"**/{path}")]]:
-                    source_dir = _ensure_path(files[0]).parent
+                    source_dir = IU._ensure_path(files[0]).parent
                 else:
                     source_dir = Path.cwd()
             if not source_dir.exists():
-                return _fail_or_default(
-                    NotImplementedError("Can't determine a relative path from a virtual file."),
+                return IU._fail_or_default(
+                    NotImplementedError(
+                        "Can't determine a relative path from a virtual file."
+                    ),
                     default,
                 )
             path = source_dir.joinpath(path).resolve()
             if not path.exists():
-                return _fail_or_default(ImportError(f"Sure '{path}' exists?"), default)
+                return IU._fail_or_default(
+                    ImportError(f"Sure '{path}' exists?"), default
+                )
             os.chdir(path.parent)
             name = path.stem
             if reloading:
@@ -546,7 +549,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     with open(path, "rb") as rfile:
                         code = rfile.read()
                     # initial instance, if this doesn't work, just throw the towel
-                    mod = _build_mod(
+                    mod = IU._build_mod(
                         name=name,
                         code=code,
                         initial_globals=initial_globals,
@@ -555,7 +558,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 except KeyError:
                     exc = traceback.format_exc()
                 if exc:
-                    return _fail_or_default(ImportError(exc), default)
+                    return IU._fail_or_default(ImportError(exc), default)
                 mod = ProxyModule(mod)
                 reloader = ModuleReloader(
                     proxy=mod,
@@ -592,7 +595,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 frame = inspect.getframeinfo(inspect.currentframe())
                 self._set_mod(name=name, mod=mod, frame=frame)
                 try:
-                    mod = _build_mod(
+                    mod = IU._build_mod(
                         name=name,
                         code=code,
                         initial_globals=initial_globals,
@@ -607,14 +610,16 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             # let's not confuse the user and restore the cwd to the original in any case
             os.chdir(original_cwd)
         if exc:
-            return _fail_or_default(ImportError(exc), default)
+            return IU._fail_or_default(ImportError(exc), default)
         if as_import:
             sys.modules[as_import] = mod
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
         return ProxyModule(mod)
 
-    @__call__.register(type(None))  # singledispatch is picky - can't be anything but a type
+    @__call__.register(
+        type(None)
+    )  # singledispatch is picky - can't be anything but a type
     def _use_kwargs(
         self,
         _: None,  # sic! otherwise single-dispatch with 'empty' *args won't work
@@ -734,7 +739,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         Returns:
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
-        package_name, module_name = _parse_name(name)
+        package_name, module_name = IU._parse_name(name)
         return self._use_package(
             name=name,
             package_name=package_name,
@@ -784,7 +789,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hashes = set([hashes])
         if not hashes:
             hashes = set()
-        hashes = {H if len(H) == 64 else num_as_hexdigest(JACK_as_num(H)) for H in hashes}
+        hashes = {
+            H if len(H) == 64 else num_as_hexdigest(JACK_as_num(H)) for H in hashes
+        }
         callstr = (
             f"use._use_package({name}, {package_name=!r}, "
             f"{module_name=!r}, {version=!r}, {hashes=!r}, "
@@ -804,7 +811,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
         # let's first see if the user might mean something else entirely
-        if _ensure_path(f"./{module_name}.py").exists():
+        if IU._ensure_path(f"./{module_name}.py").exists():
             warn(Message.ambiguous_name_warning(name), AmbiguityWarning)
         spec = None
 
@@ -824,7 +831,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         ) -> Union[ModuleType, Exception]:
             if not isinstance(result, ModuleType):
                 return result
-            result_version = _get_version(mod=result)
+            result_version = IU._get_version(mod=result)
             if result_version != version: raise AmbiguityWarning(
                 Message.version_warning(name, version, result_version)
             )
@@ -832,31 +839,31 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         
         case_func = {
             (0, 0, 0, 0): lambda: ImportError(Message.cant_import(name)),
-            (0, 0, 0, 1): lambda: _pebkac_no_version_no_hash(**kwargs),
-            (0, 0, 1, 0): lambda: _import_public_no_install(**kwargs),
+            (0, 0, 0, 1): lambda: IU._pebkac_no_version_no_hash(**kwargs),
+            (0, 0, 1, 0): lambda: IU._import_public_no_install(**kwargs),
             (0, 1, 0, 0): lambda: ImportError(Message.cant_import(name)),
             (1, 0, 0, 0): lambda: ImportError(Message.cant_import(name)),
-            (0, 0, 1, 1): lambda: _auto_install(
-                func=lambda: _import_public_no_install(**kwargs),
+            (0, 0, 1, 1): lambda: IU._auto_install(
+                func=lambda: IU._import_public_no_install(**kwargs),
                 **kwargs
             ),
-            (0, 1, 1, 0): lambda: _import_public_no_install(**kwargs),
+            (0, 1, 1, 0): lambda: IU._import_public_no_install(**kwargs),
             (1, 1, 0, 0): lambda: ImportError(Message.cant_import(name)),
-            (1, 0, 0, 1): lambda: _pebkac_version_no_hash(**kwargs),
-            (1, 0, 1, 0): lambda: _ensure_version(_import_public_no_install(**kwargs)),
-            (0, 1, 0, 1): lambda: _pebkac_no_version_hash(**kwargs),
-            (0, 1, 1, 1): lambda: _pebkac_no_version_hash(_import_public_no_install, **kwargs),
+            (1, 0, 0, 1): lambda: IU._pebkac_version_no_hash(**kwargs),
+            (1, 0, 1, 0): lambda: _ensure_version(IU._import_public_no_install(**kwargs)),
+            (0, 1, 0, 1): lambda: IU._pebkac_no_version_hash(**kwargs),
+            (0, 1, 1, 1): lambda: IU._pebkac_no_version_hash(IU._import_public_no_install, **kwargs),
             (1, 0, 1, 1): lambda: _ensure_version(
-              _pebkac_version_no_hash(
-                func=lambda: _import_public_no_install(**kwargs),
+              IU._pebkac_version_no_hash(
+                func=lambda: IU._import_public_no_install(**kwargs),
                 **kwargs
               ),
             ),
-            (1, 1, 0, 1): lambda: _auto_install(**kwargs),
-            (1, 1, 1, 0): lambda: _ensure_version(_import_public_no_install(**kwargs)),
-            (1, 1, 1, 1): lambda: _auto_install(
+            (1, 1, 0, 1): lambda: IU._auto_install(**kwargs),
+            (1, 1, 1, 0): lambda: _ensure_version(IU._import_public_no_install(**kwargs)),
+            (1, 1, 1, 1): lambda: IU._auto_install(
                 func=lambda: _ensure_version(
-                    _import_public_no_install(**kwargs)
+                    IU._import_public_no_install(**kwargs)
                 ),
                 **kwargs
             ),
@@ -875,11 +882,13 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
             return ProxyModule(mod)
-        return _fail_or_default(result, default)
+        return IU._fail_or_default(result, default)
 
 
 use = Use()
-use.__dict__.update({k: v for k, v in globals().items()})  # to avoid recursion-confusion
+use.__dict__.update(
+    {k: v for k, v in globals().items()}
+)  # to avoid recursion-confusion
 use = ProxyModule(use)
 
 
@@ -902,7 +911,7 @@ def decorator_log_calling_function_and_args(func, *args):
     return wrapper
 
 
-if not "NO_BEARTYPE" in os.environ:
+if "NO_BEARTYPE" not in os.environ:
     use @ (isfunction, "", beartype)
     use @ (isfunction, "", decorator_log_calling_function_and_args)
 
