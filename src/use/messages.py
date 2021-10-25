@@ -5,9 +5,8 @@ import webbrowser
 from enum import Enum
 
 import use
-
-from ..pypi_model import Version
 from use import __version__
+from use.pypi_model import Version
 
 print(f"Home is {use.home}")
 

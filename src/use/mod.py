@@ -4,11 +4,14 @@ import hashlib
 import threading
 import time
 import traceback
+from logging import getLogger
 from types import ModuleType
 
 from icontract import require
 
-from .install_utils import _build_mod, _apply_aspect
+from use.install_utils import _apply_aspect, _build_mod
+
+log = getLogger(__name__)
 
 
 class ProxyModule(ModuleType):
@@ -67,9 +70,7 @@ class ModuleReloader:
     def start_threaded(self):
         self._stopped = False
         atexit.register(self.stop)
-        self._thread = threading.Thread(
-            target=self.run_threaded, name=f"reloader__{self.name}"
-        )
+        self._thread = threading.Thread(target=self.run_threaded, name=f"reloader__{self.name}")
         self._thread.start()
 
     async def run_async(self):
