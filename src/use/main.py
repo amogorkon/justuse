@@ -75,7 +75,7 @@ import threading
 import time
 import traceback
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
-from logging import getLogger
+from logging import DEBUG, getLogger, root
 from pathlib import Path, PureWindowsPath, WindowsPath
 from subprocess import PIPE, run
 from types import FrameType, ModuleType
@@ -104,6 +104,7 @@ test_version: str = locals().get("test_version", None)
 from icontract import require
 
 import install_utils as IU
+import myhammer
 from use import __version__, _reloaders, _using, config, home
 from use.decorators import methdispatch
 from use.hash_alphabet import JACK_as_num, num_as_hexdigest
@@ -120,30 +121,7 @@ from use.pypi_model import PyPI_Project, PyPI_Release, Version
 
 
 # sometimes all you need is a sledge hammer..
-def releaser(cls):
-    old_locks = [*threading._shutdown_locks]
-    new_locks = threading._shutdown_locks
-    reloaders = sys.modules["use"]._reloaders
-    releaser = cls()
-
-    def release():
-        return releaser(locks=set(new_locks).difference(old_locks), reloaders=reloaders)
-
-    atexit.register(release)
-    return cls
-
-
-@releaser
-class ShutdownLockReleaser:
-    def __call__(cls, *, locks: list, reloaders: list):
-        for lock in locks:
-            lock.unlock()
-        for reloader in reloaders:
-            if hasattr(reloader, "stop"):
-                reloader.stop()
-        for lock in locks:
-            lock.unlock()
-
+the_hammer = myhammer.ShutdownLockReleaser
 
 #%% Version and Packaging
 
