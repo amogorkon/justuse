@@ -12,8 +12,10 @@ logger = logging.getLogger("air")
 
 try:
     import warnings
+
     try:
         from beartype.roar._roarwarn import BeartypeDecorHintPepWarning
+
         warnings.filterwarnings(action="ignore", category=AnnoyingBeartypeWarning)
     except (NameError, ImportError):
         pass
@@ -21,9 +23,7 @@ except ImportError:
     pass
 
 __package__ = "use"
-home = Path(
-    os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))
-).absolute()
+home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
 # !!! SEE NOTE !!!
 # IMPORTANT; The setup.py script must be able to read the
 # current use __version__ variable **AS A STRING LITERAL** from
@@ -65,40 +65,38 @@ class Modes(IntEnum):
     no_public_installation = 2 ** 4
     fastfail = 2 ** 5
 
+
 config = {"version_warning": True, "debugging": False, "use_db": True}
 
 
 # initialize logging
 root.addHandler(StreamHandler(sys.stderr))
 root.setLevel(NOTSET)
-if "DEBUG" in os.environ or "pytest" in getattr(
-    sys.modules.get("__init__", ""), "__file__", ""
-):
+if "DEBUG" in os.environ or "pytest" in getattr(sys.modules.get("__init__", ""), "__file__", ""):
     root.setLevel(DEBUG)
 else:
     root.setLevel(INFO)
 
 
-
 print("Startong submod imports: use.hash_alphabet")
 from use.hash_alphabet import *
-from use.hash_alphabet_chinese import *
-from use.hash_alphabet_emojis import *
-from use.hash_alphabet_japanese import *
-from use.hash_alphabet_korean import *
+
 print("Startong submod imports: use.modules")
 from use.modules.Decorators import *
 from use.modules.Hashish import *
 from use.modules.PlatformTag import *
 from use.modules.install_utils import *
+
 print("Startong submod imports: use.pypi_model")
 from use.pypi_model import *
+
 print("Startong submod imports: use.modules.Messages")
 from use.modules.Messages import *
+
 print("Startong submod imports: use.use")
 from use.use import *
 import inspect
+
 print("Finished importing modules")
 for k, v in inspect.getmembers(use):
-  setattr(sys.modules["use"], k, v)
-
+    setattr(sys.modules["use"], k, v)
