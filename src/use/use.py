@@ -94,16 +94,9 @@ from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
 
 # internal subpackage imports
-from .modules.init_conf import (Modes, ModInUse, NoneType, _reloaders, _using,
-                                config, log)
 
-# !!! SEE NOTE !!!
-# IMPORTANT; The setup.py script must be able to read the
-# current use __version__ variable **AS A STRING LITERAL** from
-# this file. If you do anything except updating the version,
-# please check that setup.py can still be executed.
-__version__ = "0.6.0"  # IMPORTANT; Must leave exactly as-is for setup
-# !!! SEE NOTE !!!
+from use import __version__
+from use import *
 mode = Modes
 auto_install = mode.auto_install
 test_config: str = locals().get("test_config", {})
@@ -115,9 +108,9 @@ from icontract import require
 
 from .hash_alphabet import JACK_as_num, num_as_hexdigest
 from .modules import Decorators as D
-from .modules.Decorators import methdispatch
-from .modules.Hashish import Hash
-from .modules.install_utils import (_auto_install, _build_mod, _ensure_path,
+from use.modules.Decorators import methdispatch
+from use.modules.Hashish import Hash
+from use.modules.install_utils import (_auto_install, _build_mod, _ensure_path,
                                     _fail_or_default, _find_or_install,
                                     _find_version, _get_package_data,
                                     _get_version, _import_public_no_install,
@@ -126,11 +119,11 @@ from .modules.install_utils import (_auto_install, _build_mod, _ensure_path,
                                     _pebkac_no_version_hash,
                                     _pebkac_no_version_no_hash,
                                     _pebkac_version_no_hash, get_supported)
-from use import home
-from .modules.Messages import (AmbiguityWarning, Message, NotReloadableWarning,
+from use import ( home, __version__, _reloaders, _using )
+from use.modules.Messages import (AmbiguityWarning, Message, NotReloadableWarning,
                                NoValidationWarning, UnexpectedHash,
                                VersionWarning)
-from .modules.Mod import ModuleReloader, ProxyModule
+from use.modules.Mod import ModuleReloader, ProxyModule
 from .pypi_model import *
 
 
@@ -141,7 +134,7 @@ from .pypi_model import *
 def releaser(cls: Callable[Type["ShutdownLockReleaser"], NoneType]):
   old_locks = [*threading._shutdown_locks]
   new_locks =   threading._shutdown_locks
-  reloaders = sys.modules["use.modules.init_conf"]._reloaders
+  reloaders = sys.modules["use"]._reloaders
   releaser = cls()
   def release():
     return releaser(
@@ -157,7 +150,8 @@ class ShutdownLockReleaser:
         for lock in locks:
             lock.unlock()
         for reloader in reloaders:
-            reloader.stop()
+            if hasattr(reloader, "stop"):
+                reloader.stop()
         for lock in locks:
             lock.unlock()
 
@@ -934,8 +928,9 @@ def decorator_log_calling_function_and_args(func, *args):
     return wrapper
 
 
-use @ (isfunction, "", beartype)
-use @ (isfunction, "", decorator_log_calling_function_and_args)
-
-if not test_version:
-    sys.modules["use"] = use
+if not "NO_BEARTYPE" in os.environ:
+    use @ (isfunction, "", beartype)
+    use @ (isfunction, "", decorator_log_calling_function_and_args)
+    
+    if not test_version:
+        sys.modules["use"] = use

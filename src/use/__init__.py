@@ -10,73 +10,95 @@ logging.root.setLevel(logging.DEBUG)
 logger = logging.getLogger("air")
 
 
-def log(msg, *args, **kwargs):
-    text = msg
-    try:
-        text = msg.format(*args, **kwargs)
-    except:
-        try:
-            text = msg % args
-        except:
-            text = ", ".join([msg, *args, *kwargs.items()])
-    logger.log(logging.WARN, text)
-
-
-# In[1]:
-def install_packages(*packages):
-    extra_options = []
-    if "EXTRA_PIP_OPTIONS" in os.environ:
-        extra_options = shlex.split(os.environ["EXTRA_PIP_OPTIONS"])
-        log("Adding extra pip options: {}", extra_options)
-
-    log("Installing packages: {}", packages)
-    import sys
-
-    __oldexit = sys.exit
-    try:
-        sys.exit = lambda *args: exec("raise BaseException(\x27\x27.join(map(str,args)))")
-        import pip._internal.commands.install
-
-        c = pip._internal.commands.install.InstallCommand("install", "")
-        ctx: Iterator[None] = c.main_context()
-        runner = ctx(
-            lambda: c._main(
-                [
-                    "--progress-bar",
-                    "off",
-                    "--no-input",
-                    "--pre",
-                    "--no-build-isolation",
-                    "--ignore-requires-python",
-                    "--prefer-binary",
-                    *extra_options,
-                    *packages,
-                ]
-            )
-        )
-        return runner()
-    finally:
-        sys.exit = __oldexit
-
-
 try:
-    import beartype
-except ImportError:
+    import warnings
     try:
-        install_packages("beartype")
-    except:
-        import traceback
-
-        traceback.print_exc()
-
-import warnings
-
-from beartype.roar._roarwarn import BeartypeDecorHintPepDeprecationWarning
-
-warnings.filterwarnings(action="ignore", category=BeartypeDecorHintPepDeprecationWarning)
+        from beartype.roar._roarwarn import BeartypeDecorHintPepWarning
+        warnings.filterwarnings(action="ignore", category=AnnoyingBeartypeWarning)
+    except (NameError, ImportError):
+        pass
+except ImportError:
+    pass
 
 __package__ = "use"
 home = Path(
     os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))
 ).absolute()
-from use import use
+# !!! SEE NOTE !!!
+# IMPORTANT; The setup.py script must be able to read the
+# current use __version__ variable **AS A STRING LITERAL** from
+# this file. If you do anything except updating the version,
+# please check that setup.py can still be executed.
+__version__ = "0.6.0"  # IMPORTANT; Must leave exactly as-is for setup
+# !!! SEE NOTE !!!
+
+import sys
+import os
+from collections import namedtuple
+from enum import Enum, IntEnum
+from importlib.machinery import ModuleSpec, SourceFileLoader
+from logging import getLogger, DEBUG, INFO, NOTSET, StreamHandler, root
+from typing import Any
+from pathlib import Path
+
+
+log = getLogger(__name__)
+
+
+# injected via initial_globals for testing, you can safely ignore this
+__name__ = "use"
+__package__ = "use"
+
+_reloaders: dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
+_aspects = {}
+_using = {}
+
+ModInUse = namedtuple("ModInUse", "name mod path spec frame")
+NoneType = type(None)
+
+
+# Really looking forward to actual builtin sentinel values..
+class Modes(IntEnum):
+    auto_install = 2 ** 0
+    fatal_exceptions = 2 ** 1
+    reloading = 2 ** 2
+    no_public_installation = 2 ** 4
+    fastfail = 2 ** 5
+
+config = {"version_warning": True, "debugging": False, "use_db": True}
+
+
+# initialize logging
+root.addHandler(StreamHandler(sys.stderr))
+root.setLevel(NOTSET)
+if "DEBUG" in os.environ or "pytest" in getattr(
+    sys.modules.get("__init__", ""), "__file__", ""
+):
+    root.setLevel(DEBUG)
+else:
+    root.setLevel(INFO)
+
+
+
+print("Startong submod imports: use.hash_alphabet")
+from use.hash_alphabet import *
+from use.hash_alphabet_chinese import *
+from use.hash_alphabet_emojis import *
+from use.hash_alphabet_japanese import *
+from use.hash_alphabet_korean import *
+print("Startong submod imports: use.modules")
+from use.modules.Decorators import *
+from use.modules.Hashish import *
+from use.modules.PlatformTag import *
+from use.modules.install_utils import *
+print("Startong submod imports: use.pypi_model")
+from use.pypi_model import *
+print("Startong submod imports: use.modules.Messages")
+from use.modules.Messages import *
+print("Startong submod imports: use.use")
+from use.use import *
+import inspect
+print("Finished importing modules")
+for k, v in inspect.getmembers(use):
+  setattr(sys.modules["use"], k, v)
+

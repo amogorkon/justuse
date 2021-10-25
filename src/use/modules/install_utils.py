@@ -38,10 +38,10 @@ from .. import hash_alphabet
 from . import Decorators as D
 from .Decorators import pipes
 from .Hashish import Hash
-from .init_conf import config, Modes, use
+from use import config, Modes
 from .Messages import AmbiguityWarning, Message
 from .PlatformTag import PlatformTag
-from .init_conf import log
+from use import log
 from ..pypi_model import PyPI_Release, PyPI_Project, Version
 
 

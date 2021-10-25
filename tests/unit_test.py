@@ -490,11 +490,6 @@ def test_85(reuse, name, version, hashes):
             "6.2.5",
             {"7310f8d27bc79ced999e760ca304d69f6ba6c6649c0b60fb0e04a4a77cacc134"},
         ),
-        (
-            "setuptools",
-            "57.4.0",
-            {"a49230977aa6cfb9d933614d2f7b79036e9945c4cdd7583163f4e920b83418d6"},
-        ),
     ),
 )
 def test_86(reuse, name, version, hashes):
