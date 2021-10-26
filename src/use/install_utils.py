@@ -525,6 +525,7 @@ def _auto_install(
         if "fault_inject" in config:
             config["fault_inject"](**locals())
         if mod:
+            import use
             use._save_module_info(
                 name=package_name,
                 import_relpath=str(_ensure_path(module_path).relative_to(installation_path)),
