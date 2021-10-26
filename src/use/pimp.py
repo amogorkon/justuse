@@ -39,7 +39,7 @@ from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import AmbiguityWarning, Message
 from use.platformtag import PlatformTag
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
-
+import use
 
 def all_kwargs(func, other_locals):
     d = {
@@ -365,24 +365,35 @@ def _pebkac_no_version_no_hash(
         if isinstance(result, (Exception, ModuleType)):
             return result
     # let's try to make an educated guess and give a useful suggestion
-    data = _get_package_data(package_name) >> _filter_by_platform(
-        tags=get_supported(), sys_version=_sys_version()
+    proj = _get_package_data_matching_python_single_version(
+        package_name, version=version
     )
-    flat = reduce(list.__add__, data.releases.values(), [])
-    priority = sorted(flat, key=lambda r: (not r.is_sdist, r.version), reverse=True)
-
-    for info in priority:
+    ordered = _filtered_and_ordered_data(proj, version=None)
+    rel = None
+    hashes = { o.digests.get(hash_algo.name) for o in proj.urls }
+    for r in ordered:
+            rel = r 
+            break
+    if not rel:
+            v = list(proj.releases.keys())[0]
+            rel_vals = proj.releases.get(v, [None])
+            rel = rel_vals[0]
+    
+    if rel:
         return _pebkac_version_no_hash(
             func=None,
             name=name,
-            version=info.version,
+            version=rel.version,
             hash_algo=hash_algo,
+            hashes=hashes,
             package_name=package_name,
             message_formatter=Message.no_version_or_hash_provided,
         )
 
     rw = RuntimeWarning(Message.pebkac_unsupported(package_name))
     rw.name = package_name
+    rw.version = rel.version if rel else None
+    rw.hashes = hashes
     return rw
 
 
@@ -496,7 +507,9 @@ def _auto_install(
         pass
     orig_cwd = Path.cwd()
     mod = None
-    if "installation_path" not in query:
+    if "installation_path" not in query or not _ensure_path(query["installation_path"]).exists():
+        if query:
+            sys.modules["use.main"].use.del_entry(name, version)
         query = _find_or_install(package_name, version, force_install=True)
         artifact_path = _ensure_path(query["artifact_path"])
         module_path = _ensure_path(query["module_path"])
@@ -695,15 +708,29 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     else:
         filename = artifact_path.name if artifact_path else None
     if filename and not artifact_path:
-        artifact_path = sys.modules["use"].home / "packages" / filename
+        artifact_path = use.home / "packages" / filename
 
     if not url or not artifact_path or (artifact_path and not artifact_path.exists()):
-        info.update(_filtered_and_ordered_data(_get_package_data(package_name), version)[0].dict())
-        url = URL(str(info["url"]))
+        proj = _get_package_data_matching_python_single_version(
+            package_name, version=version
+        )
+        ordered = _filtered_and_ordered_data(proj, version=None)
+        rel = None
+        for r in ordered:
+            rel = r 
+            break
+        if not rel:
+            v = list(proj.releases.keys())[0]
+            rel_vals = proj.releases.get(v, [None])
+            rel = rel_vals[0]
+        info.update(rel.dict())
+        out_info.update(rel.dict())
+        
+        url = URL(rel.url)
         filename = url.asdict()["path"]["segments"][-1]
-        artifact_path = sys.modules["use"].home / "packages" / filename
+        artifact_path = use.home / "packages" / filename
+    
     out_info["artifact_path"] = artifact_path
-
     # todo: set info
     as_dict = info
     url = URL(as_dict["url"])
@@ -726,15 +753,21 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     out_info["module_path"] = relp
     out_info["import_relpath"] = relp
     out_info["import_name"] = import_name
-    if not force_install and _pure_python_package(artifact_path, meta):
+    if not force_install and _pure_python_package(artifact_path, meta) and str(artifact_path).endswith(".whl"):
         return out_info
-
+    
     venv_root = _venv_root(package_name, version, use.home)
-    out_info["installation_path"] = venv_root
+    site_pkgs_dir = list(venv_root.rglob("site-packages"))
+    if not any(site_pkgs_dir):
+        force_install = True
+        module_paths = []
+    else:
+        out_info["installation_path"] = site_pkgs_dir[0]
+        module_paths = venv_root.rglob(f"**/{relp}")
+    
     python_exe = Path(sys.executable)
-    env = _get_venv_env(venv_root)
-    module_paths = venv_root.rglob(f"**/{relp}")
-    if force_install or (not python_exe.exists() or not any(module_paths)):
+    
+    if not module_paths or force_install:
         log.info(f"calling pip to install install_item={install_item}")
 
         # If we get here, the venv/pip setup is required.
@@ -770,10 +803,11 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     if module_path:
         module_paths.append(module_path)
         installation_path = site_dir
-
+        site_pkgs_dir = site_dir
+    
     out_info.update(**meta)
     assert module_paths
-
+    
     log.info(f"installation_path = {installation_path}")
     log.info(f"module_path = {module_path}")
     out_info.update(
@@ -849,6 +883,83 @@ def _get_package_data(package_name) -> PyPI_Project:
     return PyPI_Project(**response.json())
 
 
+def _get_package_data_matching_python_single_version(
+    package_name, version=None, proj=None
+):
+    import collections, use, packaging.tags
+    proj = proj or _get_package_data(package_name)
+    pairs = functools.reduce(
+        list.__add__,
+        [[(ver, rel) for rel in proj.releases[ver]] for ver in proj.releases],
+    )
+    ctr = collections.Counter(list(k for k, v in pairs))
+    best_ver, count = ctr.most_common()[0]
+    log.debug("%s", f"Most common version of {package_name} is {best_ver} with {count} artifacts")
+    best_ver = use.Version(version) if version else best_ver
+    m_counts = [*filter(lambda i: i[0] == best_ver, ctr.most_common())]
+    count = m_counts[0][1] if m_counts else 0
+    log.debug("%s", f" - Selected version of {package_name} is {best_ver} with {count} artifacts")
+    rels = proj.releases[best_ver]
+    use.pypi_model = list(
+        filter(lambda i: "pypi_model" in i[0].split("."), sys.modules.items())
+    )[0][1]
+    supported_interps = set(
+        packaging.tags._py_interpreter_range(sys.version_info[0:2])
+    ) - set(packaging.tags._py_interpreter_range((3, sys.version_info[1] - 2)))
+    supported_interps.add("py3")
+    supported_interps.add("source")
+    combined_tags = [
+        (
+            combined_tag := "-".join(
+                (
+                    (info := use.pypi_model._parse_filename(rel.filename)).get(
+                        "python_tag", "source"
+                    ),
+                    info.get("abi_tag", "none"),
+                    info.get("platform_tag", "any"),
+                )
+            )
+        )
+        for rel in rels
+    ]
+    parsed_tags = [*map(packaging.tags.parse_tag, combined_tags)]
+    rels_matching_python_version = [
+        *filter(
+            None,
+            (
+                functools.reduce(
+                    list.__add__,
+                    [
+                        list(
+                            map(
+                                lambda t: rels[i]
+                                if (
+                                    re.subn("^(py|cp)(\d+)$", "py\2", t.interpreter)[0]
+                                    in supported_interps
+                                )
+                                else None,
+                                p,
+                            )
+                        )
+                        for i, p in reversed(list(enumerate(parsed_tags)))
+                    ],
+                    [],
+                )
+            ),
+        )
+    ]
+    proj_filtered = use.PyPI_Project(
+        releases={best_ver: rels_matching_python_version},
+        urls=[*map(lambda i: i.dict(), rels_matching_python_version)],
+        info=proj.info,
+    )
+    filtered_count = len(proj_filtered.releases.get(best_ver, []))
+    log.debug(
+        "%s", f" - Selected version of {package_name} == {best_ver}: has {filtered_count} artifacts for {', '.join(supported_interps)}"
+    )
+    return proj_filtered
+
+
 def _sys_version():
     return Version(".".join(map(str, sys.version_info[0:3])))
 
@@ -899,7 +1010,7 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
     @see https://packaging.pypa.io/en/latest/specifiers.html
     """
     specifiers = SpecifierSet(specifier or "")
-    is_match = sys_version in specifiers
+    is_match = not specifier or sys_version in specifiers
 
     log.debug(f"is_version_satisfied(info=i){sys_version} in {specifiers}")
     return is_match
@@ -947,7 +1058,7 @@ def _is_platform_compatible(
     else:
         given_python_tag = set(info.justuse.python_tag.split("."))
 
-    # print(supported_tags, given_python_tag)
+    # log.debug("%s", supported_tags, given_python_tag)
 
     return any(supported_tags.intersection(given_python_tag)) and (
         (info.is_sdist and include_sdist) or any(given_platform_tags.intersection(platform_tags))
@@ -960,8 +1071,7 @@ def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist
     specifier = info.requires_python
 
     return (
-        (not specifier or _is_version_satisfied(specifier, sys_version))
-        and _is_platform_compatible(info, platform_tags, include_sdist)
+        _is_platform_compatible(info, platform_tags, include_sdist)
         and not info.yanked
         and (include_sdist or info.justuse.ext not in ("tar", "tar.gz" "zip"))
     )
