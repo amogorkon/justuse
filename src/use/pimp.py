@@ -41,15 +41,27 @@ from use.pypi_model import PyPI_Project, PyPI_Release, Version
 from use.tools import pipes
 
 
-def all_kwargs(func, other_locals):
-    d = {
-        name: other_locals[name]
-        for name, param in inspect.signature(func).parameters.items()
-        if (param.kind is inspect.Parameter.KEYWORD_ONLY or param.kind is inspect.Parameter.VAR_KEYWORD)
-    }
-    d.update(d["kwargs"])
-    del d["kwargs"]
-    return d
+def all_kwargs():
+    """Get all kwargs that were passed in to the function calling this one."""
+    kwargs = {}
+    upper_frame = sys._getframe().f_back
+    locals = upper_frame.f_locals
+
+    code = upper_frame.f_code
+    pos_count = code.co_argcount
+    arg_names = code.co_varnames
+    keyword_only_count = code.co_kwonlyargcount
+    kw_only_names = arg_names[pos_count : pos_count + keyword_only_count]
+
+    kwargs.update((name, locals[name]) for name in kw_only_names)
+
+    # **kwargs
+    if code.co_flags & 8:
+        index = pos_count + keyword_only_count
+        if code.co_flags & 4:
+            index += 1
+        kwargs.update(locals[arg_names[index]])
+    return kwargs
 
 
 @pipes
