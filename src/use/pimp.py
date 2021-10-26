@@ -34,11 +34,11 @@ from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
 
 from use import Hash, Modes, config, log
-from use.decorators import pipes
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import AmbiguityWarning, Message
 from use.platformtag import PlatformTag
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
+from use.tools import pipes
 
 
 def all_kwargs(func, other_locals):
