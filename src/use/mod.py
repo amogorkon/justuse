@@ -9,7 +9,7 @@ from types import ModuleType
 
 from icontract import require
 
-from use.install_utils import _apply_aspect, _build_mod
+from use.pimp import _apply_aspect, _build_mod
 
 log = getLogger(__name__)
 

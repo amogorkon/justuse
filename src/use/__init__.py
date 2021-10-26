@@ -1,10 +1,13 @@
+import hashlib
 import logging
 import os
-import re
-import shlex
 import sys
+from collections import namedtuple
+from enum import Enum, IntEnum
+from importlib.machinery import ModuleSpec, SourceFileLoader
+from logging import DEBUG, INFO, NOTSET, StreamHandler, getLogger, root
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 logging.root.setLevel(logging.DEBUG)
 logger = logging.getLogger("air")
@@ -32,20 +35,8 @@ home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).abs
 __version__ = "0.6.0"  # IMPORTANT; Must leave exactly as-is for setup
 # !!! SEE NOTE !!!
 
-import hashlib
-import os
-import sys
-from collections import namedtuple
-from enum import Enum, IntEnum
-from importlib.machinery import ModuleSpec, SourceFileLoader
-from logging import DEBUG, INFO, NOTSET, StreamHandler, getLogger, root
-from pathlib import Path
-from typing import Any
 
 log = getLogger(__name__)
-
-
-# injected via initial_globals for testing, you can safely ignore this
 __name__ = "use"
 __package__ = "use"
 
@@ -87,7 +78,7 @@ from use.hash_alphabet import *
 
 print("Startong submod imports: use.modules")
 from use.decorators import *
-from use.install_utils import *
+from use.pimp import *
 from use.platformtag import *
 
 print("Startong submod imports: use.pypi_model")

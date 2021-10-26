@@ -1,10 +1,8 @@
 import functools
 import os
-import re
 import sys
 import tempfile
 import warnings
-import webbrowser
 from contextlib import closing
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, distribution
@@ -17,9 +15,6 @@ import packaging.tags
 import packaging.version
 import pytest
 from furl import furl as URL
-
-# this is actually a test!
-from tests.simple_funcs import three
 
 src = import_base = Path(__file__).parent.parent / "src"
 cwd = Path().cwd()
@@ -39,6 +34,11 @@ import logging
 
 log = logging.getLogger(".".join((__package__, __name__)))
 log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)
+
+use.config["testing"] = True
+
+# this is actually a test!
+from tests.simple_funcs import three
 
 
 @pytest.fixture()
@@ -509,3 +509,6 @@ def test_86(reuse, name, version, hashes):
 def test_hash_alphabet():
     H = sha256("hello world".encode("utf-8")).hexdigest()
     assert H == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(H)))
+
+
+use.config["testing"] = False

@@ -345,7 +345,8 @@ def _pebkac_version_no_hash(
         rw.hashes = hashes
         return rw
     except (IndexError, KeyError) as ike:
-        return RuntimeWarning(Message.no_distribution_found(package_name, version ))
+        return RuntimeWarning(Message.no_distribution_found(package_name, version))
+
 
 @pipes
 def _pebkac_no_version_no_hash(
@@ -526,6 +527,7 @@ def _auto_install(
             config["fault_inject"](**locals())
         if mod:
             import use
+
             use._save_module_info(
                 name=package_name,
                 import_relpath=str(_ensure_path(module_path).relative_to(installation_path)),

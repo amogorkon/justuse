@@ -5,14 +5,18 @@ import webbrowser
 from enum import Enum
 
 import use
-from use import __version__
+from use import __version__, config
 from use.pypi_model import Version
 
 print(f"Home is {use.home}")
 
 
+config["testing"] = True
+
+
 def _web_no_version_or_hash_provided(name, package_name, version, hashes):
-    webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
+    if not config["testing"]:
+        webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
     return f"""Please specify version and hash for auto-installation of {package_name!r}.
 A webbrowser will open to the Snyk Advisor page to check whether the package is vulnerable.
 If you want to auto-install the latest version:
@@ -20,18 +24,20 @@ use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"
 
 
 def _web_pebkac_missing_hash(name, package_name, version, hashes):
-    with open(use.home / "web_exception.html", "w") as f:
-        f.write(
-            f"""<html><body>
-<h1>{package_name!r}</h1>
-<p>
-Please specify the hash for auto-installation.
-</p>
-<p>
-</p>
-</body></html>"""
-        )
-    webbrowser.open(f"file://{use.home / 'web_exception.html'}")
+    if not config["testing"]:
+        with open(use.home / "web_exception.html", "w") as f:
+            f.write(
+                f"""<html><body>
+    <h1>{package_name!r}</h1>
+    {config}
+    <p>
+    Please specify the hash for auto-installation.
+    </p>
+    <p>
+    </p>
+    </body></html>"""
+            )
+        webbrowser.open(f"file://{use.home / 'web_exception.html'}")
     return f"""Failed to auto-install {package_name!r} because hashes aren't specified.
         A webbrowser will open with a list of available hashes for different platforms.
         If you only want to use the package on this platform, this may work:

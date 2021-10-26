@@ -40642,7 +40642,7 @@ def hexdigest_as_JACK(string):
 def JACK_as_num(string: str):
     if isinstance(string, bytes):
         string = string.decode()
-    string = "".join(string.split())
+    string = "".join(string.split())  # TODO: add unit test to document behaviour
     return sum(len(reverse_alphabet) ** i * reverse_alphabet[x] for i, x in enumerate(reversed(string)))
 
 
