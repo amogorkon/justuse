@@ -40639,7 +40639,10 @@ def hexdigest_as_JACK(string):
     return "".join(alphabet[c] for c in represent_num_as_base(int(string, 16), len(alphabet)))
 
 
-def JACK_as_num(string):
+def JACK_as_num(string: str):
+    if isinstance(string, bytes):
+        string = string.decode()
+    string = "".join(string.split())
     return sum(len(reverse_alphabet) ** i * reverse_alphabet[x] for i, x in enumerate(reversed(string)))
 
 

@@ -103,18 +103,12 @@ test_config: str = locals().get("test_config", {})
 test_version: str = locals().get("test_version", None)
 from icontract import require
 
-import install_utils as IU
+import use.install_utils as IU
 from use import __version__, _reloaders, _using, config, home
 from use.decorators import methdispatch
 from use.hash_alphabet import JACK_as_num, num_as_hexdigest
-from use.messages import (
-    AmbiguityWarning,
-    Message,
-    NotReloadableWarning,
-    NoValidationWarning,
-    UnexpectedHash,
-    VersionWarning,
-)
+from use.messages import (AmbiguityWarning, Message, NotReloadableWarning,
+                          NoValidationWarning, UnexpectedHash, VersionWarning)
 from use.mod import ModuleReloader, ProxyModule
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
 
