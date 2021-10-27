@@ -233,6 +233,8 @@ def archive_meta(artifact_path):
 
 def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
     loader = None
+    spec = None
+    name = None
     if not loader and isinstance(obj, ModuleType):
         loader = obj.__loader__
     if not loader and isinstance(obj, ModuleType) and (spec := getattr(obj, "__spec__", None)):
@@ -270,13 +272,16 @@ def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
             for k in list(inspect.signature(type(parent_mod.__loader__).__init__).parameters)[1:]
         ]
         loader = type(parent_mod.__loader__)(*ctor_args)
-    if not loader:
+    if not loader or not name or not spec:
         if isinstance(obj, ModuleType):
             name = obj.__name__
             spec = obj.__spec__
         if isinstance(obj, ModuleSpec):
             name = obj.name
             spec = obj
+        if not spec:
+            spec = getattr(obj, "__spec__")
+    if not loader:
         module_path = (
             getattr(spec, "origin", None)
             or getattr(obj, "__file__", None)
