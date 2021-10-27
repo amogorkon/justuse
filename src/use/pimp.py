@@ -930,7 +930,7 @@ def _get_package_data_matching_python_single_version(
 ):
     import collections, use, packaging.tags
     proj = proj or _get_package_data(package_name)
-    pairs = functools.reduce(
+    pairs = reduce(
         list.__add__,
         [[(ver, rel) for rel in proj.releases[ver]] for ver in proj.releases],
     )
@@ -969,7 +969,7 @@ def _get_package_data_matching_python_single_version(
         *filter(
             None,
             (
-                functools.reduce(
+                reduce(
                     list.__add__,
                     [
                         list(
