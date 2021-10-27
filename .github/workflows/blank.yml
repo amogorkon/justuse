@@ -36,7 +36,17 @@ jobs:
         uses: tj-actions/coverage-badge-py@v1.6
         with:
           github-token: ${{ secrets.PAT_TOKEN }}
-
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v2
+        with:
+          token: 20fb71ba-3e2b-46db-b86d-e1666d56665b
+          CODECOV_TOKEN: 20fb71ba-3e2b-46db-b86d-e1666d56665b
+          fail_ci_if_error: false # optional (default = false)
+          files: ./.coverage,./coverage/cov.xml # optional
+          flags: unittests # optional
+          name: codecov-justuse # optional
+          verbose: true # optional (default = false)
+          github-token: ${{ secrets.PAT_TOKEN }}
 
   test-windows:
     runs-on: windows-latest
