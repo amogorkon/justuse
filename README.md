@@ -6,7 +6,7 @@
 [![Downloads](https://pepy.tech/badge/justuse)](https://pepy.tech/project/justuse)
 [![justuse](https://snyk.io/advisor/python/justuse/badge.svg)](https://snyk.io/advisor/python/justuse)
 [![slack](https://img.shields.io/badge/slack-@justuse-purple.svg?logo=slack)](https://join.slack.com/t/justuse/shared_invite/zt-tot4bhq9-_qIXBdeiRIfhoMjxu0EhFw)
-[![codecov](https://codecov.io/gh/amogorkon/justuse/branch/main/graph/badge.svg?token=ROM5GP7YGV)](https://codecov.io/gh/amogorkon/justuse)
+[![codecov](https://codecov.io/gh/amogorkon/justuse/branch/unstable/graph/badge.svg?token=ROM5GP7YGV)](https://codecov.io/gh/amogorkon/justuse)
 [![Sourcery](https://img.shields.io/badge/Sourcery-enabled-brightgreen)](https://sourcery.ai)
 <a href="https://github.com/psf/black"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-000000.svg"></a>
 
