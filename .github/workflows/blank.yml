@@ -1,87 +1,82 @@
 
 name: Unit Tests
 
+
 on:
+  fork:
   pull_request:
-    types: [synchronize]
+    types: [opened, edited, closed]
   push:
-  registry_package:
-    types: [published, updated]
   release:
-    types: [published, edited, released]
+    types: [published, created, edited, released]
+
 jobs:
   test-ubuntu:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Ubuntu - Check out source
+      - name: Linux Tests
         uses: actions/checkout@v2
-      - name: Ubuntu - Set up Python
-        uses: actions/setup-python@v2
+      - run: |
+          echo "Linux-Tests: Preloading package dependencies ..."
+          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests yarl
+          echo "Linux-Tests: Running tests ..."
+          mkdir -p ~/.justuse-python/
+          echo "debug = true" > ~/.justuse-python/config.toml
+          env DEBUG=1 ERRORS=1 python3 -m pytest
+          [ -e tests/coverage.sh ] && env DEBUG=1 ERRORS=1 bash ./tests/coverage.sh || env DEBUG=1 ERRORS=1 python3 -m pytest
+    
+      - name: coverage.py badge
+        uses: tj-actions/coverage-badge-py@v1.6
         with:
-          python-version: '3.9.7' # Version range or exact version of a Python version to use, using SemVer's version range syntax
-          architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified
-      - name: Ubuntu - Run Unit Tests with Coverage
-        run: |
-          DEBUG=1
-          PYTHON="$( which python3; )"
-          PYTHON3="$( which python3; )"
-          COLUMNS=250
-          export COLUMNS
-          export PYTHON
-          export PYTHON3
-          export DEBUG
-          "$PYTHON" -m pip install cython -r requirements.txt
-          bash ./tests/coverage.sh
-      - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v2
-        with:
-          token: 20fb71ba-3e2b-46db-b86d-e1666d56665b
-          CODECOV_TOKEN: 20fb71ba-3e2b-46db-b86d-e1666d56665b
-          fail_ci_if_error: false # optional (default = false)
-          verbose: true # optional (default = false)
+          github-token: ${{ secrets.PAT_TOKEN }}
 
 
-  test-windows-x86:
+  test-windows:
     runs-on: windows-latest
+
     steps:
-      - name: Windows - Check out source
+      - name: Run a multi-line script
         uses: actions/checkout@v2
-      - name: Windows - Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.9.7' # Version range or exact version of a Python version to use, using SemVer's version range syntax
-          architecture: 'x86' # optional x64 or x86. Defaults to x64 if not specified
-      - name: Windows - Run Unit Tests with Coverage
-        run: |
-          $env:FTP_USER = "${{ secrets.FTP_USER }}"
-          $env:FTP_PASS = "${{ secrets.FTP_PASS }}"
-          $env:DEBUG = 1
-          $env:DEBUGGING = 1
-          $env:ERRORS = 1
-          $env:COLUMNS = 250
+      - run: |
+          echo "Setting TLS security properties ..."
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade cython -r requirements.txt pywavelets sqlalchemy
-          & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x86/ --cov-report annotate:coverage-win32-x86/annotated --cov-report xml:coverage-win32-x86/cov.xml --cov=setup --cov=tests..tests..test1 --cov=tests..tests..test2 --cov=tests..tests..test3 --cov=tests..tests.bar --cov=tests..tests.foo --cov=tests..tests.modA --cov=tests..tests.modA_test --cov=tests..tests.modB --cov=tests..tests.modD --cov=tests..tests.modE --cov=tests..tests.sys --cov=tests..tests.tests_subdir.modC --cov=tests.__init__ --cov=tests.foo --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.unit_test --cov=use.__init__ --cov=use.use -v --cov-append -vv
+          echo "Downloading recent Python 3 ..."
+          Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.9.0/python-3.9.0.exe" -OutFile "c:/temp/python-3.9.0.exe"
+          echo "Installing Python 3 ..."
+          & "c:/temp/python-3.9.0.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
+          echo "Waiting for setup to complete ..."
+          $env:PATH = "$env:LOCALAPPDATA\Programs\Python\Python39-32;$env:LOCALAPPDATA\Programs\Python\Python39-32\lib;$env:PATH"
+          env
+          while (!(Test-Path "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe")) {
+            Write-Host "Waiting for installation"
+            [System.Threading.Thread]::Sleep(1000)
+          }
+          $pyver = ""
+          while (!($pyver.Contains(" 3.9"))) {
+            $pyver = $(
+              & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip --version || & { $global:LASTEXITCODE = 0; }
+            ) -join "`n"
+          }
+          echo "Windows-Tests: Preloading package dependencies ..."
+          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests yarl
+          echo "Windows-Tests: Running tests ..."
+          $env:DEBUG = 1
+          $env:ERRORS = 1
+          & "$env:LOCALAPPDATA/Programs/Python/Python39-32/python.exe" -m pytest
 
 
-  test-windows-x64:
-    runs-on: windows-latest
+  test-macos:
+    runs-on: macos-latest
+
     steps:
-      - name: Windows - Check out source
+      - name: Run a multi-line script
         uses: actions/checkout@v2
-      - name: Windows - Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.9.7' # Version range or exact version of a Python version to use, using SemVer's version range syntax
-          architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified
-      - name: Windows - Run Unit Tests with Coverage
-        run: |
-          $env:FTP_USER = "${{ secrets.FTP_USER }}"
-          $env:FTP_PASS = "${{ secrets.FTP_PASS }}"
-          $env:DEBUG = 1
-          $env:DEBUGGING = 1
-          $env:ERRORS = 1
-          $env:COLUMNS = 250
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade cython -r requirements.txt pywavelets sqlalchemy
-          & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x64/ --cov-report annotate:coverage-win32-x64/annotated --cov-report xml:coverage-win32-x64/cov.xml --cov=setup --cov=tests..tests..test1 --cov=tests..tests..test2 --cov=tests..tests..test3 --cov=tests..tests.bar --cov=tests..tests.foo --cov=tests..tests.modA --cov=tests..tests.modA_test --cov=tests..tests.modB --cov=tests..tests.modD --cov=tests..tests.modE --cov=tests..tests.sys --cov=tests..tests.tests_subdir.modC --cov=tests.__init__ --cov=tests.foo --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.unit_test --cov=use.__init__ --cov=use.use -v --cov-append -vv
+      - run: |
+          echo "MacOS-Tests: Preloading package dependencies ..."
+          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests yarl
+          echo "MacOS-Tests: Running tests ..."
+          mkdir -p ~/.justuse-python/
+          echo "debug = true" > ~/.justuse-python/config.toml
+          env DEBUG=1 ERRORS=1 python3 -m pytest
+  
