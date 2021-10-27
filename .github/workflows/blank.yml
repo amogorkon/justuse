@@ -25,6 +25,7 @@ jobs:
           echo "debug = true" > ~/.justuse-python/config.toml
           env DEBUG=1 ERRORS=1 python3 -m pytest
           python3 -m pip install --force-reinstall --upgrade -r requirements.txt
+          python3 -m pip install -r requirements.txt furl
           [ -e tests/coverage.sh ] && env DEBUG=1 ERRORS=1 bash ./tests/coverage.sh || env DEBUG=1 ERRORS=1 python3 -m pytest
     
       - name: coverage.py badge
