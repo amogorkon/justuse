@@ -4,8 +4,6 @@ ignore_errors = True
 
 [run]
 relative_files = True
-
-[run]
 omit =
     # omit anything in a .local directory anywhere
     */.local/*
