@@ -384,6 +384,7 @@ def test_suggestion_works(reuse):
 
 
 def double_function(func):
+    import functools
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs) * 2
