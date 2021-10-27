@@ -31,16 +31,13 @@ jobs:
           export PYTHON3
           export DEBUG
           "$PYTHON" -m pip install cython -r requirements.txt
-          python3 -m coverage run --rcfile=.coveragerc --source=.,./src/use,./src/use/modules,./tests,./tests/.tests,./tests/.tests/tests_subdir,./tests/mass --append --branch -m pytest
+          bash ./tests/coverage.sh
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v2
         with:
           token: 20fb71ba-3e2b-46db-b86d-e1666d56665b
           CODECOV_TOKEN: 20fb71ba-3e2b-46db-b86d-e1666d56665b
           fail_ci_if_error: false # optional (default = false)
-          files: ./.coverage,./coverage/cov.xml # optional
-          flags: unittests # optional
-          name: codecov-justuse # optional
           verbose: true # optional (default = false)
 
 
@@ -65,16 +62,6 @@ jobs:
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade cython -r requirements.txt pywavelets sqlalchemy
           & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x86/ --cov-report annotate:coverage-win32-x86/annotated --cov-report xml:coverage-win32-x86/cov.xml --cov=setup --cov=tests..tests..test1 --cov=tests..tests..test2 --cov=tests..tests..test3 --cov=tests..tests.bar --cov=tests..tests.foo --cov=tests..tests.modA --cov=tests..tests.modA_test --cov=tests..tests.modB --cov=tests..tests.modD --cov=tests..tests.modE --cov=tests..tests.sys --cov=tests..tests.tests_subdir.modC --cov=tests.__init__ --cov=tests.foo --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.unit_test --cov=use.__init__ --cov=use.use -v --cov-append -vv
-      - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v2
-        with:
-          token: 20fb71ba-3e2b-46db-b86d-e1666d56665b
-          CODECOV_TOKEN: 20fb71ba-3e2b-46db-b86d-e1666d56665b
-          fail_ci_if_error: false # optional (default = false)
-          files: ./.coverage,./coverage/cov.xml # optional
-          flags: unittests # optional
-          name: codecov-justuse # optional
-          verbose: true # optional (default = false)
 
 
   test-windows-x64:
@@ -98,13 +85,3 @@ jobs:
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade cython -r requirements.txt pywavelets sqlalchemy
           & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x64/ --cov-report annotate:coverage-win32-x64/annotated --cov-report xml:coverage-win32-x64/cov.xml --cov=setup --cov=tests..tests..test1 --cov=tests..tests..test2 --cov=tests..tests..test3 --cov=tests..tests.bar --cov=tests..tests.foo --cov=tests..tests.modA --cov=tests..tests.modA_test --cov=tests..tests.modB --cov=tests..tests.modD --cov=tests..tests.modE --cov=tests..tests.sys --cov=tests..tests.tests_subdir.modC --cov=tests.__init__ --cov=tests.foo --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.unit_test --cov=use.__init__ --cov=use.use -v --cov-append -vv
-      - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v2
-        with:
-          token: 20fb71ba-3e2b-46db-b86d-e1666d56665b
-          CODECOV_TOKEN: 20fb71ba-3e2b-46db-b86d-e1666d56665b
-          fail_ci_if_error: false # optional (default = false)
-          files: ./.coverage,./coverage/cov.xml # optional
-          flags: unittests # optional
-          name: codecov-justuse # optional
-          verbose: true # optional (default = false)
