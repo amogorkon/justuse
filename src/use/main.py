@@ -74,7 +74,7 @@ import threading
 import time
 import traceback
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
-from logging import getLogger
+from logging import getLogger, root, DEBUG
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, List, Optional, Type, Union
@@ -85,11 +85,13 @@ import toml
 from beartype import beartype
 from furl import furl as URL
 from icontract import ensure, invariant, require
+	
 
 from use import Hash, Modes, ModInUse, __version__, pimp
 
+root.setLevel(DEBUG)
 log = getLogger(__name__)
-
+log.setLevel(DEBUG)
 
 # internal subpackage imports
 mode = Modes
@@ -110,6 +112,8 @@ from use.messages import (
     VersionWarning,
 )
 from use.mod import ModuleReloader, ProxyModule
+### NEEDED FOR TESTS!! ###
+from use.pimp import _get_package_data, _get_version, _is_platform_compatible, _is_version_satisfied, get_supported
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
 from use.tools import methdispatch
 
@@ -169,6 +173,7 @@ class Use(ModuleType):
     reloading = Modes.reloading
     no_public_installation = Modes.no_public_installation
 
+	
     def __init__(self):
         # TODO for some reason removing self._using isn't as straight forward..
         self._using = _using
@@ -230,6 +235,7 @@ class Use(ModuleType):
         ):
             (self.home / file).touch(mode=0o755, exist_ok=True)
 
+	
     def _sqlite_row_factory(self, cursor, row):
         return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
 
@@ -397,6 +403,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     @require(lambda hash_algo: hash_algo in Hash)
     @require(lambda as_import: as_import.isidentifier())
     @__call__.register(URL)
+	
     def _use_url(
         self,
         url: URL,
@@ -446,6 +453,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
     @require(lambda as_import: as_import.isidentifier())
     @__call__.register(Path)
+	
     def _use_path(
         self,
         path,
@@ -596,6 +604,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         return ProxyModule(mod)
 
     @__call__.register(type(None))  # singledispatch is picky - can't be anything but a type
+	
     def _use_kwargs(
         self,
         _: None,  # sic! otherwise single-dispatch with 'empty' *args won't work
@@ -641,6 +650,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         )
 
     @__call__.register(tuple)
+	
     def _use_tuple(
         self,
         pkg_tuple,
@@ -685,6 +695,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         )
 
     @__call__.register(str)
+	
     def _use_str(
         self,
         name: str,
@@ -727,6 +738,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             modes=modes,
         )
 
+	
     def _use_package(
         self,
         *,
@@ -799,7 +811,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         # fmt: off
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
         log.info("case = %s", case)
-        
+
         def _ensure_version(
             result: Union[ModuleType, Exception]
         ) -> Union[ModuleType, Exception]:
@@ -810,7 +822,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 Message.version_warning(name, version, result_version)
             )
             return result
-        
+
         case_func = {
             (0, 0, 0, 0): lambda: ImportError(Message.cant_import(name)),
             (0, 0, 0, 1): lambda: pimp._pebkac_no_version_no_hash(**kwargs),

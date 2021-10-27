@@ -32,6 +32,7 @@ from icontract import ensure
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
+	
 
 from use import Hash, Modes, config, log
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
@@ -39,6 +40,7 @@ from use.messages import AmbiguityWarning, Message
 from use.platformtag import PlatformTag
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
 from use.tools import pipes
+import use
 
 
 def all_kwargs():
@@ -125,6 +127,7 @@ def sort_releases_by_install_method(project__: "PyPI_Project") -> "PyPI_Project"
     )
 
 
+	
 def _filter_by_version(project_: "PyPI_Project", version: str) -> "PyPI_Project":
 
     for_version = (
@@ -231,6 +234,7 @@ def archive_meta(artifact_path):
     return meta
 
 
+	
 def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
     loader = None
     spec = None
@@ -292,27 +296,31 @@ def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
     return loader
 
 
+	
 def _clean_sys_modules(package_name: str) -> None:
+    if not package_name:
+        return
     for k in dict(
         [
-            (k, _ensure_loader(v))
-            for k, v in sys.modules.items()
-            if (
+            (k, v)
+            for k, v in list(sys.modules.items())
+            if package_name in k.split(".") and (
                 getattr(v, "__spec__", None) is None
-                or isinstance(_ensure_loader(v), (SourceFileLoader, zipimport.zipimporter))
+                or isinstance(v, (SourceFileLoader, zipimport.zipimporter))
             )
-            and package_name in k.split(".")
         ]
     ):
         if k in sys.modules:
             del sys.modules[k]
 
 
+	
 def _venv_root(package_name, version, home) -> Path:
     assert version
     return home / "venv" / package_name / str(version)
 
 
+	
 def _pebkac_no_version_hash(
     *,
     name: str,
@@ -333,6 +341,7 @@ def _pebkac_no_version_hash(
     return RuntimeWarning(Message.cant_import_no_version(name))
 
 
+	
 def _pebkac_version_no_hash(
     *,
     name: str,
@@ -390,13 +399,13 @@ def _pebkac_no_version_no_hash(
     rel = None
     hashes = { o.digests.get(hash_algo.name) for o in proj.urls }
     for r in ordered:
-            rel = r 
+            rel = r
             break
     if not rel:
             v = list(proj.releases.keys())[0]
             rel_vals = proj.releases.get(v, [None])
             rel = rel_vals[0]
-    
+
     if rel:
         return _pebkac_version_no_hash(
             func=None,
@@ -415,6 +424,7 @@ def _pebkac_no_version_no_hash(
     return rw
 
 
+	
 def _import_public_no_install(
     *,
     name: str,
@@ -445,6 +455,7 @@ def _import_public_no_install(
 
 
 # TODO Rename this here and in `_import_public_no_install`
+	
 def _extracted_from__import_public_no_install_18(module_name, spec):
     if spec.name in sys.modules:
         mod = sys.modules[spec.name]
@@ -459,6 +470,7 @@ def _extracted_from__import_public_no_install_18(module_name, spec):
     return mod
 
 
+	
 def _parse_name(name) -> tuple[str, str]:
     ret = name, name
     try:
@@ -477,6 +489,7 @@ def _parse_name(name) -> tuple[str, str]:
         log.info("_parse_name(%s) -> %s", repr(name), repr(ret))
 
 
+	
 def _auto_install(
     *,
     name: str,
@@ -522,7 +535,7 @@ def _auto_install(
         importer = zipimport.zipimporter(artifact_path)
         return importer.load_module(query["import_name"])
     except BaseException as zerr:
-        pass
+        raise
     orig_cwd = Path.cwd()
     mod = None
     if "installation_path" not in query or not _ensure_path(query["installation_path"]).exists():
@@ -545,7 +558,7 @@ def _auto_install(
         )
         return (
             mod := _load_venv_entry(
-                package_name,
+                import_name,
                 import_name,
                 module_path=module_path,
                 installation_path=installation_path,
@@ -570,6 +583,7 @@ def _auto_install(
             )
 
 
+	
 def _process(*argv, env={}):
     _realenv = {
         k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)
@@ -617,11 +631,13 @@ def _process(*argv, env={}):
     )
 
 
+	
 def _find_version(package_name, version=None) -> PyPI_Release:
     data = _filtered_and_ordered_data(_get_package_data(package_name), version)
     return data[0]
 
 
+	
 def _get_venv_env(venv_root: Path) -> dict[str, str]:
     pathvar = os.environ.get("PATH")
     python_exe = Path(sys.executable)
@@ -632,6 +648,7 @@ def _get_venv_env(venv_root: Path) -> dict[str, str]:
 
 
 @ensure(lambda url: str(url).startswith("http"))  # should we be enforcing 443 > 80?
+	
 def _download_artifact(name, version, filename, url) -> Path:
     artifact_path = (sys.modules["use"].home / "packages" / filename).absolute()
     if not artifact_path.exists():
@@ -642,6 +659,7 @@ def _download_artifact(name, version, filename, url) -> Path:
     return artifact_path
 
 
+	
 def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
     for k, v in tuple(a_dict.items()):
         if v is None or v == "":
@@ -649,6 +667,7 @@ def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
     return a_dict
 
 
+	
 def _pure_python_package(artifact_path, meta):
     not_pure_python = any(
         any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES) for n in meta["names"]
@@ -661,6 +680,7 @@ def _pure_python_package(artifact_path, meta):
     return True
 
 
+	
 def _find_module_in_venv(package_name, version, relp):
     ___use = getattr(sys, "modules").get("use")
     ret = None, None
@@ -706,6 +726,7 @@ def _find_module_in_venv(package_name, version, relp):
         )
 
 
+	
 def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=None, force_install=False):
     log.debug(
         f"_find_or_install(name={name}, \
@@ -729,13 +750,13 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
         artifact_path = use.home / "packages" / filename
 
     if not url or not artifact_path or (artifact_path and not artifact_path.exists()):
-        proj = _get_package_data_matching_python_single_version(
-            package_name, version=version
+        proj = _get_package_data(
+            package_name
         )
-        ordered = _filtered_and_ordered_data(proj, version=None)
+        ordered = _filtered_and_ordered_data(proj, version=version)
         rel = None
         for r in ordered:
-            rel = r 
+            rel = r
             break
         if not rel:
             v = list(proj.releases.keys())[0]
@@ -743,11 +764,11 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
             rel = rel_vals[0]
         info.update(rel.dict())
         out_info.update(rel.dict())
-        
+
         url = URL(rel.url)
         filename = url.asdict()["path"]["segments"][-1]
         artifact_path = use.home / "packages" / filename
-    
+
     out_info["artifact_path"] = artifact_path
     # todo: set info
     as_dict = info
@@ -773,7 +794,7 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     out_info["import_name"] = import_name
     if not force_install and _pure_python_package(artifact_path, meta) and str(artifact_path).endswith(".whl"):
         return out_info
-    
+
     venv_root = _venv_root(package_name, version, use.home)
     site_pkgs_dir = list(venv_root.rglob("site-packages"))
     if not any(site_pkgs_dir):
@@ -782,9 +803,9 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     else:
         out_info["installation_path"] = site_pkgs_dir[0]
         module_paths = venv_root.rglob(f"**/{relp}")
-    
+
     python_exe = Path(sys.executable)
-    
+
     if not module_paths or force_install:
         log.info(f"calling pip to install install_item={install_item}")
 
@@ -822,10 +843,10 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
         module_paths.append(module_path)
         installation_path = site_dir
         site_pkgs_dir = site_dir
-    
+
     out_info.update(**meta)
     assert module_paths
-    
+
     log.info(f"installation_path = {installation_path}")
     log.info(f"module_path = {module_path}")
     out_info.update(
@@ -841,6 +862,7 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     return _delete_none(out_info)
 
 
+	
 def _load_venv_entry(package_name, rest, installation_path, module_path) -> ModuleType:
     log.info(
         f"load_venv_entry package_name={package_name} \
@@ -870,7 +892,7 @@ def _load_venv_entry(package_name, rest, installation_path, module_path) -> Modu
                     os.chdir(cwd)
                     os.chdir(variant)
                     return _build_mod(
-                        name=(package_name + "/" + rest.replace("/", ".")),
+                        name=(rest.replace("/", ".")),
                         code=code_file.read(),
                         module_path=_ensure_path(module_path),
                         initial_globals={},
@@ -891,6 +913,7 @@ def _load_venv_entry(package_name, rest, installation_path, module_path) -> Modu
 
 
 @cache(maxsize=512)
+	
 def _get_package_data(package_name) -> PyPI_Project:
     json_url = f"https://pypi.org/pypi/{package_name}/json"
     response = requests.get(json_url)
@@ -901,6 +924,7 @@ def _get_package_data(package_name) -> PyPI_Project:
     return PyPI_Project(**response.json())
 
 
+	
 def _get_package_data_matching_python_single_version(
     package_name, version=None, proj=None
 ):
@@ -978,10 +1002,12 @@ def _get_package_data_matching_python_single_version(
     return proj_filtered
 
 
+	
 def _sys_version():
     return Version(".".join(map(str, sys.version_info[0:3])))
 
 
+	
 def _filter_by_platform(
     project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version
 ) -> PyPI_Project:
@@ -1015,10 +1041,11 @@ def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> l
         filtered = _filter_by_platform(data, tags=get_supported(), sys_version=_sys_version())
 
     flat = reduce(list.__add__, filtered.releases.values(), [])
-    return sorted(flat, key=lambda r: (not r.is_sdist, r.version), reverse=True)
+    return sorted(flat, key=lambda r: (not r.filename.endswith(".tar.gz"), not r.is_sdist, r.version), reverse=True)
 
 
 @cache
+	
 def _is_version_satisfied(specifier: str, sys_version) -> bool:
     """
     SpecifierSet("") matches anything, no need to artificially
@@ -1083,6 +1110,7 @@ def _is_platform_compatible(
     )
 
 
+	
 def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist=None) -> bool:
     """Return true if the artifact described by 'info'
     is compatible with the current or specified system."""
@@ -1095,6 +1123,7 @@ def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist
     )
 
 
+	
 def _apply_aspect(
     thing,
     check,
@@ -1113,6 +1142,7 @@ def _apply_aspect(
     return thing
 
 
+	
 def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> Optional[Version]:
     version: Optional[Union[Callable[...], Version, Version, str]] = None
     for lookup_name in (name, package_name):
@@ -1137,6 +1167,7 @@ def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> 
     return Version(version)
 
 
+	
 def _build_mod(
     *,
     name,  # TODO: this should be a package name and module name
@@ -1172,6 +1203,7 @@ def _build_mod(
     return mod
 
 
+	
 def _fail_or_default(exception: BaseException, default: Any):
     if default is not Modes.fastfail:
         return default  # TODO: write test for default

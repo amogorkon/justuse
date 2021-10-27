@@ -94,15 +94,7 @@ def test_pure_python_package(reuse):
     if venv_dir.exists():
         rmtree(venv_dir)
 
-    test = reuse(
-        "example-pypi-package/examplepy",
-        version="0.1.0",
-        hashes={
-            "3c1b4ddf718d85bde796a20cf3fdea254a33a4dc89129dff5bfc5b7cd760c86b",
-            "ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77",
-        },
-        modes=reuse.auto_install,
-    )
+    test = eval(b'reuse("example-pypi-package/examplepy", version="0.1.0", hashes={\'S\xe3\xb5\x88\xe8\x9b\xb4\xe7\x9e\x99\xe7\xbb\xbd\xe3\xa1\x83\xe9\xb8\xa1 \xe3\x9c\x96\xe5\x83\xbc\xe6\xb1\xa0\xe6\xa2\xb5\xe9\xb0\xbc\xe4\xaf\x90\xe6\x9c\xa0\xe9\x89\x82\xe4\xa4\x9c\xe5\x9d\xa0\xe8\x91\x86\', \'7\xe6\x98\x93\xe6\x90\xbb\xe5\x80\x90\xe3\xba\x8d\xe4\x9a\xa1\xe5\x84\x99\xe7\x90\x9f\xe9\x99\xbb\xe3\xbf\xb7\xe5\x8c\xa6\xe4\x97\xaf\xe9\x97\x8d\xe8\x84\xb7\xe4\x87\x85\xe3\xab\x84\xe7\x83\xb6\xe5\x8c\x86\'}, modes=reuse.auto_install)')
     assert (
         venv_dir.exists() == False
     ), "Should not have created venv for example-pypi-package"

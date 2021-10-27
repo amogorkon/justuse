@@ -91,6 +91,8 @@ print("Startong submod imports: use.use")
 import inspect
 
 from use.main import *
+### NEEDED FOR TESTS!! ###
+from use.pimp import _get_package_data, _get_version, _is_version_satisfied, get_supported
 
 print("Finished importing modules")
 for k, v in inspect.getmembers(use):
