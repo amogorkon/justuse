@@ -11,9 +11,6 @@ from use.pypi_model import Version
 print(f"Home is {use.home}")
 
 
-config["testing"] = True
-
-
 def _web_no_version_or_hash_provided(name, package_name, version, hashes):
     if not config["testing"]:
         webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")

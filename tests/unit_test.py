@@ -509,6 +509,3 @@ def test_86(reuse, name, version, hashes):
 def test_hash_alphabet():
     H = sha256("hello world".encode("utf-8")).hexdigest()
     assert H == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(H)))
-
-
-use.config["testing"] = False

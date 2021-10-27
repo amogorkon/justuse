@@ -100,7 +100,6 @@ from icontract import require
 
 import use
 from use import __version__, _reloaders, _using, config, home
-from use.decorators import methdispatch
 from use.hash_alphabet import JACK_as_num, num_as_hexdigest
 from use.messages import (
     AmbiguityWarning,
@@ -112,6 +111,7 @@ from use.messages import (
 )
 from use.mod import ModuleReloader, ProxyModule
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
+from use.tools import methdispatch
 
 
 # sometimes all you need is a sledge hammer..

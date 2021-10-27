@@ -77,9 +77,9 @@ print("Startong submod imports: use.hash_alphabet")
 from use.hash_alphabet import *
 
 print("Startong submod imports: use.modules")
-from use.decorators import *
 from use.pimp import *
 from use.platformtag import *
+from use.tools import *
 
 print("Startong submod imports: use.pypi_model")
 from use.pypi_model import *
