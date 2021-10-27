@@ -43,30 +43,6 @@ from use.tools import pipes
 import use
 
 
-def all_kwargs():
-    """Get all kwargs that were passed in to the function calling this one."""
-    kwargs = {}
-    upper_frame = sys._getframe().f_back
-    locals = upper_frame.f_locals
-
-    code = upper_frame.f_code
-    pos_count = code.co_argcount
-    arg_names = code.co_varnames
-    keyword_only_count = code.co_kwonlyargcount
-    kw_only_names = arg_names[pos_count : pos_count + keyword_only_count]
-
-    kwargs.update((name, locals[name]) for name in kw_only_names)
-
-    # **kwargs
-    if code.co_flags & 8:
-        index = pos_count + keyword_only_count
-        if code.co_flags & 4:
-            index += 1
-        kwargs.update(locals[arg_names[index]])
-    return kwargs
-
-
-
 @pipes
 def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
     if isinstance(value, (str, bytes)):
@@ -146,24 +122,6 @@ def _filter_by_version(project_: "PyPI_Project", version: str) -> "PyPI_Project"
     return PyPI_Project(**new_data)
 
 
-class TarFunctions:
-    def __init__(self, artifact_path):
-        self.archive = tarfile.open(artifact_path)
-
-    def get(self):
-        return (
-            self.archive,
-            [m.name for m in self.archive.getmembers() if m.type == b"0"],
-        )
-
-    def read_entry(self, entry_name):
-        m = self.archive.getmember(entry_name)
-        with self.archive.extractfile(m) as f:
-            bdata = f.read()
-            text = bdata.decode("ISO-8859-1") if len(bdata) < 8192 else ""
-            return (Path(entry_name).stem, text.splitlines())
-
-
 class ZipFunctions:
     def __init__(self, artifact_path):
         self.archive = zipfile.ZipFile(artifact_path)
@@ -183,16 +141,7 @@ def archive_meta(artifact_path):
     DIST_PKG_INFO_REGEX = re.compile("(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$")
     meta = archive = names = functions = None
 
-    if ".tar" in str(artifact_path):
-        archive = tarfile.open(artifact_path)
-
-        def get_archive(artifact_path):
-            archive = tarfile.open(artifact_path)
-            return (archive, [m.name for m in archive.getmembers() if m.type == b"0"])
-
-        functions = TarFunctions(artifact_path)
-    else:
-
+    if True:
         def get_archive(artifact_path):
             archive = zipfile.ZipFile(artifact_path)
             return (archive, [e.filename for e in archive.filelist])
@@ -232,68 +181,6 @@ def archive_meta(artifact_path):
         break
     archive.close()
     return meta
-
-
-	
-def _ensure_loader(obj: Union[ModuleType, ModuleSpec]):
-    loader = None
-    spec = None
-    name = None
-    if not loader and isinstance(obj, ModuleType):
-        loader = obj.__loader__
-    if not loader and isinstance(obj, ModuleType) and (spec := getattr(obj, "__spec__", None)):
-        loader = spec.loader
-    if not loader and isinstance(obj, ModuleSpec):
-        loader = obj.loader
-    if not loader and hasattr(importlib.util, "loader_from_spec"):
-        loader = importlib.util.loader_from_spec(obj)
-    if not loader and isinstance(obj, ModuleType):
-        name = obj.__name__
-        mod = obj
-        segments = name.split(".")
-        parent_mod = importlib.import_module(".".join(segments[:-1]))
-        parent_spec = parent_mod.__spec__
-        ctor_args = [
-            (
-                k,
-                getattr(mod, "__name__")
-                if "name" in k
-                else (
-                    list(
-                        Path(parent_spec.submodule_search_locations[0]).glob(
-                            mod.__name__[len(parent_mod.__name__) + 1 :] + ".*"
-                        )
-                    )
-                    + list(
-                        Path(parent_spec.submodule_search_locations[0]).glob(
-                            mod.__name__[len(parent_mod.__name__) + 1 :] + "/__init__.py"
-                        )
-                    )
-                )[0]
-                if ("path" in k or "file" in k or "loc" in k)
-                else k,
-            )
-            for k in list(inspect.signature(type(parent_mod.__loader__).__init__).parameters)[1:]
-        ]
-        loader = type(parent_mod.__loader__)(*ctor_args)
-    if not loader or not name or not spec:
-        if isinstance(obj, ModuleType):
-            name = obj.__name__
-            spec = obj.__spec__
-        if isinstance(obj, ModuleSpec):
-            name = obj.name
-            spec = obj
-        if not spec:
-            spec = getattr(obj, "__spec__")
-    if not loader:
-        module_path = (
-            getattr(spec, "origin", None)
-            or getattr(obj, "__file__", None)
-            or getattr(obj, "__path__", None)
-            or inspect.getsourcefile(obj)
-        )
-        loader = SourceFileLoader(name, module_path)
-    return loader
 
 
 	
@@ -392,10 +279,10 @@ def _pebkac_no_version_no_hash(
         if isinstance(result, (Exception, ModuleType)):
             return result
     # let's try to make an educated guess and give a useful suggestion
-    proj = _get_package_data_matching_python_single_version(
-        package_name, version=version
+    proj = _get_package_data(
+        package_name
     )
-    ordered = _filtered_and_ordered_data(proj, version=None)
+    ordered = _filtered_and_ordered_data(proj, version=version)
     rel = None
     hashes = { o.digests.get(hash_algo.name) for o in proj.urls }
     for r in ordered:
@@ -609,7 +496,7 @@ def _process(*argv, env={}):
     )
     if o.returncode == 0:
         return o
-    raise RuntimeError(
+    raise RuntimeError( # cov: exclude
         "\x0a".join(
             (
                 "\x1b[1;41;37m",
@@ -922,84 +809,6 @@ def _get_package_data(package_name) -> PyPI_Project:
     elif response.status_code != 200:
         raise RuntimeWarning(Message.web_error(json_url, response))
     return PyPI_Project(**response.json())
-
-
-	
-def _get_package_data_matching_python_single_version(
-    package_name, version=None, proj=None
-):
-    import collections, use, packaging.tags
-    proj = proj or _get_package_data(package_name)
-    pairs = reduce(
-        list.__add__,
-        [[(ver, rel) for rel in proj.releases[ver]] for ver in proj.releases],
-    )
-    ctr = collections.Counter(list(k for k, v in pairs))
-    best_ver, count = ctr.most_common()[0]
-    log.debug("%s", f"Most common version of {package_name} is {best_ver} with {count} artifacts")
-    best_ver = use.Version(version) if version else best_ver
-    m_counts = [*filter(lambda i: i[0] == best_ver, ctr.most_common())]
-    count = m_counts[0][1] if m_counts else 0
-    log.debug("%s", f" - Selected version of {package_name} is {best_ver} with {count} artifacts")
-    rels = proj.releases[best_ver]
-    use.pypi_model = list(
-        filter(lambda i: "pypi_model" in i[0].split("."), sys.modules.items())
-    )[0][1]
-    supported_interps = set(
-        packaging.tags._py_interpreter_range(sys.version_info[0:2])
-    ) - set(packaging.tags._py_interpreter_range((3, sys.version_info[1] - 2)))
-    supported_interps.add("py3")
-    supported_interps.add("source")
-    combined_tags = [
-        (
-            combined_tag := "-".join(
-                (
-                    (info := use.pypi_model._parse_filename(rel.filename)).get(
-                        "python_tag", "source"
-                    ),
-                    info.get("abi_tag", "none"),
-                    info.get("platform_tag", "any"),
-                )
-            )
-        )
-        for rel in rels
-    ]
-    parsed_tags = [*map(packaging.tags.parse_tag, combined_tags)]
-    rels_matching_python_version = [
-        *filter(
-            None,
-            (
-                reduce(
-                    list.__add__,
-                    [
-                        list(
-                            map(
-                                lambda t: rels[i]
-                                if (
-                                    re.subn("^(py|cp)(\d+)$", "py\2", t.interpreter)[0]
-                                    in supported_interps
-                                )
-                                else None,
-                                p,
-                            )
-                        )
-                        for i, p in reversed(list(enumerate(parsed_tags)))
-                    ],
-                    [],
-                )
-            ),
-        )
-    ]
-    proj_filtered = use.PyPI_Project(
-        releases={best_ver: rels_matching_python_version},
-        urls=[*map(lambda i: i.dict(), rels_matching_python_version)],
-        info=proj.info,
-    )
-    filtered_count = len(proj_filtered.releases.get(best_ver, []))
-    log.debug(
-        "%s", f" - Selected version of {package_name} == {best_ver}: has {filtered_count} artifacts for {', '.join(supported_interps)}"
-    )
-    return proj_filtered
 
 
 	
