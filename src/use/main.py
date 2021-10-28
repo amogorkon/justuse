@@ -206,9 +206,7 @@ class Use(ModuleType):
             try:
                 response = requests.get("https://pypi.org/pypi/justuse/json")
                 data = response.json()
-                max_version = max(
-                    Version(version) for version in data["releases"].keys()
-                )
+                max_version = max(Version(version) for version in data["releases"].keys())
                 target_version = max_version
                 this_version = __version__
                 if Version(this_version) < target_version:
@@ -304,9 +302,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         self.registry.connection.close()
         self.registry = None
         number_of_backups = len(list((self.home / "registry.db").glob("*.bak")))
-        (self.home / "registry.db").rename(
-            self.home / f"registry.db.{number_of_backups + 1}.bak"
-        )
+        (self.home / "registry.db").rename(self.home / f"registry.db.{number_of_backups + 1}.bak")
         (self.home / "registry.db").touch(mode=0o644)
         self.registry = self._set_up_registry()
         self.cleanup()
@@ -340,9 +336,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
             "DELETE FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?)",
             (name, version),
         )
-        self.registry.execute(
-            "DELETE FROM distributions WHERE name=? AND version=?", (name, version)
-        )
+        self.registry.execute("DELETE FROM distributions WHERE name=? AND version=?", (name, version))
         self.registry.connection.commit()
 
     def cleanup(self):
@@ -362,10 +356,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         for name, version, artifact_path, installation_path in self.registry.execute(
             "SELECT name, version, artifact_path, installation_path FROM distributions JOIN artifacts on distributions.id = distribution_id"
         ).fetchall():
-            if not (
-                pimp._ensure_path(artifact_path).exists()
-                and pimp._ensure_path(installation_path).exists()
-            ):
+            if not (pimp._ensure_path(artifact_path).exists() and pimp._ensure_path(installation_path).exists()):
                 self.del_entry(name, version)
         self.registry.connection.commit()
 
@@ -437,9 +428,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if hash_value:
             if this_hash != hash_value:
                 return pimp._fail_or_default(
-                    UnexpectedHash(
-                        f"{this_hash} does not match the expected hash {hash_value} - aborting!"
-                    ),
+                    UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!"),
                     default,
                 )
         else:
@@ -498,9 +487,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         mod = None
 
         if path.is_dir():
-            return pimp._fail_or_default(
-                ImportError(f"Can't import directory {path}"), default
-            )
+            return pimp._fail_or_default(ImportError(f"Can't import directory {path}"), default)
 
         original_cwd = source_dir = Path.cwd()
         try:
@@ -520,11 +507,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 # we're in jupyter, we use the CWD as set in the notebook
                 if not jupyter and hasattr(main_mod, "__file__"):
                     source_dir = (
-                        pimp._ensure_path(
-                            inspect.currentframe().f_back.f_back.f_code.co_filename
-                        )
-                        .resolve()
-                        .parent
+                        pimp._ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename).resolve().parent
                     )
             if source_dir is None:
                 if main_mod.__loader__ and hasattr(main_mod.__loader__, "path"):
@@ -538,16 +521,12 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     source_dir = Path.cwd()
             if not source_dir.exists():
                 return pimp._fail_or_default(
-                    NotImplementedError(
-                        "Can't determine a relative path from a virtual file."
-                    ),
+                    NotImplementedError("Can't determine a relative path from a virtual file."),
                     default,
                 )
             path = source_dir.joinpath(path).resolve()
             if not path.exists():
-                return pimp._fail_or_default(
-                    ImportError(f"Sure '{path}' exists?"), default
-                )
+                return pimp._fail_or_default(ImportError(f"Sure '{path}' exists?"), default)
             os.chdir(path.parent)
             name = path.stem
             if reloading:
@@ -623,9 +602,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         self._set_mod(name=name, mod=mod, frame=frame)
         return ProxyModule(mod)
 
-    @__call__.register(
-        type(None)
-    )  # singledispatch is picky - can't be anything but a type
+    @__call__.register(type(None))  # singledispatch is picky - can't be anything but a type
     def _use_kwargs(
         self,
         _: None,  # sic! otherwise single-dispatch with 'empty' *args won't work
@@ -795,9 +772,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hashes = set([hashes])
         if not hashes:
             hashes = set()
-        hashes = {
-            H if len(H) == 64 else num_as_hexdigest(JACK_as_num(H)) for H in hashes
-        }
+        hashes = {H if len(H) == 64 else num_as_hexdigest(JACK_as_num(H)) for H in hashes}
         callstr = (
             f"use._use_package({name}, {package_name=!r}, "
             f"{module_name=!r}, {version=!r}, {hashes=!r}, "
@@ -892,9 +867,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
 
 use = Use()
-use.__dict__.update(
-    {k: v for k, v in globals().items()}
-)  # to avoid recursion-confusion
+use.__dict__.update({k: v for k, v in globals().items()})  # to avoid recursion-confusion
 use = ProxyModule(use)
 
 
