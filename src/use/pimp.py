@@ -95,8 +95,7 @@ def sort_releases_by_install_method(project__: "PyPI_Project") -> "PyPI_Project"
             **__project.dict(),
             **{
                 "releases": {
-                    k: [x.dict() for x in sorted(v, key=lambda r: r.is_sdist)]
-                    for k, v in project__.releases.items()
+                    k: [x.dict() for x in sorted(v, key=lambda r: r.is_sdist)] for k, v in project__.releases.items()
                 }
             },
         }
@@ -150,9 +149,7 @@ def archive_meta(artifact_path):
 
     archive, names = get_archive(artifact_path)
     archive, names = functions.get()
-    meta = dict(
-        names << filter(DIST_PKG_INFO_REGEX.search) << map(functions.read_entry)
-    )
+    meta = dict(names << filter(DIST_PKG_INFO_REGEX.search) << map(functions.read_entry))
     meta.update(
         dict(
             (lp := l.partition(": "), (lp[0].lower().replace("-", "_"), lp[2]))[-1]
@@ -193,10 +190,7 @@ def _clean_sys_modules(package_name: str) -> None:
             (k, v)
             for k, v in list(sys.modules.items())
             if package_name in k.split(".")
-            and (
-                getattr(v, "__spec__", None) is None
-                or isinstance(v, (SourceFileLoader, zipimport.zipimporter))
-            )
+            and (getattr(v, "__spec__", None) is None or isinstance(v, (SourceFileLoader, zipimport.zipimporter)))
         ]
     ):
         if k in sys.modules:
@@ -216,9 +210,7 @@ def _pebkac_no_version_hash(
     hash_algo=None,
     package_name: str = None,
     module_name: str = None,
-    message_formatter: Callable[
-        [str, str, Version, set[str]], str
-    ] = Message.pebkac_missing_hash,
+    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
 
@@ -238,9 +230,7 @@ def _pebkac_version_no_hash(
     hash_algo=None,
     package_name: str = None,
     module_name: str = None,
-    message_formatter: Callable[
-        [str, str, Version, set[str]], str
-    ] = Message.pebkac_missing_hash,
+    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     version = Version(version)
@@ -274,9 +264,7 @@ def _pebkac_no_version_no_hash(
     hash_algo=None,
     package_name: str = None,
     module_name: str = None,
-    message_formatter: Callable[
-        [str, str, Version, set[str]], str
-    ] = Message.pebkac_missing_hash,
+    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     if func:
@@ -323,9 +311,7 @@ def _import_public_no_install(
     package_name: str = None,
     module_name: str = None,
     spec=None,
-    message_formatter: Callable[
-        [str, str, Version, set[str]], str
-    ] = Message.pebkac_missing_hash,
+    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     if func:
@@ -388,9 +374,7 @@ def _auto_install(
     hash_algo=None,
     package_name: str = None,
     module_name: str = None,
-    message_formatter: Callable[
-        [str, str, Version, set[str]], str
-    ] = Message.pebkac_missing_hash,
+    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, BaseException]:
     package_name, rest = _parse_name(name)
@@ -430,10 +414,7 @@ def _auto_install(
         raise
     orig_cwd = Path.cwd()
     mod = None
-    if (
-        "installation_path" not in query
-        or not _ensure_path(query["installation_path"]).exists()
-    ):
+    if "installation_path" not in query or not _ensure_path(query["installation_path"]).exists():
         if query:
             sys.modules["use.main"].use.del_entry(name, version)
         query = _find_or_install(package_name, version, force_install=True)
@@ -468,9 +449,7 @@ def _auto_install(
 
             use._save_module_info(
                 name=package_name,
-                import_relpath=str(
-                    _ensure_path(module_path).relative_to(installation_path)
-                ),
+                import_relpath=str(_ensure_path(module_path).relative_to(installation_path)),
                 version=version,
                 artifact_path=artifact_path,
                 hash_value=hash_algo.value(artifact_path.read_bytes()).hexdigest(),
@@ -480,11 +459,7 @@ def _auto_install(
 
 
 def _process(*argv, env={}):
-    _realenv = {
-        k: v
-        for k, v in chain(os.environ.items(), env.items())
-        if isinstance(k, str) and isinstance(v, str)
-    }
+    _realenv = {k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)}
     o = run(
         **(
             setup := dict(
@@ -561,10 +536,7 @@ def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
 
 
 def _pure_python_package(artifact_path, meta):
-    not_pure_python = any(
-        any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES)
-        for n in meta["names"]
-    )
+    not_pure_python = any(any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES) for n in meta["names"])
 
     if ".tar" in str(artifact_path):
         return False
@@ -577,11 +549,7 @@ def _find_module_in_venv(package_name, version, relp):
     ___use = getattr(sys, "modules").get("use")
     ret = None, None
     try:
-        site_dirs = list(
-            (getattr(___use, "home") / "venv" / package_name / str(version)).rglob(
-                "**/site-packages"
-            )
-        )
+        site_dirs = list((getattr(___use, "home") / "venv" / package_name / str(version)).rglob("**/site-packages"))
         if not site_dirs:
             return ret
 
@@ -620,9 +588,7 @@ def _find_module_in_venv(package_name, version, relp):
         )
 
 
-def _find_or_install(
-    name, version=None, artifact_path=None, url=None, out_info=None, force_install=False
-):
+def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=None, force_install=False):
     log.debug(
         f"_find_or_install(name={name}, \
                             version={version}, \
@@ -685,11 +651,7 @@ def _find_or_install(
     out_info["module_path"] = relp
     out_info["import_relpath"] = relp
     out_info["import_name"] = import_name
-    if (
-        not force_install
-        and _pure_python_package(artifact_path, meta)
-        and str(artifact_path).endswith(".whl")
-    ):
+    if not force_install and _pure_python_package(artifact_path, meta) and str(artifact_path).endswith(".whl"):
         return out_info
 
     venv_root = _venv_root(package_name, version, use.home)
@@ -716,9 +678,7 @@ def _find_or_install(
             "install",
             "--pre",
             "--root",
-            PureWindowsPath(venv_root).drive
-            if isinstance(venv_root, (WindowsPath, PureWindowsPath))
-            else "/",
+            PureWindowsPath(venv_root).drive if isinstance(venv_root, (WindowsPath, PureWindowsPath)) else "/",
             "--prefix",
             str(venv_root),
             "--progress-bar",
@@ -823,9 +783,7 @@ def _sys_version():
     return Version(".".join(map(str, sys.version_info[0:3])))
 
 
-def _filter_by_platform(
-    project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version
-) -> PyPI_Project:
+def _filter_by_platform(project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version) -> PyPI_Project:
     filtered = {
         ver: [
             rel.dict()
@@ -844,20 +802,14 @@ def _filter_by_platform(
 
 
 @pipes
-def _filtered_and_ordered_data(
-    data: PyPI_Project, version: Version = None
-) -> list[PyPI_Release]:
+def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> list[PyPI_Release]:
     if version:
         version = Version(str(version))
         filtered = (
-            data
-            >> _filter_by_version(version)
-            >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
+            data >> _filter_by_version(version) >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
         )
     else:
-        filtered = _filter_by_platform(
-            data, tags=get_supported(), sys_version=_sys_version()
-        )
+        filtered = _filter_by_platform(data, tags=get_supported(), sys_version=_sys_version())
 
     flat = reduce(list.__add__, filtered.releases.values(), [])
     return sorted(
@@ -884,16 +836,12 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
 
 
 @pipes
-def _is_platform_compatible(
-    info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
-) -> bool:
+def _is_platform_compatible(info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False) -> bool:
 
     if "py2" in info.justuse.python_tag and "py3" not in info.justuse.python_tag:
         return False
 
-    if not include_sdist and (
-        ".tar" in info.justuse.ext or info.justuse.python_tag in ("cpsource", "sdist")
-    ):
+    if not include_sdist and (".tar" in info.justuse.ext or info.justuse.python_tag in ("cpsource", "sdist")):
         return False
 
     if "win" in info.packagetype and sys.platform != "win32":
@@ -916,9 +864,7 @@ def _is_platform_compatible(
         ]
     )
 
-    given_platform_tags = (
-        info.justuse.platform_tag.split(".") << map(PlatformTag) >> frozenset
-    )
+    given_platform_tags = info.justuse.platform_tag.split(".") << map(PlatformTag) >> frozenset
 
     if info.is_sdist and info.requires_python is not None:
         given_python_tag = {
@@ -932,14 +878,11 @@ def _is_platform_compatible(
     # log.debug("%s", supported_tags, given_python_tag)
 
     return any(supported_tags.intersection(given_python_tag)) and (
-        (info.is_sdist and include_sdist)
-        or any(given_platform_tags.intersection(platform_tags))
+        (info.is_sdist and include_sdist) or any(given_platform_tags.intersection(platform_tags))
     )
 
 
-def _is_compatible(
-    info: PyPI_Release, sys_version, platform_tags, include_sdist=None
-) -> bool:
+def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist=None) -> bool:
     """Return true if the artifact described by 'info'
     is compatible with the current or specified system."""
     specifier = info.requires_python
@@ -969,9 +912,7 @@ def _apply_aspect(
     return thing
 
 
-def _get_version(
-    name: Optional[str] = None, package_name=None, /, mod=None
-) -> Optional[Version]:
+def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> Optional[Version]:
     version: Optional[Union[Callable[...], Version, Version, str]] = None
     for lookup_name in (name, package_name):
         if not lookup_name:
@@ -1016,9 +957,7 @@ def _build_mod(
     getattr(linecache, "cache")[module_path] = (
         len(code),  # size of source code
         None,  # last modified time; None means there is no physical file
-        [
-            *map(lambda ln: ln + "\x0a", code_text.splitlines())
-        ],  # a list of lines, including trailing newline on each
+        [*map(lambda ln: ln + "\x0a", code_text.splitlines())],  # a list of lines, including trailing newline on each
         mod.__file__,  # file name, e.g. "<mymodule>" or the actual path to the file
     )
     # not catching this causes the most irritating bugs ever!
