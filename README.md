@@ -29,13 +29,14 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [x] have multiple versions of the same package installed and loaded in the same program without conflicts
 - [x] auto-install packages with C-extensions and other precompiled stuff
 - [x] no-hassle installation of almost all conda packages
+- [ ] attach birdseye debugger to a loaded module as a mode
 - [ ] try to pull packages from a P2P network before pulling from PyPI or conda directly
 - [ ] all justuse-code is compiled to single .py files, with and without dependencies, just drop it into your own code without installation
 - [ ] provide a visual representation of the internal dependency graph
 - [ ] module-level variable guards aka "module-properties"
 - [ ] isolation of packages via subprocess/subinterpreter for clean un-/reloading
 - [ ] document everything!
-- [ ] testing everything!
+- [ ] test everything!
 
 ## The Story
 Over the years, many times I've come across various situations where Python's import statement just didn't work the way I needed.
