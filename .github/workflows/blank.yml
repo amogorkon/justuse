@@ -30,8 +30,7 @@ jobs:
           echo "debug = true" > ~/.justuse-python/config.toml
           python3 -m pip install --force-reinstall --upgrade -r requirements.txt
           python3 -m pip install -r requirements.txt furl
-          [ -e tests/coverage.sh ] && env DEBUG=1 ERRORS=1 bash ./tests/coverage.sh || env DEBUG=1 ERRORS=1 python3 -m pytest
-    
+          IFS=$'\n'; set -- $( find -name "*.py" | cut -c 3- | sed -r -e 's~^src/~~; s~\.py~~; \~^\.|/\.~d; s~/~.~g; s~\.__init__$~~; s~^~--cov=~; ' ; ); python3 -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage/ --cov-report annotate:coverage/annotated --cov-report xml:coverage/cov.xml "$@"
       - name: coverage.py badge
         uses: tj-actions/coverage-badge-py@v1.6
         with:
