@@ -56,12 +56,13 @@ def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
 
 
 def execute_wrapped(sql: str, params: tuple):
+    ___use = getattr(sys, "modules").get("use")
     try:
-        return use.registry.execute(sql, params)
+        return getattr(___use, "registry").execute(sql, params)
     except sqlite3.OperationalError as _oe:
         pass
-    use.recreate_registry() # cov: exclude
-    return use.registry.execute(sql, params) # cov: exclude
+    getattr(___use, "recreate_registry")()
+    return getattr(___use, "registry").execute(sql, params)
 
 
 @cache
@@ -137,6 +138,7 @@ def archive_meta(artifact_path):
     meta = archive = names = functions = None
 
     if True:
+
         def get_archive(artifact_path):
             archive = zipfile.ZipFile(artifact_path)
             return (archive, [e.filename for e in archive.filelist])
@@ -201,6 +203,7 @@ def _venv_root(package_name, version, home) -> Path:
 def _pebkac_no_version_hash(
     *,
     name: str,
+    func: Callable[..., Union[Exception, ModuleType]] = None,
     version: Version = None,
     hash_algo=None,
     package_name: str = None,
@@ -208,6 +211,12 @@ def _pebkac_no_version_hash(
     message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
+
+    if func:
+        result = func()
+        if isinstance(result, (Exception, ModuleType)):
+            return result
+
     return RuntimeWarning(Message.cant_import_no_version(name))
 
 
@@ -248,6 +257,7 @@ def _pebkac_version_no_hash(
 def _pebkac_no_version_no_hash(
     *,
     name: str,
+    func: Callable[..., Union[Exception, ModuleType]] = None,
     version: Version = None,
     hash_algo=None,
     package_name: str = None,
@@ -255,6 +265,10 @@ def _pebkac_no_version_no_hash(
     message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
+    if func:
+        result = func()
+        if isinstance(result, (Exception, ModuleType)):
+            return result
     # let's try to make an educated guess and give a useful suggestion
     proj = _get_package_data(package_name)
     ordered = _filtered_and_ordered_data(proj, version=version)
@@ -263,6 +277,11 @@ def _pebkac_no_version_no_hash(
     for r in ordered:
         rel = r
         break
+    if not rel:
+        v = list(proj.releases.keys())[0]
+        rel_vals = proj.releases.get(v, [None])
+        rel = rel_vals[0]
+
     if rel:
         return _pebkac_version_no_hash(
             func=None,
@@ -273,12 +292,18 @@ def _pebkac_no_version_no_hash(
             package_name=package_name,
             message_formatter=Message.no_version_or_hash_provided,
         )
-    return RuntimeWarning(Message.pebkac_unsupported(package_name))
+
+    rw = RuntimeWarning(Message.pebkac_unsupported(package_name))
+    rw.name = package_name
+    rw.version = rel.version if rel else None
+    rw.hashes = hashes
+    return rw
 
 
 def _import_public_no_install(
     *,
     name: str,
+    func: Callable[..., Union[Exception, ModuleType]] = None,
     version: Version = None,
     hash_algo=None,
     package_name: str = None,
@@ -287,6 +312,10 @@ def _import_public_no_install(
     message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
+    if func:
+        result = func()
+        if isinstance(result, (Exception, ModuleType)):
+            return result
     # builtin?
     builtin = False
     try:
@@ -309,6 +338,8 @@ def _extracted_from__import_public_no_install_18(module_name, spec):
         importlib.reload(mod)
     else:
         mod = _ensure_loader(spec).create_module(spec)
+    if mod is None:
+        mod = importlib.import_module(module_name)
     assert mod
     sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)  # ! => cache
@@ -378,13 +409,14 @@ def _auto_install(
         raise
     orig_cwd = Path.cwd()
     mod = None
-    if (
-        "installation_path" not in query
-        or not _ensure_path(query["installation_path"]).exists()
-    ):
+    if "installation_path" not in query or not _ensure_path(query["installation_path"]).exists():
+        if query:
+            sys.modules["use.main"].use.del_entry(name, version)
         query = _find_or_install(package_name, version, force_install=True)
-    artifact_path = _ensure_path(query["artifact_path"])
-    module_path = _ensure_path(query["module_path"])
+        artifact_path = _ensure_path(query["artifact_path"])
+        module_path = _ensure_path(query["module_path"])
+    assert "installation_path" in query  # why redundant assertions?
+    assert query["installation_path"]
     installation_path = _ensure_path(query["installation_path"])
     try:
         module_path = _ensure_path(query["module_path"])

@@ -166,8 +166,7 @@ class Use(ModuleType):
 
         self._set_up_files_and_directories()
         # might run into issues during testing otherwise
-        global registry
-        registry = self._set_up_registry()
+        self.registry = self._set_up_registry()
         self._user_registry = toml.load(self.home / "user_registry.toml")
 
         # for the user to copy&paste
@@ -225,7 +224,6 @@ class Use(ModuleType):
         return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
 
     def _set_up_registry(self, path: Optional[Path] = None):
-        global registry
         registry = None
         if path or test_version and "DB_TEST" not in os.environ:
             registry = sqlite3.connect(path or ":memory:").cursor()
@@ -279,14 +277,13 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         return registry
 
     def recreate_registry(self):
-        global registry
-        registry.close()
-        registry.connection.close()
-        registry = None
+        self.registry.close()
+        self.registry.connection.close()
+        self.registry = None
         number_of_backups = len(list((self.home / "registry.db").glob("*.bak")))
         (self.home / "registry.db").rename(self.home / f"registry.db.{number_of_backups + 1}.bak")
         (self.home / "registry.db").touch(mode=0o644)
-        registry = self._set_up_registry()
+        self.registry = self._set_up_registry()
         self.cleanup()
 
     def install(self):
@@ -310,16 +307,16 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
 
     def del_entry(self, name, version):
         # TODO: CASCADE to artifacts etc
-        registry.execute(
+        self.registry.execute(
             "DELETE FROM hashes WHERE artifact_id IN (SELECT id FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?))",
             (name, version),
         )
-        registry.execute(
+        self.registry.execute(
             "DELETE FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?)",
             (name, version),
         )
-        registry.execute("DELETE FROM distributions WHERE name=? AND version=?", (name, version))
-        registry.connection.commit()
+        self.registry.execute("DELETE FROM distributions WHERE name=? AND version=?", (name, version))
+        self.registry.connection.commit()
 
     def cleanup(self):
         """Bring registry and downloaded packages in sync.
@@ -335,12 +332,12 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
                     sub.unlink()
             path.rmdir()
 
-        for name, version, artifact_path, installation_path in registry.execute(
+        for name, version, artifact_path, installation_path in self.registry.execute(
             "SELECT name, version, artifact_path, installation_path FROM distributions JOIN artifacts on distributions.id = distribution_id"
         ).fetchall():
             if not (pimp._ensure_path(artifact_path).exists() and pimp._ensure_path(installation_path).exists()):
                 self.del_entry(name, version)
-        registry.connection.commit()
+        self.registry.connection.commit()
 
     def _save_module_info(
         self,
@@ -355,27 +352,27 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         hash_algo=Hash.sha256,
     ):
         """Update the registry to contain the pkg's metadata."""
-        if not registry.execute(
+        if not self.registry.execute(
             f"SELECT * FROM distributions WHERE name='{name}' AND version='{version}'"
         ).fetchone():
-            registry.execute(
+            self.registry.execute(
                 f"""
 INSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
 VALUES ('{name}', '{version}', '{installation_path}', {time.time()}, {installation_path is None})
 """
             )
-            registry.execute(
+            self.registry.execute(
                 f"""
 INSERT OR IGNORE INTO artifacts (distribution_id, import_relpath, artifact_path, module_path)
-VALUES ({registry.lastrowid}, '{import_relpath}', '{artifact_path}', '{module_path}')
+VALUES ({self.registry.lastrowid}, '{import_relpath}', '{artifact_path}', '{module_path}')
 """
             )
-            registry.execute(
+            self.registry.execute(
                 f"""
 INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
-VALUES ({registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
+VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             )
-        registry.connection.commit()
+        self.registry.connection.commit()
 
     def _set_mod(self, *, name, mod, frame, path=None, spec=None):
         """Helper to get the order right."""

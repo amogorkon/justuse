@@ -427,6 +427,17 @@ def test_86_numpy(reuse, name, version):
     return mod  # for the redownload test
 
 
+def test_clear_registry(reuse):
+    reuse.registry.connection.close()
+    try:
+        fd, file = tempfile.mkstemp(".db", "test_registry")
+        with closing(open(fd, "rb")):
+            reuse.registry = reuse._set_up_registry(Path(file))
+            reuse.cleanup()
+    finally:
+        reuse.registry = reuse._set_up_registry()
+
+
 def installed_or_skip(reuse, name, version=None):
     if not (spec := find_spec(name)):
         pytest.skip(f"{name} not installed")
