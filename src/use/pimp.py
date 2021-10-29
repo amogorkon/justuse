@@ -38,7 +38,7 @@ from use import Hash, Modes, config, log
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import AmbiguityWarning, Message
 from use.platformtag import PlatformTag
-from use.pypi_model import PyPI_Project, PyPI_Release, Version
+from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none
 from use.tools import pipes
 import use
 
@@ -526,13 +526,6 @@ def _download_artifact(name, version, filename, url) -> Path:
         artifact_path.write_bytes(data)
         log.debug(f"Wrote {len(data)} bytes to {artifact_path}")
     return artifact_path
-
-
-def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
-    for k, v in tuple(a_dict.items()):
-        if v is None or v == "":
-            del a_dict[k]
-    return a_dict
 
 
 def _pure_python_package(artifact_path, meta):
