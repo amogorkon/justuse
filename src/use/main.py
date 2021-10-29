@@ -151,27 +151,6 @@ class ShutdownLockReleaser:
             lock.unlock()
 
 
-#%% Version and Packaging
-
-
-class PlatformTag:
-    def __init__(self, platform: str):
-        self.platform = platform
-
-    def __str__(self):
-        return self.platform
-
-    def __repr__(self):
-        return f"use.PlatformTag({self.platform!r})"
-
-    def __hash__(self):
-        return hash(self.platform)
-
-    @require(lambda self, other: isinstance(other, self.__class__))
-    def __eq__(self, other):
-        return self.platform == other.platform
-
-
 class Use(ModuleType):
     # MODES to reduce signature complexity
     # enum.Flag wasn't viable, but this alternative is actually pretty cool
@@ -890,9 +869,8 @@ def decorator_log_calling_function_and_args(func, *args):
     return wrapper
 
 
-if "NO_BEARTYPE" not in os.environ:
-    use @ (isfunction, "", beartype)
-    use @ (isfunction, "", decorator_log_calling_function_and_args)
+use @ (isfunction, "", beartype)
+use @ (isfunction, "", decorator_log_calling_function_and_args)
 
 if not test_version:
     sys.modules["use"] = use
