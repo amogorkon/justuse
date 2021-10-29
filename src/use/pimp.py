@@ -86,19 +86,6 @@ def get_supported() -> frozenset[PlatformTag]:
     return tags
 
 
-def sort_releases_by_install_method(project__: "PyPI_Project") -> "PyPI_Project":
-    return PyPI_Project(
-        **{
-            **__project.dict(),
-            **{
-                "releases": {
-                    k: [x.dict() for x in sorted(v, key=lambda r: r.is_sdist)] for k, v in project__.releases.items()
-                }
-            },
-        }
-    )
-
-
 def _filter_by_version(project_: "PyPI_Project", version: str) -> "PyPI_Project":
 
     for_version = (
@@ -106,9 +93,6 @@ def _filter_by_version(project_: "PyPI_Project", version: str) -> "PyPI_Project"
         or project_.releases.get(str(version))
         or project_.releases.get(Version(str(version)))
     )
-    if not for_version:
-        raise BaseException("Invalid version: {version!r}", project_)
-
     new_data = {
         "urls": for_version,
         "releases": {Version(str(version)): for_version},
@@ -161,7 +145,7 @@ def archive_meta(artifact_path):
         top_level,
         name,
     ) = (meta["top_level"][0], meta["name"])
-    import_name = (name,) if (top_level == name) else (top_level, name)
+    import_name = name if top_level == name else ".".join((top_level, name))
     meta["names"] = names
     meta["import_name"] = import_name
     for relpath in sorted(
@@ -375,7 +359,7 @@ def _auto_install(
         importer = zipimport.zipimporter(artifact_path)
         return importer.load_module(query["import_name"])
     except BaseException as zerr:
-        raise
+        pass
     orig_cwd = Path.cwd()
     mod = None
     if (
@@ -395,9 +379,11 @@ def _auto_install(
             .replace("/__init__.py", "")
             .replace("-", "_")
         )
+        print(import_name)
         return (
             mod := _load_venv_entry(
-                import_name,
+                rest,
+                rest,
                 module_path=module_path,
                 installation_path=installation_path,
             )
