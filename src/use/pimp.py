@@ -116,20 +116,34 @@ class ZipFunctions:
             return (Path(entry_name).stem, text)
 
 
+class TarFunctions:
+    def __init__(self, artifact_path):
+        self.archive = tarfile.open(artifact_path)
+    def get(self):
+        return (
+            self.archive,
+            [m.name for m in self.archive.getmembers()
+             if m.type == b"0"]
+        )
+    def read_entry(self, entry_name):
+        m = self.archive.getmember(entry_name)
+        with self.archive.extractfile(m) as f:
+            bdata = f.read()
+            text = ""
+            if len(bdata) < 8192:
+                text = bdata.decode("UTF-8").splitlines()
+            return (Path(entry_name).stem, text)
+
 @pipes
 def archive_meta(artifact_path):
     DIST_PKG_INFO_REGEX = re.compile("(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$")
     meta = archive = names = functions = None
 
-    if True:
-
-        def get_archive(artifact_path):
-            archive = zipfile.ZipFile(artifact_path)
-            return (archive, [e.filename for e in archive.filelist])
-
+    if ".tar" in Path(str(artifact_path)).stem:
+        functions = TarFunctions(artifact_path)
+    else:
         functions = ZipFunctions(artifact_path)
 
-    archive, names = get_archive(artifact_path)
     archive, names = functions.get()
     meta = dict(names << filter(DIST_PKG_INFO_REGEX.search) << map(functions.read_entry))
     meta.update(
