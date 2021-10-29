@@ -34,7 +34,7 @@ from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
 
 
-from use import Hash, Modes, config, log
+from use import Hash, Modes, config
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import AmbiguityWarning, Message
 from use.platformtag import PlatformTag
@@ -67,7 +67,6 @@ def execute_wrapped(sql: str, params: tuple):
 
 @cache
 def get_supported() -> frozenset[PlatformTag]:
-    log.debug("enter get_supported()")
     """
     Results of this function are cached. They are expensive to
     compute, thanks to some heavyweight usual players
@@ -85,7 +84,6 @@ def get_supported() -> frozenset[PlatformTag]:
         items.append(PlatformTag(platform=str(tag)))
 
     tags = frozenset(items)
-    log.debug("leave get_supported() -> %s", repr(tags))
     return tags
 
 
@@ -350,20 +348,17 @@ def _extracted_from__import_public_no_install_18(module_name, spec):
 
 def _parse_name(name) -> tuple[str, str]:
     ret = name, name
-    try:
-        match = re.match(r"(?P<package_name>[^/.]+)/?(?P<rest>[a-zA-Z0-9._]+)?$", name)
-        assert match, f"Invalid name spec: {name!r}"
-        names = match.groupdict()
-        package_name = names["package_name"]
-        rest = names["rest"]
-        if not package_name:
-            package_name = rest
-        if not rest:
-            rest = package_name
-        ret = (package_name, rest)
-        return ret
-    finally:
-        log.info("_parse_name(%s) -> %s", repr(name), repr(ret))
+    match = re.match(r"(?P<package_name>[^/.]+)/?(?P<rest>[a-zA-Z0-9._]+)?$", name)
+    assert match, f"Invalid name spec: {name!r}"
+    names = match.groupdict()
+    package_name = names["package_name"]
+    rest = names["rest"]
+    if not package_name:
+        package_name = rest
+    if not rest:
+        rest = package_name
+    ret = (package_name, rest)
+    return ret
 
 
 def _auto_install(
@@ -521,10 +516,8 @@ def _get_venv_env(venv_root: Path) -> dict[str, str]:
 def _download_artifact(name, version, filename, url) -> Path:
     artifact_path = (sys.modules["use"].home / "packages" / filename).absolute()
     if not artifact_path.exists():
-        log.info(f"Downloading {name}=={version} from {url}")
         data = requests.get(url).content
         artifact_path.write_bytes(data)
-        log.debug(f"Wrote {len(data)} bytes to {artifact_path}")
     return artifact_path
 
 
@@ -541,53 +534,39 @@ def _pure_python_package(artifact_path, meta):
 def _find_module_in_venv(package_name, version, relp):
     ___use = getattr(sys, "modules").get("use")
     ret = None, None
-    try:
-        site_dirs = list((getattr(___use, "home") / "venv" / package_name / str(version)).rglob("**/site-packages"))
-        if not site_dirs:
-            return ret
-
-        dist = None
-        mod_relative_to_site = None
-        osp = None
-        for site_dir in site_dirs:
-            osp = list(sys.path)
-            sys.path.clear()
-            sys.path.insert(0, str(site_dir))
-            try:
-                dist = importlib.metadata.Distribution.from_name(package_name)
-                while not mod_relative_to_site:
-                    pps = [pp for pp in dist.files if pp.as_posix() == relp]
-                    if pps:
-                        mod_relative_to_site = pps[0]
-                        break
-                    if len(relp.split("/")) == 0:
-                        break
-                    relp = "/".join(relp.split("/")[1:])
-            except PackageNotFoundError:
-                continue
-            finally:
-                sys.path.remove(str(site_dir))
-                sys.path += osp
-        if mod_relative_to_site:
-            module_path = site_dir / mod_relative_to_site.as_posix()
-            return (ret := site_dir, module_path)
+    site_dirs = list((getattr(___use, "home") / "venv" / package_name / str(version)).rglob("**/site-packages"))
+    if not site_dirs:
         return ret
-    finally:
-        log.info(
-            f"_find_module_in_venv(package_name={repr(package_name)}, \
-                                    version={repr(version)}, \
-                                    relp={repr(relp)}) \
-                                    -> {repr(ret)}"
-        )
+
+    dist = None
+    mod_relative_to_site = None
+    osp = None
+    for site_dir in site_dirs:
+        osp = list(sys.path)
+        sys.path.clear()
+        sys.path.insert(0, str(site_dir))
+        try:
+            dist = importlib.metadata.Distribution.from_name(package_name)
+            while not mod_relative_to_site:
+                pps = [pp for pp in dist.files if pp.as_posix() == relp]
+                if pps:
+                    mod_relative_to_site = pps[0]
+                    break
+                if len(relp.split("/")) == 0:
+                    break
+                relp = "/".join(relp.split("/")[1:])
+        except PackageNotFoundError:
+            continue
+        finally:
+            sys.path.remove(str(site_dir))
+            sys.path += osp
+    if mod_relative_to_site:
+        module_path = site_dir / mod_relative_to_site.as_posix()
+        return (ret := site_dir, module_path)
+    return ret
 
 
 def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=None, force_install=False):
-    log.debug(
-        f"_find_or_install(name={name}, \
-                            version={version}, \
-                            artifact_path={artifact_path}, \
-                            url={url})"
-    )
     if out_info is None:
         out_info = {}
     info = out_info
@@ -659,7 +638,6 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     python_exe = Path(sys.executable)
 
     if not module_paths or force_install:
-        log.info(f"calling pip to install install_item={install_item}")
 
         # If we get here, the venv/pip setup is required.
         output = _process(
@@ -696,9 +674,6 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
 
     out_info.update(**meta)
     assert module_paths
-
-    log.info(f"installation_path = {installation_path}")
-    log.info(f"module_path = {module_path}")
     out_info.update(
         {
             **info,
@@ -713,14 +688,7 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
 
 
 def _load_venv_entry(package_name, rest, installation_path, module_path) -> ModuleType:
-    log.info(
-        f"load_venv_entry package_name={package_name} \
-                            rest={rest} \
-                            ]module_path={module_path}"
-    )
     cwd = Path.cwd()
-    log.info(f"{cwd=}")
-    log.info(f"{sys.path=}")
     orig_exc = None
     old_sys_path = list(sys.path)
     if sys.path[0] != "":
@@ -823,8 +791,6 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
     """
     specifiers = SpecifierSet(specifier or "")
     is_match = not specifier or sys_version in specifiers
-
-    log.debug(f"is_version_satisfied(info=i){sys_version} in {specifiers}")
     return is_match
 
 
@@ -867,9 +833,6 @@ def _is_platform_compatible(info: PyPI_Release, platform_tags: frozenset[Platfor
         }
     else:
         given_python_tag = set(info.justuse.python_tag.split("."))
-
-    # log.debug("%s", supported_tags, given_python_tag)
-
     return any(supported_tags.intersection(given_python_tag)) and (
         (info.is_sdist and include_sdist) or any(given_platform_tags.intersection(platform_tags))
     )
@@ -899,8 +862,6 @@ def _apply_aspect(
         if not aspectize_dunders and name.startswith("__") and name.endswith("__"):
             continue
         if check(obj) and re.match(pattern, name):
-            if "VERBOSE" in os.environ:
-                log.debug(f"Applying aspect to {thing}.{name}")
             thing.__dict__[name] = decorator(obj)
     return thing
 
