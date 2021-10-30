@@ -1,0 +1,63 @@
+
+name: CI Build Wheels
+
+on: [push, pull_request]
+
+jobs:
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macOS-10.15]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      # Used to host cibuildwheel
+      - uses: actions/setup-python@v2
+
+      - name: Install cibuildwheel
+        continue-on-error: true
+        run: |
+          typeset -p -a 
+          typeset -p
+          set
+          python -m pip install -r requirements.txt cibuildwheel
+          python -m pip install -r requirements.txt cibuildwheel
+
+      - name: Build wheels
+        run: python -m cibuildwheel --output-dir wheelhouse .
+        continue-on-error: true
+        env:
+          CIBW_AFTER_BUILD: python -m pip install -r ${{ runner.workspace }}/requirements.txt cibuildwheel
+          CIBW_TEST_COMMAND: true
+          CIBW_TEST_REQUIRES: pytest pytest-env
+          CIBW_BUILD_VERBOSITY: -vvv
+          CIBW_PACKAGE: justuse
+          CIBW_PROJECT_ROOT: ${{ runner.workspace }}
+          CIBW_ROOT: ${{ runner.workspace }}
+          CIBW_PROJECT_DIT: ${{ runner.workspace }}
+          CIBW_DIR: ${{ runner.workspace }}
+          CIBW_BUILDDIR: ${{ runner.workspace }}
+          CIBW_BUILD_DIR: ${{ runner.workspace }}
+          CIBW_BUILD: cp39-*
+      - name: Build wheels
+        run: python -m cibuildwheel --output-dir wheelhouse .
+        continue-on-error: true
+        env:
+          CIBW_AFTER_BUILD: python -m pip install -r ${{ runner.workspace }}/requirements.txt cibuildwheel
+          CIBW_TEST_COMMAND: true
+          CIBW_TEST_REQUIRES: pytest pytest-env
+          CIBW_BUILD_VERBOSITY: -vvv
+          CIBW_PACKAGE: justuse
+          CIBW_PROJECT_ROOT: ${{ runner.workspace }}
+          CIBW_ROOT: ${{ runner.workspace }}
+          CIBW_PROJECT_DIT: ${{ runner.workspace }}
+          CIBW_DIR: ${{ runner.workspace }}
+          CIBW_BUILDDIR: ${{ runner.workspace }}
+          CIBW_BUILD_DIR: ${{ runner.workspace }}
+          CIBW_BUILD: cp310-*
+      - uses: actions/upload-artifact@v2
+        with:
+          path: ./wheelhouse/*.whl

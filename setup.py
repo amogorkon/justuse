@@ -1,7 +1,9 @@
+import ast
 import os
 import sys
 
-from setuptools import find_packages, setup
+# from distutils.core import 
+from setuptools import find_packages, setup, Extension
 
 here = os.path.abspath(os.path.dirname(__file__))
 src = os.path.join(here, "src/use")
@@ -17,11 +19,31 @@ src = os.path.join(here, "src/use")
 #
 #    python3 setup.py install
 #
-import ast
+
+
+dummy_name = "dummy"
+dummy_path = os.path.join(src, f"{dummy_name}.c")
+with open(dummy_path, "w") as f:
+    f.write(f"extern int PyInit_{dummy_name}() {{ return 0; }}")
+dummy = Extension(
+    dummy_name,
+    define_macros = [],
+    include_dirs = [],
+    libraries = [],
+    library_dirs = [],
+    sources = [dummy_path]
+)
+
+
 
 with open(os.path.join(src, "__init__.py")) as f:
     mod = ast.parse(f.read())
-    version = [t for t in [*filter(lambda n: isinstance(n, ast.Assign), mod.body)] if t.targets[0].id == "__version__"][0].value.value
+    version = [t for t in [*filter(lambda n: isinstance(n, ast.Assign), mod.body)] if t.targets[0].id == "__version__"][0]
+    while hasattr(version, "value") or isinstance(version, ast.Str):
+        if hasattr(version, "value"):
+            version = version.value
+        if isinstance(version, ast.Str):
+            version = version.s
 
 meta = {
     "name": "justuse",
@@ -56,6 +78,7 @@ meta = {
     "maintainer": "Anselm Kiefner",
     "platforms": ["any"],
     "download_url": "https://github.com/amogorkon/justuse/" "archive/refs/heads/main.zip",
+    "ext_modules": [dummy],
 }
 
 
@@ -86,4 +109,3 @@ setup(
     zip_safe=True,
     **meta
 )
-
