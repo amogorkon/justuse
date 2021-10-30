@@ -528,6 +528,7 @@ class ScopedArgv(AbstractContextManager):
         sys.argv.clear()
         sys.argv.extend(self._oldargv)
 
+@pytest.mark.skipif(is_win, reason="Windows TODO")
 def test_setup_py_works(reuse):
     with ScopedArgv("", "bdist_wheel", "-v"):
         result = runpy.run_path("./setup.py")
@@ -543,6 +544,7 @@ class ScopedCwd(AbstractContextManager):
     def __exit__(self, *_):
         os.chdir(self._oldcwd)
 
+@pytest.mark.skipif(is_win, reason="Windows TODO")
 def test_read_wheel_metadata(reuse):
     with ScopedCwd(Path(reuse.main.__file__).parent.parent.parent):
       output = subprocess.check_output(
