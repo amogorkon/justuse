@@ -1,14 +1,18 @@
 import functools
 import os
+import re
+import runpy
+import subprocess
 import sys
 import tempfile
 import warnings
-from contextlib import closing
+from contextlib import AbstractContextManager, closing
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, distribution
 from importlib.util import find_spec
 from pathlib import Path
 from threading import _shutdown_locks
+from typing import List
 from unittest.mock import patch
 
 import packaging.tags
@@ -510,3 +514,53 @@ def test_86(reuse, name, version, hashes):
 def test_hash_alphabet():
     H = sha256("hello world".encode("utf-8")).hexdigest()
     assert H == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(H)))
+
+
+class ScopedArgv(AbstractContextManager):
+    def __init__(self, *newargv: List[str]):
+        self._oldargv = [*sys.argv]
+        self._newargv = newargv
+    def __enter__(self, *_):
+        sys.argv.clear()
+        sys.argv.extend(self._newargv)
+        
+    def __exit__(self, *_):
+        sys.argv.clear()
+        sys.argv.extend(self._oldargv)
+
+def test_setup_py_works(reuse):
+    with ScopedArgv("", "bdist_wheel", "-v"):
+        result = runpy.run_path("./setup.py")
+        assert result
+
+
+class ScopedCwd(AbstractContextManager):
+    def __init__(self, newcwd: Path):
+        self._oldcwd = Path.cwd()
+        self._newcwd = newcwd
+    def __enter__(self, *_):
+        os.chdir(self._newcwd)
+    def __exit__(self, *_):
+        os.chdir(self._oldcwd)
+
+def test_read_wheel_metadata(reuse):
+    with ScopedCwd(Path(reuse.main.__file__).parent.parent.parent):
+      output = subprocess.check_output(
+          [
+              sys.executable, "setup.py", "bdist_wheel", "-v"
+          ], shell=False
+      )
+      whl_path = Path( 
+          re.search(
+              r"(?:\')(?:[a-z]+ )*([\w\']+[^\r\n\']*whl)",
+              output.decode(),
+              re.DOTALL
+          ).group(1)
+      ).absolute()
+      assert whl_path.exists()
+      assert whl_path.is_file()
+      meta = reuse.pimp.archive_meta(whl_path)
+      assert meta
+      assert meta["name"] == "justuse"
+      assert meta["import_relpath"] == "use/__init__.py"
+

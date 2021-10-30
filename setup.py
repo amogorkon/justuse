@@ -19,20 +19,9 @@ src = os.path.join(here, "src/use")
 #
 import ast
 
-with open(os.path.join(src, "use.py")) as f:
+with open(os.path.join(src, "__init__.py")) as f:
     mod = ast.parse(f.read())
-    version = (
-        [
-            *filter(
-                lambda n: isinstance(n, ast.Assign)
-                and isinstance(n.targets[0], ast.Name)
-                and n.targets[0].id == "__version__",
-                mod.body,
-            )
-        ][0]
-        .value.values[1]
-        .value
-    )
+    version = [t for t in [*filter(lambda n: isinstance(n, ast.Assign), mod.body)] if t.targets[0].id == "__version__"][0].value.value
 
 meta = {
     "name": "justuse",
