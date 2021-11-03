@@ -567,7 +567,7 @@ def test_read_wheel_metadata(reuse):
         assert meta["import_relpath"] == "use/__init__.py"
 
 
-@given(st.characters())
+@given(st.characters(max_codepoint=sys.maxunicode))
 @example("")
 def test_jack(inputs):
     sha = sha256(inputs.encode("utf-8")).hexdigest()
