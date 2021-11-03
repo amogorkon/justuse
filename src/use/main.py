@@ -74,7 +74,7 @@ import threading
 import time
 import traceback
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
-from logging import DEBUG, getLogger, root
+from logging import getLogger
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, List, Optional, Type, Union
@@ -88,9 +88,7 @@ from icontract import ensure, invariant, require
 
 from use import Hash, Modes, ModInUse, __version__, pimp
 
-root.setLevel(DEBUG)
 log = getLogger(__name__)
-log.setLevel(DEBUG)
 
 # internal subpackage imports
 mode = Modes

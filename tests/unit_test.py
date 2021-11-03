@@ -398,6 +398,7 @@ def double_function(func):
     return wrapper
 
 
+# @pytest.mark.skip
 def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
     # baseline
     mod = reuse(reuse.Path("simple_funcs.py"))

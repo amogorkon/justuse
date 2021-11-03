@@ -1,13 +1,13 @@
 import hashlib
-import logging
 import os
 import sys
 from collections import namedtuple
 from enum import Enum, IntEnum
-from importlib.machinery import ModuleSpec, SourceFileLoader
-from logging import DEBUG, INFO, NOTSET, StreamHandler, getLogger, root
+from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
-from typing import Any, Iterator
+
+
+root.setLevel(DEBUG)
 
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
 # !!! SEE NOTE !!!
@@ -18,7 +18,7 @@ home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).abs
 __version__ = "0.6.0"  # IMPORTANT; Must leave exactly as-is for setup
 __name__ = "use"
 __package__ = "use"
-_reloaders: dict["ProxyModule", Any] = {}  # ProxyModule:Reloader
+_reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
 _aspects = {}
 _using = {}
 
