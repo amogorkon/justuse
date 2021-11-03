@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
+import packaging
 from packaging.version import Version as PkgVersion
 from pydantic import BaseModel
 
@@ -24,7 +25,9 @@ class Version(PkgVersion):
         else:
             return super(cls, Version).__new__(cls)
 
-    def __init__(self, versionobj: Optional[Union[PkgVersion, __class__, str]]=None, *, major=0, minor=0, patch=0):
+    def __init__(
+        self, versionobj: Optional[Union[PkgVersion, __class__, str]] = None, *, major=0, minor=0, patch=0
+    ):
         if isinstance(versionobj, Version):
             return
 
@@ -39,9 +42,7 @@ class Version(PkgVersion):
 
         # string as only argument
         # no way to construct a Version otherwise - WTF
-        versionobj = ".".join(
-            map(str, (major, minor, patch))
-        )
+        versionobj = ".".join(map(str, (major, minor, patch)))
         super(Version, self).__init__(versionobj)
 
     def __iter__(self):
@@ -106,9 +107,7 @@ class PyPI_Release(QuietModel):
     @property
     def is_sdist(self):
         return (
-            self.packagetype == "sdist"
-            or self.python_version == "source"
-            or self.justuse.abi_tag == "none"
+            self.packagetype == "sdist" or self.python_version == "source" or self.justuse.abi_tag == "none"
         )
 
     @property
@@ -194,7 +193,8 @@ class PyPI_Project(QuietModel):
     def __init__(self, *, releases, urls, info, **kwargs):
 
         for version in list(releases.keys()):
-            if not isinstance(version, str): continue
+            if not isinstance(version, str):
+                continue
             try:
                 Version(version)
             except packaging.version.InvalidVersion:
@@ -203,23 +203,14 @@ class PyPI_Project(QuietModel):
         releases2 = {
             str(ver_str): [
                 {
-                    **(
-                        rel_info
-                        if isinstance(rel_info, dict)
-                        else rel_info.dict()
-                    ),
-                    "version": Version(str(ver_str))
-                } for rel_info in release_infos
+                    **(rel_info if isinstance(rel_info, dict) else rel_info.dict()),
+                    "version": Version(str(ver_str)),
+                }
+                for rel_info in release_infos
             ]
-            for ver_str, release_infos
-            in releases.items()
+            for ver_str, release_infos in releases.items()
         }
-        super(PyPI_Project, self).__init__(
-            releases=releases2,
-            urls=urls,
-            info=info,
-            **kwargs
-        )
+        super(PyPI_Project, self).__init__(releases=releases2, urls=urls, info=info, **kwargs)
 
 
 def _parse_filename(filename) -> dict:
@@ -254,9 +245,7 @@ def _parse_filename(filename) -> dict:
 
     python_version = None
     if python_tag:
-        python_version = (
-            python_tag.replace("cp", "")[0] + "." + python_tag.replace("cp", "")[1:]
-        )
+        python_version = python_tag.replace("cp", "")[0] + "." + python_tag.replace("cp", "")[1:]
     return _delete_none(
         {
             "distribution": distribution,

@@ -33,14 +33,24 @@ from packaging import tags
 from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
 
-
-from use import Hash, Modes, config
+import use
+from use import AmbiguityWarning, Hash, Modes, config
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-from use.messages import AmbiguityWarning, Message
+from use.messages import Message
 from use.platformtag import PlatformTag
 from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none
 from use.tools import pipes
-import use
+
+
+def _ensure_version(
+    result: Union[ModuleType, Exception], *, name, version, **kwargs
+) -> Union[ModuleType, Exception]:
+    if not isinstance(result, ModuleType):
+        return result
+    result_version = _get_version(mod=result)
+    if result_version != version:
+        return AmbiguityWarning(Message.version_warning(name, version, result_version))
+    return result
 
 
 @pipes
@@ -119,12 +129,10 @@ class ZipFunctions:
 class TarFunctions:
     def __init__(self, artifact_path):
         self.archive = tarfile.open(artifact_path)
+
     def get(self):
-        return (
-            self.archive,
-            [m.name for m in self.archive.getmembers()
-             if m.type == b"0"]
-        )
+        return (self.archive, [m.name for m in self.archive.getmembers() if m.type == b"0"])
+
     def read_entry(self, entry_name):
         m = self.archive.getmember(entry_name)
         with self.archive.extractfile(m) as f:
@@ -133,6 +141,7 @@ class TarFunctions:
             if len(bdata) < 8192:
                 text = bdata.decode("UTF-8").splitlines()
             return (Path(entry_name).stem, text)
+
 
 @pipes
 def archive_meta(artifact_path):
@@ -186,7 +195,10 @@ def _clean_sys_modules(package_name: str) -> None:
             (k, v)
             for k, v in list(sys.modules.items())
             if package_name in k.split(".")
-            and (getattr(v, "__spec__", None) is None or isinstance(v, (SourceFileLoader, zipimport.zipimporter)))
+            and (
+                getattr(v, "__spec__", None) is None
+                or isinstance(v, (SourceFileLoader, zipimport.zipimporter))
+            )
         ]
     ):
         if k in sys.modules:
@@ -454,7 +466,9 @@ def _auto_install(
 
 
 def _process(*argv, env={}):
-    _realenv = {k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)}
+    _realenv = {
+        k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)
+    }
     o = run(
         **(
             setup := dict(
@@ -522,7 +536,9 @@ def _download_artifact(name, version, filename, url) -> Path:
 
 
 def _pure_python_package(artifact_path, meta):
-    not_pure_python = any(any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES) for n in meta["names"])
+    not_pure_python = any(
+        any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES) for n in meta["names"]
+    )
 
     if ".tar" in str(artifact_path):
         return False
@@ -534,7 +550,9 @@ def _pure_python_package(artifact_path, meta):
 def _find_module_in_venv(package_name, version, relp):
     ___use = getattr(sys, "modules").get("use")
     ret = None, None
-    site_dirs = list((getattr(___use, "home") / "venv" / package_name / str(version)).rglob("**/site-packages"))
+    site_dirs = list(
+        (getattr(___use, "home") / "venv" / package_name / str(version)).rglob("**/site-packages")
+    )
     if not site_dirs:
         return ret
 
@@ -623,7 +641,11 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     out_info["module_path"] = relp
     out_info["import_relpath"] = relp
     out_info["import_name"] = import_name
-    if not force_install and _pure_python_package(artifact_path, meta) and str(artifact_path).endswith(".whl"):
+    if (
+        not force_install
+        and _pure_python_package(artifact_path, meta)
+        and str(artifact_path).endswith(".whl")
+    ):
         return out_info
 
     venv_root = _venv_root(package_name, version, use.home)
@@ -649,7 +671,9 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
             "install",
             "--pre",
             "--root",
-            PureWindowsPath(venv_root).drive if isinstance(venv_root, (WindowsPath, PureWindowsPath)) else "/",
+            PureWindowsPath(venv_root).drive
+            if isinstance(venv_root, (WindowsPath, PureWindowsPath))
+            else "/",
             "--prefix",
             str(venv_root),
             "--progress-bar",
@@ -744,7 +768,9 @@ def _sys_version():
     return Version(".".join(map(str, sys.version_info[0:3])))
 
 
-def _filter_by_platform(project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version) -> PyPI_Project:
+def _filter_by_platform(
+    project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version
+) -> PyPI_Project:
     filtered = {
         ver: [
             rel.dict()
@@ -767,7 +793,9 @@ def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> l
     if version:
         version = Version(str(version))
         filtered = (
-            data >> _filter_by_version(version) >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
+            data
+            >> _filter_by_version(version)
+            >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
         )
     else:
         filtered = _filter_by_platform(data, tags=get_supported(), sys_version=_sys_version())
@@ -795,7 +823,9 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
 
 
 @pipes
-def _is_platform_compatible(info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False) -> bool:
+def _is_platform_compatible(
+    info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
+) -> bool:
 
     if "py2" in info.justuse.python_tag and "py3" not in info.justuse.python_tag:
         return False
@@ -911,7 +941,9 @@ def _build_mod(
     getattr(linecache, "cache")[module_path] = (
         len(code),  # size of source code
         None,  # last modified time; None means there is no physical file
-        [*map(lambda ln: ln + "\x0a", code_text.splitlines())],  # a list of lines, including trailing newline on each
+        [
+            *map(lambda ln: ln + "\x0a", code_text.splitlines())
+        ],  # a list of lines, including trailing newline on each
         mod.__file__,  # file name, e.g. "<mymodule>" or the actual path to the file
     )
     # not catching this causes the most irritating bugs ever!

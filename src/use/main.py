@@ -100,13 +100,30 @@ test_version: str = locals().get("test_version", None)
 from icontract import require
 
 import use
-from use import __version__, _reloaders, _using, config, home
+from use import (
+    AmbiguityWarning,
+    NotReloadableWarning,
+    NoValidationWarning,
+    UnexpectedHash,
+    VersionWarning,
+    __version__,
+    _reloaders,
+    _using,
+    buffet_table,
+    config,
+    home,
+)
 from use.hash_alphabet import JACK_as_num, num_as_hexdigest
-from use.messages import (AmbiguityWarning, Message, NotReloadableWarning,
-                          NoValidationWarning, UnexpectedHash, VersionWarning)
+from use.messages import Message
+
 ### NEEDED FOR TESTS!! ###
-from use.pimp import (_get_package_data, _get_version, _is_platform_compatible,
-                      _is_version_satisfied, get_supported)
+from use.pimp import (
+    _get_package_data,
+    _get_version,
+    _is_platform_compatible,
+    _is_version_satisfied,
+    get_supported,
+)
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
 from use.tools import methdispatch
 
@@ -843,7 +860,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "name": name,
             "package_name": package_name,
             "module_name": module_name,
-            "version": version,
+            "version": Version(version),
             "hashes": hashes,
             "modes": modes,
             "default": default,
@@ -894,68 +911,20 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             spec = importlib.util.find_spec(package_name)
         kwargs["spec"] = spec
 
-        # welcome to the buffet table, where everything is a lie
-        # fmt: off
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
         log.info("case = %s", case)
-
-        def _ensure_version(
-            result: Union[ModuleType, Exception]
-        ) -> Union[ModuleType, Exception]:
-            if not isinstance(result, ModuleType):
-                return result
-            result_version = pimp._get_version(mod=result)
-            if result_version != version: raise AmbiguityWarning(
-                Message.version_warning(name, version, result_version)
-            )
-            return result
-
-        case_func = {
-            (0, 0, 0, 0): lambda: ImportError(Message.cant_import(name)),
-            (0, 0, 0, 1): lambda: pimp._pebkac_no_version_no_hash(**kwargs),
-            (0, 0, 1, 0): lambda: pimp._import_public_no_install(**kwargs),
-            (0, 1, 0, 0): lambda: ImportError(Message.cant_import(name)),
-            (1, 0, 0, 0): lambda: ImportError(Message.cant_import(name)),
-            (0, 0, 1, 1): lambda: pimp._auto_install(
-                func=lambda: pimp._import_public_no_install(**kwargs),
-                **kwargs
-            ),
-            (0, 1, 1, 0): lambda: pimp._import_public_no_install(**kwargs),
-            (1, 1, 0, 0): lambda: ImportError(Message.cant_import(name)),
-            (1, 0, 0, 1): lambda: pimp._pebkac_version_no_hash(**kwargs),
-            (1, 0, 1, 0): lambda: _ensure_version(pimp._import_public_no_install(**kwargs)),
-            (0, 1, 0, 1): lambda: pimp._pebkac_no_version_hash(**kwargs),
-            (0, 1, 1, 1): lambda: pimp._pebkac_no_version_hash(pimp._import_public_no_install, **kwargs),
-            (1, 0, 1, 1): lambda: _ensure_version(
-              pimp._pebkac_version_no_hash(
-                func=lambda: pimp._import_public_no_install(**kwargs),
-                **kwargs
-              ),
-            ),
-            (1, 1, 0, 1): lambda: pimp._auto_install(**kwargs),
-            (1, 1, 1, 0): lambda: _ensure_version(pimp._import_public_no_install(**kwargs)),
-            (1, 1, 1, 1): lambda: pimp._auto_install(
-                func=lambda: _ensure_version(
-                    pimp._import_public_no_install(**kwargs)
-                ),
-                **kwargs
-            ),
-        }[case]
-        log.info("case_func = '%s' %s",
-            case_func.__qualname__, case_func)
-        log.info("kwargs = %s", repr(kwargs))
-        result = case_func()
-        log.info("result = %s", repr(result))
-        # fmt: on
+        # welcome to the buffet table, where everything is a lie
+        result = buffet_table(case, kwargs)
         assert result
-        if isinstance(result, BaseException):
-            raise result
+
+        if isinstance(result, Exception):
+            return pimp._fail_or_default(result, default)
 
         if isinstance((mod := result), ModuleType):
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
             return ProxyModule(mod)
-        return pimp._fail_or_default(result, default)
+        raise RuntimeError(f"{result=!r} is neither a module nor an Exception")
 
 
 use = Use()
