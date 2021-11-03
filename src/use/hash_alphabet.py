@@ -40650,4 +40650,4 @@ def JACK_as_num(string: str):
 
 
 def num_as_hexdigest(num):
-    return hex(num)[2:]
+    return str.rjust(hex(num)[2:], 64, "0")
