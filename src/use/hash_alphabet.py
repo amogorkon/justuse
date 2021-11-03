@@ -1,7 +1,7 @@
 # korean characters: https://github.com/arcsecw/wubi/blob/master/wubi/cw.py
 # chinese characters: https://github.com/tsroten/zhon/blob/develop/zhon/cedict/all.py
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 chinese_characters = """○
 、
@@ -40613,8 +40613,11 @@ korean_characters = """←
     "\n"
 )
 
+# to avoid possible (albeit extremely rare) collisions with regular hexdigests
+ascii_characters = list(
+    set("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") - set("0123456789ABCDEFabcdef")
+)
 
-ascii_characters = list("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 # ascii chars aren't really needed for the number of characters but highlighting algos break on special chars
 # emojis only cause interoperability issues
 # japanese alphabet would only add 100 individual chars, not worth the trouble (and GPL is prohibitive)
@@ -40642,7 +40645,7 @@ def hexdigest_as_JACK(string):
 def JACK_as_num(string: str):
     if isinstance(string, bytes):
         string = string.decode()
-    string = "".join(string.split())  # TODO: add unit test to document behaviour
+    string = "".join(string.split())
     return sum(len(reverse_alphabet) ** i * reverse_alphabet[x] for i, x in enumerate(reversed(string)))
 
 

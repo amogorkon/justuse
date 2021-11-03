@@ -1,4 +1,3 @@
-import functools
 import os
 import re
 import runpy
@@ -19,6 +18,8 @@ import packaging.tags
 import packaging.version
 import pytest
 from furl import furl as URL
+from hypothesis import example, given
+from hypothesis import strategies as st
 
 src = import_base = Path(__file__).parent.parent / "src"
 cwd = Path().cwd()
@@ -389,6 +390,7 @@ def test_suggestion_works(reuse):
 
 def double_function(func):
     import functools
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs) * 2
@@ -520,13 +522,15 @@ class ScopedArgv(AbstractContextManager):
     def __init__(self, *newargv: List[str]):
         self._oldargv = [*sys.argv]
         self._newargv = newargv
+
     def __enter__(self, *_):
         sys.argv.clear()
         sys.argv.extend(self._newargv)
-        
+
     def __exit__(self, *_):
         sys.argv.clear()
         sys.argv.extend(self._oldargv)
+
 
 @pytest.mark.skipif(is_win, reason="Windows TODO")
 def test_setup_py_works(reuse):
@@ -539,30 +543,31 @@ class ScopedCwd(AbstractContextManager):
     def __init__(self, newcwd: Path):
         self._oldcwd = Path.cwd()
         self._newcwd = newcwd
+
     def __enter__(self, *_):
         os.chdir(self._newcwd)
+
     def __exit__(self, *_):
         os.chdir(self._oldcwd)
+
 
 @pytest.mark.skipif(is_win, reason="Windows TODO")
 def test_read_wheel_metadata(reuse):
     with ScopedCwd(Path(reuse.main.__file__).parent.parent.parent):
-      output = subprocess.check_output(
-          [
-              sys.executable, "setup.py", "bdist_wheel", "-v"
-          ], shell=False
-      )
-      whl_path = Path( 
-          re.search(
-              r"(?:\')(?:[a-z]+ )*([\w\']+[^\r\n\']*whl)",
-              output.decode(),
-              re.DOTALL
-          ).group(1)
-      ).absolute()
-      assert whl_path.exists()
-      assert whl_path.is_file()
-      meta = reuse.pimp.archive_meta(whl_path)
-      assert meta
-      assert meta["name"] == "justuse"
-      assert meta["import_relpath"] == "use/__init__.py"
+        output = subprocess.check_output([sys.executable, "setup.py", "bdist_wheel", "-v"], shell=False)
+        whl_path = Path(
+            re.search(r"(?:\')(?:[a-z]+ )*([\w\']+[^\r\n\']*whl)", output.decode(), re.DOTALL).group(1)
+        ).absolute()
+        assert whl_path.exists()
+        assert whl_path.is_file()
+        meta = reuse.pimp.archive_meta(whl_path)
+        assert meta
+        assert meta["name"] == "justuse"
+        assert meta["import_relpath"] == "use/__init__.py"
 
+
+@given(st.characters())
+@example("")
+def test_jack(inputs):
+    sha = sha256(inputs.encode("utf-8")).hexdigest()
+    assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))
