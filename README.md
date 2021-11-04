@@ -28,13 +28,14 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [x] safely auto-install version-tagged pure python packages from PyPI (packages with C-extensions like numpy don't work yet)
 - [x] have multiple versions of the same package installed and loaded in the same program without conflicts
 - [x] auto-install packages with C-extensions and other precompiled stuff
-- [x] no-hassle installation of almost all conda packages
+- [x] no-hassle inline auto-installation of (almost) all conda packages
 - [ ] attach birdseye debugger to a loaded module as a mode
 - [ ] try to pull packages from a P2P network before pulling from PyPI or conda directly
-- [ ] all justuse-code is compiled to single .py files, with and without dependencies, just drop it into your own code without installation
+- [ ] all justuse-code is compiled to a single, standalone .py file - just drop it into your own code without installation
 - [ ] provide a visual representation of the internal dependency graph
 - [ ] module-level variable guards aka "module-properties"
 - [ ] isolation of packages via subprocess/subinterpreter for clean un-/reloading
+- [ ] slot-based plugin architecture (to ensure reproducable testability of plugin-combinations)
 - [ ] document everything!
 - [ ] test everything!
 
