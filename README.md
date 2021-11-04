@@ -24,7 +24,7 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [x] initial module globals - a straight forward solution to diamond/cyclic imports
 - [x] decorate all specified callables (functions, methods, classes, ..) on import via pattern matching, aspect-orientation made easy
 - [x] return a given default if an exception happened during an import, simplifying optional dependencies
-- [x] safely hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
+- [x] safe hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
 - [x] safely auto-install version-tagged pure python packages from PyPI (packages with C-extensions like numpy don't work yet)
 - [x] have multiple versions of the same package installed and loaded in the same program without conflicts
 - [x] auto-install packages with C-extensions and other precompiled stuff
