@@ -1,3 +1,8 @@
+"""
+Exceptions used in justuse.
+"""
+
+
 class VersionWarning(Warning):
     pass
 

@@ -1,6 +1,9 @@
+"""
+Delegating package installation to pip, packaging and friends.
+"""
+
 import codecs
 import importlib.util
-import inspect
 import linecache
 import os
 import platform

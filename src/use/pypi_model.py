@@ -1,7 +1,6 @@
-# Pydantic model for the PyPi JSON API
-
-# If this code is inside use.py, it causes all kinds of problems.
-
+"""
+Pydantic model for the PyPI JSON API
+"""
 from __future__ import annotations
 
 import re
@@ -11,8 +10,6 @@ from typing import Dict, List, Optional, Union
 import packaging
 from packaging.version import Version as PkgVersion
 from pydantic import BaseModel
-
-#%% Version and Packaging
 
 # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
 # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.

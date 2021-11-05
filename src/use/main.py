@@ -1,66 +1,7 @@
 """
-Just use() python code from anywhere - a functional import alternative with advanced features.
-
-Goals/Features:
-- inline version checks, user notification on potential version conflicts (DONE)
-- securely load standalone-modules from online sources (DONE)
-- safely hot auto-reloading of local modules on file changes (DONE)
-- pass module-level globals into the importing context (DONE)
-- return optional fallback-default object/module if import failed (DONE)
-- aspect-oriented decorators for everything callable on import (DONE)
-- securely auto-install packages (preliminary DONE, still some kinks with C-extensions)
-- support P2P pkg distribution (TODO)
-- unwrap aspect-decorators on demand (TODO)
-- easy introspection via internal dependency graph (TODO)
-- relative imports on online-sources via URL-aliases (TODO)
-- module-level variable placeholders/guards aka "module-properties" (TODO)
-- load packages faster while using less memory than classical pip/import - ideal for embedded systems with limited resources (TODO)
-
-Non-Goal:
-Completely replace the import statement.
-
-Notes:
-pathlib.Path and yarl.URL can both be accessed as aliases via use.Path and use.URL
-inspect.isfunction, .ismethod and .isclass also can be accessed via their aliases use.isfunction, use.ismethod and use.isclass
-
-Examples:
->>> import use
-
-# equivalent to `import numpy as np` with explicit version check
->>> np = use("numpy", version="1.1.1")
->>> np.version == "1.1.1"
-True
-
-# equivalent to `from pprint import pprint; pprint(dictionary)` but without assigning
-# pprint to a global variable, thus no namespace pollution
->>> use("pprint").pprint([1,2,3])
-[1,2,3]
-# equivalent to sys.path manipulation, then `import tools` with a reload(tools) every second
->>> tools = use(use._ensure_path("/media/sf_Dropbox/code/tools.py"), reloading=True)
-
-# it is possible to import standalone modules from online sources
-# with immediate sha1-hash-verificiation before execution of the code like
->>> utils = use(use.URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"), hashes={"95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8"})
-
-# to auto-install a certain version (within a virtual env and pip in secure hash-check mode) of a pkg you can do
->>> np = use("numpy", version="1.1.1", hashes={"9879de676"}, modes=use.auto_install)
-
-:author: Anselm Kiefner (amogorkon)
-:author: David Reilly
-:license: MIT
+Main classes that act as API for the user to interact with.
 """
 
-#% Preamble
-# we use https://github.com/microsoft/vscode-python/issues/17218 with % syntax to structure the code
-
-# Read in this order:
-# 1) initialization (instance of Use() is set as module on import)
-# 2) use() dispatches to one of three __call__ methods, depending on first argument
-# 3) from there, various global functions are called
-# 4) a ProxyModule is always returned, wrapping the module that was imported
-
-
-#% Imports
 
 import asyncio
 import atexit
@@ -74,7 +15,7 @@ import threading
 import time
 import traceback
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
-from logging import getLogger
+from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, List, Optional, Type, Union
