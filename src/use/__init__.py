@@ -1,3 +1,9 @@
+"""
+This is where the story begins. Welcome to JustUse!
+Only imports and project-global constants are defined here. 
+    
+    """
+
 import hashlib
 import os
 import sys
@@ -5,7 +11,6 @@ from collections import namedtuple
 from enum import Enum, IntEnum
 from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
-
 
 root.setLevel(DEBUG)
 
@@ -18,9 +23,7 @@ home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).abs
 __version__ = "0.6.0"  # IMPORTANT; Must leave exactly as-is for setup
 __name__ = "use"
 __package__ = "use"
-_reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
-_aspects = {}
-_using = {}
+
 
 from use.exceptions import *
 from use.hash_alphabet import *
@@ -63,3 +66,14 @@ from use.tools import *
 
 for k, v in inspect.getmembers(use):
     setattr(sys.modules["use"], k, v)
+
+__all__ = [
+    "use",
+    "__version__",
+    "__name__",
+    "__package__",
+    "config",
+    "home",
+    "Hash",
+    "Modes",
+]

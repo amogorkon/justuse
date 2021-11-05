@@ -1,6 +1,9 @@
-# This is a collection of the messages directed to the user.
-# How it works is quite magical - the lambdas prevent the f-strings from being prematuraly evaluated, and are only evaluated once returned.
-# Fun fact: f-strings are firmly rooted in the AST.
+"""
+This is a collection of the messages directed to the user.
+How it works is quite magical - the lambdas prevent the f-strings from being prematuraly evaluated, and are only evaluated once returned.
+Fun fact: f-strings are firmly rooted in the AST.
+"""
+
 import webbrowser
 from enum import Enum
 

@@ -25,9 +25,7 @@ class Version(PkgVersion):
         else:
             return super(cls, Version).__new__(cls)
 
-    def __init__(
-        self, versionobj: Optional[Union[PkgVersion, __class__, str]] = None, *, major=0, minor=0, patch=0
-    ):
+    def __init__(self, versionobj: Optional[Union[PkgVersion, str]] = None, *, major=0, minor=0, patch=0):
         if isinstance(versionobj, Version):
             return
 

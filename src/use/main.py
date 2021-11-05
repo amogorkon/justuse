@@ -105,8 +105,6 @@ from use import (
     UnexpectedHash,
     VersionWarning,
     __version__,
-    _reloaders,
-    _using,
     buffet_table,
     config,
     home,
@@ -125,16 +123,19 @@ from use.pimp import (
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
 from use.tools import methdispatch
 
+_reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
+_aspects = {}
+_using = {}
 
 # sometimes all you need is a sledge hammer..
 def releaser(cls):
     old_locks = [*threading._shutdown_locks]
     new_locks = threading._shutdown_locks
-    reloaders = sys.modules["use"]._reloaders
+    global _reloaders
     releaser = cls()
 
     def release():
-        return releaser(locks=set(new_locks).difference(old_locks), reloaders=reloaders)
+        return releaser(locks=set(new_locks).difference(old_locks), reloaders=_reloaders)
 
     atexit.register(release)
     return cls
