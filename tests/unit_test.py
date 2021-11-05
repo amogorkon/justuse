@@ -570,5 +570,5 @@ def test_read_wheel_metadata(reuse):
 @given(st.characters(max_codepoint=sys.maxunicode))
 @example("")
 def test_jack(inputs):
-    sha = sha256(inputs.encode("utf-8")).hexdigest()
+    sha = sha256(inputs.encode("utf-8", "surrogateescape")).hexdigest()
     assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))
