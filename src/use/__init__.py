@@ -1,3 +1,4 @@
+# sourcery skip: hoist-statement-from-if, remove-pass-body
 """
 This is where the story begins. Welcome to JustUse!
 Only imports and project-global constants are defined here. 
@@ -13,6 +14,8 @@ from enum import Enum, IntEnum
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
+
+from beartype import beartype
 
 root.setLevel(DEBUG)
 
@@ -73,7 +76,12 @@ config = {"version_warning": True, "debugging": False, "use_db": True}
 ### NEEDED FOR TESTS!! ###
 import inspect
 
-from use.buffet_old import buffet_table
+if sys.version_info < (3, 10):
+    from use.buffet_old import buffet_table
+else:
+    print("future buffet table is not set up yet, using the old one")
+    from use.buffet_old import buffet_table  # TODO
+
 from use.main import *
 from use.messages import *
 
@@ -83,5 +91,32 @@ from use.pimp import _get_package_data, _get_version, _is_version_satisfied, get
 from use.pypi_model import *
 from use.tools import *
 
-for k, v in inspect.getmembers(use):
-    setattr(sys.modules["use"], k, v)
+use = Use()
+use.__dict__.update({k: v for k, v in globals().items()})  # to avoid recursion-confusion
+use = ProxyModule(use)
+
+
+def decorator_log_calling_function_and_args(func, *args):
+    """
+    Decorator to log the calling function and its arguments.
+
+    Args:
+        func (function): The function to decorate.
+        *args: The arguments to pass to the function.
+
+    Returns:
+        function: The decorated function.
+    """
+
+    def wrapper(*args, **kwargs):
+        log.debug(f"{func.__name__}({args}, {kwargs})")
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+use @ (isfunction, "", beartype)
+use @ (isfunction, "", decorator_log_calling_function_and_args)
+
+if not test_version:
+    sys.modules["use"] = use

@@ -1,14 +1,14 @@
+"""
+Buffet pattern.
+Basically dispatch on a specific case, pass in all local context from which the function takes what it needs.
+"""
+
 from logging import getLogger
 
 log = getLogger(__name__)
 
 from use import pimp
 from use.messages import Message
-
-"""
-Buffet pattern.
-Basically dispatch on a specific case, pass in all local context from which the function takes what it needs.
-"""
 
 # the buffet of the past (<3.10)
 

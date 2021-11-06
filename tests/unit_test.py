@@ -55,18 +55,6 @@ def reuse():
     return use
 
 
-def suggested_artifact(reuse, *args, **kwargs):
-    try:
-        mod = reuse(*args, **kwargs)
-        assert False, f"Actually returned mod: {mod}"
-    except (RuntimeWarning, RuntimeError) as rw:
-        last_line = rw.args[0].strip().splitlines()[-1]
-        log.info("Usimg last line as suggested artifact: %s", repr(last_line))
-        mod = eval(last_line)
-        log.info("suggest artifact returning: %s", mod)
-        return mod
-
-
 @pytest.mark.skipif(True, reason="Needs investigation")
 def test_redownload_module(reuse):
     def inject_fault(*, path, **kwargs):
@@ -384,8 +372,15 @@ def test_reloading(reuse):
 
 def test_suggestion_works(reuse):
     with patch("webbrowser.open"):
-        sugg = suggested_artifact(reuse, "example-pypi-package/examplepy", modes=reuse.auto_install)
-        assert sugg
+        try:
+            mod = reuse("example-pypi-package/examplepy", modes=reuse.auto_install)
+            assert False, f"Actually returned mod: {mod}"
+        except (RuntimeWarning, RuntimeError) as rw:
+            last_line = rw.args[0].strip().splitlines()[-1]
+            log.info("Using last line as suggested artifact: %s", repr(last_line))
+            mod = eval(last_line)
+            log.info("suggest artifact returning: %s", mod)
+        assert mod
 
 
 def double_function(func):
@@ -570,5 +565,5 @@ def test_read_wheel_metadata(reuse):
 @given(st.characters(max_codepoint=sys.maxunicode))
 @example("")
 def test_jack(inputs):
-    sha = sha256(inputs.encode("utf-8", "surrogateescape")).hexdigest()
+    sha = sha256(inputs.encode("utf-8")).hexdigest()
     assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))

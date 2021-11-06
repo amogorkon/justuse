@@ -14,7 +14,6 @@ import sys
 import tarfile
 import zipfile
 import zipimport
-from enum import Enum
 from functools import lru_cache as cache
 from functools import reduce
 from importlib import metadata
@@ -371,7 +370,6 @@ def _extracted_from__import_public_no_install_18(module_name, spec):
 
 
 def _parse_name(name) -> tuple[str, str]:
-    ret = name, name
     match = re.match(r"(?P<package_name>[^/.]+)/?(?P<rest>[a-zA-Z0-9._]+)?$", name)
     assert match, f"Invalid name spec: {name!r}"
     names = match.groupdict()
@@ -381,23 +379,19 @@ def _parse_name(name) -> tuple[str, str]:
         package_name = rest
     if not rest:
         rest = package_name
-    ret = (package_name, rest)
-    return ret
+    return (package_name, rest)
 
 
 def _auto_install(
     *,
     name: str,
     func: Callable[..., Union[Exception, ModuleType]] = None,
-    version: Version = None,
-    hash_algo=None,
-    package_name: str = None,
-    module_name: str = None,
-    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
+    version: Version,
+    hash_algo,
+    package_name: str,
+    module_name: str,
     **kwargs,
 ) -> Union[ModuleType, BaseException]:
-    package_name, rest = _parse_name(name)
-
     if func:
         result = func()
         if isinstance(result, (Exception, ModuleType)):
@@ -425,7 +419,7 @@ def _auto_install(
     artifact_path = _ensure_path(query["artifact_path"])
     module_path = _ensure_path(query["module_path"])
     # trying to import directly from zip
-    _clean_sys_modules(rest)
+    _clean_sys_modules(module_name)
     try:
         importer = zipimport.zipimporter(artifact_path)
         return importer.load_module(query["import_name"])
@@ -451,11 +445,10 @@ def _auto_install(
             .replace("/__init__.py", "")
             .replace("-", "_")
         )
-        print(import_name)
         return (
             mod := _load_venv_entry(
-                rest,
-                rest,
+                package_name=package_name,
+                module_name=module_name,
                 module_path=module_path,
                 installation_path=installation_path,
             )
@@ -466,8 +459,6 @@ def _auto_install(
         if "fault_inject" in config:
             config["fault_inject"](**locals())
         if mod:
-            import use
-
             use._save_module_info(
                 name=package_name,
                 import_relpath=str(_ensure_path(module_path).relative_to(installation_path)),
@@ -725,7 +716,7 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     return _delete_none(out_info)
 
 
-def _load_venv_entry(package_name, rest, installation_path, module_path) -> ModuleType:
+def _load_venv_entry(*, package_name, module_name, installation_path, module_path) -> ModuleType:
     cwd = Path.cwd()
     orig_exc = None
     old_sys_path = list(sys.path)
@@ -747,7 +738,7 @@ def _load_venv_entry(package_name, rest, installation_path, module_path) -> Modu
                     os.chdir(cwd)
                     os.chdir(variant)
                     return _build_mod(
-                        name=(rest.replace("/", ".")),
+                        name=(module_name.replace("/", ".")),
                         code=code_file.read(),
                         module_path=_ensure_path(module_path),
                         initial_globals={},
@@ -757,7 +748,7 @@ def _load_venv_entry(package_name, rest, installation_path, module_path) -> Modu
                     continue
         except RuntimeError as ierr:
             try:
-                return importlib.import_module(rest)
+                return importlib.import_module(module_name)
             except BaseException as ierr2:
                 raise ierr from orig_exc
         finally:

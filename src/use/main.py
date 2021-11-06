@@ -5,6 +5,7 @@ Main classes that act as API for the user to interact with.
 
 import asyncio
 import atexit
+import hashlib
 import importlib.util
 import inspect
 import os
@@ -22,24 +23,14 @@ from warnings import warn
 
 import requests
 import toml
-from beartype import beartype
 from furl import furl as URL
 from icontract import ensure, invariant, require
 
-from use import Hash, Modes, ModInUse, __version__, isfunction, pimp
-
-log = getLogger(__name__)
-
-# internal subpackage imports
-mode = Modes
-auto_install = Modes.auto_install
-test_config: str = locals().get("test_config", {})
-test_version: str = locals().get("test_version", None)
-from icontract import require
-
-import use
 from use import (
     AmbiguityWarning,
+    Hash,
+    Modes,
+    ModInUse,
     NotReloadableWarning,
     NoValidationWarning,
     UnexpectedHash,
@@ -48,20 +39,19 @@ from use import (
     buffet_table,
     config,
     home,
+    isfunction,
 )
 from use.hash_alphabet import JACK_as_num, num_as_hexdigest
 from use.messages import Message
-
-### NEEDED FOR TESTS!! ###
-from use.pimp import (
-    _get_package_data,
-    _get_version,
-    _is_platform_compatible,
-    _is_version_satisfied,
-    get_supported,
-)
+from use.pimp import _apply_aspect, _build_mod, _ensure_path, _fail_or_default, _parse_name
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
 from use.tools import methdispatch
+
+log = getLogger(__name__)
+
+# internal subpackage imports
+test_config: str = locals().get("test_config", {})
+test_version: str = locals().get("test_version", None)
 
 _reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
 _aspects = {}
@@ -91,22 +81,6 @@ class ShutdownLockReleaser:
                 reloader.stop()
         for lock in locks:
             lock.unlock()
-
-
-import asyncio
-import atexit
-import hashlib
-import threading
-import time
-import traceback
-from logging import getLogger
-from types import ModuleType
-
-from icontract import require
-
-from use.pimp import _apply_aspect, _build_mod
-
-log = getLogger(__name__)
 
 
 class ProxyModule(ModuleType):
@@ -274,7 +248,7 @@ class Use(ModuleType):
         except PermissionError:
             # this should fix the permission issues on android #80
 
-            self.home = home = pimp._ensure_path(tempfile.mkdtemp(prefix="justuse_"))
+            self.home = home = _ensure_path(tempfile.mkdtemp(prefix="justuse_"))
         (self.home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
         for file in (
             "config.toml",
@@ -400,9 +374,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         for name, version, artifact_path, installation_path in self.registry.execute(
             "SELECT name, version, artifact_path, installation_path FROM distributions JOIN artifacts on distributions.id = distribution_id"
         ).fetchall():
-            if not (
-                pimp._ensure_path(artifact_path).exists() and pimp._ensure_path(installation_path).exists()
-            ):
+            if not (_ensure_path(artifact_path).exists() and _ensure_path(installation_path).exists()):
                 self.del_entry(name, version)
         self.registry.connection.commit()
 
@@ -461,7 +433,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hash_value=None,
         initial_globals: Optional[dict[Any, Any]] = None,
         as_import: str = None,
-        default=mode.fastfail,
+        default=Modes.fastfail,
         modes=0,
     ) -> ProxyModule:
         log.debug(f"use-url: {url}")
@@ -473,7 +445,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         this_hash = hash_algo.value(response.content).hexdigest()
         if hash_value:
             if this_hash != hash_value:
-                return pimp._fail_or_default(
+                return _fail_or_default(
                     UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!"),
                     default,
                 )
@@ -482,16 +454,16 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         name = url.path.segments[-1]
         try:
-            mod = pimp._build_mod(
+            mod = _build_mod(
                 name=name,
                 code=response.content,
-                module_path=pimp._ensure_path(url.path),
+                module_path=_ensure_path(url.path),
                 initial_globals=initial_globals,
             )
         except KeyError:
             raise
         if exc:
-            return pimp._fail_or_default(ImportError(exc), default)
+            return _fail_or_default(ImportError(exc), default)
 
         frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod, frame=frame)
@@ -508,7 +480,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         *,
         initial_globals=None,
         as_import: str = None,
-        default=mode.fastfail,
+        default=Modes.fastfail,
         modes=0,
     ) -> ProxyModule:
         """Import a module from a path.
@@ -533,7 +505,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         mod = None
 
         if path.is_dir():
-            return pimp._fail_or_default(ImportError(f"Can't import directory {path}"), default)
+            return _fail_or_default(ImportError(f"Can't import directory {path}"), default)
 
         original_cwd = source_dir = Path.cwd()
         try:
@@ -553,28 +525,26 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 # we're in jupyter, we use the CWD as set in the notebook
                 if not jupyter and hasattr(main_mod, "__file__"):
                     source_dir = (
-                        pimp._ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename)
-                        .resolve()
-                        .parent
+                        _ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename).resolve().parent
                     )
             if source_dir is None:
                 if main_mod.__loader__ and hasattr(main_mod.__loader__, "path"):
-                    source_dir = pimp._ensure_path(main_mod.__loader__.path).parent
+                    source_dir = _ensure_path(main_mod.__loader__.path).parent
                 else:
                     source_dir = Path.cwd()
             if not source_dir.joinpath(path).exists():
                 if files := [*[*source_dir.rglob(f"**/{path}")]]:
-                    source_dir = pimp._ensure_path(files[0]).parent
+                    source_dir = _ensure_path(files[0]).parent
                 else:
                     source_dir = Path.cwd()
             if not source_dir.exists():
-                return pimp._fail_or_default(
+                return _fail_or_default(
                     NotImplementedError("Can't determine a relative path from a virtual file."),
                     default,
                 )
             path = source_dir.joinpath(path).resolve()
             if not path.exists():
-                return pimp._fail_or_default(ImportError(f"Sure '{path}' exists?"), default)
+                return _fail_or_default(ImportError(f"Sure '{path}' exists?"), default)
             os.chdir(path.parent)
             name = path.stem
             if reloading:
@@ -582,7 +552,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     with open(path, "rb") as rfile:
                         code = rfile.read()
                     # initial instance, if this doesn't work, just throw the towel
-                    mod = pimp._build_mod(
+                    mod = _build_mod(
                         name=name,
                         code=code,
                         initial_globals=initial_globals,
@@ -591,7 +561,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 except KeyError:
                     exc = traceback.format_exc()
                 if exc:
-                    return pimp._fail_or_default(ImportError(exc), default)
+                    return _fail_or_default(ImportError(exc), default)
                 mod = ProxyModule(mod)
                 reloader = ModuleReloader(
                     proxy=mod,
@@ -628,7 +598,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 frame = inspect.getframeinfo(inspect.currentframe())
                 self._set_mod(name=name, mod=mod, frame=frame)
                 try:
-                    mod = pimp._build_mod(
+                    mod = _build_mod(
                         name=name,
                         code=code,
                         initial_globals=initial_globals,
@@ -643,7 +613,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             # let's not confuse the user and restore the cwd to the original in any case
             os.chdir(original_cwd)
         if exc:
-            return pimp._fail_or_default(ImportError(exc), default)
+            return _fail_or_default(ImportError(exc), default)
         if as_import:
             sys.modules[as_import] = mod
         frame = inspect.getframeinfo(inspect.currentframe())
@@ -661,7 +631,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         version: str = None,
         hash_algo=Hash.sha256,
         hashes: Optional[Union[str, list[str]]] = None,
-        default=mode.fastfail,
+        default=Modes.fastfail,
         modes: int = 0,
     ) -> ProxyModule:
         """
@@ -704,7 +674,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         version: str = None,
         hash_algo=Hash.sha256,
         hashes: Optional[Union[str, list[str]]] = None,
-        default=mode.fastfail,
+        default=Modes.fastfail,
         modes: int = 0,
     ) -> ProxyModule:
         """
@@ -748,7 +718,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         version: str = None,
         hash_algo=Hash.sha256,
         hashes: Optional[Union[str, list[str]]] = None,
-        default=mode.fastfail,
+        default=Modes.fastfail,
         modes: int = 0,
     ) -> ProxyModule:
         """
@@ -770,7 +740,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         Returns:
             Optional[ModuleType]: Module if successful, default as specified otherwise.
         """
-        package_name, module_name = pimp._parse_name(name)
+        package_name, module_name = _parse_name(name)
         return self._use_package(
             name=name,
             package_name=package_name,
@@ -795,103 +765,55 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hash_algo,
         user_msg=Message,
     ):
-        kwargs = {
-            "name": name,
-            "package_name": package_name,
-            "module_name": module_name,
-            "version": Version(version),
-            "hashes": hashes,
-            "modes": modes,
-            "default": default,
-            "hash_algo": hash_algo,
-            "user_msg": user_msg,
-        }
-        callstr = (
-            f"use._use_package({name}, {package_name=!r}, "
-            f"{module_name=!r}, {version=!r}, {hashes=!r}, "
-            f"{modes=!r}, {default=!r}, {hash_algo=!r}, "
-            f"{user_msg=!r})"
-        )
-        log.debug("Entering %s", callstr)
-
-        modes |= mode.fastfail
-
         if isinstance(hashes, str):
-            hashes = set([hashes])
+            hashes = set(hashes.split())
         if not hashes:
             hashes = set()
-        hashes = {H if len(H) == 64 else num_as_hexdigest(JACK_as_num(H)) for H in hashes}
-        callstr = (
-            f"use._use_package({name}, {package_name=!r}, "
-            f"{module_name=!r}, {version=!r}, {hashes=!r}, "
-            f"{modes=!r}, {default=!r}, {hash_algo=!r}, "
-            f"{user_msg=!r})"
-        )
-        log.debug("Normalized hashes=%s", repr(hashes))
-
-        rest = module_name
-        kwargs["rest"] = rest
+        hashes: set = {H if len(H) == 64 else num_as_hexdigest(JACK_as_num(H)) for H in hashes}
         # we use boolean flags to reduce the complexity of the call signature
-        global auto_install
-        is_auto_install = bool(auto_install & modes)
+        auto_install: bool = Modes.auto_install & modes
+        fatal_exceptions: bool = Modes.fatal_exceptions & modes
+        no_public_installation: bool = Modes.no_public_installation & modes
+        fastfail: bool = Modes.fastfail & modes
 
         version: Version = Version(version) if version else None
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
         # let's first see if the user might mean something else entirely
-        if pimp._ensure_path(f"./{module_name}.py").exists():
+        if _ensure_path(f"./{module_name}.py").exists():
             warn(Message.ambiguous_name_warning(name), AmbiguityWarning)
         spec = None
 
         if name in self._using:
             spec = self._using[name].spec
-        elif not is_auto_install:
+        elif not auto_install:
             spec = importlib.util.find_spec(package_name)
-        kwargs["spec"] = spec
 
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
         log.info("case = %s", case)
         # welcome to the buffet table, where everything is a lie
+        kwargs = {
+            "name": name,
+            "package_name": package_name,
+            "module_name": module_name,
+            "version": version,
+            "hashes": hashes,
+            "hash_algo": hash_algo,
+            "user_msg": user_msg,
+            "spec": spec,
+            "fastfail": fastfail,
+            "no_public_installation": no_public_installation,
+            "fatal_exceptions": fatal_exceptions,
+        }
         result = buffet_table(case, kwargs)
         assert result
 
         if isinstance(result, Exception):
-            return pimp._fail_or_default(result, default)
+            return _fail_or_default(result, default)
 
-        if isinstance((mod := result), ModuleType):
+        if isinstance(result, ModuleType):
             frame = inspect.getframeinfo(inspect.currentframe())
-            self._set_mod(name=name, mod=mod, spec=spec, frame=frame)
-            return ProxyModule(mod)
+            self._set_mod(name=name, mod=result, spec=spec, frame=frame)
+            return ProxyModule(result)
         raise RuntimeError(f"{result=!r} is neither a module nor an Exception")
-
-
-use = Use()
-use.__dict__.update({k: v for k, v in globals().items()})  # to avoid recursion-confusion
-use = ProxyModule(use)
-
-
-def decorator_log_calling_function_and_args(func, *args):
-    """
-    Decorator to log the calling function and its arguments.
-
-    Args:
-        func (function): The function to decorate.
-        *args: The arguments to pass to the function.
-
-    Returns:
-        function: The decorated function.
-    """
-
-    def wrapper(*args, **kwargs):
-        log.debug(f"{func.__name__}({args}, {kwargs})")
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
-use @ (isfunction, "", beartype)
-use @ (isfunction, "", decorator_log_calling_function_and_args)
-
-if not test_version:
-    sys.modules["use"] = use
