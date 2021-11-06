@@ -76,23 +76,12 @@ import inspect
 from use.buffet_old import buffet_table
 from use.main import *
 from use.messages import *
+
 ### NEEDED FOR TESTS!! ###
 from use.pimp import *
-from use.pimp import (_get_package_data, _get_version, _is_version_satisfied,
-                      get_supported)
+from use.pimp import _get_package_data, _get_version, _is_version_satisfied, get_supported
 from use.pypi_model import *
 from use.tools import *
 
 for k, v in inspect.getmembers(use):
     setattr(sys.modules["use"], k, v)
-
-__all__ = [
-    "use",
-    "__version__",
-    "__name__",
-    "__package__",
-    "config",
-    "home",
-    "Hash",
-    "Modes",
-]
