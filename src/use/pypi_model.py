@@ -1,5 +1,5 @@
 """
-Pydantic model for the PyPI JSON API
+Pydantic model for the PyPI JSON API.
 """
 from __future__ import annotations
 

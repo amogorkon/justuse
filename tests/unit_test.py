@@ -176,7 +176,7 @@ def test_classical_install(reuse):
 
 
 def test_classical_install_no_version(reuse):
-    mod = reuse("pytest", modes=reuse.fatal_exceptions)
+    mod = reuse("pytest")
     assert mod is pytest or mod._ProxyModule__implementation is pytest
 
 

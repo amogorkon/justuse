@@ -31,7 +31,7 @@ import furl
 import packaging
 import requests
 from furl import furl as URL
-from icontract import ensure
+from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
@@ -40,9 +40,26 @@ import use
 from use import AmbiguityWarning, Hash, Modes, config
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import Message
-from use.platformtag import PlatformTag
 from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none
 from use.tools import pipes
+
+
+class PlatformTag:
+    def __init__(self, platform: str):
+        self.platform = platform
+
+    def __str__(self):
+        return self.platform
+
+    def __repr__(self):
+        return f"use.PlatformTag({self.platform!r})"
+
+    def __hash__(self):
+        return hash(self.platform)
+
+    @require(lambda self, other: isinstance(other, self.__class__))
+    def __eq__(self, other):
+        return self.platform == other.platform
 
 
 def _ensure_version(

@@ -52,7 +52,9 @@ import inspect
 if sys.version_info < (3, 10):
     from use.buffet_old import buffet_table
 else:
-    from use.buffet import buffet_table
+    from use.buffet_old import buffet_table
+
+    # from use.buffet import buffet_table  # TODO
 
 from use.main import *
 from use.messages import *
@@ -60,7 +62,6 @@ from use.messages import *
 ### NEEDED FOR TESTS!! ###
 from use.pimp import *
 from use.pimp import _get_package_data, _get_version, _is_version_satisfied, get_supported
-from use.platformtag import *
 from use.pypi_model import *
 from use.tools import *
 
