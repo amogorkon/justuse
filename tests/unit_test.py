@@ -168,6 +168,37 @@ def test_classical_install_no_version(reuse):
     assert mod is pytest or mod._ProxyModule__implementation is pytest
 
 
+def test_PEBKAC_hash_no_version(reuse):
+    with pytest.raises(RuntimeWarning):
+        reuse(
+            "pytest",
+            hashes="asdf",
+            modes=reuse.auto_install,
+        )
+
+
+def test_PEBKAC_nonexisting_pkg(reuse):
+    # non-existing pkg
+    with pytest.raises(ImportError):
+        reuse(
+            "4-^df",
+            modes=reuse.auto_install,
+            version="0.0.1",
+            hashes="asdf",
+        )
+
+
+def test_PEBKAC_impossible_version(reuse):
+    # impossible version
+    with pytest.raises(TypeError):  # version must be either str or tuple
+        reuse(
+            "pytest",
+            modes=reuse.auto_install,
+            version=-1,
+            hashes="asdf",
+        )
+
+
 def test_autoinstall_PEBKAC(reuse):
     with patch("webbrowser.open"):
         # auto-install requested, but no version or hashes specified
@@ -177,32 +208,6 @@ def test_autoinstall_PEBKAC(reuse):
         # forgot hashes
         with pytest.raises(packaging.version.InvalidVersion):
             reuse("pytest", version="-1", modes=reuse.auto_install)
-
-        # forgot version
-        with pytest.raises(RuntimeWarning):
-            reuse(
-                "pytest",
-                hashes="asdf",
-                modes=reuse.auto_install,
-            )
-
-        # impossible version
-        with pytest.raises(TypeError):  # version must be either str or tuple
-            reuse(
-                "pytest",
-                modes=reuse.auto_install,
-                version=-1,
-                hashes="asdf",
-            )
-
-        # non-existing pkg
-        with pytest.raises(ImportError):
-            reuse(
-                "4-^df",
-                modes=reuse.auto_install,
-                version="0.0.1",
-                hashes="asdf",
-            )
 
 
 def test_version_warning(reuse):
@@ -562,8 +567,7 @@ def test_read_wheel_metadata(reuse):
         assert meta["import_relpath"] == "use/__init__.py"
 
 
-@given(st.characters(max_codepoint=sys.maxunicode))
-@example("")
+@given(st.binary(max_size=1000))  # max_size otherwise it seems we hit a bug in hashlib :|
 def test_jack(inputs):
-    sha = sha256(inputs.encode("utf-8")).hexdigest()
+    sha = sha256(inputs).hexdigest()
     assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))

@@ -41,7 +41,7 @@ from use import (
     home,
     isfunction,
 )
-from use.hash_alphabet import JACK_as_num, num_as_hexdigest
+from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import Message
 from use.pimp import _apply_aspect, _build_mod, _ensure_path, _fail_or_default, _parse_name
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
@@ -769,7 +769,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hashes = set(hashes.split())
         if not hashes:
             hashes = set()
-        hashes: set = {H if len(H) == 64 else num_as_hexdigest(JACK_as_num(H)) for H in hashes}
+        hashes: set = {num_as_hexdigest(JACK_as_num(H)) if is_JACK(H) else H for H in hashes}
         # we use boolean flags to reduce the complexity of the call signature
         auto_install: bool = Modes.auto_install & modes
         fatal_exceptions: bool = Modes.fatal_exceptions & modes
