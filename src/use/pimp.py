@@ -113,8 +113,7 @@ def get_supported() -> frozenset[PlatformTag]:
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
 
-    tags = frozenset(items)
-    return tags
+    return frozenset(items)
 
 
 def _filter_by_version(project_: "PyPI_Project", version: str) -> "PyPI_Project":
@@ -157,9 +156,7 @@ class TarFunctions:
         m = self.archive.getmember(entry_name)
         with self.archive.extractfile(m) as f:
             bdata = f.read()
-            text = ""
-            if len(bdata) < 8192:
-                text = bdata.decode("UTF-8").splitlines()
+            text = bdata.decode("UTF-8").splitlines() if len(bdata) < 8192 else ""
             return (Path(entry_name).stem, text)
 
 
@@ -365,9 +362,6 @@ def _import_public_no_install(
 def _extracted_from__import_public_no_install_18(module_name, spec):
     if spec.name in sys.modules:
         mod = sys.modules[spec.name]
-        importlib.reload(mod)
-    else:
-        mod = _ensure_loader(spec).create_module(spec)
     if mod is None:
         mod = importlib.import_module(module_name)
     assert mod
@@ -838,8 +832,7 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
     @see https://packaging.pypa.io/en/latest/specifiers.html
     """
     specifiers = SpecifierSet(specifier or "")
-    is_match = not specifier or sys_version in specifiers
-    return is_match
+    return not specifier or sys_version in specifiers
 
 
 @pipes

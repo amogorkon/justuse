@@ -62,6 +62,7 @@ def test_package(pkg: PackageToTest) -> tuple[bool, Dict]:
 
     log1 = start_capture_logs()
     retry = None
+    use_version: Optional[str] = None
     try:
         use(pkg.name, modes=use.auto_install)
     except RuntimeWarning as e:

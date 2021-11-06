@@ -14,7 +14,6 @@ import tempfile
 import threading
 import time
 import traceback
-from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
 from types import ModuleType
@@ -27,7 +26,7 @@ from beartype import beartype
 from furl import furl as URL
 from icontract import ensure, invariant, require
 
-from use import Hash, Modes, ModInUse, __version__, pimp
+from use import Hash, Modes, ModInUse, __version__, isfunction, pimp
 
 log = getLogger(__name__)
 

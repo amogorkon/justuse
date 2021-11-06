@@ -2,13 +2,15 @@
 This is where the story begins. Welcome to JustUse!
 Only imports and project-global constants are defined here. 
     
-    """
+"""
+
 
 import hashlib
 import os
 import sys
 from collections import namedtuple
 from enum import Enum, IntEnum
+from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
 
@@ -59,7 +61,6 @@ class Hash(Enum):
     sha256 = hashlib.sha256
 
 
-# Really looking forward to actual builtin sentinel values..
 class Modes(IntEnum):
     auto_install = 2 ** 0
     fatal_exceptions = 2 ** 1
@@ -72,19 +73,13 @@ config = {"version_warning": True, "debugging": False, "use_db": True}
 ### NEEDED FOR TESTS!! ###
 import inspect
 
-if sys.version_info < (3, 10):
-    from use.buffet_old import buffet_table
-else:
-    from use.buffet_old import buffet_table
-
-    # from use.buffet import buffet_table  # TODO
-
+from use.buffet_old import buffet_table
 from use.main import *
 from use.messages import *
-
 ### NEEDED FOR TESTS!! ###
 from use.pimp import *
-from use.pimp import _get_package_data, _get_version, _is_version_satisfied, get_supported
+from use.pimp import (_get_package_data, _get_version, _is_version_satisfied,
+                      get_supported)
 from use.pypi_model import *
 from use.tools import *
 
