@@ -25,7 +25,30 @@ __name__ = "use"
 __package__ = "use"
 
 
-from use.exceptions import *
+class VersionWarning(Warning):
+    pass
+
+
+class NotReloadableWarning(Warning):
+    pass
+
+
+class NoValidationWarning(Warning):
+    pass
+
+
+class AmbiguityWarning(Warning):
+    pass
+
+
+class UnexpectedHash(ImportError):
+    pass
+
+
+class AutoInstallationError(ImportError):
+    pass
+
+
 from use.hash_alphabet import *
 
 ModInUse = namedtuple("ModInUse", "name mod path spec frame")
