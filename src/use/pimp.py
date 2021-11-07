@@ -429,7 +429,7 @@ def _auto_install(
     mod = None
     if "installation_path" not in query or not _ensure_path(query["installation_path"]).exists():
         if query:
-            sys.modules["use.main"].use.del_entry(name, version)
+            use.del_entry(name, version)
         query = _find_or_install(package_name, version, force_install=True)
         artifact_path = _ensure_path(query["artifact_path"])
         module_path = _ensure_path(query["module_path"])

@@ -567,7 +567,7 @@ def test_read_wheel_metadata(reuse):
         assert meta["import_relpath"] == "use/__init__.py"
 
 
-@given(st.binary(max_size=1000))  # max_size otherwise it seems we hit a bug in hashlib :|
+@given(st.binary(max_size=100))  # max_size otherwise it seems we hit a bug in hashlib :|
 def test_jack(inputs):
     sha = sha256(inputs).hexdigest()
     assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))

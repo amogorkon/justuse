@@ -73,8 +73,6 @@ class Modes(IntEnum):
 
 
 config = {"version_warning": True, "debugging": False, "use_db": True}
-### NEEDED FOR TESTS!! ###
-import inspect
 
 if sys.version_info < (3, 10):
     from use.buffet_old import buffet_table
