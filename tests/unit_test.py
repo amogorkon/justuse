@@ -18,7 +18,7 @@ import packaging.tags
 import packaging.version
 import pytest
 from furl import furl as URL
-from hypothesis import example, given, assume
+from hypothesis import assume, example, given
 from hypothesis import strategies as st
 
 src = import_base = Path(__file__).parent.parent / "src"
@@ -567,8 +567,7 @@ def test_read_wheel_metadata(reuse):
         assert meta["import_relpath"] == "use/__init__.py"
 
 
-@given(st.binary(max_size=100))
+@given(st.text())
 def test_jack(inputs):
-    assume()
-    sha = sha256(inputs).hexdigest()
+    sha = sha256(inputs.encode("utf-8")).hexdigest()
     assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))
