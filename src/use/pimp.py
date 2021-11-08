@@ -226,7 +226,7 @@ def _venv_root(package_name, version, home) -> Path:
     return home / "venv" / package_name / str(version)
 
 
-def _pebkac_no_version_hash(
+def _pebkac_no_version(
     *,
     name: str,
     func: Callable[..., Union[Exception, ModuleType]] = None,
@@ -246,7 +246,7 @@ def _pebkac_no_version_hash(
     return RuntimeWarning(Message.cant_import_no_version(name))
 
 
-def _pebkac_version_no_hash(
+def _pebkac_no_hash(
     *,
     name: str,
     func: Callable[[Any], Union[Exception, ModuleType]] = None,
@@ -309,7 +309,7 @@ def _pebkac_no_version_no_hash(
         rel = rel_vals[0]
 
     if rel:
-        return _pebkac_version_no_hash(
+        return _pebkac_no_hash(
             func=None,
             name=name,
             version=rel.version,

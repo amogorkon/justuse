@@ -21,18 +21,14 @@ def buffet_table(case, kwargs):
         (0, 0, 1, 0): lambda: pimp._import_public_no_install(**kwargs),
         (0, 1, 0, 0): lambda: ImportError(Message.cant_import(name)),
         (1, 0, 0, 0): lambda: ImportError(Message.cant_import(name)),
-        (0, 0, 1, 1): lambda: pimp._auto_install(
-            func=lambda: pimp._import_public_no_install(**kwargs), **kwargs
-        ),
+        (0, 0, 1, 1): lambda: pimp._pebkac_no_version_no_hash(**kwargs),
         (0, 1, 1, 0): lambda: pimp._import_public_no_install(**kwargs),
         (1, 1, 0, 0): lambda: ImportError(Message.cant_import(name)),
-        (1, 0, 0, 1): lambda: pimp._pebkac_version_no_hash(**kwargs),
+        (1, 0, 0, 1): lambda: pimp._pebkac_no_hash(**kwargs),
         (1, 0, 1, 0): lambda: pimp._ensure_version(pimp._import_public_no_install(**kwargs), **kwargs),
-        (0, 1, 0, 1): lambda: pimp._pebkac_no_version_hash(**kwargs),
-        (0, 1, 1, 1): lambda: pimp._pebkac_no_version_hash(pimp._import_public_no_install, **kwargs),
-        (1, 0, 1, 1): lambda: pimp._ensure_version(
-            pimp._pebkac_version_no_hash(func=lambda: pimp._import_public_no_install(**kwargs), **kwargs), **kwargs
-        ),
+        (0, 1, 0, 1): lambda: pimp._pebkac_no_version(**kwargs),
+        (0, 1, 1, 1): lambda: pimp._pebkac_no_version(**kwargs),
+        (1, 0, 1, 1): lambda: pimp._pebkac_no_hash(**kwargs),
         (1, 1, 0, 1): lambda: pimp._auto_install(**kwargs),
         (1, 1, 1, 0): lambda: pimp._ensure_version(pimp._import_public_no_install(**kwargs), **kwargs),
         (1, 1, 1, 1): lambda: pimp._auto_install(
