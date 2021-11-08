@@ -731,14 +731,15 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             version (str or Version, optional): The version of the pkg to import. Defaults to None.
             hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
             hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
-            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
+            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to Modes.fastfail.
             modes (int, optional): Any combination of Use.modes . Defaults to 0.
 
         Raises:
-            RuntimeWarning: May be raised if the auto-installation of the pkg fails for some reason.
+            RuntimeWarning: May be raised if something non-critical happens during import.
+            ImportError: May be raised if the auto-installation of the pkg fails for some reason.
 
         Returns:
-            Optional[ModuleType]: Module if successful, default as specified otherwise.
+            ProxyModule|Any: Module (wrapped in a ProxyModule) if successful, default as specified if the requested Module couldn't be imported for some reason.
         """
         package_name, module_name = _parse_name(name)
         return self._use_package(

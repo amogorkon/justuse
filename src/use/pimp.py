@@ -800,10 +800,11 @@ def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> l
         filtered = (
             data
             >> _filter_by_version(version)
-            >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())
+            # >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())  # let's not filter by platform for now
         )
     else:
-        filtered = _filter_by_platform(data, tags=get_supported(), sys_version=_sys_version())
+        filtered = data
+        # filtered = _filter_by_platform(data, tags=get_supported(), sys_version=_sys_version())
 
     flat = reduce(list.__add__, filtered.releases.values(), [])
     return sorted(
