@@ -27,6 +27,7 @@ def test_template(reuse):
     pass
 
 
+@pytest.mark.skipif(not_local, reason="tdd")
 def test_is_platform_compatible_macos(reuse):
     platform_tags = reuse.use.get_supported()
     platform_tag = next(iter(platform_tags))
@@ -54,6 +55,7 @@ def test_is_platform_compatible_macos(reuse):
     assert reuse._is_platform_compatible(PyPI_Release(**info), platform_tags)
 
 
+@pytest.mark.skipif(not_local, reason="tdd")
 def test_is_platform_compatible_win(reuse):
     platform_tags = reuse.use.get_supported()
     platform_tag = next(iter(platform_tags))
@@ -144,6 +146,7 @@ def test_use_kwargs(reuse):
     mod = reuse(package_name="matplotlib", module_name="matplotlib.pyplot")
     assert mod
 
+
 @pytest.mark.skipif(not_local, reason="tdd")
 def test_auto_install_protobuf(reuse):
     mod = reuse(
@@ -178,6 +181,7 @@ def test_auto_install_protobuf(reuse):
         modes=reuse.auto_install,
     )
     assert mod
+
 
 @pytest.mark.skipif(not_local, reason="tdd")
 def test_auto_install_numpy(reuse):
