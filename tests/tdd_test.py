@@ -144,7 +144,7 @@ def test_use_kwargs(reuse):
     mod = reuse(package_name="matplotlib", module_name="matplotlib.pyplot")
     assert mod
 
-
+@pytest.mark.skipif(not_local, reason="tdd")
 def test_auto_install_protobuf(reuse):
     mod = reuse(
         "protobuf",
@@ -179,7 +179,7 @@ def test_auto_install_protobuf(reuse):
     )
     assert mod
 
-
+@pytest.mark.skipif(not_local, reason="tdd")
 def test_auto_install_numpy(reuse):
     mod = reuse(
         "numpy",
@@ -224,6 +224,7 @@ def test_auto_install_numpy(reuse):
     assert mod
 
 
+@pytest.mark.skipif(not_local, reason="tdd")
 def test_auto_install_justuse(reuse):
     mod = reuse("justuse/use", version="0.5.0", hashes={"9瑉㬾鮓蘄鏲枲亝㫖徑怌罒硴厷䣍拑瑙瓦"}, modes=reuse.auto_install)
     assert mod

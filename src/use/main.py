@@ -773,9 +773,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hashes: set = {num_as_hexdigest(JACK_as_num(H)) if is_JACK(H) else H for H in hashes}
         # we use boolean flags to reduce the complexity of the call signature
         auto_install: bool = Modes.auto_install & modes
-        fatal_exceptions: bool = Modes.fatal_exceptions & modes
-        no_public_installation: bool = Modes.no_public_installation & modes
-        fastfail: bool = Modes.fastfail & modes
 
         version: Version = Version(version) if version else None
 
@@ -803,9 +800,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "hash_algo": hash_algo,
             "user_msg": user_msg,
             "spec": spec,
-            "fastfail": fastfail,
-            "no_public_installation": no_public_installation,
-            "fatal_exceptions": fatal_exceptions,
+            "fastfail": Modes.fastfail & modes,
+            "no_public_installation": Modes.no_public_installation & modes,
+            "fatal_exceptions": Modes.fatal_exceptions & modes,
         }
         result = buffet_table(case, kwargs)
         assert result
