@@ -1,3 +1,11 @@
+"""Here live all the tests that are expected to fail because their functionality is not implemented yet.
+Test-Driven Development is done in the following order: 
+    1. Create a test that fails.
+    2. Write the code that makes the test pass.
+    3. Check how long the test took to pass. 
+    4. If it took longer than 1 second, move it to integration tests. Otherwise, move it to unit tests.
+"""
+
 import importlib
 import os
 import re
@@ -19,8 +27,6 @@ from .unit_test import PyPI_Release, Version, log, reuse
 not_local = "GITHUB_REF" in os.environ
 is_win = sys.platform.lower().startswith("win")
 not_win = not is_win
-
-# Add in-progress tests here
 
 
 def test_template(reuse):
