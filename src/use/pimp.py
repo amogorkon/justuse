@@ -72,6 +72,7 @@ def _ensure_version(
     return result
 
 
+# fmt: off
 @pipes
 def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
     if isinstance(value, (str, bytes)):
@@ -79,9 +80,13 @@ def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
     if isinstance(value, furl.Path):
         return (
             Path.cwd(),
-            value.segments << map(Path) << tuple << reduce(Path.__truediv__),
+            value.segments 
+            << map(Path) 
+            << tuple 
+            << reduce(Path.__truediv__),
         ) << reduce(Path.__truediv__)
     return value
+# fmt: on
 
 
 def execute_wrapped(sql: str, params: tuple):

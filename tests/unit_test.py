@@ -97,29 +97,6 @@ def test_simple_path(reuse):
     assert mod.test() == 42
 
 
-def test_simple_url(reuse):
-    import http.server
-
-    port = 8089
-    orig_cwd = Path.cwd()
-    try:
-        os.chdir(Path(__file__).parent.parent)
-
-        with http.server.HTTPServer(("", port), http.server.SimpleHTTPRequestHandler) as svr:
-            foo_uri = f"http://localhost:{port}/tests/.tests/foo.py"
-            print(f"starting thread to handle HTTP request on port {port}")
-            import threading
-
-            thd = threading.Thread(target=svr.handle_request)
-            thd.start()
-            print(f"loading foo module via use(URL({foo_uri}))")
-            with pytest.warns(use.NoValidationWarning):
-                mod = reuse(URL(foo_uri), initial_globals={"a": 42})
-                assert mod.test() == 42
-    finally:
-        os.chdir(orig_cwd)
-
-
 def test_internet_url(reuse):
     foo_uri = "https://raw.githubusercontent.com/greyblue9/justuse/3f783e6781d810780a4bbd2a76efdee938dde704/tests/foo.py"
     print(f"loading foo module via use(URL({foo_uri}))")
@@ -386,52 +363,6 @@ def test_suggestion_works(reuse):
             mod = eval(last_line)
             log.info("suggest artifact returning: %s", mod)
         assert mod
-
-
-def double_function(func):
-    import functools
-
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        return func(*args, **kwargs) * 2
-
-    return wrapper
-
-
-# @pytest.mark.skip
-def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
-    # baseline
-    mod = reuse(reuse.Path("simple_funcs.py"))
-    assert mod.two() == 2
-
-    # all functions, but not classes or methods
-    mod = reuse(reuse.Path("simple_funcs.py")) @ (reuse.isfunction, "", double_function)
-
-    assert mod.two() == 4
-    assert mod.three() == 6
-    inst = mod.Two()
-    assert inst() == 2
-    inst = mod.Three()
-    assert inst.three() == 3
-
-    # functions with specific names only
-    mod = reuse(reuse.Path("simple_funcs.py")) @ (reuse.isfunction, "two", double_function)
-    assert mod.two() == 4
-    assert mod.three() == 3
-    assert reuse.ismethod
-
-
-@pytest.mark.skipif(True, reason="too slow; moved to the Beast")
-@pytest.mark.parametrize("name, version", (("numpy", "1.19.3"),))
-def test_86_numpy(reuse, name, version):
-    use = reuse  # for the eval() later
-    with pytest.raises(RuntimeWarning) as w:
-        reuse(name, version=version, modes=reuse.auto_install)
-    assert w
-    recommendation = str(w.value).split("\n")[-1].strip()
-    mod = eval(recommendation)
-    assert mod.__name__ == reuse._parse_name(name)[1]
-    return mod  # for the redownload test
 
 
 def test_clear_registry(reuse):

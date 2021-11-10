@@ -54,7 +54,6 @@ test_config: str = locals().get("test_config", {})
 test_version: str = locals().get("test_version", None)
 
 _reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
-_aspects = {}
 _using = {}
 
 # sometimes all you need is a sledge hammer..
@@ -124,6 +123,7 @@ class ProxyModule(ModuleType):
 class ModuleReloader:
     def __init__(self, *, proxy, name, path, initial_globals):
         self.proxy = proxy
+        "ProxyModula that we refer to."
         self.name = name
         self.path = path
         self.initial_globals = initial_globals
@@ -201,18 +201,19 @@ class Use(ModuleType):
     def __init__(self):
         # TODO for some reason removing self._using isn't as straight forward..
         self._using = _using
-        self.home: Path
 
         self._set_up_files_and_directories()
         # might run into issues during testing otherwise
         self.registry = self._set_up_registry()
-        self._user_registry = toml.load(self.home / "user_registry.toml")
+        "Registry sqlite DB to store all relevant package metadata."
+        self._user_registry = toml.load(home / "user_registry.toml")
+        "User can override package directories via user_registry.toml"
 
         # for the user to copy&paste
-        with open(self.home / "config_defaults.toml", "w") as rfile:
+        with open(home / "config_defaults.toml", "w") as rfile:
             toml.dump(config, rfile)
 
-        with open(self.home / "config.toml") as rfile:
+        with open(home / "config.toml") as rfile:
             config.update(toml.load(rfile))
 
         config.update(test_config)
@@ -223,6 +224,7 @@ class Use(ModuleType):
         if config["version_warning"]:
             try:
                 response = requests.get("https://pypi.org/pypi/justuse/json")
+                "Checking if there's a new version of justuse."
                 data = response.json()
                 max_version = max(Version(version) for version in data["releases"].keys())
                 target_version = max_version
@@ -241,15 +243,15 @@ class Use(ModuleType):
 
     def _set_up_files_and_directories(self):
         global home
-        self.home = home
+        "Where we live."
 
         try:
-            self.home.mkdir(mode=0o755, parents=True, exist_ok=True)
+            home.mkdir(mode=0o755, parents=True, exist_ok=True)
         except PermissionError:
             # this should fix the permission issues on android #80
 
-            self.home = home = _ensure_path(tempfile.mkdtemp(prefix="justuse_"))
-        (self.home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
+            home = _ensure_path(tempfile.mkdtemp(prefix="justuse_"))
+        (home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
         for file in (
             "config.toml",
             "config_defaults.toml",
@@ -257,7 +259,7 @@ class Use(ModuleType):
             "registry.db",
             "user_registry.toml",
         ):
-            (self.home / file).touch(mode=0o755, exist_ok=True)
+            (home / file).touch(mode=0o755, exist_ok=True)
 
     def _sqlite_row_factory(self, cursor, row):
         return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
@@ -268,7 +270,7 @@ class Use(ModuleType):
             registry = sqlite3.connect(path or ":memory:").cursor()
         else:
             try:
-                registry = sqlite3.connect(self.home / "registry.db").cursor()
+                registry = sqlite3.connect(home / "registry.db").cursor()
             except Exception as e:
                 raise RuntimeError(Message.couldnt_connect_to_db(e))
         registry.row_factory = self._sqlite_row_factory
@@ -319,9 +321,9 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         self.registry.close()
         self.registry.connection.close()
         self.registry = None
-        number_of_backups = len(list((self.home / "registry.db").glob("*.bak")))
-        (self.home / "registry.db").rename(self.home / f"registry.db.{number_of_backups + 1}.bak")
-        (self.home / "registry.db").touch(mode=0o644)
+        number_of_backups = len(list((home / "registry.db").glob("*.bak")))
+        (home / "registry.db").rename(home / f"registry.db.{number_of_backups + 1}.bak")
+        (home / "registry.db").touch(mode=0o644)
         self.registry = self._set_up_registry()
         self.cleanup()
 
