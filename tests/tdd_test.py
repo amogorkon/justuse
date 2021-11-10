@@ -2,7 +2,7 @@
 Test-Driven Development is done in the following order: 
     1. Create a test that fails.
     2. Write the code that makes the test pass.
-    3. Check how long the test took to pass. 
+    3. Check how long the test took to run. 
     4. If it took longer than 1 second, move it to integration tests. Otherwise, move it to unit tests.
 """
 
@@ -29,8 +29,10 @@ is_win = sys.platform.lower().startswith("win")
 not_win = not is_win
 
 
+@pytest.mark.skipif(not_local, reason="tdd")
 def test_template(reuse):
-    pass
+    "Copy and paste this as a template for your tdd tests."
+    assert False
 
 
 @pytest.mark.skipif(not_local, reason="tdd")
