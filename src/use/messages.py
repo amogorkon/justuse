@@ -14,11 +14,11 @@ from use.pypi_model import Version
 print(f"Home is {use.home}")
 
 
-def _web_no_version_or_hash_provided(*, name, package_name, version, hashes, best_release):
-    if not config["testing"]:
+def _web_no_version_or_hash_provided(*, name, package_name, version, hashes):
+    if not config.get("testing", True):
         webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
     return f"""Please specify version and hash for auto-installation of {package_name!r}.
-A webbrowser will open to the Snyk Advisor page to check whether the package is vulnerable.
+A webbrowser will open to the Snyk Advisor to check whether the package is vulnerable.
 If you want to auto-install the latest version:
 use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
 

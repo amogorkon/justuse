@@ -274,9 +274,8 @@ def _pebkac_no_hash(
 def _pebkac_no_version_no_hash(
     *,
     name: str,
-    hash_algo,
-    package_name: str = None,
-    version: Version = None,
+    hash_algo: Hash,
+    package_name: str,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     # let's try to make an educated guess and give a useful suggestion
@@ -288,9 +287,13 @@ def _pebkac_no_version_no_hash(
 
     # we found something that could work, but it may not fit to the user's requirements
     hashes = {o.digests.get(hash_algo.name) for o in proj.urls}
+    version = ordered[0].version
     return RuntimeWarning(
         Message.no_version_or_hash_provided(
-            name=name, hashes=hashes, package_name=package_name, version=version, best_release=ordered[0]
+            name=name,
+            hashes=hashes,
+            package_name=package_name,
+            version=version,
         )
     )
 
@@ -319,23 +322,16 @@ def _import_public_no_install(
         builtin = True
 
     if builtin:
-        return _extracted_from__import_public_no_install_18(module_name, spec)
+        if spec.name in sys.modules:
+            mod = sys.modules[spec.name]
+        if mod is None:
+            mod = importlib.import_module(module_name)
+        assert mod
+        sys.modules[spec.name] = mod
+        spec.loader.exec_module(mod)  # ! => cache
+        return mod
     # it seems to be installed in some way, for instance via pip
     return importlib.import_module(module_name)  # ! => cache
-
-
-# TODO Rename this here and in `_import_public_no_install`
-
-
-def _extracted_from__import_public_no_install_18(module_name, spec):
-    if spec.name in sys.modules:
-        mod = sys.modules[spec.name]
-    if mod is None:
-        mod = importlib.import_module(module_name)
-    assert mod
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)  # ! => cache
-    return mod
 
 
 def _parse_name(name) -> tuple[str, str]:
@@ -484,11 +480,6 @@ def _process(*argv, env={}):
         if o.returncode != 0
         else (f"{o.stdout}\n\n{o.stderr}")
     )
-
-
-def _find_version(package_name, version=None) -> PyPI_Release:
-    data = _filtered_and_ordered_data(_get_package_data(package_name), version)
-    return data[0]
 
 
 def _get_venv_env(venv_root: Path) -> dict[str, str]:
