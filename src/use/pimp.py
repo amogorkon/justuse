@@ -288,13 +288,9 @@ def _pebkac_no_version_no_hash(
 
     # we found something that could work, but it may not fit to the user's requirements
     hashes = {o.digests.get(hash_algo.name) for o in proj.urls}
-    rel = ordered[0]
     return RuntimeWarning(
         Message.no_version_or_hash_provided(
-            name=name,
-            hashes=hashes,
-            package_name=package_name,
-            version=version,
+            name=name, hashes=hashes, package_name=package_name, version=version, best_release=ordered[0]
         )
     )
 
