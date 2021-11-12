@@ -487,3 +487,7 @@ def test_jack(inputs):
     assume(inputs.isprintable())
     sha = sha256(inputs.encode("utf-8")).hexdigest()
     assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))
+
+
+def test_test():
+    assert False
