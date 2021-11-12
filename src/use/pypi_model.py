@@ -65,11 +65,6 @@ def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
     return a_dict
 
 
-class QuietModel(BaseModel):
-    def __repr__(self):
-        return "%s()" % type(self).__qualname__
-
-
 class JustUse_Info(BaseModel):
     distribution: Optional[str]
     version: Optional[str]
@@ -80,7 +75,7 @@ class JustUse_Info(BaseModel):
     ext: Optional[str]
 
 
-class PyPI_Release(QuietModel):
+class PyPI_Release(BaseModel):
     comment_text: str = None
     digests: dict[str, str] = None
     url: str = None
@@ -125,13 +120,13 @@ class PyPI_Release(QuietModel):
         return JustUse_Info()
 
 
-class PyPI_Downloads(QuietModel):
+class PyPI_Downloads(BaseModel):
     last_day: int
     last_month: int
     last_week: int
 
 
-class PyPI_Info(QuietModel):
+class PyPI_Info(BaseModel):
     author: str = None
     author_email: str = None
     bugtrack_url: str = None
@@ -161,7 +156,7 @@ class PyPI_Info(QuietModel):
     yanked_reason: str = None
 
 
-class PyPI_URL(QuietModel):
+class PyPI_URL(BaseModel):
     comment_text: str = None
     digests: dict[str, str] = None
     downloads: int = -1
@@ -179,7 +174,7 @@ class PyPI_URL(QuietModel):
     yanked_reason: str = None
 
 
-class PyPI_Project(QuietModel):
+class PyPI_Project(BaseModel):
     releases: dict[Version, list[PyPI_Release]] = None
     urls: list[PyPI_URL] = None
     last_serial: int = None

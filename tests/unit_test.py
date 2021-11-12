@@ -26,7 +26,6 @@ cwd = Path().cwd()
 os.chdir(src)
 sys.path.insert(0, "") if "" not in sys.path else None
 import use
-from use import PyPI_Release, Version
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 
 os.chdir(cwd)
@@ -53,21 +52,6 @@ def reuse():
     use._aspects = {}
     use._reloaders = {}
     return use
-
-
-@pytest.mark.skipif(True, reason="Needs investigation")
-def test_redownload_module(reuse):
-    def inject_fault(*, path, **kwargs):
-        log.info("fault_inject: deleting %s", path)
-        path.delete()
-
-    assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
-    try:
-        reuse.config["fault_inject"] = inject_fault
-        assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
-    finally:
-        del reuse.config["fault_inject"]
-    assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
 
 
 def test_access_to_home(reuse):
@@ -500,5 +484,6 @@ def test_read_wheel_metadata(reuse):
 
 @given(st.text())
 def test_jack(inputs):
+    assume(inputs.isprintable())
     sha = sha256(inputs.encode("utf-8")).hexdigest()
     assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))

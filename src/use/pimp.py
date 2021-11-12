@@ -38,7 +38,7 @@ from pip._internal.utils import compatibility_tags
 import use
 from use import AmbiguityWarning, Hash, Modes, config
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-from use.messages import Message
+from use.messages import Message, _web_no_version_or_hash_provided
 from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none
 from use.tools import pipes
 
@@ -253,20 +253,11 @@ def _pebkac_no_version(
 
 def _pebkac_no_hash(
     *,
-    name: str,
-    func: Callable[[Any], Union[Exception, ModuleType]] = None,
     version: Version = None,
-    hash_algo=None,
+    hash_algo: Hash,
     package_name: str = None,
-    module_name: str = None,
-    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
-    version = Version(version)
-    if func:
-        result = func()
-        if isinstance(result, (Exception, ModuleType)):
-            return result
     try:
         hashes = {
             hexdigest_as_JACK(entry.digests.get(hash_algo.name))
@@ -274,11 +265,6 @@ def _pebkac_no_hash(
         }
         if not hashes:
             rw = RuntimeWarning(Message.pebkac_unsupported(package_name))
-        else:
-            rw = RuntimeWarning(message_formatter(name, package_name, version, hashes))
-        rw.name = name
-        rw.version = version
-        rw.hashes = hashes
         return rw
     except (IndexError, KeyError) as ike:
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
@@ -288,47 +274,29 @@ def _pebkac_no_hash(
 def _pebkac_no_version_no_hash(
     *,
     name: str,
-    func: Callable[..., Union[Exception, ModuleType]] = None,
-    version: Version = None,
-    hash_algo=None,
+    hash_algo,
     package_name: str = None,
-    module_name: str = None,
-    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
+    version: Version = None,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
-    if func:
-        result = func()
-        if isinstance(result, (Exception, ModuleType)):
-            return result
     # let's try to make an educated guess and give a useful suggestion
     proj = _get_package_data(package_name)
-    ordered = _filtered_and_ordered_data(proj, version=version)
-    rel = None
-    hashes = {o.digests.get(hash_algo.name) for o in proj.urls}
-    for r in ordered:
-        rel = r
-        break
-    if not rel:
-        v = list(proj.releases.keys())[0]
-        rel_vals = proj.releases.get(v, [None])
-        rel = rel_vals[0]
+    ordered = _filtered_and_ordered_data(proj, version=None)
+    # we tried our best, but we didn't find anything that could work'
+    if not ordered:
+        return RuntimeWarning(Message.pebkac_unsupported(package_name))
 
-    if rel:
-        return _pebkac_no_hash(
-            func=None,
+    # we found something that could work, but it may not fit to the user's requirements
+    hashes = {o.digests.get(hash_algo.name) for o in proj.urls}
+    rel = ordered[0]
+    return RuntimeWarning(
+        Message.no_version_or_hash_provided(
             name=name,
-            version=rel.version,
-            hash_algo=hash_algo,
             hashes=hashes,
             package_name=package_name,
-            message_formatter=Message.no_version_or_hash_provided,
+            version=version,
         )
-
-    rw = RuntimeWarning(Message.pebkac_unsupported(package_name))
-    rw.name = package_name
-    rw.version = rel.version if rel else None
-    rw.hashes = hashes
-    return rw
+    )
 
 
 def _import_public_no_install(
@@ -764,7 +732,7 @@ def _load_venv_entry(*, package_name, module_name, installation_path, module_pat
 
 
 @cache(maxsize=512)
-def _get_package_data(package_name) -> PyPI_Project:
+def _get_package_data(package_name: str) -> PyPI_Project:
     json_url = f"https://pypi.org/pypi/{package_name}/json"
     response = requests.get(json_url)
     if response.status_code == 404:
@@ -772,10 +740,6 @@ def _get_package_data(package_name) -> PyPI_Project:
     elif response.status_code != 200:
         raise RuntimeWarning(Message.web_error(json_url, response))
     return PyPI_Project(**response.json())
-
-
-def _sys_version():
-    return Version(".".join(map(str, sys.version_info[0:3])))
 
 
 def _filter_by_platform(

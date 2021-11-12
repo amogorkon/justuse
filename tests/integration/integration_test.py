@@ -73,6 +73,21 @@ def test_86_numpy(reuse, name, version):
     return mod  # for the redownload test
 
 
+@pytest.mark.skipif(True, reason="Needs investigation")
+def test_redownload_module(reuse):
+    def inject_fault(*, path, **kwargs):
+        log.info("fault_inject: deleting %s", path)
+        path.delete()
+
+    assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
+    try:
+        reuse.config["fault_inject"] = inject_fault
+        assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
+    finally:
+        del reuse.config["fault_inject"]
+    assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
+
+
 def double_function(func):
     import functools
 

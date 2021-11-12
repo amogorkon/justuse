@@ -1,3 +1,4 @@
 import use
 
-use("example-pypi-package", modes=use.auto_install)
+mod = use("example-pypi-package/examplepy", modes=use.auto_install)
+print("fin")

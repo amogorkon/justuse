@@ -768,6 +768,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hash_algo,
         user_msg=Message,
     ):
+        assert hash_algo != None, "Hash algorithm must be specified"
+
         if isinstance(hashes, str):
             hashes = set(hashes.split())
         if not hashes:
@@ -805,6 +807,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "fastfail": Modes.fastfail & modes,
             "no_public_installation": Modes.no_public_installation & modes,
             "fatal_exceptions": Modes.fatal_exceptions & modes,
+            "sys_version": Version(".".join(map(str, sys.version_info[0:3]))),
         }
         result = buffet_table(case, kwargs)
         assert result

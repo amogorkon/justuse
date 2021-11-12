@@ -6,36 +6,36 @@ Test-Driven Development is done in the following order:
     4. If it took longer than 1 second, move it to integration tests. Otherwise, move it to unit tests.
 """
 
-import importlib
 import os
-import re
-import shlex
-import subprocess
 import sys
-import warnings
-from importlib.metadata import PackageNotFoundError, distribution
-from importlib.util import find_spec
 from pathlib import Path
-from shutil import rmtree
-from unittest import skip
 
 import pytest
-import requests
+from hypothesis import assume, example, given
+from hypothesis import strategies as st
 
-from .unit_test import PyPI_Release, Version, log, reuse
+src = import_base = Path(__file__).parent.parent / "src"
+cwd = Path().cwd()
+os.chdir(src)
+sys.path.insert(0, "") if "" not in sys.path else None
+import use
+from use.pypi_model import JustUse_Info, PyPI_Project, PyPI_Release, Version
+
+os.chdir(cwd)
 
 not_local = "GITHUB_REF" in os.environ
 is_win = sys.platform.lower().startswith("win")
-not_win = not is_win
 
 
-@pytest.mark.skipif(not_local, reason="tdd")
-def test_template(reuse):
-    "Copy and paste this as a template for your tdd tests."
-    assert False
+@pytest.fixture()
+def reuse():
+    # making a completely new one each time would take ages (_registry)
+    use._using = {}
+    use._aspects = {}
+    use._reloaders = {}
+    return use
 
 
-@pytest.mark.skipif(not_local, reason="tdd")
 def test_is_platform_compatible_macos(reuse):
     platform_tags = reuse.use.get_supported()
     platform_tag = next(iter(platform_tags))
@@ -63,7 +63,6 @@ def test_is_platform_compatible_macos(reuse):
     assert reuse._is_platform_compatible(PyPI_Release(**info), platform_tags)
 
 
-@pytest.mark.skipif(not_local, reason="tdd")
 def test_is_platform_compatible_win(reuse):
     platform_tags = reuse.use.get_supported()
     platform_tag = next(iter(platform_tags))
@@ -89,3 +88,35 @@ def test_is_platform_compatible_win(reuse):
         "version": "1.19.5",
     }
     assert reuse._is_platform_compatible(PyPI_Release(**info), platform_tags, include_sdist=False)
+
+
+def test_pypi_model():
+
+    release = PyPI_Release(
+        comment_text="test",
+        digests={"md5": "asdf"},
+        url="https://files.pythonhost",
+        ext=".whl",
+        packagetype="bdist_wheel",
+        distribution="numpy",
+        requires_python=False,
+        python_version="cp3",
+        python_tag="cp3",
+        platform_tag="cp4",
+        filename="numpy-1.19.5-cp3-cp3-cp4-bdist_wheel.whl",
+        abi_tag="cp3",
+        yanked=False,
+        version="1.19.5",
+    )
+    assert release == eval(repr(release))
+
+    info = JustUse_Info(
+        distribution="numpy",
+        version="1.19.5",
+        build_tag="cp4",
+        python_tag="cp4",
+        abi_tag="cp4",
+        platform_tag="cp4",
+        ext="whl",
+    )
+    assert info == eval(repr(info))

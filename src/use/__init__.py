@@ -1,4 +1,3 @@
-# sourcery skip: hoist-statement-from-if, remove-pass-body
 """
 This is where the story begins. Welcome to JustUse!
 Only imports and project-global constants are defined here. 
@@ -77,8 +76,7 @@ config = {"version_warning": True, "debugging": False, "use_db": True}
 if sys.version_info < (3, 10):
     from use.buffet_old import buffet_table
 else:
-    print("future buffet table is not set up yet, using the old one")
-    from use.buffet_old import buffet_table  # TODO
+    from use.buffet import buffet_table
 
 from use.main import *
 from use.messages import *
