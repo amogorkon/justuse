@@ -120,3 +120,7 @@ def test_pypi_model():
         ext="whl",
     )
     assert info == eval(repr(info))
+
+
+def test_test():
+    assert False
