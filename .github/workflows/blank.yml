@@ -30,7 +30,7 @@ jobs:
           echo "debug = true" > ~/.justuse-python/config.toml
           python3 -m pip install --force-reinstall --upgrade -r requirements.txt
           python3 -m pip install -r requirements.txt furl
-          IFS=$'\n'; set -- $( find -name "*.py" | cut -c 3- | sed -r -e 's~^src/~~; s~\.py~~; \~^\.|/\.~d; s~/~.~g; s~\.__init__$~~; s~^~--cov=~; ' ; ); python3 -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage/ --cov-report annotate:coverage/annotated --cov-report xml:coverage/cov.xml "$@"
+          IFS=$'\n'; set -- $( find -name "*.py" | cut -c 3- | sed -r -e 's~^src/~~; s~\.py~~; \~^\.|/\.~d; s~/~.~g; s~\.__init__$~~; s~^~--cov=~; ' ; ); python3 -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage/ --cov-report annotate:coverage/annotated --cov-report xml:coverage/cov.xml "$@" tests/unit_test.py
       - name: coverage.py badge
         uses: tj-actions/coverage-badge-py@v1.6
         with:
@@ -71,7 +71,7 @@ jobs:
           $env:ERRORS = 1
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade -r requirements.txt
-          & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x86/ --cov-report annotate:coverage-win32-x86/annotated --cov-report xml:coverage-win32-x86/cov.xml --cov=setup --cov=use --cov=use.hash_alphabet --cov=use.main --cov=use.messages --cov=use.mod --cov=use.pimp --cov=use.platformtag --cov=use.pypi_model --cov=use.tools --cov=tests --cov=tests.foo --cov=tests.mass.collect_packages --cov=tests.mass.justtest --cov=tests.mass.test_pypi_model --cov=tests.mass.test_single --cov=tests.mass.tmp --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.test_beast --cov=tests.unit_test --cov=build.lib.use --cov=build.lib.use.hash_alphabet --cov=build.lib.use.main --cov=build.lib.use.messages --cov=build.lib.use.mod --cov=build.lib.use.pimp --cov=build.lib.use.platformtag --cov=build.lib.use.pypi_model --cov=build.lib.use.tools
+          & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x86/ --cov-report annotate:coverage-win32-x86/annotated --cov-report xml:coverage-win32-x86/cov.xml --cov=setup --cov=use --cov=use.hash_alphabet --cov=use.main --cov=use.messages --cov=use.mod --cov=use.pimp --cov=use.platformtag --cov=use.pypi_model --cov=use.tools --cov=tests --cov=tests.foo --cov=tests.mass.collect_packages --cov=tests.mass.justtest --cov=tests.mass.test_pypi_model --cov=tests.mass.test_single --cov=tests.mass.tmp --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.test_beast --cov=tests.unit_test --cov=build.lib.use --cov=build.lib.use.hash_alphabet --cov=build.lib.use.main --cov=build.lib.use.messages --cov=build.lib.use.mod --cov=build.lib.use.pimp --cov=build.lib.use.platformtag --cov=build.lib.use.pypi_model --cov=build.lib.use.tools tests/unit_test.py
       - name: Windows - Collect Coverage
         run: |
           & "xcopy.exe" ".\.coverage" ".\coverage-win32-x86"
@@ -112,7 +112,7 @@ jobs:
           $env:ERRORS = 1
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade -r requirements.txt
-          & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x64/ --cov-report annotate:coverage-win32-x64/annotated --cov-report xml:coverage-win32-x64/cov.xml --cov=setup --cov=use --cov=use.hash_alphabet --cov=use.main --cov=use.messages --cov=use.mod --cov=use.pimp --cov=use.platformtag --cov=use.pypi_model --cov=use.tools --cov=tests --cov=tests.foo --cov=tests.mass.collect_packages --cov=tests.mass.justtest --cov=tests.mass.test_pypi_model --cov=tests.mass.test_single --cov=tests.mass.tmp --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.test_beast --cov=tests.unit_test --cov=build.lib.use --cov=build.lib.use.hash_alphabet --cov=build.lib.use.main --cov=build.lib.use.messages --cov=build.lib.use.mod --cov=build.lib.use.pimp --cov=build.lib.use.platformtag --cov=build.lib.use.pypi_model --cov=build.lib.use.tools
+          & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x64/ --cov-report annotate:coverage-win32-x64/annotated --cov-report xml:coverage-win32-x64/cov.xml --cov=setup --cov=use --cov=use.hash_alphabet --cov=use.main --cov=use.messages --cov=use.mod --cov=use.pimp --cov=use.platformtag --cov=use.pypi_model --cov=use.tools --cov=tests --cov=tests.foo --cov=tests.mass.collect_packages --cov=tests.mass.justtest --cov=tests.mass.test_pypi_model --cov=tests.mass.test_single --cov=tests.mass.tmp --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.test_beast --cov=tests.unit_test --cov=build.lib.use --cov=build.lib.use.hash_alphabet --cov=build.lib.use.main --cov=build.lib.use.messages --cov=build.lib.use.mod --cov=build.lib.use.pimp --cov=build.lib.use.platformtag --cov=build.lib.use.pypi_model --cov=build.lib.use.tools  tests/unit_test.py
       - name: Windows - Collect Coverage
         run: |
           & "xcopy.exe" ".\.coverage" ".\coverage-win32-x64"
