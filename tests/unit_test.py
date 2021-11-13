@@ -20,19 +20,12 @@ from furl import furl as URL
 from hypothesis import assume, example, given
 from hypothesis import strategies as st
 
-src = import_base = Path(__file__).parent.parent / "src"
-cwd = Path().cwd()
-os.chdir(src)
-sys.path.insert(0, "") if "" not in sys.path else None
-import use
-from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-
-os.chdir(cwd)
 
 is_win = sys.platform.startswith("win")
 
 __package__ = "tests"
-
+import use
+from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 import logging
 
 log = logging.getLogger(".".join((__package__, __name__)))
