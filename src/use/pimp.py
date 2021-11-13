@@ -586,7 +586,7 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     out_info["artifact_path"] = artifact_path
     # todo: set info
     as_dict = info
-    url = URL(as_Dict["url"])
+    url = URL(as_dict["url"])
     filename = url.path.segments[-1]
     info["filename"] = filename
     # info.update(_parse_filename(filename))

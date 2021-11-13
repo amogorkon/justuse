@@ -61,7 +61,7 @@ class Version(PkgVersion):
 def _delete_none(a_dict: Dict[str, object]) -> Dict[str, object]:
     for k, v in tuple(a_dict.items()):
         if v is None or v == "":
-            del a_Dict[k]
+            del a_dict[k]
     return a_dict
 
 
