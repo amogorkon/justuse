@@ -60,7 +60,7 @@ def test_is_platform_compatible_macos(reuse):
         "yanked_reason": None,
         "version": "1.19.5",
     }
-    assert reuse._is_platform_compatible(PyPI_Release(**info), platform_tags)
+    assert reuse.pimp._is_platform_compatible(PyPI_Release(**info), platform_tags)
 
 
 def test_is_platform_compatible_win(reuse):
@@ -87,7 +87,7 @@ def test_is_platform_compatible_win(reuse):
         "yanked_reason": None,
         "version": "1.19.5",
     }
-    assert reuse._is_platform_compatible(PyPI_Release(**info), platform_tags, include_sdist=False)
+    assert reuse.pimp._is_platform_compatible(PyPI_Release(**info), platform_tags, include_sdist=False)
 
 
 def test_pypi_model():
