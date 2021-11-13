@@ -11,7 +11,6 @@ from importlib.metadata import PackageNotFoundError, distribution
 from importlib.util import find_spec
 from pathlib import Path
 from threading import _shutdown_locks
-from typing import List
 from unittest.mock import patch
 
 import packaging.tags
@@ -435,7 +434,7 @@ def test_hash_alphabet():
 
 
 class ScopedArgv(AbstractContextManager):
-    def __init__(self, *newargv: List[str]):
+    def __init__(self, *newargv: list[str]):
         self._oldargv = [*sys.argv]
         self._newargv = newargv
 

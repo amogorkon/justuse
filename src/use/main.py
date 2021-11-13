@@ -18,7 +18,7 @@ import traceback
 from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, List, Optional, Type, Union
+from typing import Any, Callable, Optional, Type, Union
 from warnings import warn
 
 import requests
@@ -38,8 +38,11 @@ from use import (
     __version__,
     buffet_table,
     config,
+    dict,
     home,
     isfunction,
+    list,
+    set,
 )
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import Message

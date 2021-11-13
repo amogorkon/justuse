@@ -1,3 +1,9 @@
-from hashlib import sha256
+import typing
 
-print(sha256('\xc2\x80\xc3\x92'.encode("utf8")).hexdigest())
+class list(list):
+    @staticmethod
+    def __class_getitem__(key):
+         return typing.List[key]
+
+        
+print(hash(list))

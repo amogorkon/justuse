@@ -16,6 +16,26 @@ from pathlib import Path
 
 from beartype import beartype
 
+if sys.version_info < (3, 10):
+    import typing
+
+    class list(list):
+        def __class_getitem__(cls, item):
+            return typing.List[item]
+
+    class dict(dict):
+        def __class_getitem__(cls, item):
+            return typing.Dict[item]
+
+    class set(set):
+        def __class_getitem__(cls, item):
+            return typing.Set[item]
+
+    class tuple(tuple):
+        def __class_getitem__(cls, item):
+            return typing.Tuple[item]
+
+
 root.setLevel(DEBUG)
 
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()

@@ -1,7 +1,7 @@
-import os
 import json
+import os
 import time
-from typing import Dict, List, Optional
+from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
@@ -16,7 +16,10 @@ def get_soup(page: int):
 
 
 def parse_package(soup):
-    return {"name": soup.select_one("span.packageName").text, "href": soup.select_one("a[data-package]")["href"]}
+    return {
+        "name": soup.select_one("span.packageName").text,
+        "href": soup.select_one("a[data-package]")["href"],
+    }
 
 
 def parse_packages(soup):
