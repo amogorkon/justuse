@@ -8,6 +8,8 @@ Test-Driven Development is done in the following order:
 
 import os
 import sys
+
+from contextlib import AbstractContextManager, closing
 from pathlib import Path
 
 import pytest
@@ -113,3 +115,30 @@ def test_pypi_model():
         ext="whl",
     )
     assert info == eval(repr(info))
+
+
+class ScopedCwd(AbstractContextManager):
+    def __init__(self, newcwd: Path):
+        self._oldcwd = Path.cwd()
+        self._newcwd = newcwd
+
+    def __enter__(self, *_):
+        os.chdir(self._newcwd)
+
+    def __exit__(self, *_):
+        os.chdir(self._oldcwd)
+
+
+@pytest.mark.skipif(is_win or Path.cwd().as_posix().startswith("/media/"), reason="Not enough hours in a day")
+def test_setup_py_works(reuse):
+    import subprocess
+    with ScopedCwd(Path(__file__).parent.parent):
+        result = subprocess.check_output(
+            [sys.executable, "setup.py", "--help"],
+            shell=False
+        )
+        assert result
+
+
+
+

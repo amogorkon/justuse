@@ -426,17 +426,6 @@ def test_hash_alphabet():
     assert H == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(H)))
 
 
-@pytest.mark.skipif(is_win, reason="Windows TODO")
-def test_setup_py_works(reuse):
-    import subprocess
-    with ScopedCwd(Path(__file__).parent.parent):
-        result = subprocess.check_output(
-            [sys.executable, "setup.py", "--help"],
-            shell=False
-        )
-        assert result
-
-
 class ScopedCwd(AbstractContextManager):
     def __init__(self, newcwd: Path):
         self._oldcwd = Path.cwd()
