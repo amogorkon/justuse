@@ -26,27 +26,14 @@ import toml
 from furl import furl as URL
 from icontract import ensure, invariant, require
 
-from use import (
-    AmbiguityWarning,
-    Hash,
-    Modes,
-    ModInUse,
-    NotReloadableWarning,
-    NoValidationWarning,
-    UnexpectedHash,
-    VersionWarning,
-    __version__,
-    buffet_table,
-    config,
-    dict,
-    home,
-    isfunction,
-    list,
-    set,
-)
+from use import (AmbiguityWarning, Hash, Modes, ModInUse, NotReloadableWarning,
+                 NoValidationWarning, UnexpectedHash, VersionWarning,
+                 __version__, buffet_table, config, dict, home, isfunction,
+                 list, set)
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import Message
-from use.pimp import _apply_aspect, _build_mod, _ensure_path, _fail_or_default, _parse_name
+from use.pimp import (_apply_aspect, _build_mod, _ensure_path,
+                      _fail_or_default, _parse_name)
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
 from use.tools import methdispatch
 
@@ -56,7 +43,7 @@ log = getLogger(__name__)
 test_config: str = locals().get("test_config", {})
 test_version: str = locals().get("test_version", None)
 
-_reloaders: Dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
+_reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
 _using = {}
 
 # sometimes all you need is a sledge hammer..
@@ -436,7 +423,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         *,
         hash_algo=Hash.sha256,
         hash_value=None,
-        initial_globals: Optional[Dict[Any, Any]] = None,
+        initial_globals: Optional[dict[Any, Any]] = None,
         as_import: str = None,
         default=Modes.fastfail,
         modes=0,
@@ -635,7 +622,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         module_name: str = None,
         version: str = None,
         hash_algo=Hash.sha256,
-        hashes: Optional[Union[str, List[str]]] = None,
+        hashes: Optional[Union[str, list[str]]] = None,
         default=Modes.fastfail,
         modes: int = 0,
     ) -> ProxyModule:
@@ -678,7 +665,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         *,
         version: str = None,
         hash_algo=Hash.sha256,
-        hashes: Optional[Union[str, List[str]]] = None,
+        hashes: Optional[Union[str, list[str]]] = None,
         default=Modes.fastfail,
         modes: int = 0,
     ) -> ProxyModule:
@@ -722,7 +709,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         *,
         version: str = None,
         hash_algo=Hash.sha256,
-        hashes: Optional[Union[str, List[str]]] = None,
+        hashes: Optional[Union[str, list[str]]] = None,
         default=Modes.fastfail,
         modes: int = 0,
     ) -> ProxyModule:

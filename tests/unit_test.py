@@ -434,7 +434,7 @@ def test_hash_alphabet():
 
 
 class ScopedArgv(AbstractContextManager):
-    def __init__(self, *newargv: List[str]):
+    def __init__(self, *newargv: list[str]):
         self._oldargv = [*sys.argv]
         self._newargv = newargv
 

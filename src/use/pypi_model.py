@@ -58,7 +58,7 @@ class Version(PkgVersion):
         return Version(value)
 
 
-def _delete_none(a_dict: Dict[str, object]) -> Dict[str, object]:
+def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
     for k, v in tuple(a_dict.items()):
         if v is None or v == "":
             del a_dict[k]
@@ -77,7 +77,7 @@ class JustUse_Info(BaseModel):
 
 class PyPI_Release(BaseModel):
     comment_text: str = None
-    digests: Dict[str, str] = None
+    digests: dict[str, str] = None
     url: str = None
     ext: str = None
     packagetype: str = None
@@ -130,7 +130,7 @@ class PyPI_Info(BaseModel):
     author: str = None
     author_email: str = None
     bugtrack_url: str = None
-    classifiers: List[str] = None
+    classifiers: list[str] = None
     description: str = None
     description_content_type: str = None
     docs_url: str = None
@@ -146,9 +146,9 @@ class PyPI_Info(BaseModel):
     package_url: str = None
     platform: str = None
     project_url: str
-    project_urls: Dict[str, str] = None
+    project_urls: dict[str, str] = None
     release_url: str = None
-    requires_dist: List[str] = None
+    requires_dist: list[str] = None
     requires_python: str = None
     summary: str = None
     version: str = None
@@ -158,7 +158,7 @@ class PyPI_Info(BaseModel):
 
 class PyPI_URL(BaseModel):
     comment_text: str = None
-    digests: Dict[str, str] = None
+    digests: dict[str, str] = None
     downloads: int = -1
     filename: str = None
     has_sig: bool = False
@@ -175,8 +175,8 @@ class PyPI_URL(BaseModel):
 
 
 class PyPI_Project(BaseModel):
-    releases: Dict[Version, List[PyPI_Release]] = None
-    urls: List[PyPI_URL] = None
+    releases: dict[Version, list[PyPI_Release]] = None
+    urls: list[PyPI_URL] = None
     last_serial: int = None
     info: PyPI_Info = None
 

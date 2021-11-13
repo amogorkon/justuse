@@ -4,12 +4,11 @@ Only imports and project-global constants are defined here.
     
 """
 # Workaround for 3.8 - 3.9 incompatibility
-import builtins, typing
-for name in (
-    "Dict", "FrozenSet", "Iterator", "List", "Mapping", "Set", "Tuple"
-):
-    setattr(builtins, name, getattr(typing, name))
+import builtins
+import typing
 
+for name in ("Dict", "FrozenSet", "Iterator", "List", "Mapping", "Set", "Tuple"):
+    setattr(builtins, name, getattr(typing, name))
 
 
 import hashlib

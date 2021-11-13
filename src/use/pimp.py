@@ -100,7 +100,7 @@ def execute_wrapped(sql: str, params: tuple):
 
 
 @cache
-def get_supported() -> FrozenSet[PlatformTag]:
+def get_supported() -> frozenset[PlatformTag]:
     """
     Results of this function are cached. They are expensive to
     compute, thanks to some heavyweight usual players
@@ -110,7 +110,7 @@ def get_supported() -> FrozenSet[PlatformTag]:
     Returns a set containing all platform _platform_tags
     supported on the current system.
     """
-    items: List[PlatformTag] = []
+    items: list[PlatformTag] = []
 
     for tag in compatibility_tags.get_supported():
         items.append(PlatformTag(platform=tag.platform))
@@ -239,7 +239,7 @@ def _pebkac_no_version(
     hash_algo=None,
     package_name: str = None,
     module_name: str = None,
-    message_formatter: Callable[[str, str, Version, Set[str]], str] = Message.pebkac_missing_hash,
+    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
 
@@ -300,14 +300,10 @@ def _pebkac_no_version_no_hash(
 
 def _import_public_no_install(
     *,
-    name: str,
     func: Callable[..., Union[Exception, ModuleType]] = None,
-    version: Version = None,
-    hash_algo=None,
     package_name: str = None,
     module_name: str = None,
     spec=None,
-    message_formatter: Callable[[str, str, Version, Set[str]], str] = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     if func:
@@ -334,7 +330,7 @@ def _import_public_no_install(
     return importlib.import_module(module_name)  # ! => cache
 
 
-def _parse_name(name) -> Tuple[str, str]:
+def _parse_name(name) -> tuple[str, str]:
     match = re.match(r"(?P<package_name>[^/.]+)/?(?P<rest>[a-zA-Z0-9._]+)?$", name)
     assert match, f"Invalid name spec: {name!r}"
     names = match.groupdict()
@@ -482,7 +478,7 @@ def _process(*argv, env={}):
     )
 
 
-def _get_venv_env(venv_root: Path) -> Dict[str, str]:
+def _get_venv_env(venv_root: Path) -> dict[str, str]:
     pathvar = os.environ.get("PATH")
     python_exe = Path(sys.executable)
     if not venv_root.exists():
@@ -730,7 +726,7 @@ def _get_package_data(package_name: str) -> PyPI_Project:
 
 
 def _filter_by_platform(
-    project: PyPI_Project, tags: FrozenSet[PlatformTag], sys_version: Version
+    project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version
 ) -> PyPI_Project:
     filtered = {
         ver: [
@@ -750,7 +746,7 @@ def _filter_by_platform(
 
 
 @pipes
-def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> List[PyPI_Release]:
+def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> list[PyPI_Release]:
     if version:
         version = Version(str(version))
         filtered = (
@@ -785,7 +781,7 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
 
 @pipes
 def _is_platform_compatible(
-    info: PyPI_Release, platform_tags: FrozenSet[PlatformTag], include_sdist=False
+    info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
 ) -> bool:
 
     if "py2" in info.justuse.python_tag and "py3" not in info.justuse.python_tag:
@@ -885,7 +881,7 @@ def _build_mod(
     *,
     name,  # TODO: this should be a package name and module name
     code,
-    initial_globals: Optional[Dict[str, Any]],
+    initial_globals: Optional[dict[str, Any]],
     module_path,
 ) -> ModuleType:
 
