@@ -13,15 +13,8 @@ from pathlib import Path
 import pytest
 from hypothesis import assume, example, given
 from hypothesis import strategies as st
-
-src = import_base = Path(__file__).parent.parent / "src"
-cwd = Path().cwd()
-os.chdir(src)
-sys.path.insert(0, "") if "" not in sys.path else None
 import use
 from use.pypi_model import JustUse_Info, PyPI_Project, PyPI_Release, Version
-
-os.chdir(cwd)
 
 not_local = "GITHUB_REF" in os.environ
 is_win = sys.platform.lower().startswith("win")

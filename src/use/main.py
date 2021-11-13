@@ -28,8 +28,8 @@ from icontract import ensure, invariant, require
 
 from use import (AmbiguityWarning, Hash, Modes, ModInUse, NotReloadableWarning,
                  NoValidationWarning, UnexpectedHash, VersionWarning,
-                 __version__, buffet_table, config, dict, home, isfunction,
-                 list, set)
+                 __version__, buffet_table, config, home, isfunction,
+                 )
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import Message
 from use.pimp import (_apply_aspect, _build_mod, _ensure_path,

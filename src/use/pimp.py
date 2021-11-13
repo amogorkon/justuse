@@ -36,7 +36,7 @@ from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
 
 import use
-from use import AmbiguityWarning, Hash, Modes, config, dict, list, set
+from use import AmbiguityWarning, Hash, Modes, config
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import Message, _web_no_version_or_hash_provided
 from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none

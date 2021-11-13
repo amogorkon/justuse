@@ -3,17 +3,19 @@ This is where the story begins. Welcome to JustUse!
 Only imports and project-global constants are defined here. 
     
 """
-# Workaround for 3.8 - 3.9 incompatibility
-import builtins
-import typing
-
-for name in ("Dict", "FrozenSet", "Iterator", "List", "Mapping", "Set", "Tuple"):
-    setattr(builtins, name, getattr(typing, name))
+import sys
+if sys.version_info < (3, 9) and not "tests" in sys.modules:
+    import gc, types, typing
+    from typing import _GenericAlias as GenericAlias
+    for t in (list, dict, set, tuple, frozenset):
+      r = gc.get_referents(t.__dict__)[0]
+      r.update({
+        "__class_getitem__": classmethod(GenericAlias),
+      })
 
 
 import hashlib
 import os
-import sys
 from collections import namedtuple
 from enum import Enum, IntEnum
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
@@ -21,26 +23,6 @@ from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
 
 from beartype import beartype
-
-if sys.version_info < (3, 10):
-    import typing
-
-    class list(list):
-        def __class_getitem__(cls, item):
-            return typing.List[item]
-
-    class dict(dict):
-        def __class_getitem__(cls, item):
-            return typing.Dict[item]
-
-    class set(set):
-        def __class_getitem__(cls, item):
-            return typing.Set[item]
-
-    class tuple(tuple):
-        def __class_getitem__(cls, item):
-            return typing.Tuple[item]
-
 
 root.setLevel(DEBUG)
 
