@@ -30,11 +30,8 @@ jobs:
           echo "debug = true" > ~/.justuse-python/config.toml
           python3 -m pip install --force-reinstall --upgrade -r requirements.txt
           python3 -m pip install -r requirements.txt furl
-          IFS=$'\n'; set -- $( find -name "*.py" | cut -c 3- | sed -r -e 's~^src/~~; s~\.py~~; \~^\.|/\.~d; s~/~.~g; s~\.__init__$~~; s~^~--cov=~; ' ; ); python3 -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage/ --cov-report annotate:coverage/annotated --cov-report xml:coverage/cov.xml "$@" tests/unit_test.py
-      - name: coverage.py badge
-        uses: tj-actions/coverage-badge-py@v1.6
-        with:
-          github-token: ${{ secrets.PAT_TOKEN }}
+          IFS=$'\n'; set -- $( find -name "*.py" | cut -c 3- | sed -r -e 's~^src/~~; s~\.py~~; \~^\.|/\.~d; s~/~.~g; s~\.__init__$~~; s~^~--cov=~; ' ; ); 
+          python3 -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage/ --cov-report annotate:coverage/annotated --cov-report xml:coverage/cov.xml "$@" tests/unit_test.py
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v2
         with:
@@ -47,9 +44,29 @@ jobs:
           verbose: true # optional (default = false)
           github-token: ${{ secrets.PAT_TOKEN }}
 
-
-
-
+  build-dist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v2
+      - name: Ubuntu - Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9.7' # Version range or exact version of a Python version to use, using SemVer's version range syntax
+          architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified
+      - name: Build wheel and sdist
+        run: |
+          python3 -m pip install --upgrade setuptools wheel
+          python3 setup.py egg_info
+          python3 setup.py bdist_wheel
+          python3 setup.py sdist
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: distribution
+          path: |
+            **/*.whl
+            **/*.tar*
 
 
   test-windows-x86:
