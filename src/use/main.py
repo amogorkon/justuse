@@ -35,7 +35,7 @@ from use.messages import Message
 from use.pimp import (_apply_aspect, _build_mod, _ensure_path,
                       _fail_or_default, _parse_name)
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
-from use.tools import methdispatch
+from use.tools import methdispatch, releaser
 
 log = getLogger(__name__)
 
@@ -46,20 +46,8 @@ test_version: str = locals().get("test_version", None)
 _reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
 _using = {}
 
+
 # sometimes all you need is a sledge hammer..
-def releaser(cls):
-    old_locks = [*threading._shutdown_locks]
-    new_locks = threading._shutdown_locks
-    global _reloaders
-    releaser = cls()
-
-    def release():
-        return releaser(locks=set(new_locks).difference(old_locks), reloaders=_reloaders)
-
-    atexit.register(release)
-    return cls
-
-
 @releaser
 class ShutdownLockReleaser:
     def __call__(cls, *, locks: list, reloaders: list):

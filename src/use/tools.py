@@ -70,3 +70,17 @@ def pipes(func_or_class):
     code = compile(tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec")
     exec(code, ctx)
     return ctx[tree.body[0].name]
+
+
+# sometimes all you need is a sledge hammer?
+def releaser(cls):
+    old_locks = [*threading._shutdown_locks]
+    new_locks = threading._shutdown_locks
+    global _reloaders
+    releaser = cls()
+
+    def release():
+        return releaser(locks=set(new_locks).difference(old_locks), reloaders=_reloaders)
+
+    atexit.register(release)
+    return cls
