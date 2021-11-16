@@ -3,7 +3,9 @@ Module to hold the decorators and other utility functions used in justuse.
 """
 
 import ast
+import atexit
 import inspect
+import threading
 from itertools import takewhile
 from textwrap import dedent
 
