@@ -15,6 +15,7 @@ import tempfile
 import threading
 import time
 import traceback
+from atexit import register
 from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
 from types import ModuleType
@@ -47,29 +48,11 @@ _reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
 _using = {}
 
 # sometimes all you need is a sledge hammer..
-def releaser(cls):
-    old_locks = [*threading._shutdown_locks]
-    new_locks = threading._shutdown_locks
-    global _reloaders
-    releaser = cls()
-
-    def release():
-        return releaser(locks=set(new_locks).difference(old_locks), reloaders=_reloaders)
-
-    atexit.register(release)
-    return cls
-
-
-@releaser
-class ShutdownLockReleaser:
-    def __call__(cls, *, locks: list, reloaders: list):
-        for lock in locks:
-            lock.unlock()
-        for reloader in reloaders:
-            if hasattr(reloader, "stop"):
-                reloader.stop()
-        for lock in locks:
-            lock.unlock()
+@register
+def _release_locks():
+    for _ in range(2):
+        [lock.unlock() for lock in threading._shutdown_locks]
+        [reloader.stop() for reloader in _reloaders.values()]
 
 
 class ProxyModule(ModuleType):
