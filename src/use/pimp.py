@@ -420,7 +420,7 @@ def _auto_install(
         if "fault_inject" in config:
             config["fault_inject"](**locals())
         if mod:
-            use._save_module_info(
+            use.main._save_module_info(
                 name=package_name,
                 import_relpath=str(_ensure_path(module_path).relative_to(installation_path)),
                 version=version,
@@ -761,8 +761,8 @@ def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> l
     flat = reduce(list.__add__, filtered.releases.values(), [])
     return sorted(
         flat,
-        key=lambda r: (not r.filename.endswith(".tar.gz"), not r.is_sdist, r.version),
-        reverse=True,
+        key=lambda r: (r.filename.endswith(".tar.gz"), r.is_sdist, r.version),
+        reverse=False,
     )
 
 
