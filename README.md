@@ -15,7 +15,7 @@
 # Just use() python the way you want!
 
 ## Installation
-To install, enter `python -m pip install justuse` in a commandline, then you can `import use` in your code and simply use() stuff. Check for examples below!
+To install, enter `python -m pip install justuse` in a commandline, then you can `import use` in your code and simply use() stuff. Check for examples below and our [Showcase](https://github.com/amogorkon/justuse/blob/unstable/docs/Showcase.ipynb)!
 
 ## Features, Claims & Goals
 
@@ -54,6 +54,7 @@ I also remember how I had some code in a jupyter notebook that did 'import openc
 Well, those shortcomings of the import statement kept bugging me. And when I stumbled over the word 'use' as a name for whatever I was conceiving, I thought "what the heck, let's try it! - how hard could it be?!" Turns out, some challenges like actual, working hot-reloading are pretty hard! But by now use() can cover all the original usecases and there's even more to come!
 
 # Examples
+Here are a few tidbits on how to use() stuff to wet your appetite, for a more in-depth overview, check out our [Showcase](https://github.com/amogorkon/justuse/blob/unstable/docs/Showcase.ipynb)!
 
  `import use`
  
@@ -69,39 +70,6 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
             hashes={"95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8"})` no chance with classical imports
             
  `np = use("numpy", version="1.21.0rc2", hashes={"3c90b0bb77615bda5e007cfa4c53eb6097ecc82e247726e0eb138fcda769b45d"}, modes=use.auto_install)` inline installation of packages and importing the same package with different versions in parallel in the same code - most people wouldn't even dream of that!
-
-Thanks to the *default* keyword argument, it is also easy to simplify the rather clumsy optional import usecase like
-
-```
-try:
-    import numpy as np
-except ImportError:
-    np = None
-```
-which would simply become
-`np = use("numpy", default=None)`
-while it is possible of course to pass anything as default, for instance some fallback that should be used instead if the preferred module/package isn't available. Note that you can cascade different use() this way! For instance, you can try to use() a local module with reload in a certain version, but if that fails fall back to a specific, reliably working version pulled from the web but that might not be the newest and best optimized.
-
-To auto-install packages, the simplest way is to try to import the package simply with auto-install active, check the link whether you picked the right package and not some typo-squatting one and then simply copy&paste the last line of the exception to get the latest version, here is an example:
-
-```
->>> test = use("example-pypi-package/examplepy", modes=use.auto_install)
-
-RuntimeWarning: Please specify version and hash for auto-installation of 'example-pypi-package'. 
-To get some valuable insight on the health of this package, please check out https://snyk.io/advisor/python/example-pypi-package
-If you want to auto-install the latest version: 
-use("example-pypi-package/examplepy", version="0.1.0", hashes={'S㵈蛴瞙绽㡃鸡㜖僼池梵鰼䯐朠鉂䤜坠葆', '7易搻倐㺍䚡儙琟陻㿷匦䗯闍脷䇅㫄烶匆'}, modes=use.auto_install)  
-
->>> test = use("example-pypi-package/examplepy", version="0.1.0", hashes={"S㵈蛴瞙绽㡃鸡㜖僼池梵鰼䯐朠鉂䤜坠葆"}, modes=use.auto_install)
-=> download and import the requested package, version-pinned and hash-checked inline!
-```
-Version-pinning and hash-checking is the most secure way to install a package. It will ensure that your code will always run as you expect it, but there's a drawback: there is no immediate and automatic way to update code without involving the user (yet). On one side, you won't ever accidentally break your stuff by updating something else, but you also won't benefit from automatic security patches. To fix this shortcoming, it might be feasible to build IDE-plugins that check and update these pins in the code or check some database for security patches every time an auto-installed package is imported - please contact us if you have ideas or better yet, code ;-)
-
-## Use() case: optional dependencies and "premium features"
-We already touched on how to do use() with defaults and auto_install. Here's a metaphor from *The Matrix*:
-[![Matrix - Skill Upload](https://img.youtube.com/vi/w_8NsPQBdV0/0.jpg)](https://www.youtube.com/watch?v=w_8NsPQBdV0)
-
-Imagine you want to streamline user experience by distributing a very minimal, "free" but fully functional software to your end users which installs within seconds. Now, whenever the user wants to use a premium feature (or simply a feature that isn't generally required by the majority of users, therefor not included in the basic installation) the program could use() the packages and modules needed to realise the feature to download and install in the background while the user can still use other stuff, then trigger a callback when use() is done loading. The experience would be similar to playing an open world game which seamlessly downloads and loads new areas in the background on demand, without hiccup or loading screens. Or like Neo and Trinity - just get the skills to pilot a helicopter when you need them, right there on the spot. 
 
 ## There are strange chinese symbols in my hashes, am I being hacked?
 Nope. SHA256 hashes normally are pretty long (64 characters per hexdigest) and we require them defined within regular python code. Additionally, if you want to support multiple platforms, you need to supply a hash for every platform - which can add up to huge blocks of visual noise. Since Python 3 supports unicode by default, why not use the whole range of printable characters to encode those hashes? It's easier said than done - turns out emojis don't work well across different systems and editors - however, it *is* feasible to merge the Japanese, ASCII, Chinese and Korean alphabets into a single, big one we call JACK - which can be used to reliably encode those hashes in merely 18 characters. Since humans aren't supposed to manually type those hashes but simply copy&paste them anyway, there is only the question how to get them if you only have hexdigests at hand for some reason. Simply do `use.hexdigest_as_JACK(H)` and you're ready to go. Of course we also support classical hexdigests as fallback.
