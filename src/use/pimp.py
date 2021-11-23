@@ -262,15 +262,13 @@ def _pebkac_no_hash(
     package_name: str = None,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
-    try:
-        hashes = {
-            hexdigest_as_JACK(entry.digests.get(hash_algo.name))
-            for entry in (_get_package_data(package_name).releases[version])
-        }
-        if not hashes:
-            rw = RuntimeWarning(Message.pebkac_unsupported(package_name))
-        return rw
-    except (IndexError, KeyError) as ike:
+    hashes = {
+        hexdigest_as_JACK(entry.digests.get(hash_algo.name))
+        for entry in _get_package_data(package_name).releases[version]
+    }
+    if hashes:
+        return RuntimeWarning(Message.pebkac_missing_hash(hash_algo.name, hashes))
+    else:
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
 
 

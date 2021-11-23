@@ -1,5 +1,5 @@
 print("start")
 import use
 
-mod = use("numpy", modes=use.auto_install)
+mod = use("numpy", version="1.0", modes=use.auto_install)
 print("fin")

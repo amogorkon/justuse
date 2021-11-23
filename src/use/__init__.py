@@ -33,6 +33,8 @@ from beartype import beartype
 
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
 
+config = {"version_warning": True, "debugging": False, "use_db": True, "testing": False}
+
 
 basicConfig(
     filename=home / "usage.log",
@@ -93,8 +95,6 @@ class Modes(IntEnum):
     no_public_installation = 2 ** 4
     fastfail = 2 ** 5
 
-
-config = {"version_warning": True, "debugging": False, "use_db": True}
 
 if sys.version_info < (3, 10):
     from use.buffet_old import buffet_table

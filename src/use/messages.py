@@ -13,7 +13,7 @@ from use.pypi_model import Version
 
 
 def _web_no_version_or_hash_provided(*, name, package_name, version, hashes):
-    if not config.get("testing", True):
+    if not config["testing"]:
         webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
     return f"""Please specify version and hash for auto-installation of {package_name!r}.
 A webbrowser will open to the Snyk Advisor to check whether the package is vulnerable.
