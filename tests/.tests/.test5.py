@@ -52,7 +52,7 @@ for x in range(10000):
 print([f(results) for f in [min, max, median, mean, stdev]])
 
 results = []
-for x in range(10000):
+for _ in range(10000):
     before = perf_counter_ns()
     factorial_tail(200)
     foo = perf_counter_ns()-before

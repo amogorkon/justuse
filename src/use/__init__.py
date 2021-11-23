@@ -3,8 +3,9 @@ This is where the story begins. Welcome to JustUse!
 Only imports and project-global constants are defined here. 
     
 """
+
 import sys
-if sys.version_info < (3, 9) and not "tests" in sys.modules:
+if sys.version_info < (3, 9) and "tests" not in sys.modules:
     import gc, types, typing
     from typing import _GenericAlias as GenericAlias
     for t in (list, dict, set, tuple, frozenset):
