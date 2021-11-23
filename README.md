@@ -1,4 +1,4 @@
-[![license](https://img.shields.io/github/license/amogorkon/justuse)](https://github.com/amogorkon/justuse/blob/master/LICENSE)
+[![license](https://img.shields.io/github/license/amogorkon/justuse)](https://github.com/amogorkon/justuse/blob/main/LICENSE)
 [![stars](https://img.shields.io/github/stars/amogorkon/justuse?style=plastic)](https://github.com/amogorkon/justuse/stargazers)
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/amogorkon/justuse/graphs/commit-activity)
 [![Updates](https://pyup.io/repos/github/amogorkon/justuse/shield.svg)](https://pyup.io/repos/github/amogorkon/justuse/)
