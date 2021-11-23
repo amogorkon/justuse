@@ -34,7 +34,7 @@ from beartype import beartype
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
 
 config = {"version_warning": True, "debugging": False, "use_db": True, "testing": False}
-
+(home / "usage.log").touch(mode=0o755, exist_ok=True)
 
 basicConfig(
     filename=home / "usage.log",
