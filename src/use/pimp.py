@@ -114,10 +114,12 @@ def get_supported() -> frozenset[PlatformTag]:
     Returns a set containing all platform _platform_tags
     supported on the current system.
     """
-    items: list[PlatformTag] = []
+    items: list[PlatformTag] = [
+        PlatformTag(platform=tag.platform)
+        for tag in compatibility_tags.get_supported()
+    ]
 
-    for tag in compatibility_tags.get_supported():
-        items.append(PlatformTag(platform=tag.platform))
+
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
 
