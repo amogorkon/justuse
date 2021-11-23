@@ -761,8 +761,8 @@ def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> l
     flat = reduce(list.__add__, filtered.releases.values(), [])
     return sorted(
         flat,
-        key=lambda r: (r.filename.endswith(".tar.gz"), r.is_sdist, r.version),
-        reverse=False,
+        key=lambda r: (not r.filename.endswith(".tar.gz"), not r.is_sdist, r.version),
+        reverse=True,
     )
 
 
