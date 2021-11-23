@@ -27,14 +27,24 @@ import toml
 from furl import furl as URL
 from icontract import ensure, invariant, require
 
-from use import (AmbiguityWarning, Hash, Modes, ModInUse, NotReloadableWarning,
-                 NoValidationWarning, UnexpectedHash, VersionWarning,
-                 __version__, buffet_table, config, home, isfunction,
-                 )
+from use import (
+    AmbiguityWarning,
+    Hash,
+    Modes,
+    ModInUse,
+    NotReloadableWarning,
+    NoValidationWarning,
+    UnexpectedHash,
+    VersionWarning,
+    __version__,
+    buffet_table,
+    config,
+    home,
+    isfunction,
+)
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import Message
-from use.pimp import (_apply_aspect, _build_mod, _ensure_path,
-                      _fail_or_default, _parse_name)
+from use.pimp import _apply_aspect, _build_mod, _ensure_path, _fail_or_default, _parse_name
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
 from use.tools import methdispatch
 
@@ -174,8 +184,6 @@ class Use(ModuleType):
     def __init__(self):
         # TODO for some reason removing self._using isn't as straight forward..
         self._using = _using
-
-        self._set_up_files_and_directories()
         # might run into issues during testing otherwise
         self.registry = self._set_up_registry()
         "Registry sqlite DB to store all relevant package metadata."
@@ -213,26 +221,6 @@ class Use(ModuleType):
                 log.error(
                     traceback.format_exc()
                 )  # we really don't need to bug the user about this (either pypi is down or internet is broken)
-
-    def _set_up_files_and_directories(self):
-        global home
-        "Where we live."
-
-        try:
-            home.mkdir(mode=0o755, parents=True, exist_ok=True)
-        except PermissionError:
-            # this should fix the permission issues on android #80
-
-            home = _ensure_path(tempfile.mkdtemp(prefix="justuse_"))
-        (home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
-        for file in (
-            "config.toml",
-            "config_defaults.toml",
-            "usage.log",
-            "registry.db",
-            "user_registry.toml",
-        ):
-            (home / file).touch(mode=0o755, exist_ok=True)
 
     def _sqlite_row_factory(self, cursor, row):
         return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}

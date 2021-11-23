@@ -31,11 +31,27 @@ from pathlib import Path
 
 from beartype import beartype
 
+
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
 
+try:
+    home.mkdir(mode=0o755, parents=True, exist_ok=True)
+except PermissionError:
+    # this should fix the permission issues on android #80
+
+    home = tempfile.mkdtemp(prefix="justuse_")
+(home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
+for file in (
+    "config.toml",
+    "config_defaults.toml",
+    "usage.log",
+    "registry.db",
+    "user_registry.toml",
+):
+    (home / file).touch(mode=0o755, exist_ok=True)
+
+
 config = {"version_warning": True, "debugging": False, "use_db": True, "testing": False}
-home.touch(mode=0o755, exist_ok=True)
-(home / "usage.log").touch(mode=0o755, exist_ok=True)
 
 basicConfig(
     filename=home / "usage.log",
