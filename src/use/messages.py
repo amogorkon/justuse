@@ -11,8 +11,6 @@ import use
 from use import __version__, config
 from use.pypi_model import Version
 
-print(f"Home is {use.home}")
-
 
 def _web_no_version_or_hash_provided(*, name, package_name, version, hashes):
     if not config.get("testing", True):
