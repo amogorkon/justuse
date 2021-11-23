@@ -854,6 +854,7 @@ def _apply_aspect(
             continue
         if check(obj) and re.match(pattern, name):
             thing.__dict__[name] = decorator(obj)
+            log.debug(f"Applied {decorator.__name__} to {obj.__qualname__}")
     return thing
 
 

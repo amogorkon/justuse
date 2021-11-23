@@ -5,14 +5,20 @@ Only imports and project-global constants are defined here.
 """
 
 import sys
+
 if sys.version_info < (3, 9) and "tests" not in sys.modules:
-    import gc, types, typing
+    import gc
+    import types
+    import typing
     from typing import _GenericAlias as GenericAlias
+
     for t in (list, dict, set, tuple, frozenset):
-      r = gc.get_referents(t.__dict__)[0]
-      r.update({
-        "__class_getitem__": classmethod(GenericAlias),
-      })
+        r = gc.get_referents(t.__dict__)[0]
+        r.update(
+            {
+                "__class_getitem__": classmethod(GenericAlias),
+            }
+        )
 
 
 import hashlib
@@ -20,14 +26,22 @@ import os
 from collections import namedtuple
 from enum import Enum, IntEnum
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
-from logging import DEBUG, INFO, NOTSET, getLogger, root
+from logging import DEBUG, INFO, NOTSET, basicConfig, getLogger, root
 from pathlib import Path
 
 from beartype import beartype
 
-root.setLevel(DEBUG)
-
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
+
+
+basicConfig(
+    filename=home / "usage.log",
+    filemode="a",
+    format="%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+    level=DEBUG,
+)
+
 # !!! SEE NOTE !!!
 # IMPORTANT; The setup.py script must be able to read the
 # current use __version__ variable **AS A STRING LITERAL** from
