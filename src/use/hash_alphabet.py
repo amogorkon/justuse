@@ -1,7 +1,13 @@
+"""
+The JACK hash alphabet. 
+For details see https://pypi.org/project/jackhash
+"""
+
+
 # korean characters: https://github.com/arcsecw/wubi/blob/master/wubi/cw.py
 # chinese characters: https://github.com/tsroten/zhon/blob/develop/zhon/cedict/all.py
 
-__version__ = "1.0.0"
+__version__ = "4"
 
 chinese_characters = """○
 、
@@ -40613,13 +40619,15 @@ korean_characters = """←
     "\n"
 )
 
+# to avoid possible (albeit extremely rare) collisions with regular hexdigests all digits and ABCDEF are removed
+# to avoid problems with selection for copy&paste, all special characters in ASCII are also removed
+ascii_characters = list(
+    "ghijklmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZ¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿĀāĂăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĦħĨĩĪīĬĭĮįİıĲĳĴĵĶķĸĹĺĻļĽľĿŀŁłŃńŅņŇňŉŊŋŌōŎŏŐőŒœŔŕŖŗŘřŚśŜŝŞşŠšŢţŤťŦŧŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽžſƀƁƂƃƄƅƆƇƈƉƊƋƌƍƎƏƐƑƒƓƔƕƖƗƘƙƚƛƜƝƞƟƠơƢƣƤƥƦƧƨƩƪƫƬƭƮƯưƱƲƳƴƵƶƷƸƹƺƻƼƽƾƿǀǁǂǃǄǅǆǇǈǉǊǋǌǍǎǏǐǑǒǓǔǕǖǗǘǙǚǛǜǝǞǟǠǡǢǣǤǥǦǧǨǩǪǫǬǭǮǯǰǱǲǳǴǵǶǷǸǹǺǻǼǽǾǿȀȁȂȃȄȅȆȇȈȉȊȋȌȍȎȏȐȑȒȓȔȕȖȗȘșȚțȜȝȞȟȠȡȢȣȤȥȦȧȨȩȪȫȬȭȮȯȰȱȲȳȴȵȶȷȸȹȺȻȼȽȾȿɀɁɂɃɄɅɆɇɈɉɊɋɌɍɎɏɐɑɒɓɔɕɖɗɘəɚɛɜɝɞɟɠɡɢɣɤɥɦɧɨɩɪɫɬɭɮɯɰɱɲɳɴɵɶɷɸɹɺɻɼɽɾɿʀʁʂʃʄʅʆʇʈʉʊʋʌʍʎʏʐʑʒʓʔʕʖʗʘʙʚʛʜʝʞʟʠʡʢʣʤʥʦʧʨʩʪʫʬʭʮʯʰʱʲʳʴʵʶʷʸʹʺʻʼʽʾʿˀˁ˂˃˄˅ˆˇˈˉˊˋˌˍˎˏːˑ˒˓˔˕˖˗˘˙˚˛˜˝˞˟ˠˡˢˣˤ˥˦˧˨˩˪˫ˬ˭ˮ˯˰˱˲˳˴˵"
+)
 
-ascii_characters = list("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-# ascii chars aren't really needed for the number of characters but highlighting algos break on special chars
 # emojis only cause interoperability issues
 # japanese alphabet would only add 100 individual chars, not worth the trouble (and GPL is prohibitive)
-alphabet = ascii_characters + chinese_characters + korean_characters
-alphabet = sorted(list(set(alphabet)))
+alphabet = sorted(list(set(ascii_characters + chinese_characters + korean_characters)))
 reverse_alphabet = {c: i for i, c in enumerate(alphabet)}
 
 
@@ -40639,9 +40647,16 @@ def hexdigest_as_JACK(string):
     return "".join(alphabet[c] for c in represent_num_as_base(int(string, 16), len(alphabet)))
 
 
-def JACK_as_num(string):
+def JACK_as_num(string: str):
+    if isinstance(string, bytes):
+        string = string.decode()
+    string = "".join(string.split())
     return sum(len(reverse_alphabet) ** i * reverse_alphabet[x] for i, x in enumerate(reversed(string)))
 
 
 def num_as_hexdigest(num):
-    return hex(num)[2:]
+    return str.rjust(hex(num)[2:], 64, "0")
+
+
+def is_JACK(H):
+    return all(c in alphabet for c in H)

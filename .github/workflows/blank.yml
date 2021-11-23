@@ -1,37 +1,37 @@
 
 name: Unit Tests
 
+
 on:
+  fork:
   pull_request:
-    types: [synchronize]
+    types: [opened, edited, closed]
   push:
-  registry_package:
-    types: [published, updated]
   release:
-    types: [published, edited, released]
+    types: [published, created, edited, released]
+
 jobs:
   test-ubuntu:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Ubuntu - Check out source
+      - name: Linux Tests
         uses: actions/checkout@v2
       - name: Ubuntu - Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: '3.9.7' # Version range or exact version of a Python version to use, using SemVer's version range syntax
           architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified
-      - name: Ubuntu - Run Unit Tests with Coverage
-        run: |
-          DEBUG=1
-          PYTHON="$( which python3; )"
-          PYTHON3="$( which python3; )"
-          COLUMNS=250
-          export COLUMNS
-          export PYTHON
-          export PYTHON3
-          export DEBUG
-          "$PYTHON" -m pip install cython -r requirements.txt
-          python3 -m coverage run --rcfile=.coveragerc --source=.,./src/use,./src/use/modules,./tests,./tests/.tests,./tests/.tests/tests_subdir,./tests/mass --append --branch -m pytest
+      - run: |
+          echo "Linux-Tests: Preloading package dependencies ..."
+          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests furl
+          echo "Linux-Tests: Running tests ..."
+          mkdir -p ~/.justuse-python/
+          echo "debug = true" > ~/.justuse-python/config.toml
+          python3 -m pip install --force-reinstall --upgrade -r requirements.txt
+          python3 -m pip install -r requirements.txt furl
+          IFS=$'\n'; set -- $( find -name "*.py" | cut -c 3- | sed -r -e 's~^src/~~; s~\.py~~; \~^\.|/\.~d; s~/~.~g; s~\.__init__$~~; s~^~--cov=~; ' ; ); 
+          python3 -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage/ --cov-report annotate:coverage/annotated --cov-report xml:coverage/cov.xml "$@" tests/unit_test.py
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v2
         with:
@@ -42,6 +42,31 @@ jobs:
           flags: unittests # optional
           name: codecov-justuse # optional
           verbose: true # optional (default = false)
+          github-token: ${{ secrets.PAT_TOKEN }}
+
+  build-dist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v2
+      - name: Ubuntu - Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9.7' # Version range or exact version of a Python version to use, using SemVer's version range syntax
+          architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified
+      - name: Build wheel and sdist
+        run: |
+          python3 -m pip install --upgrade setuptools wheel
+          python3 setup.py egg_info
+          python3 setup.py bdist_wheel
+          python3 setup.py sdist
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: distribution
+          path: |
+            **/*.whl
+            **/*.tar*
 
 
   test-windows-x86:
@@ -61,20 +86,28 @@ jobs:
           $env:DEBUG = 1
           $env:DEBUGGING = 1
           $env:ERRORS = 1
-          $env:COLUMNS = 250
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade cython -r requirements.txt pywavelets sqlalchemy
-          & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x86/ --cov-report annotate:coverage-win32-x86/annotated --cov-report xml:coverage-win32-x86/cov.xml --cov=setup --cov=tests..tests..test1 --cov=tests..tests..test2 --cov=tests..tests..test3 --cov=tests..tests.bar --cov=tests..tests.foo --cov=tests..tests.modA --cov=tests..tests.modA_test --cov=tests..tests.modB --cov=tests..tests.modD --cov=tests..tests.modE --cov=tests..tests.sys --cov=tests..tests.tests_subdir.modC --cov=tests.__init__ --cov=tests.foo --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.unit_test --cov=use.__init__ --cov=use.use -v --cov-append -vv
-      - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v2
+          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade -r requirements.txt
+          & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x86/ --cov-report annotate:coverage-win32-x86/annotated --cov-report xml:coverage-win32-x86/cov.xml --cov=setup --cov=use --cov=use.hash_alphabet --cov=use.main --cov=use.messages --cov=use.mod --cov=use.pimp --cov=use.platformtag --cov=use.pypi_model --cov=use.tools --cov=tests --cov=tests.foo --cov=tests.mass.collect_packages --cov=tests.mass.justtest --cov=tests.mass.test_pypi_model --cov=tests.mass.test_single --cov=tests.mass.tmp --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.test_beast --cov=tests.unit_test --cov=build.lib.use --cov=build.lib.use.hash_alphabet --cov=build.lib.use.main --cov=build.lib.use.messages --cov=build.lib.use.mod --cov=build.lib.use.pimp --cov=build.lib.use.platformtag --cov=build.lib.use.pypi_model --cov=build.lib.use.tools tests/unit_test.py
+      - name: Windows - Collect Coverage
+        run: |
+          & "xcopy.exe" ".\.coverage" ".\coverage-win32-x86"
+      - name: Collect Coverage
+        uses: master-atul/tar-action@v1.0.2
+        id: compress
         with:
-          token: 20fb71ba-3e2b-46db-b86d-e1666d56665b
-          CODECOV_TOKEN: 20fb71ba-3e2b-46db-b86d-e1666d56665b
-          fail_ci_if_error: false # optional (default = false)
-          files: ./.coverage,./coverage/cov.xml # optional
-          flags: unittests # optional
-          name: codecov-justuse # optional
-          verbose: true # optional (default = false)
+          command: c
+          cwd: .
+          files: |
+            ./.coverage
+            ./coverage-win32-x86
+          outPath: coverage-win32-x86.tar.gz
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage
+          path: coverage-win32-x86.tar.gz
+
 
 
   test-windows-x64:
@@ -94,17 +127,28 @@ jobs:
           $env:DEBUG = 1
           $env:DEBUGGING = 1
           $env:ERRORS = 1
-          $env:COLUMNS = 250
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade cython -r requirements.txt pywavelets sqlalchemy
-          & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x64/ --cov-report annotate:coverage-win32-x64/annotated --cov-report xml:coverage-win32-x64/cov.xml --cov=setup --cov=tests..tests..test1 --cov=tests..tests..test2 --cov=tests..tests..test3 --cov=tests..tests.bar --cov=tests..tests.foo --cov=tests..tests.modA --cov=tests..tests.modA_test --cov=tests..tests.modB --cov=tests..tests.modD --cov=tests..tests.modE --cov=tests..tests.sys --cov=tests..tests.tests_subdir.modC --cov=tests.__init__ --cov=tests.foo --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.unit_test --cov=use.__init__ --cov=use.use -v --cov-append -vv
-      - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v2
+          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade -r requirements.txt
+          & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x64/ --cov-report annotate:coverage-win32-x64/annotated --cov-report xml:coverage-win32-x64/cov.xml --cov=setup --cov=use --cov=use.hash_alphabet --cov=use.main --cov=use.messages --cov=use.mod --cov=use.pimp --cov=use.platformtag --cov=use.pypi_model --cov=use.tools --cov=tests --cov=tests.foo --cov=tests.mass.collect_packages --cov=tests.mass.justtest --cov=tests.mass.test_pypi_model --cov=tests.mass.test_single --cov=tests.mass.tmp --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.test_beast --cov=tests.unit_test --cov=build.lib.use --cov=build.lib.use.hash_alphabet --cov=build.lib.use.main --cov=build.lib.use.messages --cov=build.lib.use.mod --cov=build.lib.use.pimp --cov=build.lib.use.platformtag --cov=build.lib.use.pypi_model --cov=build.lib.use.tools  tests/unit_test.py
+      - name: Windows - Collect Coverage
+        run: |
+          & "xcopy.exe" ".\.coverage" ".\coverage-win32-x64"
+      - name: Collect Coverage
+        uses: master-atul/tar-action@v1.0.2
+        id: compress
         with:
-          token: 20fb71ba-3e2b-46db-b86d-e1666d56665b
-          CODECOV_TOKEN: 20fb71ba-3e2b-46db-b86d-e1666d56665b
-          fail_ci_if_error: false # optional (default = false)
-          files: ./.coverage,./coverage/cov.xml # optional
-          flags: unittests # optional
-          name: codecov-justuse # optional
-          verbose: true # optional (default = false)
+          command: c
+          cwd: .
+          files: |
+            ./.coverage
+            ./coverage-win32-x64
+          outPath: coverage-win32-x64.tar.gz
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage
+          path: coverage-win32-x64.tar.gz
+
+
+
+

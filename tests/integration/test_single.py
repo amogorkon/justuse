@@ -6,7 +6,7 @@ import re
 import sys
 import traceback
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import packaging
 
@@ -58,10 +58,11 @@ class Packages(BaseModel):
         self.data.append(item)
 
 
-def test_package(pkg: PackageToTest) -> tuple[bool, Dict]:
+def test_package(pkg: PackageToTest) -> tuple[bool, dict]:
 
     log1 = start_capture_logs()
     retry = None
+    use_version: Optional[str] = None
     try:
         use(pkg.name, modes=use.auto_install)
     except RuntimeWarning as e:

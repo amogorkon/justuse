@@ -1,23 +1,44 @@
-# This is a collection of the messages directed to the user.
-# How it works is quite magical - the lambdas prevent the f-strings from being prematuraly evaluated, and are only evaluated once returned.
-# Fun fact: f-strings are firmly rooted in the AST.
+"""
+Collection of the messages directed to the user.
+How it works is quite magical - the lambdas prevent the f-strings from being prematuraly evaluated, and are only evaluated once returned.
+Fun fact: f-strings are firmly rooted in the AST.
+"""
+
 import webbrowser
 from enum import Enum
 
-from ..pypi_model import Version
-from ..use import __version__  # use  # TODO: need access to use.home !!
+import use
+from use import __version__, config
+from use.pypi_model import Version
+
+print(f"Home is {use.home}")
 
 
-def _web_no_version_or_hash_provided(name, package_name, version, hashes):
-    webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
+def _web_no_version_or_hash_provided(*, name, package_name, version, hashes):
+    if not config.get("testing", True):
+        webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
     return f"""Please specify version and hash for auto-installation of {package_name!r}.
-A webbrowser will open to the Snyk Advisor page to check whether the package is vulnerable.
+A webbrowser will open to the Snyk Advisor to check whether the package is vulnerable.
 If you want to auto-install the latest version:
 use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
 
 
 def _web_pebkac_missing_hash(name, package_name, version, hashes):
-    f"""Failed to auto-install {package_name!r} because hashes aren't specified.
+    if not config["testing"]:
+        with open(use.home / "web_exception.html", "w") as f:
+            f.write(
+                f"""<html><body>
+    <h1>{package_name!r}</h1>
+    {config}
+    <p>
+    Please specify the hash for auto-installation.
+    </p>
+    <p>
+    </p>
+    </body></html>"""
+            )
+        webbrowser.open(f"file://{use.home / 'web_exception.html'}")
+    return f"""Failed to auto-install {package_name!r} because hashes aren't specified.
         A webbrowser will open with a list of available hashes for different platforms.
         If you only want to use the package on this platform, this may work:
     use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
@@ -104,28 +125,4 @@ class TupleMessage(Message):
 
 
 class KwargsMessage(Message):
-    pass
-
-
-class VersionWarning(Warning):
-    pass
-
-
-class NotReloadableWarning(Warning):
-    pass
-
-
-class NoValidationWarning(Warning):
-    pass
-
-
-class AmbiguityWarning(Warning):
-    pass
-
-
-class UnexpectedHash(ImportError):
-    pass
-
-
-class AutoInstallationError(ImportError):
     pass

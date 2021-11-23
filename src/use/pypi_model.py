@@ -1,17 +1,15 @@
-# Pydantic model for the PyPi JSON API
-
-# If this code is inside use.py, it causes all kinds of problems.
-
+"""
+Pydantic model for the PyPI JSON API.
+"""
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
+import packaging
 from packaging.version import Version as PkgVersion
 from pydantic import BaseModel
-
-#%% Version and Packaging
 
 # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
 # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
@@ -24,24 +22,22 @@ class Version(PkgVersion):
         else:
             return super(cls, Version).__new__(cls)
 
-    def __init__(self, versionobj: Optional[Union[PkgVersion, __class__, str]]=None, *, major=0, minor=0, patch=0):
+    def __init__(self, versionobj: Optional[Union[PkgVersion, str]] = None, *, major=0, minor=0, patch=0):
         if isinstance(versionobj, Version):
             return
-        
+
         if versionobj:
             super(Version, self).__init__(versionobj)
             return
-        
+
         if major is None or minor is None or patch is None:
             raise ValueError(
-                f"Either 'Version' must be initialized with either a string, packaging.version.Verson, {__class__.__qualname__}, or else keyword arguments for 'major', 'minor' and 'patch' must be provided. Actual invocation was: {__class__.__qualname__}({versionobj!r}, {major=!r}, {minor=!r}, {path=!r})"
+                f"Either 'Version' must be initialized with either a string, packaging.version.Verson, {__class__.__qualname__}, or else keyword arguments for 'major', 'minor' and 'patch' must be provided. Actual invocation was: {__class__.__qualname__}({versionobj!r}, {major=!r}, {minor=!r})"
             )
-        
-        # string as only argument 
+
+        # string as only argument
         # no way to construct a Version otherwise - WTF
-        versionobj = ".".join(
-            map(str, (major, minor, patch))
-        )
+        versionobj = ".".join(map(str, (major, minor, patch)))
         super(Version, self).__init__(versionobj)
 
     def __iter__(self):
@@ -69,11 +65,6 @@ def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
     return a_dict
 
 
-class QuietModel(BaseModel):
-    def __repr__(self):
-        return "%s()" % type(self).__qualname__
-
-
 class JustUse_Info(BaseModel):
     distribution: Optional[str]
     version: Optional[str]
@@ -84,7 +75,7 @@ class JustUse_Info(BaseModel):
     ext: Optional[str]
 
 
-class PyPI_Release(QuietModel):
+class PyPI_Release(BaseModel):
     comment_text: str = None
     digests: dict[str, str] = None
     url: str = None
@@ -106,9 +97,7 @@ class PyPI_Release(QuietModel):
     @property
     def is_sdist(self):
         return (
-            self.packagetype == "sdist"
-            or self.python_version == "source"
-            or self.justuse.abi_tag == "none"
+            self.packagetype == "sdist" or self.python_version == "source" or self.justuse.abi_tag == "none"
         )
 
     @property
@@ -131,13 +120,13 @@ class PyPI_Release(QuietModel):
         return JustUse_Info()
 
 
-class PyPI_Downloads(QuietModel):
+class PyPI_Downloads(BaseModel):
     last_day: int
     last_month: int
     last_week: int
 
 
-class PyPI_Info(QuietModel):
+class PyPI_Info(BaseModel):
     author: str = None
     author_email: str = None
     bugtrack_url: str = None
@@ -167,7 +156,7 @@ class PyPI_Info(QuietModel):
     yanked_reason: str = None
 
 
-class PyPI_URL(QuietModel):
+class PyPI_URL(BaseModel):
     comment_text: str = None
     digests: dict[str, str] = None
     downloads: int = -1
@@ -185,7 +174,7 @@ class PyPI_URL(QuietModel):
     yanked_reason: str = None
 
 
-class PyPI_Project(QuietModel):
+class PyPI_Project(BaseModel):
     releases: dict[Version, list[PyPI_Release]] = None
     urls: list[PyPI_URL] = None
     last_serial: int = None
@@ -194,7 +183,8 @@ class PyPI_Project(QuietModel):
     def __init__(self, *, releases, urls, info, **kwargs):
 
         for version in list(releases.keys()):
-            if not isinstance(version, str): continue
+            if not isinstance(version, str):
+                continue
             try:
                 Version(version)
             except packaging.version.InvalidVersion:
@@ -203,23 +193,14 @@ class PyPI_Project(QuietModel):
         releases2 = {
             str(ver_str): [
                 {
-                    **(
-                        rel_info 
-                        if isinstance(rel_info, dict)
-                        else rel_info.dict()
-                    ),
-                    "version": Version(str(ver_str))
-                } for rel_info in release_infos
+                    **(rel_info if isinstance(rel_info, dict) else rel_info.dict()),
+                    "version": Version(str(ver_str)),
+                }
+                for rel_info in release_infos
             ]
-            for ver_str, release_infos
-            in releases.items()
+            for ver_str, release_infos in releases.items()
         }
-        super(PyPI_Project, self).__init__(
-            releases=releases2,
-            urls=urls,
-            info=info,
-            **kwargs
-        )
+        super(PyPI_Project, self).__init__(releases=releases2, urls=urls, info=info, **kwargs)
 
 
 def _parse_filename(filename) -> dict:
@@ -254,9 +235,7 @@ def _parse_filename(filename) -> dict:
 
     python_version = None
     if python_tag:
-        python_version = (
-            python_tag.replace("cp", "")[0] + "." + python_tag.replace("cp", "")[1:]
-        )
+        python_version = python_tag.replace("cp", "")[0] + "." + python_tag.replace("cp", "")[1:]
     return _delete_none(
         {
             "distribution": distribution,
