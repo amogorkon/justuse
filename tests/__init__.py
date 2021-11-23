@@ -5,7 +5,7 @@ cwd = Path().cwd()
 os.chdir(src)
 sys.path.insert(0, "") if "" not in sys.path else None
 
-if sys.version_info < (3, 9) and not "use" in sys.modules:
+if sys.version_info < (3, 9) and "use" not in sys.modules:
     import gc, types, typing
     from typing import _GenericAlias as GenericAlias
     for t in (list, dict, set, tuple, frozenset):
