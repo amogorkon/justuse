@@ -35,7 +35,7 @@ from furl import furl as URL
 from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
-from pip._internal.utils import compatibility_tags
+
 
 import use
 from use import Hash, Modes, VersionWarning, config
@@ -115,8 +115,29 @@ def get_supported() -> frozenset[PlatformTag]:
     supported on the current system.
     """
     items: list[PlatformTag] = []
-
-    for tag in compatibility_tags.get_supported():
+    get_supported = None
+    try:
+      from pip._internal.resolution.legacy.resolver import get_supported
+    except ImportError:
+      pass
+    if not get_supported:
+      try:
+        from pip._internal.models.target_python import get_supported
+      except ImportError:
+        pass
+    if not get_supported:
+      try:
+        from pip._internal.utils.compatibility_tags import get_supported
+      except ImportError:
+        pass
+    if not get_supported:
+      try:
+        from pip._internal.resolution.resolvelib.factory import get_supported
+      except ImportError:
+        pass
+    get_supported = get_supported or (lambda: [])
+    
+    for tag in get_supported():
         items.append(PlatformTag(platform=tag.platform))
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
