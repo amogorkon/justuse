@@ -28,7 +28,10 @@ from enum import Enum, IntEnum
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from logging import DEBUG, INFO, NOTSET, basicConfig, getLogger, root
 from pathlib import Path
+from warnings import filterwarnings
 
+# Stop beartype from printing messages not from our code
+filterwarnings(action="ignore", module="beartype")
 from beartype import beartype
 
 
