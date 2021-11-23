@@ -1,4 +1,5 @@
+print("start")
 import use
 
-mod = use("example-pypi-package/examplepy", modes=use.auto_install)
+mod = use("numpy", modes=use.auto_install)
 print("fin")

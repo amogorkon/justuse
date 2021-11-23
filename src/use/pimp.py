@@ -20,11 +20,13 @@ from importlib import metadata
 from importlib.machinery import ModuleSpec, SourceFileLoader
 from importlib.metadata import PackageNotFoundError
 from itertools import chain
+from logging import getLogger
 from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
 from subprocess import run
 from types import ModuleType
 from typing import Any, Callable, Optional, Union
+from warnings import warn
 
 import furl
 import packaging
@@ -36,11 +38,13 @@ from packaging.specifiers import SpecifierSet
 from pip._internal.utils import compatibility_tags
 
 import use
-from use import AmbiguityWarning, Hash, Modes, config
+from use import Hash, Modes, VersionWarning, config
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import Message, _web_no_version_or_hash_provided
 from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none
 from use.tools import pipes
+
+log = getLogger(__name__)
 
 
 class PlatformTag:
@@ -68,7 +72,7 @@ def _ensure_version(
         return result
     result_version = _get_version(mod=result)
     if result_version != version:
-        return AmbiguityWarning(Message.version_warning(name, version, result_version))
+        warn(Message.version_warning(name, version, result_version), category=VersionWarning)
     return result
 
 
@@ -277,7 +281,7 @@ def _pebkac_no_version_no_hash(
     hash_algo: Hash,
     package_name: str,
     **kwargs,
-) -> Union[Exception, ModuleType]:
+) -> Exception:
     # let's try to make an educated guess and give a useful suggestion
     proj = _get_package_data(package_name)
     ordered = _filtered_and_ordered_data(proj, version=None)
