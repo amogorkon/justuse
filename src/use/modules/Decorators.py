@@ -1,5 +1,9 @@
 """
-Module to hold the decorators and other utility functions used in justuse.
+Module to hold the decorators used in justuse
+
+
+Author: ...
+Date: 21.Oct.2021
 """
 
 import ast
@@ -27,7 +31,9 @@ class _PipeTransformer(ast.NodeTransformer):
                     col_offset=node.right.col_offset,
                 )
             )
-        node.right.args.insert(0 if isinstance(node.op, ast.RShift) else len(node.right.args), node.left)
+        node.right.args.insert(
+            0 if isinstance(node.op, ast.RShift) else len(node.right.args), node.left
+        )
         return self.visit(node.right)
 
 
@@ -64,9 +70,14 @@ def pipes(func_or_class):
     tree.body[0].decorator_list = [
         d
         for d in tree.body[0].decorator_list
-        if isinstance(d, ast.Call) and d.func.id != "pipes" or isinstance(d, ast.Name) and d.id != "pipes"
+        if isinstance(d, ast.Call)
+        and d.func.id != "pipes"
+        or isinstance(d, ast.Name)
+        and d.id != "pipes"
     ]
     tree = _PipeTransformer().visit(tree)
-    code = compile(tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec")
+    code = compile(
+        tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec"
+    )
     exec(code, ctx)
     return ctx[tree.body[0].name]

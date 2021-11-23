@@ -1,34 +1,30 @@
-"""Here live all the tests that are expected to fail because their functionality is not implemented yet.
-Test-Driven Development is done in the following order: 
-    1. Create a test that fails.
-    2. Write the code that makes the test pass.
-    3. Check how long the test took to run. 
-    4. If it took longer than 1 second, move it to integration tests. Otherwise, move it to unit tests.
-"""
-
+import importlib
 import os
+import re
+import shlex
+import subprocess
 import sys
-
-from contextlib import AbstractContextManager, closing
+import warnings
+from importlib.metadata import PackageNotFoundError, distribution
+from importlib.util import find_spec
 from pathlib import Path
+from shutil import rmtree
+from unittest import skip
 
 import pytest
-from hypothesis import assume, example, given
-from hypothesis import strategies as st
-import use
-from use.pypi_model import JustUse_Info, PyPI_Project, PyPI_Release, Version
+import requests
+
+from .unit_test import PyPI_Release, Version, log, reuse
 
 not_local = "GITHUB_REF" in os.environ
 is_win = sys.platform.lower().startswith("win")
+not_win = not is_win
+
+# Add in-progress tests here
 
 
-@pytest.fixture()
-def reuse():
-    # making a completely new one each time would take ages (_registry)
-    use._using = {}
-    use._aspects = {}
-    use._reloaders = {}
-    return use
+def test_template(reuse):
+    pass
 
 
 def test_is_platform_compatible_macos(reuse):
@@ -55,7 +51,7 @@ def test_is_platform_compatible_macos(reuse):
         "yanked_reason": None,
         "version": "1.19.5",
     }
-    assert reuse.pimp._is_platform_compatible(PyPI_Release(**info), platform_tags)
+    assert reuse._is_platform_compatible(PyPI_Release(**info), platform_tags)
 
 
 def test_is_platform_compatible_win(reuse):
@@ -82,63 +78,87 @@ def test_is_platform_compatible_win(reuse):
         "yanked_reason": None,
         "version": "1.19.5",
     }
-    assert reuse.pimp._is_platform_compatible(PyPI_Release(**info), platform_tags, include_sdist=False)
-
-
-def test_pypi_model():
-
-    release = PyPI_Release(
-        comment_text="test",
-        digests={"md5": "asdf"},
-        url="https://files.pythonhost",
-        ext=".whl",
-        packagetype="bdist_wheel",
-        distribution="numpy",
-        requires_python=False,
-        python_version="cp3",
-        python_tag="cp3",
-        platform_tag="cp4",
-        filename="numpy-1.19.5-cp3-cp3-cp4-bdist_wheel.whl",
-        abi_tag="cp3",
-        yanked=False,
-        version="1.19.5",
+    assert reuse._is_platform_compatible(
+        PyPI_Release(**info), platform_tags, include_sdist=False
     )
-    assert release == eval(repr(release))
 
-    info = JustUse_Info(
-        distribution="numpy",
-        version="1.19.5",
-        build_tag="cp4",
-        python_tag="cp4",
-        abi_tag="cp4",
-        platform_tag="cp4",
-        ext="whl",
+
+def test_pure_python_package(reuse):
+    # https://pypi.org/project/example-pypi-package/
+    file = (
+        reuse.Path.home()
+        / ".justuse-python/packages/example_pypi_package-0.1.0-py3-none-any.whl"
     )
-    assert info == eval(repr(info))
+    venv_dir = reuse.Path.home() / ".justuse-python/venv/example-pypi-package/0.1.0"
+    file.unlink(missing_ok=True)
+    if venv_dir.exists():
+        rmtree(venv_dir)
+
+    test = reuse(
+        "example-pypi-package/examplepy",
+        version="0.1.0",
+        hashes={
+            "3c1b4ddf718d85bde796a20cf3fdea254a33a4dc89129dff5bfc5b7cd760c86b",
+            "ce89b1fe92abc55b4349bc58462ba255c42132598df6fe3a416a75b39b872a77",
+        },
+        modes=reuse.auto_install,
+    )
+    assert (
+        venv_dir.exists() == False
+    ), "Should not have created venv for example-pypi-package"
+
+    assert str(test.Number(2)) == "2"
+    if file.exists():
+        file.unlink()
 
 
-class ScopedCwd(AbstractContextManager):
-    def __init__(self, newcwd: Path):
-        self._oldcwd = Path.cwd()
-        self._newcwd = newcwd
-
-    def __enter__(self, *_):
-        os.chdir(self._newcwd)
-
-    def __exit__(self, *_):
-        os.chdir(self._oldcwd)
+def test_db_setup(reuse):
+    assert reuse.registry
 
 
-@pytest.mark.skipif(is_win or Path.cwd().as_posix().startswith("/media/"), reason="Not enough hours in a day")
-def test_setup_py_works(reuse):
-    import subprocess
-    with ScopedCwd(Path(__file__).parent.parent):
-        result = subprocess.check_output(
-            [sys.executable, "setup.py", "--help"],
-            shell=False
-        )
-        assert result
+@pytest.mark.skipif(True, reason="broken")
+def test_no_isolation(reuse):
+    assert test_load_multi_version(reuse, "numpy", "1.19.0", 1)
+    assert test_load_multi_version(reuse, "numpy", "1.19.0", 1)
 
 
+def installed_or_skip(reuse, name, version=None):
+    if not (spec := find_spec(name)):
+        pytest.skip(f"{name} not installed")
+        return False
+    try:
+        dist = distribution(spec.name)
+    except PackageNotFoundError as pnfe:
+        pytest.skip(f"{name} partially installed: {spec=}, {pnfe}")
+
+    if not (
+        (ver := dist.metadata["version"])
+        and (not version or reuse.Version(version)) == (not ver or reuse.Version(ver))
+    ):
+        pytest.skip(f"found '{name}' v{ver}, but require v{version}")
+        return False
+    return True
 
 
+@pytest.mark.skipif(not_local, reason="requires matplotlib")
+def test_use_str(reuse):
+    if not installed_or_skip(reuse, "matplotlib"):
+        return
+    mod = reuse("matplotlib/matplotlib.pyplot")
+    assert mod
+
+
+@pytest.mark.skipif(not_local, reason="requires matplotlib")
+def test_use_tuple(reuse):
+    if not installed_or_skip(reuse, "matplotlib"):
+        return
+    mod = reuse(("matplotlib", "matplotlib.pyplot"))
+    assert mod
+
+
+@pytest.mark.skipif(not_local, reason="requires matplotlib")
+def test_use_kwargs(reuse):
+    if not installed_or_skip(reuse, "matplotlib"):
+        return
+    mod = reuse(package_name="matplotlib", module_name="matplotlib.pyplot")
+    assert mod

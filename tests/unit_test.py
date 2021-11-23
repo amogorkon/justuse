@@ -1,10 +1,11 @@
+import functools
 import os
 import re
-import subprocess
 import sys
 import tempfile
 import warnings
-from contextlib import AbstractContextManager, closing
+import webbrowser
+from contextlib import closing
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, distribution
 from importlib.util import find_spec
@@ -15,26 +16,29 @@ from unittest.mock import patch
 import packaging.tags
 import packaging.version
 import pytest
-import requests
 from furl import furl as URL
-from hypothesis import assume, example, given
-from hypothesis import strategies as st
+
+# this is actually a test!
+from tests.simple_funcs import three
+
+src = import_base = Path(__file__).parent.parent / "src"
+cwd = Path().cwd()
+os.chdir(src)
+sys.path.insert(0, "") if "" not in sys.path else None
+import use
+from use import PyPI_Release, Version
+from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
+
+os.chdir(cwd)
 
 is_win = sys.platform.startswith("win")
 
 __package__ = "tests"
-import logging
 
-import use
-from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
+import logging
 
 log = logging.getLogger(".".join((__package__, __name__)))
 log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)
-
-use.config["testing"] = True
-
-# this is actually a test!
-from tests.simple_funcs import three
 
 
 @pytest.fixture()
@@ -44,6 +48,33 @@ def reuse():
     use._aspects = {}
     use._reloaders = {}
     return use
+
+
+def suggested_artifact(reuse, *args, **kwargs):
+    try:
+        mod = reuse(*args, **kwargs)
+        assert False, f"Actually returned mod: {mod}"
+    except (RuntimeWarning, RuntimeError) as rw:
+        last_line = rw.args[0].strip().splitlines()[-1]
+        log.info("Usimg last line as suggested artifact: %s", repr(last_line))
+        mod = eval(last_line)
+        log.info("suggest artifact returning: %s", mod)
+        return mod
+
+
+@pytest.mark.skipif(True, reason="Needs investigation")
+def test_redownload_module(reuse):
+    def inject_fault(*, path, **kwargs):
+        log.info("fault_inject: deleting %s", path)
+        path.delete()
+
+    assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
+    try:
+        reuse.config["fault_inject"] = inject_fault
+        assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
+    finally:
+        del reuse.config["fault_inject"]
+    assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
 
 
 def test_access_to_home(reuse):
@@ -71,6 +102,29 @@ def test_simple_path(reuse):
     print(f"loading foo module via use(Path('{foo_path}'))")
     mod = reuse(Path(foo_path), initial_globals={"a": 42})
     assert mod.test() == 42
+
+
+def test_simple_url(reuse):
+    import http.server
+
+    port = 8089
+    orig_cwd = Path.cwd()
+    try:
+        os.chdir(Path(__file__).parent.parent)
+
+        with http.server.HTTPServer(("", port), http.server.SimpleHTTPRequestHandler) as svr:
+            foo_uri = f"http://localhost:{port}/tests/.tests/foo.py"
+            print(f"starting thread to handle HTTP request on port {port}")
+            import threading
+
+            thd = threading.Thread(target=svr.handle_request)
+            thd.start()
+            print(f"loading foo module via use(URL({foo_uri}))")
+            with pytest.warns(use.NoValidationWarning):
+                mod = reuse(URL(foo_uri), initial_globals={"a": 42})
+                assert mod.test() == 42
+    finally:
+        os.chdir(orig_cwd)
 
 
 def test_internet_url(reuse):
@@ -117,39 +171,8 @@ def test_classical_install(reuse):
 
 
 def test_classical_install_no_version(reuse):
-    mod = reuse("pytest")
+    mod = reuse("pytest", modes=reuse.fatal_exceptions)
     assert mod is pytest or mod._ProxyModule__implementation is pytest
-
-
-def test_PEBKAC_hash_no_version(reuse):
-    with pytest.raises(RuntimeWarning):
-        reuse(
-            "pytest",
-            hashes="asdf",
-            modes=reuse.auto_install,
-        )
-
-
-def test_PEBKAC_nonexisting_pkg(reuse):
-    # non-existing pkg
-    with pytest.raises(ImportError):
-        reuse(
-            "4-^df",
-            modes=reuse.auto_install,
-            version="0.0.1",
-            hashes="asdf",
-        )
-
-
-def test_PEBKAC_impossible_version(reuse):
-    # impossible version
-    with pytest.raises(TypeError):  # version must be either str or tuple
-        reuse(
-            "pytest",
-            modes=reuse.auto_install,
-            version=-1,
-            hashes="asdf",
-        )
 
 
 def test_autoinstall_PEBKAC(reuse):
@@ -161,6 +184,32 @@ def test_autoinstall_PEBKAC(reuse):
         # forgot hashes
         with pytest.raises(packaging.version.InvalidVersion):
             reuse("pytest", version="-1", modes=reuse.auto_install)
+
+        # forgot version
+        with pytest.raises(RuntimeWarning):
+            reuse(
+                "pytest",
+                hashes="asdf",
+                modes=reuse.auto_install,
+            )
+
+        # impossible version
+        with pytest.raises(TypeError):  # version must be either str or tuple
+            reuse(
+                "pytest",
+                modes=reuse.auto_install,
+                version=-1,
+                hashes="asdf",
+            )
+
+        # non-existing pkg
+        with pytest.raises(ImportError):
+            reuse(
+                "4-^df",
+                modes=reuse.auto_install,
+                version="0.0.1",
+                hashes="asdf",
+            )
 
 
 def test_version_warning(reuse):
@@ -330,15 +379,51 @@ def test_reloading(reuse):
 
 def test_suggestion_works(reuse):
     with patch("webbrowser.open"):
-        try:
-            mod = reuse("example-pypi-package/examplepy", modes=reuse.auto_install)
-            assert False, f"Actually returned mod: {mod}"
-        except (RuntimeWarning, RuntimeError) as rw:
-            last_line = rw.args[0].strip().splitlines()[-1]
-            log.info("Using last line as suggested artifact: %s", repr(last_line))
-            mod = eval(last_line)
-            log.info("suggest artifact returning: %s", mod)
-        assert mod
+        sugg = suggested_artifact(reuse, "example-pypi-package/examplepy", modes=reuse.auto_install)
+        assert sugg
+
+
+def double_function(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs) * 2
+
+    return wrapper
+
+
+def test_aspectize(reuse):  # sourcery skip: extract-duplicate-method
+    # baseline
+    mod = reuse(reuse.Path("simple_funcs.py"))
+    assert mod.two() == 2
+
+    # all functions, but not classes or methods
+    mod = reuse(reuse.Path("simple_funcs.py")) @ (reuse.isfunction, "", double_function)
+
+    assert mod.two() == 4
+    assert mod.three() == 6
+    inst = mod.Two()
+    assert inst() == 2
+    inst = mod.Three()
+    assert inst.three() == 3
+
+    # functions with specific names only
+    mod = reuse(reuse.Path("simple_funcs.py")) @ (reuse.isfunction, "two", double_function)
+    assert mod.two() == 4
+    assert mod.three() == 3
+    assert reuse.ismethod
+
+
+@pytest.mark.skipif(True, reason="too slow; moved to the Beast")
+@pytest.mark.parametrize("name, version", (("numpy", "1.19.3"),))
+def test_86_numpy(reuse, name, version):
+    use = reuse  # for the eval() later
+    with pytest.raises(RuntimeWarning) as w:
+        reuse(name, version=version, modes=reuse.auto_install)
+    assert w
+    recommendation = str(w.value).split("\n")[-1].strip()
+    mod = eval(recommendation)
+    assert mod.__name__ == reuse._parse_name(name)[1]
+    return mod  # for the redownload test
 
 
 def test_clear_registry(reuse):
@@ -390,12 +475,7 @@ def installed_or_skip(reuse, name, version=None):
         # ("icontract", "2.5.4"),
     ),
 )
-def test_85_pywt_jupyter_ubuntu_case1010(reuse, name, version, hashes):
-    """Can't use("pywt", version="1.1.1")
-    In jupyter (Lubuntu VM):
-    pywt = use("pywt", version="1.1.1")
-    """
-    # TODO
+def test_85(reuse, name, version, hashes):
     if not installed_or_skip(reuse, name, version):
         return
     mod = reuse(name, version=reuse.Version(version))
@@ -410,14 +490,14 @@ def test_85_pywt_jupyter_ubuntu_case1010(reuse, name, version, hashes):
             "6.2.5",
             {"7310f8d27bc79ced999e760ca304d69f6ba6c6649c0b60fb0e04a4a77cacc134"},
         ),
+        (
+            "setuptools",
+            "57.4.0",
+            {"a49230977aa6cfb9d933614d2f7b79036e9945c4cdd7583163f4e920b83418d6"},
+        ),
     ),
 )
-def test_86_numpy_case1011(reuse, name, version, hashes):
-    """Can't use("numpy", version="1.20.0", modes=use.auto_install)
-
-    on windows, py39:
-    use("numpy", version="1.20.0", auto_install=True)
-    """
+def test_86(reuse, name, version, hashes):
     if not installed_or_skip(reuse, name, version):
         return
     mod = use(
@@ -434,43 +514,3 @@ def test_86_numpy_case1011(reuse, name, version, hashes):
 def test_hash_alphabet():
     H = sha256("hello world".encode("utf-8")).hexdigest()
     assert H == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(H)))
-
-
-class ScopedCwd(AbstractContextManager):
-    def __init__(self, newcwd: Path):
-        self._oldcwd = Path.cwd()
-        self._newcwd = newcwd
-
-    def __enter__(self, *_):
-        os.chdir(self._newcwd)
-
-    def __exit__(self, *_):
-        os.chdir(self._oldcwd)
-
-
-@pytest.mark.skipif(is_win, reason="Windows TODO")
-def test_read_wheel_metadata(reuse):
-    bytes = requests.get(
-        "https://files.pythonhosted.org/packages/45/80/cdf0df938fe63457f636d859499f4aab3d0411a90fd9472ad720a0b7eab6/justuse-0.5.0.tar.gz"
-    ).content
-    file = Path(tempfile.mkstemp(".tar.gz", "justuse-0.5.0")[1])
-    file.write_bytes(bytes)
-    whl_path = file
-    if whl_path.exists():
-        assert whl_path.exists()
-        assert whl_path.is_file()
-        meta = reuse.pimp.archive_meta(whl_path)
-        assert meta
-        assert meta["name"] == "justuse"
-        assert meta["import_relpath"].endswith("use/__init__.py")
-
-
-@given(st.text())
-def test_jack(inputs):
-    assume(inputs.isprintable())
-    sha = sha256(inputs.encode("utf-8")).hexdigest()
-    assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))
-
-
-def test_383_use_name(reuse):
-    assert use("pprint").pprint([1, 2, 3]) is None

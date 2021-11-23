@@ -6,11 +6,9 @@
 [![Downloads](https://pepy.tech/badge/justuse)](https://pepy.tech/project/justuse)
 [![justuse](https://snyk.io/advisor/python/justuse/badge.svg)](https://snyk.io/advisor/python/justuse)
 [![slack](https://img.shields.io/badge/slack-@justuse-purple.svg?logo=slack)](https://join.slack.com/t/justuse/shared_invite/zt-tot4bhq9-_qIXBdeiRIfhoMjxu0EhFw)
-[![codecov](https://codecov.io/gh/amogorkon/justuse/branch/unstable/graph/badge.svg?token=ROM5GP7YGV)](https://codecov.io/gh/amogorkon/justuse)
+[![codecov](https://codecov.io/gh/amogorkon/justuse/branch/main/graph/badge.svg?token=ROM5GP7YGV)](https://codecov.io/gh/amogorkon/justuse)
 [![Sourcery](https://img.shields.io/badge/Sourcery-enabled-brightgreen)](https://sourcery.ai)
 <a href="https://github.com/psf/black"><img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-000000.svg"></a>
-
-[logo]: https://github.com/amogorkon/justuse/blob/unstable/logo.svg "Logo"
 
 # Just use() python the way you want!
 
@@ -24,20 +22,17 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [x] initial module globals - a straight forward solution to diamond/cyclic imports
 - [x] decorate all specified callables (functions, methods, classes, ..) on import via pattern matching, aspect-orientation made easy
 - [x] return a given default if an exception happened during an import, simplifying optional dependencies
-- [x] safe hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
+- [x] safely hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
 - [x] safely auto-install version-tagged pure python packages from PyPI (packages with C-extensions like numpy don't work yet)
 - [x] have multiple versions of the same package installed and loaded in the same program without conflicts
 - [x] auto-install packages with C-extensions and other precompiled stuff
-- [x] no-hassle inline auto-installation of (almost) all conda packages
-- [ ] attach birdseye debugger to a loaded module as a mode
+- [x] no-hassle installation of almost all conda packages
 - [ ] try to pull packages from a P2P network before pulling from PyPI or conda directly
-- [ ] all justuse-code is compiled to a single, standalone .py file - just drop it into your own code without installation
 - [ ] provide a visual representation of the internal dependency graph
 - [ ] module-level variable guards aka "module-properties"
 - [ ] isolation of packages via subprocess/subinterpreter for clean un-/reloading
-- [ ] slot-based plugin architecture (to ensure reproducable testability of plugin-combinations)
 - [ ] document everything!
-- [ ] test everything!
+- [ ] testing everything!
 
 ## The Story
 Over the years, many times I've come across various situations where Python's import statement just didn't work the way I needed.
@@ -57,18 +52,18 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
 
  `import use`
  
- `np = use("numpy", version="1.19.2")` corresponds to `import numpy as np; if np.version != "1.19.2": warn()`
+ `np = use("numpy", version="1.19.2")`  # corresponds to `import numpy as np; if np.version != "1.19.2": warn()`
  
- `use("pprint").pprint(some_dict)` corresponds to a one-off `from pprint import pprint; pprint(some_dict)` without importing it into the global namespace
+ `use("pprint").pprint(some_dict)`  # corresponds to a one-off `from pprint import pprint; pprint(some_dict)` without importing it into the global namespace
  
- `tools = use(use.Path("/media/sf_Dropbox/code/tools.py"), reloading=True)` impossible to realize with classical imports
+ `tools = use(use.Path("/media/sf_Dropbox/code/tools.py"), reloading=True)`  # impossible to realize with classical imports
  
- `test = use("functions", initial_globals={"foo":34, "bar":49})` also impossible with the classical import statement, although importlib can help
+ `test = use("functions", initial_globals={"foo":34, "bar":49})`  # also impossible with the classical import statement, although importlib can help
  
  `utils = use(use.URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
-            hashes={"95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8"})` no chance with classical imports
+            hashes={"95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8"})`  # no chance with classical imports
             
- `np = use("numpy", version="1.21.0rc2", hashes={"3c90b0bb77615bda5e007cfa4c53eb6097ecc82e247726e0eb138fcda769b45d"}, modes=use.auto_install)` inline installation of packages and importing the same package with different versions in parallel in the same code - most people wouldn't even dream of that!
+ `np = use("numpy", version="1.21.0rc2", hashes={"3c90b0bb77615bda5e007cfa4c53eb6097ecc82e247726e0eb138fcda769b45d"}, modes=use.auto_install)` # inline installation of packages and importing the same package with different versions in parallel in the same code - most people wouldn't even dream of that!
 
 Thanks to the *default* keyword argument, it is also easy to simplify the rather clumsy optional import usecase like
 
@@ -97,16 +92,10 @@ use("example-pypi-package/examplepy", version="0.1.0", hashes={'S㵈蛴瞙绽㡃
 ```
 Version-pinning and hash-checking is the most secure way to install a package. It will ensure that your code will always run as you expect it, but there's a drawback: there is no immediate and automatic way to update code without involving the user (yet). On one side, you won't ever accidentally break your stuff by updating something else, but you also won't benefit from automatic security patches. To fix this shortcoming, it might be feasible to build IDE-plugins that check and update these pins in the code or check some database for security patches every time an auto-installed package is imported - please contact us if you have ideas or better yet, code ;-)
 
-## Use() case: optional dependencies and "premium features"
-We already touched on how to do use() with defaults and auto_install. Here's a metaphor from *The Matrix*:
-[![Matrix - Skill Upload](https://img.youtube.com/vi/w_8NsPQBdV0/0.jpg)](https://www.youtube.com/watch?v=w_8NsPQBdV0)
-
-Imagine you want to streamline user experience by distributing a very minimal, "free" but fully functional software to your end users which installs within seconds. Now, whenever the user wants to use a premium feature (or simply a feature that isn't generally required by the majority of users, therefor not included in the basic installation) the program could use() the packages and modules needed to realise the feature to download and install in the background while the user can still use other stuff, then trigger a callback when use() is done loading. The experience would be similar to playing an open world game which seamlessly downloads and loads new areas in the background on demand, without hiccup or loading screens. Or like Neo and Trinity - just get the skills to pilot a helicopter when you need them, right there on the spot. 
-
-## There are strange chinese symbols in my hashes, am I being hacked?
-Nope. SHA256 hashes normally are pretty long (64 characters per hexdigest) and we require them defined within regular python code. Additionally, if you want to support multiple platforms, you need to supply a hash for every platform - which can add up to huge blocks of visual noise. Since Python 3 supports unicode by default, why not use the whole range of printable characters to encode those hashes? It's easier said than done - turns out emojis don't work well across different systems and editors - however, it *is* feasible to merge the Japanese, ASCII, Chinese and Korean alphabets into a single, big one we call JACK - which can be used to reliably encode those hashes in merely 18 characters. Since humans aren't supposed to manually type those hashes but simply copy&paste them anyway, there is only the question how to get them if you only have hexdigests at hand for some reason. Simply do `use.hexdigest_as_JACK(H)` and you're ready to go. Of course we also support classical hexdigests as fallback.
 
 ## Beware of Magic!
 Inspired by the q package/module, use() is a subclass of ModuleType, which is a callable class that replaces the module on import, so that only 'import use' is needed to be able to call use() on things.
 
-Probably the most magical thing about use() is that it does not return the plain module you wanted but a *ProxyModule* instead which adds a layer of abstraction. This allows things like automatic and transparent reloading without any intervention needed on your part. ProxyModules also add operations on modules like aspectizing via `mod @ (check, pattern, decorator)` syntax, which would not be possible with the classical import machinery.
+Probably the most magical thing about use() is how automatic reload is realized. Whenever you `use(something, reloading=True)`, you won't get your actual module but a stand-in replacement, a so-called ProxyModule instead. The actual module is imported whenever the file changed and the implementation is transparently replaced in the background. This way, you can keep references to the things in your module without problems, but thanks to this indirection it is possible that when you try to access something in your module, the current implementation is dynamically evaluated per call. It is detected whether the code runs in an async environment like jupyter, then an async approach is used, otherwise threading with locking is used.
+The file you specified as module is opened and hashed every second. Only if the hash has changed, it is actually attempted to execute and import the code. This means that if you properly imported a module at first but then edited and left a SyntaxError in, it will report this error when it tries to import the file again, but it won't replace the previous implementation until you edited the file and it could import it without error.
+Another advantage of this approach is that all aspects are applied fresh on every reload. This ensures that you always call prestine code with as little side-effects and therefor as few surprises as possible.
