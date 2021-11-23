@@ -11,6 +11,7 @@ from importlib.util import find_spec
 from pathlib import Path
 from threading import _shutdown_locks
 from unittest.mock import patch
+from warnings import catch_warnings, filterwarnings
 
 import packaging.tags
 import packaging.version
@@ -90,7 +91,7 @@ def test_module_package_ambiguity(reuse):
     try:
         os.chdir(Path(__file__).parent / ".tests")
         with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
+            filterwarnings(action="always", module="use")
             reuse("sys", modes=reuse.fatal_exceptions)
         w_filtered = [*filter(lambda i: i.category is not DeprecationWarning, w)]
         assert len(w_filtered) == 1
@@ -103,14 +104,14 @@ def test_module_package_ambiguity(reuse):
 def test_builtin():
     # must be the original use because loading builtins requires looking up _using, which mustn't be wiped for this reason
     with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+        filterwarnings(action="always", module="use")
         mod = use("sys")
         assert mod.path is sys.path
 
 
 def test_classical_install(reuse):
     with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+        filterwarnings(action="always", module="use")
         mod = reuse("pytest", version=pytest.__version__, modes=reuse.fatal_exceptions)
         assert mod is pytest or mod._ProxyModule__implementation is pytest
         assert not w
@@ -165,10 +166,11 @@ def test_autoinstall_PEBKAC(reuse):
 
 def test_version_warning(reuse):
     # no auto-install requested, wrong version only gives a warning
-    try:
+    with catch_warnings(record=True) as w:
+        filterwarnings(action="always", module="use")
         reuse("pytest", version="0.0", modes=reuse.fatal_exceptions)
-    except use.AmbiguityWarning:
-        pass
+    assert len(w) != 0
+    assert w[0].category is use.VersionWarning
 
 
 def test_use_global_install(reuse):
@@ -263,7 +265,7 @@ def test_find_windows_artifact(reuse):
 def test_classic_import_same_version(reuse):
     version = reuse.Version(__import__("furl").__version__)
     with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+        filterwarnings(action="always", module="use")
         mod = reuse("furl", version=version)
         assert not w
         assert reuse.Version(mod.__version__) == reuse.Version(version)
@@ -271,22 +273,23 @@ def test_classic_import_same_version(reuse):
 
 def test_classic_import_diff_version(reuse):
     version = reuse.Version(__import__("furl").__version__)
-    try:
+    with catch_warnings(record=True) as w:
+        filterwarnings(action="always", module="use")
         major, minor, patch = version
         mod = reuse(
             "furl",
             version=reuse.Version(major=major, minor=minor, patch=patch + 1),
             modes=reuse.fatal_exceptions,
         )
-    except use.AmbiguityWarning:
-        pass
+    assert len(w) != 0
+    assert w[0].category == use.VersionWarning
 
 
 @pytest.mark.skipif(True, reason="Not working, needs investigation")
 def test_use_ugrade_version_warning(reuse):
     version = "0.0.0"
     with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+        filterwarnings(action="always", module="use")
         # no other way to change __version__ before the actual import while the version check happens on import
         test_use = reuse(
             reuse.Path(reuse.__file__).absolute(),
@@ -300,7 +303,8 @@ def test_use_ugrade_version_warning(reuse):
             == reuse.Version(test_use.__version__)
             == reuse.Version(version)
         )
-        assert w[0].category.__name__ == reuse.VersionWarning.__name__
+    assert len(w) != 0
+    assert w[0].category == use.VersionWarning
 
 
 class Restorer:
@@ -463,13 +467,6 @@ def test_read_wheel_metadata(reuse):
         assert meta
         assert meta["name"] == "justuse"
         assert meta["import_relpath"].endswith("use/__init__.py")
-
-
-@given(st.text())
-def test_jack(text):
-    assume(text.isprintable())
-    sha = sha256(text.encode("utf-8")).hexdigest()
-    assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))
 
 
 def test_383_use_name(reuse):
