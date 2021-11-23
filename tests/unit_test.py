@@ -20,13 +20,13 @@ from furl import furl as URL
 from hypothesis import assume, example, given
 from hypothesis import strategies as st
 
-
 is_win = sys.platform.startswith("win")
 
 __package__ = "tests"
+import logging
+
 import use
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-import logging
 
 log = logging.getLogger(".".join((__package__, __name__)))
 log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)
@@ -390,7 +390,12 @@ def installed_or_skip(reuse, name, version=None):
         # ("icontract", "2.5.4"),
     ),
 )
-def test_85(reuse, name, version, hashes):
+def test_85_pywt_jupyter_ubuntu_case1010(reuse, name, version, hashes):
+    """Can't use("pywt", version="1.1.1")
+    In jupyter (Lubuntu VM):
+    pywt = use("pywt", version="1.1.1")
+    """
+    # TODO
     if not installed_or_skip(reuse, name, version):
         return
     mod = reuse(name, version=reuse.Version(version))
@@ -407,7 +412,12 @@ def test_85(reuse, name, version, hashes):
         ),
     ),
 )
-def test_86(reuse, name, version, hashes):
+def test_86_numpy_case1011(reuse, name, version, hashes):
+    """Can't use("numpy", version="1.20.0", modes=use.auto_install)
+
+    on windows, py39:
+    use("numpy", version="1.20.0", auto_install=True)
+    """
     if not installed_or_skip(reuse, name, version):
         return
     mod = use(
@@ -440,7 +450,9 @@ class ScopedCwd(AbstractContextManager):
 
 @pytest.mark.skipif(is_win, reason="Windows TODO")
 def test_read_wheel_metadata(reuse):
-    bytes = requests.get("https://files.pythonhosted.org/packages/45/80/cdf0df938fe63457f636d859499f4aab3d0411a90fd9472ad720a0b7eab6/justuse-0.5.0.tar.gz").content
+    bytes = requests.get(
+        "https://files.pythonhosted.org/packages/45/80/cdf0df938fe63457f636d859499f4aab3d0411a90fd9472ad720a0b7eab6/justuse-0.5.0.tar.gz"
+    ).content
     file = Path(tempfile.mkstemp(".tar.gz", "justuse-0.5.0")[1])
     file.write_bytes(bytes)
     whl_path = file
@@ -458,3 +470,7 @@ def test_jack(inputs):
     assume(inputs.isprintable())
     sha = sha256(inputs.encode("utf-8")).hexdigest()
     assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))
+
+
+def test_383_use_name(reuse):
+    assert use("pprint").pprint([1, 2, 3]) is None
