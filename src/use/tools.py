@@ -32,7 +32,7 @@ class _PipeTransformer(ast.NodeTransformer):
 
 
 # singledispatch for methods
-def methdispatch(func) -> Callable:
+def methdispatch(func) :
     dispatcher = singledispatch(func)
 
     def wrapper(*args, **kw):

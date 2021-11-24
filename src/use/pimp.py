@@ -35,7 +35,7 @@ from furl import furl as URL
 from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
-from pip._internal.utils import compatibility_tags
+
 
 import use
 from use import Hash, Modes, VersionWarning, config
@@ -84,9 +84,9 @@ def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
     if isinstance(value, furl.Path):
         return (
             Path.cwd(),
-            value.segments 
-            << map(Path) 
-            << tuple 
+            value.segments
+            << map(Path)
+            << tuple
             << reduce(Path.__truediv__),
         ) << reduce(Path.__truediv__)
     return value
@@ -114,10 +114,32 @@ def get_supported() -> frozenset[PlatformTag]:
     Returns a set containing all platform _platform_tags
     supported on the current system.
     """
-    items: list[PlatformTag] = []
+    get_supported = None
+    try:
+      from pip._internal.resolution.legacy.resolver import get_supported
+    except ImportError:
+      pass
+    if not get_supported:
+      try:
+        from pip._internal.models.target_python import get_supported
+      except ImportError:
+        pass
+    if not get_supported:
+      try:
+        from pip._internal.utils.compatibility_tags import get_supported
+      except ImportError:
+        pass
+    if not get_supported:
+      try:
+        from pip._internal.resolution.resolvelib.factory import get_supported
+      except ImportError:
+        pass
+    get_supported = get_supported or (lambda: [])
 
-    for tag in compatibility_tags.get_supported():
-        items.append(PlatformTag(platform=tag.platform))
+    items: list[PlatformTag] = [
+        PlatformTag(platform=tag.platform) for tag in get_supported()
+    ]
+
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
 
@@ -754,11 +776,11 @@ def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> l
         filtered = (
             data
             >> _filter_by_version(version)
-            # >> _filter_by_platform(tags=get_supported(), sys_version=_sys_version())  # let's not filter by platform for now
+            >> _filter_by_platform(tags=get_supported(), sys_version=sys.version_info[0:2])  # let's not filter by platform for now
         )
     else:
         filtered = data
-        # filtered = _filter_by_platform(data, tags=get_supported(), sys_version=_sys_version())
+        filtered = _filter_by_platform(data, tags=get_supported(), sys_version=sys.version_info[0:2])
 
     flat = reduce(list.__add__, filtered.releases.values(), [])
     return sorted(
@@ -792,7 +814,7 @@ def _is_platform_compatible(
     if not include_sdist and (".tar" in info.justuse.ext or info.justuse.python_tag in ("cpsource", "sdist")):
         return False
 
-    if "win" in info.packagetype and sys.platform != "win32":
+    if "win" in (info.packagetype or "unknown") and sys.platform != "win32":
         return False
 
     if "win32" in info.justuse.platform_tag and sys.platform != "win32":
@@ -843,11 +865,14 @@ def _apply_aspect(
     thing,
     check,
     pattern,
-    decorator: Callable[[Callable[..., Any]], Any],
+    decorator,
     aspectize_dunders=False,
 ) -> Any:
     """Apply the aspect as a side-effect, no copy is created."""
     for name, obj in thing.__dict__.items():
+        if isinstance(getattr(thing, name), (dict, list, set, tuple, str, bytes)):
+            continue
+        if name == "beartype": continue
         if not aspectize_dunders and name.startswith("__") and name.endswith("__"):
             continue
         if check(obj) and re.match(pattern, name):

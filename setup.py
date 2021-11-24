@@ -68,7 +68,7 @@ requires = (
     "packaging(== 21.0)",
     "pydantic(>= 1.8.2)",
     "typeguard(>= 2.12.1)",
-    "pip(== 21.2.1)",
+    "pip",
     "furl(>= 2.1.2)",
     "wheel(>= 0.36.2)",
     "icontract(>= 2.5.4)",
