@@ -864,11 +864,14 @@ def _apply_aspect(
     thing,
     check,
     pattern,
-    decorator: Callable[[Callable[..., Any]], Any],
+    decorator,
     aspectize_dunders=False,
 ) -> Any:
     """Apply the aspect as a side-effect, no copy is created."""
     for name, obj in thing.__dict__.items():
+        if isinstance(getattr(thing, name), (dict, list, set, tuple, str, bytes)):
+            continue
+        if name == "beartype": continue
         if not aspectize_dunders and name.startswith("__") and name.endswith("__"):
             continue
         if check(obj) and re.match(pattern, name):

@@ -30,9 +30,14 @@ from logging import DEBUG, INFO, NOTSET, basicConfig, getLogger, root
 from pathlib import Path
 from warnings import filterwarnings
 
-# Stop beartype from printing messages not from our code
-filterwarnings(action="ignore", module="beartype")
 from beartype import beartype
+from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
+from warnings import simplefilter
+
+# Coerce all PEP 585 deprecation warnings into fatal exceptions.
+simplefilter('error', BeartypeDecorHintPep585DeprecationWarning)
+
+
 
 
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
