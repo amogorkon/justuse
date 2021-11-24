@@ -114,7 +114,6 @@ def get_supported() -> frozenset[PlatformTag]:
     Returns a set containing all platform _platform_tags
     supported on the current system.
     """
-    items: list[PlatformTag] = []
     get_supported = None
     try:
       from pip._internal.resolution.legacy.resolver import get_supported
@@ -137,8 +136,10 @@ def get_supported() -> frozenset[PlatformTag]:
         pass
     get_supported = get_supported or (lambda: [])
 
-    for tag in get_supported():
-        items.append(PlatformTag(platform=tag.platform))
+    items: list[PlatformTag] = [
+        PlatformTag(platform=tag.platform) for tag in get_supported()
+    ]
+
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
 
