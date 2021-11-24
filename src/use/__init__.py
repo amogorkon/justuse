@@ -28,16 +28,13 @@ from enum import Enum, IntEnum
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from logging import DEBUG, INFO, NOTSET, basicConfig, getLogger, root
 from pathlib import Path
-from warnings import filterwarnings
+from warnings import filterwarnings, simplefilter
 
 from beartype import beartype
 from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
-from warnings import simplefilter
 
 # Coerce all PEP 585 deprecation warnings into fatal exceptions.
-simplefilter('error', BeartypeDecorHintPep585DeprecationWarning)
-
-
+simplefilter("error", BeartypeDecorHintPep585DeprecationWarning)
 
 
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
@@ -74,7 +71,7 @@ basicConfig(
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.6.1"  # IMPORTANT; Must leave exactly as-is for setup
+__version__ = "0.6.2"  # IMPORTANT; Must leave exactly as-is for setup
 __name__ = "use"
 __package__ = "use"
 
