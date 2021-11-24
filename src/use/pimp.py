@@ -84,9 +84,9 @@ def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
     if isinstance(value, furl.Path):
         return (
             Path.cwd(),
-            value.segments 
-            << map(Path) 
-            << tuple 
+            value.segments
+            << map(Path)
+            << tuple
             << reduce(Path.__truediv__),
         ) << reduce(Path.__truediv__)
     return value
@@ -136,7 +136,7 @@ def get_supported() -> frozenset[PlatformTag]:
       except ImportError:
         pass
     get_supported = get_supported or (lambda: [])
-    
+
     for tag in get_supported():
         items.append(PlatformTag(platform=tag.platform))
     for tag in packaging.tags._platform_tags():
@@ -813,7 +813,7 @@ def _is_platform_compatible(
     if not include_sdist and (".tar" in info.justuse.ext or info.justuse.python_tag in ("cpsource", "sdist")):
         return False
 
-    if "win" in info.packagetype and sys.platform != "win32":
+    if "win" in (info.packagetype or "unknown") and sys.platform != "win32":
         return False
 
     if "win32" in info.justuse.platform_tag and sys.platform != "win32":

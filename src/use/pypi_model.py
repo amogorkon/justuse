@@ -214,10 +214,13 @@ def _parse_filename(filename) -> dict:
     assert isinstance(filename, str)
     distribution = version = build_tag = python_tag = abi_tag = platform_tag = None
     pp = Path(filename)
+    packagetype = None
     if ".tar" in filename:
         ext = filename[filename.index(".tar") :]
+        packagetype = "source"
     else:
         ext = pp.name[len(pp.stem) + 1 :]
+        packagetype = "bdist"
     rest = pp.name[0 : -len(ext) - 1]
 
     p = rest.split("-")
@@ -246,5 +249,7 @@ def _parse_filename(filename) -> dict:
             "platform_tag": platform_tag,
             "python_version": python_version,
             "ext": ext,
+            "filename": filename,
+            "packagetype": packagetype,
         }
     )
