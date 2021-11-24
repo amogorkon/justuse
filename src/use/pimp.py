@@ -587,6 +587,8 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     if not url or not artifact_path or (artifact_path and not artifact_path.exists()):
         proj = _get_package_data(package_name)
         ordered = _filtered_and_ordered_data(proj, version=version)
+        if not ordered:
+            raise RuntimeWarning(Message.pebkac_unsupported(package_name))
         rel = None
         for r in ordered:
             rel = r
