@@ -478,6 +478,8 @@ def _process(*argv, env={}):
         if name in ("write", "__init__", "__class__", "__dict__"):
           return object.__getattr__(self, name)
         return getattr(sys.stderr, name)
+      def fileno(self):
+        return sys.stderr.fileno()
     
     cap = Capture()
     o = run(
@@ -787,11 +789,25 @@ def _filter_by_platform(
                 rel,
                 sys_version=sys_version,
                 platform_tags=tags,
-                include_sdist=True,
+                include_sdist=False,
             )
         ]
         for ver, releases in project.releases.items()
     }
+    if not filtered:
+      filtered = {
+          ver: [
+              rel.dict()
+              for rel in releases
+              if _is_compatible(
+                  rel,
+                  sys_version=sys_version,
+                  platform_tags=tags,
+                  include_sdist=True,
+              )
+          ]
+          for ver, releases in project.releases.items()
+      }
 
     return PyPI_Project(**{**project.dict(), **{"releases": filtered}})
 
@@ -812,7 +828,11 @@ def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> l
     flat = reduce(list.__add__, filtered.releases.values(), [])
     return sorted(
         flat,
-        key=lambda r: (not r.filename.endswith(".tar.gz"), not r.is_sdist, r.version),
+        key=(lambda r: (
+            1 - int(r.filename.endswith(".tar.gz")),
+            1 - int(r.is_sdist),
+            r.version,
+        )),
         reverse=True,
     )
 
