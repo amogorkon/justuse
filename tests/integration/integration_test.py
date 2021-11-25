@@ -57,9 +57,15 @@ params = [
 
 @pytest.mark.parametrize("name,version", params)
 def test_sample(reuse, name, version):
-    mod = reuse(name, version=version, modes=reuse.auto_install)
-    assert mod
-
+    try:
+        reuse(name, version=version, modes=reuse.auto_install)
+    except BaseException as ie:
+        suggestion = ie.args[0].strip().splitlines()[-1]
+        log.debug("suggestion = %s", repr(suggestion))
+        mod = eval(suggestion)
+        assert mod
+        return
+    assert False, "Should raise ImportError: missing hashes."
 
 @pytest.mark.parametrize("name, version", (("numpy", "1.19.3"),))
 def test_86_numpy(reuse, name, version):
@@ -126,7 +132,7 @@ def test_simple_url(reuse):
     port = 8089
     orig_cwd = Path.cwd()
     try:
-        os.chdir(Path(__file__).parent.parent)
+        os.chdir(Path(__file__).parent.parent.parent)
 
         with http.server.HTTPServer(("", port), http.server.SimpleHTTPRequestHandler) as svr:
             foo_uri = f"http://localhost:{port}/tests/.tests/foo.py"

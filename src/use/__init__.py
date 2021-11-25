@@ -128,7 +128,7 @@ from use.messages import *
 
 ### NEEDED FOR TESTS!! ###
 from use.pimp import *
-from use.pimp import _get_package_data, _get_version, _is_version_satisfied, get_supported
+from use.pimp import _get_package_data, _get_version, _is_version_satisfied, get_supported, _parse_name
 from use.pypi_model import *
 from use.tools import *
 

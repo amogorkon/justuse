@@ -404,7 +404,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         response = requests.get(str(url))
         if response.status_code != 200:
-            raise ImportError(Message.web_error())
+            raise ImportError(Message.web_error(url, response))
         this_hash = hash_algo.value(response.content).hexdigest()
         if hash_value:
             if this_hash != hash_value:

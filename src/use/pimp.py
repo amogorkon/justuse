@@ -25,7 +25,7 @@ from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
 from subprocess import run
 from types import ModuleType
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional, Protocol, TypeVar, Union, runtime_checkable
 from warnings import warn
 
 import furl
@@ -45,6 +45,12 @@ from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none
 from use.tools import pipes
 
 log = getLogger(__name__)
+
+
+T = TypeVar("T", bound=Callable[[str, str, Version, set[str]], str])
+@runtime_checkable
+class MissingHashFotmatter(Protocol[T]):
+    pass
 
 
 class PlatformTag:
@@ -265,7 +271,7 @@ def _pebkac_no_version(
     hash_algo=None,
     package_name: str = None,
     module_name: str = None,
-    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
+    message_formatter: MissingHashFotmatter = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
 
@@ -289,7 +295,7 @@ def _pebkac_no_hash(
         for entry in _get_package_data(package_name).releases[version]
     }
     if hashes:
-        return RuntimeWarning(Message.pebkac_missing_hash(hash_algo.name, hashes))
+        return RuntimeWarning(Message.pebkac_missing_hash(name=package_name, package_name=package_name, version=version, hashes=hashes))
     else:
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
 
