@@ -110,7 +110,7 @@ def execute_wrapped(sql: str, params: tuple):
 
 
 @cache
-def get_supported() -> frozenset[PlatformTag]:
+def get_supported() -> frozenset[PlatformTag]: # cov: exclude
     """
     Results of this function are cached. They are expensive to
     compute, thanks to some heavyweight usual players
@@ -420,7 +420,7 @@ def _auto_install(
     mod = None
     if "installation_path" not in query or not _ensure_path(query["installation_path"]).exists():
         if query:
-            use.del_entry(name, version)
+            sys.modules["use"].del_entry(name, version)
         query = _find_or_install(package_name, version, force_install=True)
         artifact_path = _ensure_path(query["artifact_path"])
         module_path = _ensure_path(query["module_path"])
@@ -450,7 +450,7 @@ def _auto_install(
         if "fault_inject" in config:
             config["fault_inject"](**locals())
         if mod:
-            use.main._save_module_info(
+            sys.modules["use"]._save_module_info(
                 name=package_name,
                 import_relpath=str(_ensure_path(module_path).relative_to(installation_path)),
                 version=version,
@@ -465,6 +465,21 @@ def _process(*argv, env={}):
     _realenv = {
         k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)
     }
+    class Capture:
+      def __init__(self):
+        self.output = []
+      def write(self, *args, **kwargs):
+        self.output.append(args[0])
+        res = sys.stderr.write(*args, **kwargs)
+        sys.stderr.flush()
+        log.debug("%s", args[0])
+        return res
+      def __getattr__(self, name):
+        if name in ("write", "__init__", "__class__", "__dict__"):
+          return object.__getattr__(self, name)
+        return getattr(sys.stderr, name)
+    
+    cap = Capture()
     o = run(
         **(
             setup := dict(
@@ -472,18 +487,22 @@ def _process(*argv, env={}):
                 args=[*map(str, argv)],
                 bufsize=1024,
                 input="",
-                capture_output=True,
+                capture_output=False,
                 timeout=45000,
-                check=False,
+                check=True,
                 close_fds=True,
                 env=_realenv,
                 encoding="ISO-8859-1",
                 errors="ISO-8859-1",
                 text=True,
                 shell=False,
+                stderr=cap,
+                stdout=cap,
             )
         )
     )
+    o.stderr = o.stdout = "\x0a".join(map(str, cap.output))
+    
     if o.returncode == 0:
         return o
     raise RuntimeError(  # cov: exclude
@@ -659,6 +678,8 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
             "pip",
             "--disable-pip-version-check",
             "--no-color",
+            "--verbose",
+            "--verbose",
             "install",
             "--pre",
             "--root",

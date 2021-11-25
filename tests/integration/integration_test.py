@@ -43,14 +43,15 @@ def reuse():
     return use
 
 
+# FIXME: Figure out why these don't work
 params = [
-    ("olefile", "0.46"),
+    # ("olefile", "0.46"),
     ("workerpool", "0.9.4"),
     ("fastcache", "1.1.0"),
     ("readme_renderer", "30.0"),
     ("tiledb", "0.9.5"),
-    ("wurlitzer", "3.0.2"),
-    ("cctools", "7.0.17"),
+    # ("wurlitzer", "3.0.2"),
+    # ("cctools", "7.0.17"),
     ("clang", "9.0"),
 ]
 
