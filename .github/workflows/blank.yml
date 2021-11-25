@@ -20,29 +20,56 @@ jobs:
       - name: Ubuntu - Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.9.7' # Version range or exact version of a Python version to use, using SemVer's version range syntax
+          python-version: '3.10' # Version range or exact version of a Python version to use, using SemVer's version range syntax
           architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified
       - run: |
           echo "Linux-Tests: Preloading package dependencies ..."
-          python3 -m pip install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests furl
+          python3 -m pip --disable-pip-version-check --no-python-version-warning install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests furl
           echo "Linux-Tests: Running tests ..."
           mkdir -p ~/.justuse-python/
           echo "debug = true" > ~/.justuse-python/config.toml
-          python3 -m pip install --force-reinstall --upgrade -r requirements.txt
-          python3 -m pip install -r requirements.txt furl
+          python3 -m pip --disable-pip-version-check --no-python-version-warning install --force-reinstall --upgrade -r requirements.txt
+          python3 -m pip --disable-pip-version-check --no-python-version-warning install -r requirements.txt furl
           IFS=$'\n'; set -- $( find -name "*.py" | cut -c 3- | sed -r -e 's~^src/~~; s~\.py~~; \~^\.|/\.~d; s~/~.~g; s~\.__init__$~~; s~^~--cov=~; ' ; ); 
           python3 -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage/ --cov-report annotate:coverage/annotated --cov-report xml:coverage/cov.xml "$@" tests/unit_test.py
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v2
         with:
           token: 20fb71ba-3e2b-46db-b86d-e1666d56665b
-          CODECOV_TOKEN: 20fb71ba-3e2b-46db-b86d-e1666d56665b
-          fail_ci_if_error: false # optional (default = false)
-          files: ./.coverage,./coverage/cov.xml # optional
-          flags: unittests # optional
-          name: codecov-justuse # optional
-          verbose: true # optional (default = false)
-          github-token: ${{ secrets.PAT_TOKEN }}
+          fail_ci_if_error: false
+          name: justuse
+          files: .coverage,coverage/cov.xml
+          verbose: true
+          
+  test-macos:
+    runs-on: macos-11
+
+    steps:
+      - name: Linux Tests
+        uses: actions/checkout@v2
+      - name: Ubuntu - Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9' # Version range or exact version of a Python version to use, using SemVer's version range syntax
+          architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified
+      - run: |
+          echo "Linux-Tests: Preloading package dependencies ..."
+          python3 -m pip --disable-pip-version-check --no-python-version-warning install anyio mmh3 mypy packaging pip pytest pytest-env pytest-cov requests types-toml types-requests furl
+          echo "Linux-Tests: Running tests ..."
+          mkdir -p ~/.justuse-python/
+          echo "debug = true" > ~/.justuse-python/config.toml
+          python3 -m pip --disable-pip-version-check --no-python-version-warning install --force-reinstall --upgrade -r requirements.txt
+          python3 -m pip --disable-pip-version-check --no-python-version-warning install -r requirements.txt furl
+          IFS=$'\n'; set -- $( find . -name "*.py" | cut -c 3- | sed -r -e 's~^src/~~; s~\.py~~; \~^\.|/\.~d; s~/~.~g; s~\.__init__$~~; s~^~--cov=~; ' ; ); 
+          python3 -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage/ --cov-report annotate:coverage/annotated --cov-report xml:coverage/cov.xml "$@" tests/unit_test.py
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v2
+        with:
+          token: 20fb71ba-3e2b-46db-b86d-e1666d56665b
+          fail_ci_if_error: false
+          name: justuse
+          files: .coverage,coverage/cov.xml
+          verbose: true
 
   build-dist:
     runs-on: ubuntu-latest
@@ -52,21 +79,30 @@ jobs:
       - name: Ubuntu - Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.9.7' # Version range or exact version of a Python version to use, using SemVer's version range syntax
+          python-version: '3.10' # Version range or exact version of a Python version to use, using SemVer's version range syntax
           architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified
       - name: Build wheel and sdist
         run: |
-          python3 -m pip install --upgrade setuptools wheel
+          python3 -m pip --disable-pip-version-check --no-python-version-warning install setuptools wheel 2>/dev/null 1>&2  || true
           python3 setup.py egg_info
           python3 setup.py bdist_wheel
           python3 setup.py sdist
-      - name: Upload Artifact
+          SUFFIX="$( python3 -c $'def timestamp2fragday():\n    from datetime import datetime; from math import modf\n    now = datetime.utcnow()\n    seconds = now.hour*60*60 + now.minute*60 + now.second\n    total_seconds = 24*60*60\n    return datetime.today().strftime("%Y%m%d") + f".{modf(seconds/total_seconds)[0]:.4f}"[1:].strip("0")\nprint(timestamp2fragday())'; )" 
+          typeset -p SUFFIX
+          echo $'\n'"ARTIFACT_BDIST_PATH=$( find dist -name '*.whl' -printf '%p'; )"$'\n' | tee -a "$GITHUB_ENV"
+          echo $'\n'"ARTIFACT_SDIST_PATH=$( find dist -name '*.tar*' -printf '%p'; )"$'\n' | tee -a "$GITHUB_ENV"
+          echo $'\n'"ARTIFACT_BDIST_NAME=justuse-$SUFFIX"$'\n' | tee -a "$GITHUB_ENV"
+          echo $'\n'"ARTIFACT_SDIST_NAME=justuse-$SUFFIX"$'\n' | tee -a "$GITHUB_ENV"
+      - name: Upload Artifact - bdist
         uses: actions/upload-artifact@v2
         with:
-          name: distribution
-          path: |
-            **/*.whl
-            **/*.tar*
+          name: "${{ env.ARTIFACT_BDIST_NAME }}"
+          path: "${{ env.ARTIFACT_BDIST_PATH }}"
+      - name: Upload Artifact - sdist
+        uses: actions/upload-artifact@v2
+        with:
+          name: "${{ env.ARTIFACT_SDIST_NAME }}"
+          path: "${{ env.ARTIFACT_SDIST_PATH }}"
 
 
   test-windows-x86:
@@ -87,7 +123,7 @@ jobs:
           $env:DEBUGGING = 1
           $env:ERRORS = 1
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade -r requirements.txt
+          & "python.exe" -m pip --disable-pip-version-check --no-python-version-warning install --exists-action s --prefer-binary --no-compile --upgrade -r requirements.txt
           & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x86/ --cov-report annotate:coverage-win32-x86/annotated --cov-report xml:coverage-win32-x86/cov.xml --cov=setup --cov=use --cov=use.hash_alphabet --cov=use.main --cov=use.messages --cov=use.mod --cov=use.pimp --cov=use.platformtag --cov=use.pypi_model --cov=use.tools --cov=tests --cov=tests.foo --cov=tests.mass.collect_packages --cov=tests.mass.justtest --cov=tests.mass.test_pypi_model --cov=tests.mass.test_single --cov=tests.mass.tmp --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.test_beast --cov=tests.unit_test --cov=build.lib.use --cov=build.lib.use.hash_alphabet --cov=build.lib.use.main --cov=build.lib.use.messages --cov=build.lib.use.mod --cov=build.lib.use.pimp --cov=build.lib.use.platformtag --cov=build.lib.use.pypi_model --cov=build.lib.use.tools tests/unit_test.py
       - name: Windows - Collect Coverage
         run: |
@@ -128,7 +164,7 @@ jobs:
           $env:DEBUGGING = 1
           $env:ERRORS = 1
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          & "python.exe" -m pip install --exists-action s --prefer-binary --no-compile --upgrade -r requirements.txt
+          & "python.exe" -m pip --disable-pip-version-check --no-python-version-warning install --exists-action s --prefer-binary --no-compile --upgrade -r requirements.txt
           & "python.exe" -m pytest --cov-branch --cov-report term-missing --cov-report html:coverage-win32-x64/ --cov-report annotate:coverage-win32-x64/annotated --cov-report xml:coverage-win32-x64/cov.xml --cov=setup --cov=use --cov=use.hash_alphabet --cov=use.main --cov=use.messages --cov=use.mod --cov=use.pimp --cov=use.platformtag --cov=use.pypi_model --cov=use.tools --cov=tests --cov=tests.foo --cov=tests.mass.collect_packages --cov=tests.mass.justtest --cov=tests.mass.test_pypi_model --cov=tests.mass.test_single --cov=tests.mass.tmp --cov=tests.simple_funcs --cov=tests.tdd_test --cov=tests.test --cov=tests.test_beast --cov=tests.unit_test --cov=build.lib.use --cov=build.lib.use.hash_alphabet --cov=build.lib.use.main --cov=build.lib.use.messages --cov=build.lib.use.mod --cov=build.lib.use.pimp --cov=build.lib.use.platformtag --cov=build.lib.use.pypi_model --cov=build.lib.use.tools  tests/unit_test.py
       - name: Windows - Collect Coverage
         run: |
@@ -148,7 +184,6 @@ jobs:
         with:
           name: coverage
           path: coverage-win32-x64.tar.gz
-
 
 
 

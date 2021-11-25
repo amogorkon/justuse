@@ -121,7 +121,7 @@ class Modes(IntEnum):
 if sys.version_info < (3, 10):
     from use.buffet_old import buffet_table
 else:
-    from use.buffet import buffet_table
+    from use.buffet_old import buffet_table
 
 from use.main import *
 from use.messages import *
