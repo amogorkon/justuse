@@ -120,7 +120,6 @@ def get_supported() -> frozenset[PlatformTag]: # cov: exclude
     Returns a set containing all platform _platform_tags
     supported on the current system.
     """
-    items = None
     get_supported = None
     with catch_warnings():
         filterwarnings(action="ignore", category=DeprecationWarning)
@@ -135,7 +134,7 @@ def get_supported() -> frozenset[PlatformTag]: # cov: exclude
             pass
         if not get_supported:
           try:
-            from pip._internal.utils.justuse.compatibility_tags import get_supported
+            from pip._internal.utils.compatibility_tags import get_supported
           except ImportError:
             pass
         if not get_supported:
@@ -144,11 +143,11 @@ def get_supported() -> frozenset[PlatformTag]: # cov: exclude
           except ImportError:
             pass
     
-        get_supported = get_supported or (lambda: [])
-    
-        items: list[PlatformTag] = [
-            PlatformTag(platform=tag.platform) for tag in get_supported()
-        ]
+    get_supported = get_supported or (lambda: [])
+
+    items: list[PlatformTag] = [
+        PlatformTag(platform=tag.platform) for tag in get_supported()
+    ]
 
     for tag in packaging.tags._platform_tags():
         items.append(PlatformTag(platform=str(tag)))
@@ -331,7 +330,7 @@ def _pebkac_no_version_no_hash(
 
     # we found something that could work, but it may not fit to the user's requirements
     hashes = {hexdigest_as_JACK(o.digests.get(hash_algo.name)) for o in proj.urls}
-    version = ordered[0].justuse.version
+    version = ordered[0].version
     return RuntimeWarning(
         Message.no_version_or_hash_provided(
             name=name,
@@ -486,12 +485,11 @@ def _process(*argv, env={}):
         self.output.append(args[0])
         res = sys.stderr.write(*args, **kwargs)
         sys.stderr.flush()
-        log.error("%s", args[0])
+        log.debug("%s", args[0])
         return res
       def __getattr__(self, name):
         if name in ("write", "__init__", "__class__", "__dict__"):
           return object.__getattr__(self, name)
-        log.error("Capture.%s(%s)", args[0], args[1:])
         return getattr(sys.stderr, name)
       def fileno(self):
         return sys.stderr.fileno()
@@ -502,12 +500,12 @@ def _process(*argv, env={}):
             setup := dict(
                 executable=(exe := argv[0]),
                 args=[*map(str, argv)],
-                bufsize=0,
+                bufsize=1024,
                 input="",
                 capture_output=False,
                 timeout=45000,
                 check=True,
-                close_fds=False,
+                close_fds=True,
                 env=_realenv,
                 encoding="ISO-8859-1",
                 errors="ISO-8859-1",
@@ -749,25 +747,27 @@ def _load_venv_entry(*, package_name, module_name, installation_path, module_pat
     with open(module_path, "rb") as code_file:
         try:
             for variant in (
-                cwd,
                 installation_path,
                 Path(str(str(installation_path).replace("lib64/", "lib/"))),
                 Path(str(str(installation_path).replace("lib/", "lib64/"))),
-                installation_path,
+                None,
             ):
+                if not variant:
+                    raise RuntimeError()
                 if not variant.exists():
                     continue
-                origcwd = Path.cwd()
                 try:
-                    log.info("Changimg directory: from %s to %s", origcwd, variant)
+                    os.chdir(cwd)
                     os.chdir(variant)
-                    return importlib.import_module(module_name.replace("/", "."))
+                    return _build_mod(
+                        name=(module_name.replace("/", ".")),
+                        code=code_file.read(),
+                        module_path=_ensure_path(module_path),
+                        initial_globals={},
+                    )
                 except ImportError as ierr0:
                     orig_exc = orig_exc or ierr0
                     continue
-                finally:
-                    log.debug("Change directory back: from %s to %s", Path.cwd(), origcwd)
-                    os.chdir(origcwd)
         except RuntimeError as ierr:
             try:
                 return importlib.import_module(module_name)
@@ -822,7 +822,7 @@ def _filter_by_platform(
           for ver, releases in project.releases.items()
       }
 
-    return PyPI_Project(**{**project.dict(), **dict(releases=filtered, info=project.info.dict(), urls=[r for r in filtered for ver,rels in filtered.items()])})
+    return PyPI_Project(**{**project.dict(), **{"releases": filtered}})
 
 
 @pipes
@@ -844,7 +844,7 @@ def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> l
         key=(lambda r: (
             1 - int(r.filename.endswith(".tar.gz")),
             1 - int(r.is_sdist),
-            r.justuse.version,
+            r.version,
         )),
         reverse=True,
     )
@@ -868,13 +868,16 @@ def _is_platform_compatible(
     info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
 ) -> bool:
 
+    if not include_sdist and (".tar" in info.justuse.ext or info.justuse.python_tag in ("cpsource", "sdist")):
+        return False
+
     if "win" in (info.packagetype or "unknown") and sys.platform != "win32":
         return False
     
-    if info.justuse.platform_tag:
-        if "win32" in info.justuse.platform_tag and sys.platform != "win32":
+    if info.platform_tag:
+        if "win32" in info.platform_tag and sys.platform != "win32":
             return False
-        if "macosx" in info.justuse.platform_tag and sys.platform != "darwin":
+        if "macosx" in info.platform_tag and sys.platform != "darwin":
             return False
 
     our_python_tag = tags.interpreter_name() + tags.interpreter_version()
@@ -883,31 +886,27 @@ def _is_platform_compatible(
             our_python_tag,
             "py3",
             "cp3",
-            f"cp{tags.interpreter_version()}", f"cp{tags.interpreter_version()}m",
-            f"py{tags.interpreter_version()}", f"py{tags.interpreter_version()}m",
+            f"cp{tags.interpreter_version()}",
+            f"py{tags.interpreter_version()}",
         ]
     )
 
-    if info.justuse.platform_tag:
-        given_platform_tags = info.justuse.platform_tag.split(".") << map(PlatformTag) >> frozenset
+    if info.platform_tag:
+        given_platform_tags = info.platform_tag.split(".") << map(PlatformTag) >> frozenset
+    else:
+        return include_sdist
     
+    if info.is_sdist and info.requires_python:
+        given_python_tag = {
+            our_python_tag
+            for p in info.requires_python.split(",")
+            if Version(platform.python_version()) in SpecifierSet(p)
+        }
+    else:
+        given_python_tag = set(info.python_tag.split(".")) 
     
-    ## FIXME: Move to pypi_model / requires_python etc fields
-    pyX_dot_pyY = info.justuse.python_tag.split(".") if info.justuse.python_tag else ["py3"]
-    spec_set_input = info.requires_python if info.requires_python else None
-    if not spec_set_input:
-        spec_set_input = " , ".join([*map(lambda i: (">= %d.0.0, < %d.9999.9999" % ((z:=next(map(int,filter(str.isdigit, i)))),z+1,)), map(list, pyX_dot_pyY))])
-    spec_set = SpecifierSet(spec_set_input)
-    ##
-
-    sys_vet = use.Version(major=sys.version_info[0], minor=sys.version_info[1])
-    if sys_vet not in spec_set:
-        log.debug("NOTE: %s rejected by %s", sys_vet, spec_set)
-        return False
-    return (
-        (info.is_sdist and include_sdist)
-        or not info.is_sdist
-        or supported_tags.intersection([*pyX_dot_pyY, info.justuse.python_tag, info.requires_python, info.justuse.python_tag, info.justuse.abi_tag])
+    return any(supported_tags.intersection(given_python_tag)) and (
+        (info.is_sdist and include_sdist) or any(given_platform_tags.intersection(platform_tags))
     )
 
 
