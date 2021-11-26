@@ -1,8 +1,3 @@
-from beartype import beartype
-from logging import getLogger
-from typing import List
+import sys
 
-def foo(X: List):
-    return
-
-beartype(foo)
+print(sys.argsv)

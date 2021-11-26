@@ -71,7 +71,7 @@ basicConfig(
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.6.2"  # IMPORTANT; Must leave exactly as-is for setup
+__version__ = "0.6.3"  # IMPORTANT; Must leave exactly as-is for setup
 __name__ = "use"
 __package__ = "use"
 
@@ -128,7 +128,7 @@ from use.messages import *
 
 ### NEEDED FOR TESTS!! ###
 from use.pimp import *
-from use.pimp import _get_package_data, _get_version, _is_version_satisfied, get_supported, _parse_name
+from use.pimp import _get_package_data, _get_version, _is_version_satisfied, _parse_name, get_supported
 from use.pypi_model import *
 from use.tools import *
 
