@@ -10,10 +10,16 @@ from typing import Optional, Union
 import packaging
 from packaging.version import Version as PkgVersion
 from pydantic import BaseModel
+from logging import getLogger
+
+log = getLogger(__name__)
 
 # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
 # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
 
+class BaseModel(BaseModel):
+    def __repr__(self):
+        return self.__class__.__name__
 
 class Version(PkgVersion):
     def __new__(cls, *args, **kwargs):
@@ -69,27 +75,31 @@ class JustUse_Info(BaseModel):
     distribution: Optional[str]
     version: Optional[str]
     build_tag: Optional[str]
-    python_tag: Optional[str] = ""
+    python_tag: Optional[str]
     abi_tag: Optional[str]
-    platform_tag: Optional[str] = "any"
+    platform_tag: Optional[str]
     ext: Optional[str]
 
 
 class PyPI_Release(BaseModel):
-    comment_text: str = None
-    digests: dict[str, str] = None
-    url: str = None
-    ext: str = None
-    packagetype: str = None
-    distribution: str = None
-    requires_python: str = None
-    python_version: str = None
-    python_tag: str = None
-    platform_tag: str = None
-    filename: str = None
-    abi_tag: str = None
-    yanked: bool = False
+    digests: dict[str, str]
+    url: str
+    packagetype: str
+    distribution: str
+    requires_python: Optional[str]
+    python_version: Optional[str]
+    python_tag: Optional[str]
+    platform_tag: str
+    filename: str
+    abi_tag: str
+    yanked: bool
     version: Version
+    distribution: Optional[str]
+    build_tag: Optional[str]
+    python_tag: Optional[str]
+    abi_tag: Optional[str]
+    platform_tag: Optional[str]
+    ext: Optional[str]
 
     class Config:
         arbitrary_types_allowed = True
@@ -127,51 +137,54 @@ class PyPI_Downloads(BaseModel):
 
 
 class PyPI_Info(BaseModel):
-    author: str = None
-    author_email: str = None
-    bugtrack_url: str = None
-    classifiers: list[str] = None
-    description: str = None
-    description_content_type: str = None
-    docs_url: str = None
-    download_url: str = None
-    downloads: PyPI_Downloads = None
-    home_page: str = None
-    keywords: str = None
-    license: str = None
-    maintainer: str = None
-    maintainer_email: str = None
-    name: str = None
-    package_name: str = None
-    package_url: str = None
-    platform: str = None
-    project_url: str
-    project_urls: dict[str, str] = None
-    release_url: str = None
-    requires_dist: list[str] = None
-    requires_python: str = None
-    summary: str = None
-    version: str = None
-    yanked: bool = False
-    yanked_reason: str = None
+    author: Optional[str]
+    author_email: Optional[str]
+    bugtrack_url: Optional[str]
+    classifiers: Optional[list[str]]
+    description: Optional[str]
+    description_content_type: Optional[str]
+    docs_url: Optional[str]
+    download_url: Optional[str]
+    downloads: Optional[PyPI_Downloads]
+    home_page: Optional[str]
+    keywords: Optional[str]
+    license: Optional[str]
+    maintainer: Optional[str]
+    maintainer_email: Optional[str]
+    name: str
+    package_name: Optional[str]
+    package_url: str
+    platform: Optional[str]
+    project_url: Optional[str]
+    project_urls: Optional[dict[str, str]]
+    release_url: Optional[str]
+    requires_dist: Optional[list[str]]
+    requires_python: Optional[str]
+    summary: Optional[str]
+    version: Optional[str]
+    yanked: Optional[bool]
+    yanked_reason: Optional[str]
 
 
 class PyPI_URL(BaseModel):
-    comment_text: str = None
-    digests: dict[str, str] = None
-    downloads: int = -1
-    filename: str = None
-    has_sig: bool = False
-    md5_digest: str = None
-    packagetype: str = None
-    python_version: str = None
-    requires_python: str = None
-    size: int = -1
-    upload_time: str = None
-    upload_time_iso_8601: str = None
-    url: str = None
-    yanked: bool = False
-    yanked_reason: str = None
+    digests: dict[str, str]
+    url: str
+    packagetype: str
+    distribution: str
+    requires_python: Optional[str]
+    python_version: Optional[str]
+    python_tag: Optional[str]
+    platform_tag: str
+    filename: str
+    abi_tag: str
+    yanked: bool
+    version: Version
+    distribution: Optional[str]
+    build_tag: Optional[str]
+    python_tag: Optional[str]
+    abi_tag: Optional[str]
+    platform_tag: Optional[str]
+    ext: Optional[str]
 
 
 class PyPI_Project(BaseModel):
@@ -181,7 +194,7 @@ class PyPI_Project(BaseModel):
     info: PyPI_Info = None
 
     def __init__(self, *, releases, urls, info, **kwargs):
-
+      try:
         for version in list(releases.keys()):
             if not isinstance(version, str):
                 continue
@@ -190,17 +203,37 @@ class PyPI_Project(BaseModel):
             except packaging.version.InvalidVersion:
                 del releases[version]
 
-        releases2 = {
-            str(ver_str): [
-                {
-                    **(rel_info if isinstance(rel_info, dict) else rel_info.dict()),
+        def get_info(rel_info, ver_str):
+           data = {
+                    **rel_info,
+                    **_parse_filename(rel_info["filename"]),
                     "version": Version(str(ver_str)),
                 }
+           if info.get("requires_python"): data["requires_python"] = info.get("requites_python")
+           if info.get("requires_dist"): data["requires_dist"] = info.get("requires_dist")
+           return data
+        
+        super(PyPI_Project, self).__init__(
+          releases={
+            str(ver_str): [
+                get_info(rel_info, ver_str)
                 for rel_info in release_infos
             ]
             for ver_str, release_infos in releases.items()
-        }
-        super(PyPI_Project, self).__init__(releases=releases2, urls=urls, info=info, **kwargs)
+          },
+          urls=[
+            get_info(rel_info, ver_str) 
+            for ver_str, rel_infos in releases.items()
+            for rel_info in rel_infos
+          ],
+          info=info,
+          **kwargs
+        )
+      finally:
+        releases = None
+        info = None
+        urls = None
+        
 
 
 def _parse_filename(filename) -> dict:
@@ -235,21 +268,18 @@ def _parse_filename(filename) -> dict:
         distribution, version = p
     else:
         return {}
-
-    python_version = None
-    if python_tag:
-        python_version = python_tag.replace("cp", "")[0] + "." + python_tag.replace("cp", "")[1:]
-    return _delete_none(
-        {
+    
+    return {
             "distribution": distribution,
             "version": version,
             "build_tag": build_tag,
             "python_tag": python_tag,
             "abi_tag": abi_tag,
             "platform_tag": platform_tag,
-            "python_version": python_version,
             "ext": ext,
             "filename": filename,
             "packagetype": packagetype,
-        }
-    )
+            "yanked_reason": "",
+            "bugtrack_url": "",
+            
+    }
