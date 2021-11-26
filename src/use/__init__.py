@@ -4,6 +4,7 @@ Only imports and project-global constants are defined here.
     
 """
 
+
 import sys
 
 if sys.version_info < (3, 9) and "tests" not in sys.modules:
@@ -120,11 +121,7 @@ class Modes(IntEnum):
     fastfail = 2 ** 5
 
 
-if sys.version_info < (3, 10):
-    from use.buffet_old import buffet_table
-else:
-    from use.buffet_old import buffet_table
-
+from use.buffet_old import buffet_table
 from use.main import *
 from use.messages import *
 
