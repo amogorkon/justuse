@@ -28,13 +28,15 @@ from enum import Enum, IntEnum
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from logging import DEBUG, INFO, NOTSET, basicConfig, getLogger, root
 from pathlib import Path
-from warnings import filterwarnings, simplefilter
+from warnings import catch_warnings, filterwarnings, simplefilter
 
 from beartype import beartype
 from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
 
 # Coerce all PEP 585 deprecation warnings into fatal exceptions.
-simplefilter("error", BeartypeDecorHintPep585DeprecationWarning)
+catch_warnings()
+filterwarnings("ignore", category=DeprecationWarning, module="pip")
+filterwarnings("error", category=BeartypeDecorHintPep585DeprecationWarning)
 
 
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()

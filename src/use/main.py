@@ -311,7 +311,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         # TODO: CASCADE to artifacts etc
         self.registry.execute(
             "DELETE FROM hashes WHERE artifact_id IN (SELECT id FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?))",
-            (name, version),
+            (name, str(version)),
         )
         self.registry.execute(
             "DELETE FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?)",
@@ -729,6 +729,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hash_algo,
         user_msg=Message,
     ):
+        if module_name:
+            module_name = module_name.replace("/", ".").replace("-", "_")
         assert hash_algo != None, "Hash algorithm must be specified"
 
         if isinstance(hashes, str):

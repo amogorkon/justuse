@@ -110,7 +110,7 @@ def test_pypi_model():
         yanked=False,
         version="1.19.5",
     )
-    assert release == eval(repr(release))
+    assert type(release)(**release.dict()) == release
 
     info = JustUse_Info(
         distribution="numpy",
@@ -121,7 +121,7 @@ def test_pypi_model():
         platform_tag="cp4",
         ext="whl",
     )
-    assert info == eval(repr(info))
+    assert type(info)(**info.dict()) == info
 
 
 class ScopedCwd(AbstractContextManager):
