@@ -736,27 +736,25 @@ def _load_venv_entry(*, package_name, module_name, installation_path, module_pat
     with open(module_path, "rb") as code_file:
         try:
             for variant in (
+                cwd,
                 installation_path,
                 Path(str(str(installation_path).replace("lib64/", "lib/"))),
                 Path(str(str(installation_path).replace("lib/", "lib64/"))),
-                None,
+                installation_path,
             ):
-                if not variant:
-                    raise RuntimeError()
                 if not variant.exists():
                     continue
+                origcwd = Path.cwd()
                 try:
-                    os.chdir(cwd)
+                    log.info("Changimg directory: from %s to %s", origcwd, variant)
                     os.chdir(variant)
-                    return _build_mod(
-                        name=(module_name.replace("/", ".")),
-                        code=code_file.read(),
-                        module_path=_ensure_path(module_path),
-                        initial_globals={},
-                    )
+                    return importlib.import_module(module_name.replace("/", "."))
                 except ImportError as ierr0:
                     orig_exc = orig_exc or ierr0
                     continue
+                finally:
+                    log.debug("Change directory back: from %s to %s", Path.cwd(), origcwd)
+                    os.chdir(origcwd)
         except RuntimeError as ierr:
             try:
                 return importlib.import_module(module_name)
