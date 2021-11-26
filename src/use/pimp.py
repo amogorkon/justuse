@@ -158,26 +158,15 @@ def get_supported() -> frozenset[PlatformTag]: # cov: exclude
 def _filter_by_version(project_: "PyPI_Project", version: str) -> "PyPI_Project":
     v = Version(version)
     rels = project_.releases.get(v, project_.releases.get(version, []))
-    
+
     if not rels:
       return project_
-    
+
     project_.releases = { v: rels }
     project_.urls = rels
     print(repr(project_))
-    
+
     return project_
-    for_version = (
-        project_.releases.get(version)
-        or project_.releases.get(str(version))
-        or project_.releases.get(Version(str(version)))
-    )
-    new_data = {
-        "urls": for_version,
-        "releases": {Version(str(version)): for_version},
-        "info": project_.info.dict(),
-    }
-    return PyPI_Project(**new_data)
 
 
 class ZipFunctions:
