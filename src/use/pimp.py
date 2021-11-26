@@ -316,10 +316,10 @@ def _pebkac_no_version_no_hash(
     # we tried our best, but we didn't find anything that could work'
     if not ordered:
         return RuntimeWarning(Message.pebkac_unsupported(package_name))
-
     # we found something that could work, but it may not fit to the user's requirements
-    hashes = {hexdigest_as_JACK(o.digests.get(hash_algo.name)) for o in proj.urls}
     version = ordered[0].version
+    hash = ordered[0].digests.get(hash_algo.name)
+    hashes = { hexdigest_as_JACK(hash) }
     return RuntimeWarning(
         Message.no_version_or_hash_provided(
             name=name,
@@ -467,23 +467,6 @@ def _process(*argv, env={}):
     _realenv = {
         k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)
     }
-    class Capture:
-      def __init__(self):
-        self.output = []
-      def write(self, *args, **kwargs):
-        self.output.append(args[0])
-        res = sys.stderr.write(*args, **kwargs)
-        sys.stderr.flush()
-        log.debug("%s", args[0])
-        return res
-      def __getattr__(self, name):
-        if name in ("write", "__init__", "__class__", "__dict__"):
-          return object.__getattr__(self, name)
-        return getattr(sys.stderr, name)
-      def fileno(self):
-        return sys.stderr.fileno()
-    
-    cap = Capture()
     o = run(
         **(
             setup := dict(
@@ -500,13 +483,9 @@ def _process(*argv, env={}):
                 errors="ISO-8859-1",
                 text=True,
                 shell=False,
-                stderr=cap,
-                stdout=cap,
             )
         )
     )
-    o.stderr = o.stdout = "\x0a".join(map(str, cap.output))
-    
     if o.returncode == 0:
         return o
     raise RuntimeError(  # cov: exclude
@@ -703,8 +682,6 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
             "--no-warn-conflicts",
             install_item,
         )
-        sys.stderr.write("\n\n".join((output.stderr, output.stdout)))
-
     site_dir, module_path = _find_module_in_venv(package_name, version, relp)
     module_paths = []
     if module_path:

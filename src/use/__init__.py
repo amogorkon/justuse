@@ -74,7 +74,7 @@ basicConfig(
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.6.3"  # IMPORTANT; Must leave exactly as-is for setup
+__version__ = "0.6.4"  # IMPORTANT; Must leave exactly as-is for setup
 __name__ = "use"
 __package__ = "use"
 
