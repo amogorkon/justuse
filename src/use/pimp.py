@@ -467,23 +467,6 @@ def _process(*argv, env={}):
     _realenv = {
         k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)
     }
-    class Capture:
-      def __init__(self):
-        self.output = []
-      def write(self, *args, **kwargs):
-        self.output.append(args[0])
-        res = sys.stderr.write(*args, **kwargs)
-        sys.stderr.flush()
-        log.debug("%s", args[0])
-        return res
-      def __getattr__(self, name):
-        if name in ("write", "__init__", "__class__", "__dict__"):
-          return object.__getattr__(self, name)
-        return getattr(sys.stderr, name)
-      def fileno(self):
-        return sys.stderr.fileno()
-    
-    cap = Capture()
     o = run(
         **(
             setup := dict(
@@ -500,13 +483,9 @@ def _process(*argv, env={}):
                 errors="ISO-8859-1",
                 text=True,
                 shell=False,
-                stderr=cap,
-                stdout=cap,
             )
         )
     )
-    o.stderr = o.stdout = "\x0a".join(map(str, cap.output))
-    
     if o.returncode == 0:
         return o
     raise RuntimeError(  # cov: exclude
