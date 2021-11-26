@@ -11,10 +11,10 @@ coverage:
     - 100.0
   round: up
   status:
-    changes: true
+    changes: false
     default_rules:
-      flag_coverage_not_uploaded_behavior: include
-    patch: true
-    project: true
+      flag_coverage_not_uploaded_behavior: exclude
+    patch: false
+    project: false
 github_checks:
-  annotations: false
+  annotations: true
