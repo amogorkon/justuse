@@ -316,10 +316,9 @@ def _pebkac_no_version_no_hash(
     # we tried our best, but we didn't find anything that could work'
     if not ordered:
         return RuntimeWarning(Message.pebkac_unsupported(package_name))
-
-    # we found something that could work, but it may not fit to the user's requirements
-    hashes = {hexdigest_as_JACK(o.digests.get(hash_algo.name)) for o in proj.urls}
     version = ordered[0].version
+    # we found something that could work, but it may not fit to the user's requirements
+    hashes = {hexdigest_as_JACK(o.digests.get(hash_algo.name)) for o in proj.urls if o.version == version}
     return RuntimeWarning(
         Message.no_version_or_hash_provided(
             name=name,
