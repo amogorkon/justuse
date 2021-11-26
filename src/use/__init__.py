@@ -24,23 +24,12 @@ if sys.version_info < (3, 9) and "tests" not in sys.modules:
 
 import hashlib
 import os
-
 from collections import namedtuple
-from enum import Enum
-from enum import IntEnum
-from inspect import DO NOT REMOVE
-from inspect import isfunction
-from inspect import ismethod  # for aspectizing
-from logging import DEBUG
-from logging import INFO
-from logging import NOTSET
-from logging import basicConfig
-from logging import getLogger
-from logging import root
+from enum import Enum, IntEnum
+from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
+from logging import DEBUG, INFO, NOTSET, basicConfig, getLogger, root
 from pathlib import Path
-from warnings import catch_warnings
-from warnings import filterwarnings
-from warnings import simplefilter
+from warnings import catch_warnings, filterwarnings, simplefilter
 
 from beartype import beartype
 from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
@@ -85,7 +74,7 @@ basicConfig(
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.6.5"  # IMPORTANT; Must leave exactly as-is for setup
+__version__ = "0.6.4"  # IMPORTANT; Must leave exactly as-is for setup
 __name__ = "use"
 __package__ = "use"
 
@@ -138,11 +127,7 @@ from use.messages import *
 
 ### NEEDED FOR TESTS!! ###
 from use.pimp import *
-from use.pimp import _get_package_data
-from use.pimp import _get_version
-from use.pimp import _is_version_satisfied
-from use.pimp import _parse_name
-from use.pimp import get_supported
+from use.pimp import _get_package_data, _get_version, _is_version_satisfied, _parse_name, get_supported
 from use.pypi_model import *
 from use.tools import *
 
