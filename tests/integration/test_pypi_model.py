@@ -13,7 +13,7 @@ for i, pkg in enumerate(packages["data"]):
     r = requests.get(f"https://pypi.org/pypi/{pkg['name']}/json")
     try:
         project = PyPI_Project(**r.json())
-        filtered = project.filter_by_version_and_current_platform(project.info.version)
+        filtered = project.filter_by_version_and_current_platform(project.info.justuse.version)
         for version in filtered.releases.values():
             for release in version:
                 print(release.filename)
