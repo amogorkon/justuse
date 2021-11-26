@@ -153,5 +153,5 @@ coverage.json
 ?_*.sql
 *.db
 core.*
-
-
+release.py
+releases/**

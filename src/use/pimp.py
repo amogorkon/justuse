@@ -25,8 +25,8 @@ from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
 from subprocess import run
 from types import ModuleType
-from typing import Any, Callable, Optional, Union
-from warnings import warn
+from typing import Any, Callable, Optional, Protocol, TypeVar, Union, runtime_checkable
+from warnings import catch_warnings, filterwarnings, warn
 
 import furl
 import packaging
@@ -45,6 +45,12 @@ from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none
 from use.tools import pipes
 
 log = getLogger(__name__)
+
+
+T = TypeVar("T", bound=Callable[[str, str, Version, set[str]], str])
+@runtime_checkable
+class MissingHashFotmatter(Protocol[T]):
+    pass
 
 
 class PlatformTag:
@@ -104,7 +110,7 @@ def execute_wrapped(sql: str, params: tuple):
 
 
 @cache
-def get_supported() -> frozenset[PlatformTag]:
+def get_supported() -> frozenset[PlatformTag]: # cov: exclude
     """
     Results of this function are cached. They are expensive to
     compute, thanks to some heavyweight usual players
@@ -115,25 +121,28 @@ def get_supported() -> frozenset[PlatformTag]:
     supported on the current system.
     """
     get_supported = None
-    try:
-      from pip._internal.resolution.legacy.resolver import get_supported
-    except ImportError:
-      pass
-    if not get_supported:
-      try:
-        from pip._internal.models.target_python import get_supported
-      except ImportError:
-        pass
-    if not get_supported:
-      try:
-        from pip._internal.utils.compatibility_tags import get_supported
-      except ImportError:
-        pass
-    if not get_supported:
-      try:
-        from pip._internal.resolution.resolvelib.factory import get_supported
-      except ImportError:
-        pass
+    with catch_warnings():
+        filterwarnings(action="ignore", category=DeprecationWarning)
+        try:
+          from pip._internal.resolution.legacy.resolver import get_supported
+        except ImportError:
+          pass
+        if not get_supported:
+          try:
+            from pip._internal.models.target_python import get_supported
+          except ImportError:
+            pass
+        if not get_supported:
+          try:
+            from pip._internal.utils.compatibility_tags import get_supported
+          except ImportError:
+            pass
+        if not get_supported:
+          try:
+            from pip._internal.resolution.resolvelib.factory import get_supported
+          except ImportError:
+            pass
+    
     get_supported = get_supported or (lambda: [])
 
     items: list[PlatformTag] = [
@@ -147,18 +156,17 @@ def get_supported() -> frozenset[PlatformTag]:
 
 
 def _filter_by_version(project_: "PyPI_Project", version: str) -> "PyPI_Project":
+    v = Version(version)
+    rels = project_.releases.get(v, project_.releases.get(version, []))
 
-    for_version = (
-        project_.releases.get(version)
-        or project_.releases.get(str(version))
-        or project_.releases.get(Version(str(version)))
-    )
-    new_data = {
-        "urls": for_version,
-        "releases": {Version(str(version)): for_version},
-        "info": project_.info.dict(),
-    }
-    return PyPI_Project(**new_data)
+    if not rels:
+      return project_
+
+    project_.releases = { v: rels }
+    project_.urls = rels
+    print(repr(project_))
+
+    return project_
 
 
 class ZipFunctions:
@@ -265,7 +273,7 @@ def _pebkac_no_version(
     hash_algo=None,
     package_name: str = None,
     module_name: str = None,
-    message_formatter: Callable[[str, str, Version, set[str]], str] = Message.pebkac_missing_hash,
+    message_formatter: MissingHashFotmatter = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
 
@@ -289,7 +297,7 @@ def _pebkac_no_hash(
         for entry in _get_package_data(package_name).releases[version]
     }
     if hashes:
-        return RuntimeWarning(Message.pebkac_missing_hash(hash_algo.name, hashes))
+        return RuntimeWarning(Message.pebkac_missing_hash(name=package_name, package_name=package_name, version=version, hashes=hashes))
     else:
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
 
@@ -414,7 +422,7 @@ def _auto_install(
     mod = None
     if "installation_path" not in query or not _ensure_path(query["installation_path"]).exists():
         if query:
-            use.del_entry(name, version)
+            sys.modules["use"].del_entry(name, version)
         query = _find_or_install(package_name, version, force_install=True)
         artifact_path = _ensure_path(query["artifact_path"])
         module_path = _ensure_path(query["module_path"])
@@ -444,7 +452,7 @@ def _auto_install(
         if "fault_inject" in config:
             config["fault_inject"](**locals())
         if mod:
-            use.main._save_module_info(
+            sys.modules["use"]._save_module_info(
                 name=package_name,
                 import_relpath=str(_ensure_path(module_path).relative_to(installation_path)),
                 version=version,
@@ -459,6 +467,23 @@ def _process(*argv, env={}):
     _realenv = {
         k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)
     }
+    class Capture:
+      def __init__(self):
+        self.output = []
+      def write(self, *args, **kwargs):
+        self.output.append(args[0])
+        res = sys.stderr.write(*args, **kwargs)
+        sys.stderr.flush()
+        log.debug("%s", args[0])
+        return res
+      def __getattr__(self, name):
+        if name in ("write", "__init__", "__class__", "__dict__"):
+          return object.__getattr__(self, name)
+        return getattr(sys.stderr, name)
+      def fileno(self):
+        return sys.stderr.fileno()
+    
+    cap = Capture()
     o = run(
         **(
             setup := dict(
@@ -466,18 +491,22 @@ def _process(*argv, env={}):
                 args=[*map(str, argv)],
                 bufsize=1024,
                 input="",
-                capture_output=True,
+                capture_output=False,
                 timeout=45000,
-                check=False,
+                check=True,
                 close_fds=True,
                 env=_realenv,
                 encoding="ISO-8859-1",
                 errors="ISO-8859-1",
                 text=True,
                 shell=False,
+                stderr=cap,
+                stdout=cap,
             )
         )
     )
+    o.stderr = o.stdout = "\x0a".join(map(str, cap.output))
+    
     if o.returncode == 0:
         return o
     raise RuntimeError(  # cov: exclude
@@ -653,6 +682,8 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
             "pip",
             "--disable-pip-version-check",
             "--no-color",
+            "--verbose",
+            "--verbose",
             "install",
             "--pre",
             "--root",
@@ -705,27 +736,25 @@ def _load_venv_entry(*, package_name, module_name, installation_path, module_pat
     with open(module_path, "rb") as code_file:
         try:
             for variant in (
+                cwd,
                 installation_path,
                 Path(str(str(installation_path).replace("lib64/", "lib/"))),
                 Path(str(str(installation_path).replace("lib/", "lib64/"))),
-                None,
+                installation_path,
             ):
-                if not variant:
-                    raise RuntimeError()
                 if not variant.exists():
                     continue
+                origcwd = Path.cwd()
                 try:
-                    os.chdir(cwd)
+                    log.info("Changimg directory: from %s to %s", origcwd, variant)
                     os.chdir(variant)
-                    return _build_mod(
-                        name=(module_name.replace("/", ".")),
-                        code=code_file.read(),
-                        module_path=_ensure_path(module_path),
-                        initial_globals={},
-                    )
+                    return importlib.import_module(module_name.replace("/", "."))
                 except ImportError as ierr0:
                     orig_exc = orig_exc or ierr0
                     continue
+                finally:
+                    log.debug("Change directory back: from %s to %s", Path.cwd(), origcwd)
+                    os.chdir(origcwd)
         except RuntimeError as ierr:
             try:
                 return importlib.import_module(module_name)
@@ -760,11 +789,25 @@ def _filter_by_platform(
                 rel,
                 sys_version=sys_version,
                 platform_tags=tags,
-                include_sdist=True,
+                include_sdist=False,
             )
         ]
         for ver, releases in project.releases.items()
     }
+    if not filtered:
+      filtered = {
+          ver: [
+              rel.dict()
+              for rel in releases
+              if _is_compatible(
+                  rel,
+                  sys_version=sys_version,
+                  platform_tags=tags,
+                  include_sdist=True,
+              )
+          ]
+          for ver, releases in project.releases.items()
+      }
 
     return PyPI_Project(**{**project.dict(), **{"releases": filtered}})
 
@@ -785,7 +828,11 @@ def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> l
     flat = reduce(list.__add__, filtered.releases.values(), [])
     return sorted(
         flat,
-        key=lambda r: (not r.filename.endswith(".tar.gz"), not r.is_sdist, r.version),
+        key=(lambda r: (
+            1 - int(r.filename.endswith(".tar.gz")),
+            1 - int(r.is_sdist),
+            r.version,
+        )),
         reverse=True,
     )
 
@@ -808,20 +855,17 @@ def _is_platform_compatible(
     info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
 ) -> bool:
 
-    if "py2" in info.justuse.python_tag and "py3" not in info.justuse.python_tag:
-        return False
-
     if not include_sdist and (".tar" in info.justuse.ext or info.justuse.python_tag in ("cpsource", "sdist")):
         return False
 
     if "win" in (info.packagetype or "unknown") and sys.platform != "win32":
         return False
-
-    if "win32" in info.justuse.platform_tag and sys.platform != "win32":
-        return False
-
-    if "macosx" in info.justuse.platform_tag and sys.platform != "darwin":
-        return False
+    
+    if info.platform_tag:
+        if "win32" in info.platform_tag and sys.platform != "win32":
+            return False
+        if "macosx" in info.platform_tag and sys.platform != "darwin":
+            return False
 
     our_python_tag = tags.interpreter_name() + tags.interpreter_version()
     supported_tags = set(
@@ -834,16 +878,20 @@ def _is_platform_compatible(
         ]
     )
 
-    given_platform_tags = info.justuse.platform_tag.split(".") << map(PlatformTag) >> frozenset
-
-    if info.is_sdist and info.requires_python is not None:
+    if info.platform_tag:
+        given_platform_tags = info.platform_tag.split(".") << map(PlatformTag) >> frozenset
+    else:
+        return include_sdist
+    
+    if info.is_sdist and info.requires_python:
         given_python_tag = {
             our_python_tag
             for p in info.requires_python.split(",")
             if Version(platform.python_version()) in SpecifierSet(p)
         }
     else:
-        given_python_tag = set(info.justuse.python_tag.split("."))
+        given_python_tag = set(info.python_tag.split(".")) 
+    
     return any(supported_tags.intersection(given_python_tag)) and (
         (info.is_sdist and include_sdist) or any(given_platform_tags.intersection(platform_tags))
     )
@@ -870,14 +918,16 @@ def _apply_aspect(
 ) -> Any:
     """Apply the aspect as a side-effect, no copy is created."""
     for name, obj in thing.__dict__.items():
-        if isinstance(getattr(thing, name), (dict, list, set, tuple, str, bytes)):
+        if isinstance(obj, (dict, list, set, tuple, str, bytes)):
             continue
         if name == "beartype": continue
+        module = getattr(obj, "__module__", None)
+        if module in ("builtins", "collections", "collections.abc", "functools", "inspect", "itertools", "logging", "pprint", "subprocess", "textwrap", "typing", "warnings",): continue
         if not aspectize_dunders and name.startswith("__") and name.endswith("__"):
             continue
         if check(obj) and re.match(pattern, name):
             thing.__dict__[name] = decorator(obj)
-            log.debug(f"Applied {decorator.__name__} to {obj.__qualname__}")
+            log.debug(f"Applied {decorator.__name__} to {module}::{obj.__qualname__} [{obj.__class__.__qualname__}]")
     return thing
 
 

@@ -4,6 +4,7 @@ Only imports and project-global constants are defined here.
     
 """
 
+
 import sys
 
 if sys.version_info < (3, 9) and "tests" not in sys.modules:
@@ -28,16 +29,15 @@ from enum import Enum, IntEnum
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from logging import DEBUG, INFO, NOTSET, basicConfig, getLogger, root
 from pathlib import Path
-from warnings import filterwarnings
+from warnings import catch_warnings, filterwarnings, simplefilter
 
 from beartype import beartype
 from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
-from warnings import simplefilter
 
 # Coerce all PEP 585 deprecation warnings into fatal exceptions.
-simplefilter('error', BeartypeDecorHintPep585DeprecationWarning)
-
-
+catch_warnings()
+filterwarnings("ignore", category=DeprecationWarning, module="pip")
+filterwarnings("error", category=BeartypeDecorHintPep585DeprecationWarning)
 
 
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
@@ -74,7 +74,7 @@ basicConfig(
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.6.1"  # IMPORTANT; Must leave exactly as-is for setup
+__version__ = "0.6.3"  # IMPORTANT; Must leave exactly as-is for setup
 __name__ = "use"
 __package__ = "use"
 
@@ -121,17 +121,13 @@ class Modes(IntEnum):
     fastfail = 2 ** 5
 
 
-if sys.version_info < (3, 10):
-    from use.buffet_old import buffet_table
-else:
-    from use.buffet import buffet_table
-
+from use.buffet_old import buffet_table
 from use.main import *
 from use.messages import *
 
 ### NEEDED FOR TESTS!! ###
 from use.pimp import *
-from use.pimp import _get_package_data, _get_version, _is_version_satisfied, get_supported
+from use.pimp import _get_package_data, _get_version, _is_version_satisfied, _parse_name, get_supported
 from use.pypi_model import *
 from use.tools import *
 

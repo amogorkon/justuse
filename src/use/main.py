@@ -311,7 +311,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         # TODO: CASCADE to artifacts etc
         self.registry.execute(
             "DELETE FROM hashes WHERE artifact_id IN (SELECT id FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?))",
-            (name, version),
+            (name, str(version)),
         )
         self.registry.execute(
             "DELETE FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?)",
@@ -404,7 +404,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         response = requests.get(str(url))
         if response.status_code != 200:
-            raise ImportError(Message.web_error())
+            raise ImportError(Message.web_error(url, response))
         this_hash = hash_algo.value(response.content).hexdigest()
         if hash_value:
             if this_hash != hash_value:
@@ -729,6 +729,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hash_algo,
         user_msg=Message,
     ):
+        if module_name:
+            module_name = module_name.replace("/", ".").replace("-", "_")
         assert hash_algo != None, "Hash algorithm must be specified"
 
         if isinstance(hashes, str):
