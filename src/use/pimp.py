@@ -25,7 +25,8 @@ from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
 from subprocess import run
 from types import ModuleType
-from typing import Any, Callable, Optional, Protocol, TypeVar, Union, runtime_checkable
+from typing import (Any, Callable, Optional, Protocol, TypeVar, Union,
+                    runtime_checkable)
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -35,7 +36,6 @@ from furl import furl as URL
 from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
-
 
 import use
 from use import Hash, Modes, VersionWarning, config
@@ -139,7 +139,8 @@ def get_supported() -> frozenset[PlatformTag]: # cov: exclude
             pass
         if not get_supported:
           try:
-            from pip._internal.resolution.resolvelib.factory import get_supported
+            from pip._internal.resolution.resolvelib.factory import \
+                get_supported
           except ImportError:
             pass
     
@@ -884,28 +885,6 @@ def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist
         and not info.yanked
         and (include_sdist or info.justuse.ext not in ("tar", "tar.gz" "zip"))
     )
-
-
-def _apply_aspect(
-    thing,
-    check,
-    pattern,
-    decorator,
-    aspectize_dunders=False,
-) -> Any:
-    """Apply the aspect as a side-effect, no copy is created."""
-    for name, obj in thing.__dict__.items():
-        if isinstance(obj, (dict, list, set, tuple, str, bytes)):
-            continue
-        if name == "beartype": continue
-        module = getattr(obj, "__module__", None)
-        if module in ("builtins", "collections", "collections.abc", "functools", "inspect", "itertools", "logging", "pprint", "subprocess", "textwrap", "typing", "warnings",): continue
-        if not aspectize_dunders and name.startswith("__") and name.endswith("__"):
-            continue
-        if check(obj) and re.match(pattern, name):
-            thing.__dict__[name] = decorator(obj)
-            log.debug(f"Applied {decorator.__name__} to {module}::{obj.__qualname__} [{obj.__class__.__qualname__}]")
-    return thing
 
 
 def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> Optional[Version]:

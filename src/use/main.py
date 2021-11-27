@@ -27,24 +27,13 @@ import toml
 from furl import furl as URL
 from icontract import ensure, invariant, require
 
-from use import (
-    AmbiguityWarning,
-    Hash,
-    Modes,
-    ModInUse,
-    NotReloadableWarning,
-    NoValidationWarning,
-    UnexpectedHash,
-    VersionWarning,
-    __version__,
-    buffet_table,
-    config,
-    home,
-    isfunction,
-)
+from use import (AmbiguityWarning, Hash, Modes, ModInUse, NotReloadableWarning,
+                 NoValidationWarning, UnexpectedHash, VersionWarning,
+                 __version__, buffet_table, config, home, isfunction)
+from use.aspectizing import _apply_aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import Message
-from use.pimp import _apply_aspect, _build_mod, _ensure_path, _fail_or_default, _parse_name
+from use.pimp import _build_mod, _ensure_path, _fail_or_default, _parse_name
 from use.pypi_model import PyPI_Project, PyPI_Release, Version
 from use.tools import methdispatch
 

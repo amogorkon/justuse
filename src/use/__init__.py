@@ -24,11 +24,12 @@ if sys.version_info < (3, 9) and "tests" not in sys.modules:
 
 import hashlib
 import os
-from collections import namedtuple
+from collections import defaultdict, deque, namedtuple
 from enum import Enum, IntEnum
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from logging import DEBUG, INFO, NOTSET, basicConfig, getLogger, root
 from pathlib import Path
+from typing import Callable
 from warnings import catch_warnings, filterwarnings, simplefilter
 
 from beartype import beartype
@@ -121,6 +122,18 @@ class Modes(IntEnum):
     fastfail = 2 ** 5
 
 
+# aspect-oriented stuff
+
+packages_excluded_from_aspectizing: set = {}
+"Set of packages that should be excluded from decoration."
+modules_excluded_from_aspectizing: set = {}
+"Set of modules that should be excluded from decoration."
+_applied_decorators: dict[str, deque[Callable]] = defaultdict(deque)
+"{qualname: [callable]} - to see which decorators are applied, in which order"
+_aspectized_functions: dict[str, deque[Callable]] = defaultdict(deque)
+"{qualname: [callable]} - the actually decorated functions to undo aspectizing"
+
+from use.aspectizing import *
 from use.buffet_old import buffet_table
 from use.main import *
 from use.messages import *
