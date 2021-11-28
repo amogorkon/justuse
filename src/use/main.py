@@ -304,7 +304,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         )
         self.registry.execute(
             "DELETE FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?)",
-            (name, version),
+            (name, str(version)),
         )
         self.registry.execute("DELETE FROM distributions WHERE name=? AND version=?", (name, version))
         self.registry.connection.commit()
