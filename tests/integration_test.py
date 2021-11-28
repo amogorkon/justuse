@@ -104,7 +104,7 @@ def double_function(func):
 
 def test_aspectize_defaults(reuse):
     # baseline
-    srcdir = Path(__file__).parent.parent.parent
+    srcdir = Path(__file__).parent.parent
     if "tests.simple_funcs" in sys.modules:
         del sys.modules["tests.simple_funcs"]
     with ScopedCwd(srcdir):
@@ -114,7 +114,7 @@ def test_aspectize_defaults(reuse):
 
 def test_aspectize_function_by_name(reuse):
     # functions with specific names only
-    srcdir = Path(__file__).parent.parent.parent
+    srcdir = Path(__file__).parent.parent
     if "tests.simple_funcs" in sys.modules:
         del sys.modules["tests.simple_funcs"]
     with ScopedCwd(srcdir):
@@ -129,7 +129,7 @@ def test_aspectize_function_by_name(reuse):
 
 def test_aspectize_all_functions(reuse):
     # all functions, but not classes or methods
-    srcdir = Path(__file__).parent.parent.parent
+    srcdir = Path(__file__).parent.parent
     if "tests.simple_funcs" in sys.modules:
         del sys.modules["tests.simple_funcs"]
     with ScopedCwd(srcdir):
@@ -151,7 +151,7 @@ def test_simple_url(reuse):
     port = 8089
     orig_cwd = Path.cwd()
     try:
-        os.chdir(Path(__file__).parent.parent.parent)
+        os.chdir(Path(__file__).parent.parent)
 
         with http.server.HTTPServer(("", port), http.server.SimpleHTTPRequestHandler) as svr:
             foo_uri = f"http://localhost:{port}/tests/.tests/foo.py"
