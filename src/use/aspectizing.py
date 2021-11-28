@@ -10,9 +10,13 @@ from warnings import warn
 
 log = getLogger(__name__)
 
-from use import (AmbiguityWarning, _applied_decorators, _aspectized_functions,
-                 modules_excluded_from_aspectizing,
-                 packages_excluded_from_aspectizing)
+from use import (
+    AmbiguityWarning,
+    _applied_decorators,
+    _aspectized_functions,
+    modules_excluded_from_aspectizing,
+    packages_excluded_from_aspectizing,
+)
 
 
 def _apply_aspect(
@@ -54,10 +58,7 @@ def _apply_aspect(
         ):
             log.debug(f"{obj} is skipped because {obj.__module__} or {obj.__package__} are excluded. ")
             continue
-        if (
-            not aspectize_dunders
-            and name.startswith("__") and name.endswith("__")
-        ):
+        if not aspectize_dunders and name.startswith("__") and name.endswith("__"):
             log.debug(f"{obj} is skipped because it's a dunder")
             continue
         if check(obj) and re.match(pattern, name):
@@ -68,8 +69,8 @@ def _apply_aspect(
             _applied_decorators[obj.__qualname__].append(decorator)
             _aspectized_functions[obj.__qualname__] = obj
             thing.__dict__[name] = decorator(obj)
-            log.debug(
-                f"Applied {decorator.__qualname__} to {obj.__module__}::{obj.__qualname__} [{obj.__class__.__qualname__}]"
+            log.info(
+                f"{decorator.__qualname__} @ {getattr(obj, '__module__', '<?>')}::{obj.__qualname__} [{obj.__class__.__qualname__}]"
             )
     return thing
 
@@ -77,61 +78,44 @@ def _apply_aspect(
 def lookup_module(object):
     object_mod = None
     if isinstance(object, ModuleType):
-      object_mod = builtins
-    elif hasattr(object, '__module__'):
-      if isinstance(object.__module__, str):
-        object_mod = sys.modules[object.__module__]
-      elif isinstance(object.__module__, ModuleType):
-        object_mod = object.__module__
-      else:
-        raise TypeError(
-          'Unexpected object.__module__ value: %s, %s' % (
-            object.__module__, object.__qualname__
-          )
-        )
-    elif hasattr(object, '__init__') \
-     and hasattr(object.__init__, '__module__'):
-      object_mod = sys.modules[object.__init__.__module__]
+        object_mod = builtins
+    elif hasattr(object, "__module__"):
+        if isinstance(object.__module__, str):
+            object_mod = sys.modules[object.__module__]
+        elif isinstance(object.__module__, ModuleType):
+            object_mod = object.__module__
+        else:
+            raise TypeError(
+                "Unexpected object.__module__ value: %s, %s" % (object.__module__, object.__qualname__)
+            )
+    elif hasattr(object, "__init__") and hasattr(object.__init__, "__module__"):
+        object_mod = sys.modules[object.__init__.__module__]
     elif not isinstance(object, type):
-      object_mod = builtins
+        object_mod = builtins
     if not object_mod:
-      raise NotImplementedError(
-        "Don't know how to find module for \'%s.%s\' objects" % (
-          object.__module__, object.__qualname__
+        raise NotImplementedError(
+            "Don't know how to find module for '%s.%s' objects" % (object.__module__, object.__qualname__)
         )
-      )
     return object_mod
-    
+
 
 # @lru_cache(maxsize=0)
 def get_module_info(mod: ModuleType):
-        module_name = (
-            getattr(mod, "__name__", None)
-            or mod.__spec__.name
-        )
-        loader = (
-            getattr(mod, "__loader__", None)
-            or mod.__spec__.loader
-        )
-        spec = (
-            getattr(mod, "__spec__", None)
-            or spec_from_loader(module_name, loader)
-        )
-        return module_name, loader, spec
+    module_name = getattr(mod, "__name__", None) or mod.__spec__.name
+    loader = getattr(mod, "__loader__", None) or mod.__spec__.loader
+    spec = getattr(mod, "__spec__", None) or spec_from_loader(module_name, loader)
+    return module_name, loader, spec
 
 
 def get_package(mod):
-        module_name, loader, spec = get_module_info(mod)
-        module_parts = module_name.split(".")
-        try:
-            is_package = loader.is_package(module_name)
-        except ImportError:
-            is_package = False
-        if is_package:
-            package_name = module_name
-        else:
-            package_name = (
-                getattr(mod, "__package__", None)
-                or ".".join(module_parts[:-1])
-            )
-        return is_package, package_name
+    module_name, loader, spec = get_module_info(mod)
+    module_parts = module_name.split(".")
+    try:
+        is_package = loader.is_package(module_name)
+    except ImportError:
+        is_package = False
+    if is_package:
+        package_name = module_name
+    else:
+        package_name = getattr(mod, "__package__", None) or ".".join(module_parts[:-1])
+    return is_package, package_name

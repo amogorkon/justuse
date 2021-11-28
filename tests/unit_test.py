@@ -5,11 +5,12 @@ import sys
 import tempfile
 import warnings
 from contextlib import AbstractContextManager, closing
+from datetime import datetime
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, distribution
 from importlib.util import find_spec
 from pathlib import Path
-from subprocess import check_output, STDOUT
+from subprocess import STDOUT, check_output
 from textwrap import dedent
 from threading import _shutdown_locks
 from unittest.mock import patch
@@ -44,7 +45,7 @@ from tests.simple_funcs import three
 def reuse():
     """
     Return the `use` module in a clean state for "reuse."
-    
+
     NOTE: making a completely new one each time would take
     ages, due to expensive _registry setup, re-downloading
     venv packages, etc., so if we are careful to reset any
@@ -489,26 +490,29 @@ def test_use_version_upgrade_warning(reuse):
     with ScopedCwd(srcdir):
         output = check_output(
             [
-                sys.executable, "-c", dedent(
+                sys.executable,
+                "-c",
+                dedent(
                     f"""
                     import os
                     os.environ['USE_VERSION'] = '{version!s}'
                     import use
                     """
-                )
+                ),
             ],
             encoding="utf-8",
             shell=False,
-            stderr=STDOUT
+            stderr=STDOUT,
         )
-        match = re.search(
-            r"(?P<category>[a-zA-Z_]+): "
-            r"(?:(?!\d).)* (?P<version>\d+\.\d+\.\d+)",
-            output
-        )
+        match = re.search(r"(?P<category>[a-zA-Z_]+): " r"(?:(?!\d).)* (?P<version>\d+\.\d+\.\d+)", output)
         assert match
-        assert (
-            match.group("category")
-            == use.VersionWarning.__name__
-        )
+        assert match.group("category") == use.VersionWarning.__name__
         assert match.group("version") == str(version)
+
+
+def test_fraction_of_day(reuse):
+    assert reuse.fraction_of_day(datetime(2020, 1, 1)) == 0.0
+    assert reuse.fraction_of_day(datetime(2020, 1, 1, 12)) == 500.0
+    assert reuse.fraction_of_day(datetime(2020, 1, 1, 18)) == 750.0
+    assert reuse.fraction_of_day(datetime(2020, 1, 1, 12, 30, 30)) == 521.180556
+    assert reuse.fraction_of_day(datetime(2020, 1, 1, 12, 30, 30, 90000)) == 521.181597

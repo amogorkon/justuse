@@ -25,6 +25,7 @@ if sys.version_info < (3, 9) and "tests" not in sys.modules:
 import hashlib
 import os
 from collections import defaultdict, deque, namedtuple
+from datetime import datetime
 from enum import Enum, IntEnum
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from logging import DEBUG, INFO, NOTSET, basicConfig, getLogger, root
@@ -33,7 +34,6 @@ from typing import Callable
 from warnings import catch_warnings, filterwarnings, simplefilter
 
 from beartype import beartype
-
 
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
 
@@ -56,11 +56,27 @@ for file in (
 
 config = {"version_warning": True, "debugging": False, "use_db": True, "testing": False}
 
+
+def fraction_of_day(now: datetime = None) -> float:
+    if now is None:
+        now = datetime.utcnow()
+    return round(
+        (
+            now.hour / 24
+            + now.minute / (24 * 60)
+            + now.second / (24 * 60 * 60)
+            + now.microsecond / (24 * 60 * 60 * 1000 * 1000)
+        )
+        * 1000,
+        6,
+    )
+
+
 basicConfig(
     filename=home / "usage.log",
     filemode="a",
-    format="%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s",
-    datefmt="%H:%M:%S",
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    datefmt=f"%Y%m%d {fraction_of_day()}",
     level=DEBUG,
 )
 
@@ -100,32 +116,29 @@ class AutoInstallationError(ImportError):
     pass
 
 
-
 # Coerce all PEP 585 deprecation warnings into fatal exceptions.
 with catch_warnings():
     from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
+
     filterwarnings("ignore", category=BeartypeDecorHintPep585DeprecationWarning, module="beartype")
-    
+
     from use.hash_alphabet import *
-    
+
     ModInUse = namedtuple("ModInUse", "name mod path spec frame")
     NoneType = type(None)
-    
-    
+
     class Hash(Enum):
         sha256 = hashlib.sha256
-    
-    
+
     class Modes(IntEnum):
         auto_install = 2 ** 0
         fatal_exceptions = 2 ** 1
         reloading = 2 ** 2
         no_public_installation = 2 ** 4
         fastfail = 2 ** 5
-    
-    
+
     # aspect-oriented stuff
-    
+
     packages_excluded_from_aspectizing: set = {}
     "Set of packages that should be excluded from decoration."
     modules_excluded_from_aspectizing: set = {}
@@ -134,44 +147,42 @@ with catch_warnings():
     "{qualname: [callable]} - to see which decorators are applied, in which order"
     _aspectized_functions: dict[str, deque[Callable]] = defaultdict(deque)
     "{qualname: [callable]} - the actually decorated functions to undo aspectizing"
-    
+
     from use.aspectizing import *
     from use.buffet_old import buffet_table
     from use.main import *
     from use.messages import *
+
     ### NEEDED FOR TESTS!! ###
     from use.pimp import *
-    from use.pimp import (_get_package_data, _get_version, _is_version_satisfied,
-                          _parse_name, get_supported)
+    from use.pimp import _get_package_data, _get_version, _is_version_satisfied, _parse_name, get_supported
     from use.pypi_model import *
     from use.tools import *
-    
+
     use = Use()
     use.__dict__.update({k: v for k, v in globals().items()})  # to avoid recursion-confusion
     use = ProxyModule(use)
-    
-    
+
     def decorator_log_calling_function_and_args(func, *args):
         """
         Decorator to log the calling function and its arguments.
-    
+
         Args:
             func (function): The function to decorate.
             *args: The arguments to pass to the function.
-    
+
         Returns:
             function: The decorated function.
         """
-    
+
         def wrapper(*args, **kwargs):
             log.debug(f"{func.__name__}({args}, {kwargs})")
             return func(*args, **kwargs)
-    
+
         return wrapper
-    
-    
+
     use @ (isfunction, "", beartype)
     use @ (isfunction, "", decorator_log_calling_function_and_args)
-    
+
     if not test_version:
         sys.modules["use"] = use
