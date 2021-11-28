@@ -27,6 +27,7 @@ is_win = sys.platform.startswith("win")
 import use
 
 __package__ = "tests"
+from tests.unit_test import ScopedCwd
 
 import logging
 
@@ -43,9 +44,8 @@ def reuse():
     return use
 
 
-# FIXME: Figure out why these don't work
 params = [
-    # ("olefile", "0.46"),
+    # ("olefile", "0.46"), # Windows-only
     ("workerpool", "0.9.4"),
     ("fastcache", "1.1.0"),
     ("pytest-cov", "2.12.1"),
@@ -55,8 +55,8 @@ params = [
     ("wheel", "0.36.2"),
     ("icontract", "2.5.4"),
     ("tiledb", "0.9.5"),
-    # ("wurlitzer", "3.0.2"),
-    # ("cctools", "7.0.17"),
+    ("wurlitzer", "3.0.2"),
+    # ("cctools", "7.0.17"), # too slow, takes minutes to build
     ("clang", "9.0"),
 ]
 
@@ -110,26 +110,53 @@ def double_function(func):
     return wrapper
 
 
-def test_aspectize(reuse):
+def test_aspectize_defaults(reuse):
     # baseline
-    mod = reuse(reuse.Path("simple_funcs.py"))
-    assert mod.two() == 2
+    srcdir = Path(__file__).parent.parent.parent
+    reuse._using.clear()
+    reuse.aspectizing._applied_decorators.clear()
+    if "tests.simple_funcs" in sys.modules:
+        del sys.modules["tests.simple_funcs"]
+    with ScopedCwd(srcdir):
+        mod = reuse(reuse.Path("./tests/simple_funcs.py"), package_name="tests")
+        assert mod.two() == 2
 
-    # all functions, but not classes or methods
-    mod = reuse(reuse.Path("simple_funcs.py")) @ (reuse.isfunction, "", double_function)
 
-    assert mod.two() == 4
-    assert mod.three() == 6
-    inst = mod.Two()
-    assert inst() == 2
-    inst = mod.Three()
-    assert inst.three() == 3
-
+def test_aspectize_function_by_name(reuse):
     # functions with specific names only
-    mod = reuse(reuse.Path("simple_funcs.py")) @ (reuse.isfunction, "two", double_function)
-    assert mod.two() == 4
-    assert mod.three() == 3
-    assert reuse.ismethod
+    srcdir = Path(__file__).parent.parent.parent
+    reuse._using.clear()
+    reuse.aspectizing._applied_decorators.clear()
+    if "tests.simple_funcs" in sys.modules:
+        del sys.modules["tests.simple_funcs"]
+    with ScopedCwd(srcdir):
+        mod = (
+            reuse(reuse.Path("./tests/simple_funcs.py"), package_name="tests")
+            @ (reuse.isfunction, "two", double_function)
+        )
+        assert mod.two() == 4
+        assert mod.three() == 3
+        assert reuse.ismethod
+
+
+def test_aspectize_all_functions(reuse):
+    # all functions, but not classes or methods
+    srcdir = Path(__file__).parent.parent.parent
+    reuse._using.clear()
+    reuse.aspectizing._applied_decorators.clear()
+    if "tests.simple_funcs" in sys.modules:
+        del sys.modules["tests.simple_funcs"]
+    with ScopedCwd(srcdir):
+        mod = (
+            reuse(reuse.Path("./tests/simple_funcs.py"), package_name="tests")
+            @ (reuse.isfunction, "", double_function)
+        )
+        assert mod.two() == 4
+        assert mod.three() == 6
+        inst = mod.Two()
+        assert inst() == 2
+        inst = mod.Three()
+        assert inst.three() == 3
 
 
 def test_simple_url(reuse):

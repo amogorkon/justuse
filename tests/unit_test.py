@@ -43,10 +43,14 @@ from tests.simple_funcs import three
 @pytest.fixture()
 def reuse():
     # making a completely new one each time would take ages (_registry)
+    from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
     use._using = {}
     use._aspects = {}
     use._reloaders = {}
-    return use
+    with catch_warnings():
+        filterwarnings("error", category=BeartypeDecorHintPep585DeprecationWarning, module="use")
+        filterwarnings("ignore", category=BeartypeDecorHintPep585DeprecationWarning, module="beartype")
+        yield use
 
 
 def test_access_to_home(reuse):

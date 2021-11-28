@@ -35,11 +35,6 @@ from warnings import catch_warnings, filterwarnings, simplefilter
 from beartype import beartype
 from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
 
-# Coerce all PEP 585 deprecation warnings into fatal exceptions.
-catch_warnings()
-filterwarnings("ignore", category=DeprecationWarning, module="pip")
-filterwarnings("error", category=BeartypeDecorHintPep585DeprecationWarning)
-
 
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
 
@@ -105,6 +100,12 @@ class UnexpectedHash(ImportError):
 class AutoInstallationError(ImportError):
     pass
 
+
+
+# Coerce all PEP 585 deprecation warnings into fatal exceptions.
+catch_warnings()
+filterwarnings("error", category=BeartypeDecorHintPep585DeprecationWarning, module="use")
+filterwarnings("ignore", category=BeartypeDecorHintPep585DeprecationWarning, module="beartype")
 
 from use.hash_alphabet import *
 

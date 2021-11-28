@@ -93,11 +93,12 @@ class ProxyModule(ModuleType):
 
 
 class ModuleReloader:
-    def __init__(self, *, proxy, name, path, initial_globals):
+    def __init__(self, *, proxy, name, path, package_name, initial_globals):
         self.proxy = proxy
         "ProxyModula that we refer to."
         self.name = name
         self.path = path
+        self.package_name = package_name
         self.initial_globals = initial_globals
         self._condition = threading.RLock()
         self._stopped = True
@@ -306,7 +307,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
             "DELETE FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?)",
             (name, str(version)),
         )
-        self.registry.execute("DELETE FROM distributions WHERE name=? AND version=?", (name, version))
+        self.registry.execute("DELETE FROM distributions WHERE name=? AND version=?", (name, str(version)))
         self.registry.connection.commit()
 
     def cleanup(self):
@@ -430,6 +431,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         path,
         /,
         *,
+        package_name=None,
         initial_globals=None,
         as_import: str = None,
         default=Modes.fastfail,
@@ -448,7 +450,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         Returns:
             Optional[ModuleType]: The module if it was imported, otherwise whatever was specified as default.
         """
-        log.debug(f"use-path: {path}")
+        log.info(f"use-path: {path}: {Path.cwd()=} {package_name=}")
         initial_globals = initial_globals or {}
 
         reloading = bool(Use.reloading & modes)
@@ -460,17 +462,12 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             return _fail_or_default(ImportError(f"Can't import directory {path}"), default)
 
         original_cwd = source_dir = Path.cwd()
+        log.info(f"{original_cwd=} {source_dir=}")
         try:
-            if not path.is_absolute():
-                source_dir = Path.cwd()
-
             # calling from another use()d module
             # let's see where we started
             main_mod = __import__("__main__")
-            if source_dir and source_dir.exists():
-                os.chdir(source_dir.parent)
-                source_dir = source_dir.parent
-            else:
+            if True:
                 # there are a number of ways to call use() from a non-use() starting point
                 # let's first check if we are running in jupyter
                 jupyter = "ipykernel" in sys.modules
@@ -494,11 +491,28 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     NotImplementedError("Can't determine a relative path from a virtual file."),
                     default,
                 )
-            path = source_dir.joinpath(path).resolve()
+            if not path.exists():
+                path = source_dir.joinpath(path).resolve()
             if not path.exists():
                 return _fail_or_default(ImportError(f"Sure '{path}' exists?"), default)
-            os.chdir(path.parent)
-            name = path.stem
+            if not path.is_absolute():
+                path = path.resolve()
+            try:
+                name = path.relative_to(source_dir)
+            except ValueError:
+                source_dir = path.parent
+                os.chdir(source_dir)
+                name = path.relative_to(source_dir)
+            ext = name.as_posix().rpartition(".")[-1]
+            name_as_path_with_ext = name.as_posix()
+            name_as_path = name_as_path_with_ext[0: -len(ext) - (1 if ext else 0)]
+            name = name_as_path.replace("/", ".")
+            name_parts = name.split(".")
+            package_name = package_name or ".".join(name_parts[:-1])
+
+            log.info(f"{package_name=}, {name=}")
+            # os.chdir(path.parent)
+            # name = path.stem
             if reloading:
                 try:
                     with open(path, "rb") as rfile:
@@ -509,6 +523,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                         code=code,
                         initial_globals=initial_globals,
                         module_path=path.resolve(),
+                        package_name=package_name,
                     )
                 except KeyError:
                     exc = traceback.format_exc()
@@ -520,6 +535,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     name=name,
                     path=path,
                     initial_globals=initial_globals,
+                    package_name=package_name,
                 )
                 _reloaders[mod] = reloader
 
@@ -555,6 +571,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                         code=code,
                         initial_globals=initial_globals,
                         module_path=path,
+                        package_name=package_name,
                     )
                 except KeyError:
                     del self._using[name]

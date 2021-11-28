@@ -239,6 +239,8 @@ def archive_meta(artifact_path):
     ):
         meta["import_relpath"] = relpath
         break
+    else:
+        meta["import_relpath"] = import_name + ".py"
     archive.close()
     return meta
 
@@ -917,16 +919,21 @@ def _build_mod(
     code,
     initial_globals: Optional[dict[str, Any]],
     module_path,
+    package_name=None,
 ) -> ModuleType:
 
-    package_name, rest = _parse_name(name)
-    mod = ModuleType(rest)
-
+    package_name = package_name or ""
+    mod = ModuleType(name)
+    log.info(f"{Path.cwd()=} {package_name=} {name=} {module_path=}")
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = str(module_path)
     mod.__path__ = [str(module_path.parent)]
     mod.__package__ = package_name
-    mod.__name__ = rest
+    mod.__name__ = name
+    loader = SourceFileLoader(name, str(module_path))
+    mod.__loader__ = loader
+    mod.__spec__ = ModuleSpec(name, loader)
+    sys.modules[name] = mod
     code_text = codecs.decode(code)
     # module file "<", ">" chars are specially handled by inspect
     getattr(linecache, "cache")[module_path] = (
