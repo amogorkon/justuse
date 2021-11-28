@@ -2,7 +2,7 @@ import builtins
 import re
 import sys
 from importlib.util import spec_from_loader
-from inspect import getmembers
+from inspect import getmembers, isclass
 from logging import getLogger
 from types import ModuleType
 from typing import Any
@@ -28,16 +28,47 @@ def _apply_aspect(
     ignore_boundaries=False,
     recursive=True,
     force=False,
+    level=0,
 ) -> Any:
     """Apply the aspect as a side-effect, no copy is created."""
+    if thing is type or thing is object or not hasattr(thing, "__dict__"):
+        return
     for name, obj in getmembers(thing):
+        if name in ("__init_subclass__", "__new__", "__prepare__", ):
+            continue
+        if type(obj).__name__.startswith("builtin_method"):
+            continue
         obj = getattr(obj, "__wrapped__", obj)
         # by using `[-2:-1][-1]` we avoid an IndexError if there
         # is only one item in the `__mro__` (e.g. `object`)
         mod = lookup_module(obj)
+        if mod is None:
+            continue
         module_name, loader, spec = get_module_info(mod)
         is_package, package_name = get_package(mod)
-
+        ignore_boundaries |= int(level > 0)
+        if level < 2 and isclass(obj):
+            if module_name == "use.pypi_model":
+                continue
+            log.debug(
+                "Applying aspect recursively to %s",
+                obj
+            )
+            _apply_aspect(
+                obj,
+                check=check,
+                pattern=pattern,
+                decorator=decorator,
+                aspectize_dunders=aspectize_dunders,
+                ignore_boundaries=ignore_boundaries,
+                recursive=True,
+                force=force,
+                level=level+1
+            )
+            log.debug(
+                "Finished applying aspect recursively to %s",
+                obj
+            )
         # first let's exclude everything that doesn't belong to the module to avoid infinite recursion and other nasty stuff
         if mod is None and not ignore_boundaries:
             log.debug(
@@ -68,9 +99,12 @@ def _apply_aspect(
                 )
             _applied_decorators[obj.__qualname__].append(decorator)
             _aspectized_functions[obj.__qualname__] = obj
-            thing.__dict__[name] = decorator(obj)
-            log.info(
-                f"{decorator.__qualname__} @ {getattr(obj, '__module__', '<?>')}::{obj.__qualname__} [{obj.__class__.__qualname__}]"
+            try:
+                thing.__dict__[name] = decorator(obj)
+            except TypeError:
+                continue
+            log.debug(
+                f"Applied {decorator.__qualname__} to {obj.__module__}::{obj.__qualname__} [{obj.__class__.__qualname__}]"
             )
     return thing
 
@@ -78,18 +112,17 @@ def _apply_aspect(
 def lookup_module(object):
     object_mod = None
     if isinstance(object, ModuleType):
-        object_mod = builtins
-    elif hasattr(object, "__module__"):
-        if isinstance(object.__module__, str):
-            object_mod = sys.modules[object.__module__]
-        elif isinstance(object.__module__, ModuleType):
-            object_mod = object.__module__
-        else:
-            raise TypeError(
-                "Unexpected object.__module__ value: %s, %s" % (object.__module__, object.__qualname__)
-            )
-    elif hasattr(object, "__init__") and hasattr(object.__init__, "__module__"):
-        object_mod = sys.modules[object.__init__.__module__]
+      object_mod = builtins
+    elif hasattr(object, '__module__'):
+      if isinstance(object.__module__, str):
+        object_mod = sys.modules[object.__module__]
+      elif isinstance(object.__module__, ModuleType):
+        object_mod = object.__module__
+      else:
+        return None
+    elif hasattr(object, '__init__') \
+     and hasattr(object.__init__, '__module__'):
+      object_mod = sys.modules[object.__init__.__module__]
     elif not isinstance(object, type):
         object_mod = builtins
     if not object_mod:

@@ -5,6 +5,7 @@ import sys
 import tempfile
 import warnings
 from contextlib import closing
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
 from threading import _shutdown_locks
 
@@ -165,3 +166,51 @@ def test_simple_url(reuse):
                 assert mod.test() == 42
     finally:
         os.chdir(orig_cwd)
+
+
+def test_autoinstall_numpy_dual_version(reuse):
+    ver1, ver2 = "1.19.3", "1.19.5"
+    for ver in (ver1, ver2):
+        for k,v in list(sys.modules.items()):
+            if k == "numpy" or k.startswith("numpy."):
+                loader = (
+                    getattr(v, "__loader__", None)
+                    or v.__spec__.loader
+                )
+                if isinstance(loader, SourceFileLoader):
+                    del sys.modules[k]
+        
+        mod = suggested_artifact(reuse, "numpy", version=ver)
+        assert mod
+        assert mod.__version__ == ver
+    
+
+def test_autoinstall_protobuf(reuse):
+    ver = "3.19.1"
+    mod = suggested_artifact(
+        reuse, "protobuf/google.protobuf", version=ver
+    )
+    assert mod.__version__ == ver
+    assert mod.__name__ == "google.protobuf"
+    assert (
+        tuple(Path(mod.__file__).parts[-3:])
+        == ("google", "protobuf", "__init__.py")
+    )
+
+
+def suggested_artifact(reuse, *args, **kwargs):
+    reuse.pimp._clean_sys_modules(args[0].split("/")[-1].split(".")[0])
+    try:
+        mod = reuse(
+            *args, 
+            modes=reuse.auto_install | reuse.Modes.fastfail,
+            **kwargs
+        )
+        return mod
+    except RuntimeWarning as rw:
+        last_line = str(rw).strip().splitlines()[-1].strip()
+        log.info("Usimg last line as suggested artifact: %s", repr(last_line))
+        last_line2 = last_line.replace("protobuf", "protobuf/google.protobuf")
+        mod = eval(last_line2)
+        log.info("suggest artifact returning: %s", mod)
+        return mod
