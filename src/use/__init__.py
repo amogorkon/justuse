@@ -76,6 +76,8 @@ basicConfig(
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
 __version__ = "0.6.5"  # IMPORTANT; Must leave exactly as-is for setup
+# for tests
+__version__ = os.getenv("USE_VERSION", __version__)
 __name__ = "use"
 __package__ = "use"
 

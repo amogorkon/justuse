@@ -9,6 +9,8 @@ from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, distribution
 from importlib.util import find_spec
 from pathlib import Path
+from subprocess import check_output, STDOUT
+from textwrap import dedent
 from threading import _shutdown_locks
 from unittest.mock import patch
 from warnings import catch_warnings, filterwarnings
@@ -471,3 +473,34 @@ def test_read_wheel_metadata(reuse):
 
 def test_383_use_name(reuse):
     assert use("pprint").pprint([1, 2, 3]) is None
+
+
+def test_use_version_upgrade_warning(reuse):
+    version = reuse.Version("0.0.0")
+    srcdir = reuse.Path(reuse.__spec__.origin).parent.parent
+    with ScopedCwd(srcdir):
+        output = check_output(
+            [
+                sys.executable, "-c", dedent(
+                    f"""
+                    import os
+                    os.environ['USE_VERSION'] = '{version!s}'
+                    import use
+                    """
+                )
+            ],
+            encoding="utf-8",
+            shell=False,
+            stderr=STDOUT
+        )
+        match = re.search(
+            r"(?P<category>[a-zA-Z_]+): "
+            r"(?:(?!\d).)* (?P<version>\d+\.\d+\.\d+)",
+            output
+        )
+        assert match
+        assert (
+            match.group("category")
+            == use.VersionWarning.__name__
+        )
+        assert match.group("version") == str(version)
