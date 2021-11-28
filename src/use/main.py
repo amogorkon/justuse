@@ -467,15 +467,14 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             # calling from another use()d module
             # let's see where we started
             main_mod = __import__("__main__")
-            if True:
-                # there are a number of ways to call use() from a non-use() starting point
-                # let's first check if we are running in jupyter
-                jupyter = "ipykernel" in sys.modules
-                # we're in jupyter, we use the CWD as set in the notebook
-                if not jupyter and hasattr(main_mod, "__file__"):
-                    source_dir = (
-                        _ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename).resolve().parent
-                    )
+            # there are a number of ways to call use() from a non-use() starting point
+            # let's first check if we are running in jupyter
+            jupyter = "ipykernel" in sys.modules
+            # we're in jupyter, we use the CWD as set in the notebook
+            if not jupyter and hasattr(main_mod, "__file__"):
+                source_dir = (
+                    _ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename).resolve().parent
+                )
             if source_dir is None:
                 if main_mod.__loader__ and hasattr(main_mod.__loader__, "path"):
                     source_dir = _ensure_path(main_mod.__loader__.path).parent
