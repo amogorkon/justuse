@@ -41,13 +41,14 @@ try:
     home.mkdir(mode=0o755, parents=True, exist_ok=True)
 except PermissionError:
     # this should fix the permission issues on android #80
-
     home = tempfile.mkdtemp(prefix="justuse_")
+
+(home / "logs").mkdir(mode=0o755, parents=True, exist_ok=True)
 (home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
 for file in (
     "config.toml",
     "config_defaults.toml",
-    "usage.log",
+    "logs/usage.log",
     "registry.db",
     "user_registry.toml",
 ):
@@ -73,11 +74,12 @@ def fraction_of_day(now: datetime = None) -> float:
 
 
 basicConfig(
-    filename=home / "usage.log",
+    filename=home / "logs/usage.log",
     filemode="a",
-    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
     datefmt=f"%Y%m%d {fraction_of_day()}",
-    level=DEBUG,
+    # datefmt="%Y-%m-%d %H:%M:%S",
+    level=INFO,
 )
 
 # !!! SEE NOTE !!!
@@ -137,52 +139,44 @@ with catch_warnings():
         no_public_installation = 2 ** 4
         fastfail = 2 ** 5
 
-    # aspect-oriented stuff
 
-    packages_excluded_from_aspectizing: set = {}
-    "Set of packages that should be excluded from decoration."
-    modules_excluded_from_aspectizing: set = {}
-    "Set of modules that should be excluded from decoration."
-    _applied_decorators: dict[str, deque[Callable]] = defaultdict(deque)
-    "{qualname: [callable]} - to see which decorators are applied, in which order"
-    _aspectized_functions: dict[str, deque[Callable]] = defaultdict(deque)
-    "{qualname: [callable]} - the actually decorated functions to undo aspectizing"
+from use.aspectizing import *
+from use.buffet_old import buffet_table
+from use.main import *
+from use.messages import *
 
-    from use.aspectizing import *
-    from use.buffet_old import buffet_table
-    from use.main import *
-    from use.messages import *
+### NEEDED FOR TESTS!! ###
+from use.pimp import *
+from use.pimp import _get_package_data, _get_version, _is_version_satisfied, _parse_name, get_supported
+from use.pypi_model import *
+from use.tools import *
 
-    ### NEEDED FOR TESTS!! ###
-    from use.pimp import *
-    from use.pimp import _get_package_data, _get_version, _is_version_satisfied, _parse_name, get_supported
-    from use.pypi_model import *
-    from use.tools import *
+use = Use()
+use.__dict__.update({k: v for k, v in globals().items()})  # to avoid recursion-confusion
+use = ProxyModule(use)
 
-    use = Use()
-    use.__dict__.update({k: v for k, v in globals().items()})  # to avoid recursion-confusion
-    use = ProxyModule(use)
 
-    def decorator_log_calling_function_and_args(func, *args):
-        """
-        Decorator to log the calling function and its arguments.
+def decorator_log_calling_function_and_args(func, *args):
+    """
+    Decorator to log the calling function and its arguments.
 
-        Args:
-            func (function): The function to decorate.
-            *args: The arguments to pass to the function.
+    Args:
+        func (function): The function to decorate.
+        *args: The arguments to pass to the function.
 
-        Returns:
-            function: The decorated function.
-        """
+    Returns:
+        function: The decorated function.
+    """
 
-        def wrapper(*args, **kwargs):
-            log.debug(f"{func.__name__}({args}, {kwargs})")
-            return func(*args, **kwargs)
+    def wrapper(*args, **kwargs):
+        log.debug(f"{func.__name__}({args}, {kwargs})")
+        return func(*args, **kwargs)
 
-        return wrapper
+    return wrapper
 
-    use @ (isfunction, "", beartype)
-    use @ (isfunction, "", decorator_log_calling_function_and_args)
 
-    if not test_version:
-        sys.modules["use"] = use
+use @ (isbeartypeable, "", beartype)
+# use @ (isbeartypeable, "", decorator_log_calling_function_and_args)
+
+if not test_version:
+    sys.modules["use"] = use

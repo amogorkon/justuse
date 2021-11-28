@@ -1,22 +1,28 @@
 import builtins
 import re
 import sys
+from collections import defaultdict, deque
 from importlib.util import spec_from_loader
 from inspect import getmembers, isclass
 from logging import getLogger
 from types import ModuleType
-from typing import Any
+from typing import Any, Callable
 from warnings import warn
+
+from beartype import beartype
 
 log = getLogger(__name__)
 
-from use import (
-    AmbiguityWarning,
-    _applied_decorators,
-    _aspectized_functions,
-    modules_excluded_from_aspectizing,
-    packages_excluded_from_aspectizing,
-)
+from use import AmbiguityWarning
+
+packages_excluded_from_aspectizing: set = {}
+"Set of packages that should be excluded from decoration."
+modules_excluded_from_aspectizing: set = {}
+"Set of modules that should be excluded from decoration."
+_applied_decorators: dict[str, deque[Callable]] = defaultdict(deque)
+"{qualname: [callable]} - to see which decorators are applied, in which order"
+_aspectized_functions: dict[str, deque[Callable]] = defaultdict(deque)
+"{qualname: [callable]} - the actually decorated functions to undo aspectizing"
 
 
 def _apply_aspect(
@@ -31,12 +37,12 @@ def _apply_aspect(
     level=0,
 ) -> Any:
     """Apply the aspect as a side-effect, no copy is created."""
-    if thing is type or thing is object or not hasattr(thing, "__dict__"):
-        return
     for name, obj in getmembers(thing):
-        if name in ("__init_subclass__", "__new__", "__prepare__", ):
-            continue
-        if type(obj).__name__.startswith("builtin_method"):
+        if name in (
+            "__init_subclass__",
+            "__new__",
+            "__prepare__",
+        ):
             continue
         obj = getattr(obj, "__wrapped__", obj)
         # by using `[-2:-1][-1]` we avoid an IndexError if there
@@ -51,8 +57,7 @@ def _apply_aspect(
             if module_name == "use.pypi_model":
                 continue
             log.debug(
-                "Applying aspect recursively to %s",
-                obj
+                f"recursing on {str(obj)[:20]} [{type(obj)}] with ({check}, {pattern} {decorator.__qualname__}"
             )
             _apply_aspect(
                 obj,
@@ -63,16 +68,13 @@ def _apply_aspect(
                 ignore_boundaries=ignore_boundaries,
                 recursive=True,
                 force=force,
-                level=level+1
+                level=level + 1,
             )
-            log.debug(
-                "Finished applying aspect recursively to %s",
-                obj
-            )
+            log.debug("finished recursion on %s", obj)
         # first let's exclude everything that doesn't belong to the module to avoid infinite recursion and other nasty stuff
         if mod is None and not ignore_boundaries:
             log.debug(
-                f"{obj} is skipped because {getattr(obj, '__module__', None)} and {thing} {getattr(thing, '__module__', None)} are not the same."
+                f"skipped {obj} because {getattr(obj, '__module__', None)} and {thing} {getattr(thing, '__module__', None)} are not the same."
             )
             continue
         # we can't really tell where stuff is coming from if __package__ isn't set, so let's refuse the temptation to guess
@@ -87,15 +89,17 @@ def _apply_aspect(
             module_name in modules_excluded_from_aspectizing
             or package_name in packages_excluded_from_aspectizing
         ):
-            log.debug(f"{obj} is skipped because {obj.__module__} or {obj.__package__} are excluded. ")
+            log.debug(
+                f"{str(obj)[:20]} [{type(obj)}] is skipped because {obj.__module__} or {obj.__package__} are excluded. "
+            )
             continue
         if not aspectize_dunders and name.startswith("__") and name.endswith("__"):
-            log.debug(f"{obj} is skipped because it's a dunder")
+            log.debug(f"{str(obj)[:20]} [{type(obj)}] is skipped because it's a dunder")
             continue
         if check(obj) and re.match(pattern, name):
-            if decorator in _applied_decorators[obj.__qualname__] and not force:
+            if decorator in _applied_decorators[str(obj)[:20]] and not force:
                 warn(
-                    f"Applied decorator {decorator} to {obj} multiple times! If you intend this behaviour, use _apply_aspect with force=True"
+                    f"Applied decorator {decorator} to {str(obj)[:20]} [{type(obj)}] multiple times! If you intend this behaviour, use _apply_aspect with force=True"
                 )
             _applied_decorators[obj.__qualname__].append(decorator)
             _aspectized_functions[obj.__qualname__] = obj
@@ -103,8 +107,8 @@ def _apply_aspect(
                 thing.__dict__[name] = decorator(obj)
             except TypeError:
                 continue
-            log.debug(
-                f"Applied {decorator.__qualname__} to {obj.__module__}::{obj.__qualname__} [{obj.__class__.__qualname__}]"
+            log.info(
+                f"{decorator.__qualname__} @ {obj.__module__}::{obj.__qualname__} [{obj.__class__.__name__}]"
             )
     return thing
 
@@ -112,17 +116,16 @@ def _apply_aspect(
 def lookup_module(object):
     object_mod = None
     if isinstance(object, ModuleType):
-      object_mod = builtins
-    elif hasattr(object, '__module__'):
-      if isinstance(object.__module__, str):
-        object_mod = sys.modules[object.__module__]
-      elif isinstance(object.__module__, ModuleType):
-        object_mod = object.__module__
-      else:
-        return None
-    elif hasattr(object, '__init__') \
-     and hasattr(object.__init__, '__module__'):
-      object_mod = sys.modules[object.__init__.__module__]
+        object_mod = builtins
+    elif hasattr(object, "__module__"):
+        if isinstance(object.__module__, str):
+            object_mod = sys.modules[object.__module__]
+        elif isinstance(object.__module__, ModuleType):
+            object_mod = object.__module__
+        else:
+            return None
+    elif hasattr(object, "__init__") and hasattr(object.__init__, "__module__"):
+        object_mod = sys.modules[object.__init__.__module__]
     elif not isinstance(object, type):
         object_mod = builtins
     if not object_mod:
@@ -152,3 +155,16 @@ def get_package(mod):
     else:
         package_name = getattr(mod, "__package__", None) or ".".join(module_parts[:-1])
     return is_package, package_name
+
+
+def isbeartypeable(thing):
+    if type(thing).__name__.startswith("builtin_method"):
+        return False
+    if thing is type or thing is object or not hasattr(thing, "__dict__"):
+        return False
+
+    try:
+        beartype(thing)
+        return True
+    except:
+        return False
