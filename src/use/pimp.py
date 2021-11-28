@@ -295,14 +295,21 @@ def _pebkac_no_hash(
     package_name: str = None,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
-    hashes = {
-        hexdigest_as_JACK(entry.digests.get(hash_algo.name))
-        for entry in _get_package_data(package_name).releases[version]
-    }
-    if hashes:
-        return RuntimeWarning(Message.pebkac_missing_hash(name=package_name, package_name=package_name, version=version, hashes=hashes))
-    else:
-        return RuntimeWarning(Message.no_distribution_found(package_name, version))
+    try:
+        hashes = {
+            hexdigest_as_JACK(entry.digests.get(hash_algo.name))
+            for entry in _get_package_data(package_name).releases[version]
+        }
+        if hashes:
+            return RuntimeWarning(Message.pebkac_missing_hash(name=package_name, package_name=package_name, version=version, hashes=hashes))
+        else:
+            return RuntimeWarning(Message.no_distribution_found(package_name, version))
+    except KeyError:
+        versions = "\n  - ".join(
+            str(k)
+            for k in _get_package_data(package_name).releases
+        )
+        return RuntimeWarning(f"'{version}' is not a valid version for {package_name}. Available versions are:\x0a\x0a  - {versions}")
 
 
 @pipes
