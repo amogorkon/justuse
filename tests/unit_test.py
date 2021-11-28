@@ -28,7 +28,7 @@ is_win = sys.platform.startswith("win")
 __package__ = "tests"
 import logging
 
-import use
+from use import use
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
 
 log = logging.getLogger(".".join((__package__, __name__)))
@@ -42,15 +42,19 @@ from tests.simple_funcs import three
 
 @pytest.fixture()
 def reuse():
-    # making a completely new one each time would take ages (_registry)
-    from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
-    use._using = {}
-    use._aspects = {}
-    use._reloaders = {}
-    with catch_warnings():
-        filterwarnings("error", category=BeartypeDecorHintPep585DeprecationWarning, module="use")
-        filterwarnings("ignore", category=BeartypeDecorHintPep585DeprecationWarning, module="beartype")
-        yield use
+    """
+    Return the `use` module in a clean state for "reuse."
+    
+    NOTE: making a completely new one each time would take
+    ages, due to expensive _registry setup, re-downloading
+    venv packages, etc., so if we are careful to reset any
+    additional state changes on a case-by-case basis,
+    this approach is more efficient and is the clear winner.
+    """
+    use._using.clear()
+    use.main._reloaders.clear()
+    use.aspectizing._applied_decorators.clear()
+    return use
 
 
 def test_access_to_home(reuse):

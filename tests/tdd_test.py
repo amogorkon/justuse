@@ -20,21 +20,11 @@ from hypothesis import strategies as st
 import use
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
 from use.pypi_model import JustUse_Info, PyPI_Project, PyPI_Release, Version
+from tests.unit_test import reuse, ScopedCwd
 
 not_local = "GITHUB_REF" in os.environ
 is_win = sys.platform.lower().startswith("win")
 
-
-@pytest.fixture()
-def reuse():
-    # making a completely new one each time would take ages (_registry)
-    use._using = {}
-    use._aspects = {}
-    use._reloaders = {}
-    return use
-
-
-    
 
 def test_pypi_model():
 
@@ -68,18 +58,6 @@ def test_pypi_model():
     assert type(info)(**info.dict()) == info
 
 
-class ScopedCwd(AbstractContextManager):
-    def __init__(self, newcwd: Path):
-        self._oldcwd = Path.cwd()
-        self._newcwd = newcwd
-
-    def __enter__(self, *_):
-        os.chdir(self._newcwd)
-
-    def __exit__(self, *_):
-        os.chdir(self._oldcwd)
-
-
 @pytest.mark.skipif(is_win or Path.cwd().as_posix().startswith("/media/"), reason="Not enough hours in a day")
 def test_setup_py_works(reuse):
     import subprocess
@@ -97,6 +75,5 @@ def test_jack(text):
     assume(text.isprintable())
     sha = sha256(text.encode("utf-8")).hexdigest()
     assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))
-
 
 

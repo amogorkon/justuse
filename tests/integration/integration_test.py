@@ -27,21 +27,12 @@ is_win = sys.platform.startswith("win")
 import use
 
 __package__ = "tests"
-from tests.unit_test import ScopedCwd
+from tests.unit_test import reuse, ScopedCwd
 
 import logging
 
 log = logging.getLogger(".".join((__package__, __name__)))
 log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)
-
-
-@pytest.fixture()
-def reuse():
-    # making a completely new one each time would take ages (_registry)
-    use._using = {}
-    use._aspects = {}
-    use._reloaders = {}
-    return use
 
 
 params = [
@@ -113,8 +104,6 @@ def double_function(func):
 def test_aspectize_defaults(reuse):
     # baseline
     srcdir = Path(__file__).parent.parent.parent
-    reuse._using.clear()
-    reuse.aspectizing._applied_decorators.clear()
     if "tests.simple_funcs" in sys.modules:
         del sys.modules["tests.simple_funcs"]
     with ScopedCwd(srcdir):
@@ -125,8 +114,6 @@ def test_aspectize_defaults(reuse):
 def test_aspectize_function_by_name(reuse):
     # functions with specific names only
     srcdir = Path(__file__).parent.parent.parent
-    reuse._using.clear()
-    reuse.aspectizing._applied_decorators.clear()
     if "tests.simple_funcs" in sys.modules:
         del sys.modules["tests.simple_funcs"]
     with ScopedCwd(srcdir):
@@ -142,8 +129,6 @@ def test_aspectize_function_by_name(reuse):
 def test_aspectize_all_functions(reuse):
     # all functions, but not classes or methods
     srcdir = Path(__file__).parent.parent.parent
-    reuse._using.clear()
-    reuse.aspectizing._applied_decorators.clear()
     if "tests.simple_funcs" in sys.modules:
         del sys.modules["tests.simple_funcs"]
     with ScopedCwd(srcdir):
