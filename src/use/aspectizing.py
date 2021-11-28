@@ -6,6 +6,7 @@ from inspect import getmembers
 from logging import getLogger
 from types import ModuleType
 from typing import Any
+from warnings import warn
 
 log = getLogger(__name__)
 
@@ -26,34 +27,12 @@ def _apply_aspect(
 ) -> Any:
     """Apply the aspect as a side-effect, no copy is created."""
     for name, obj in getmembers(thing):
+        obj = getattr(obj, "__wrapped__", obj)
         # by using `[-2:-1][-1]` we avoid an IndexError if there
         # is only one item in the `__mro__` (e.g. `object`)
-        kind = type(obj).__mro__[-2:-1][-1].__name__
         mod = lookup_module(obj)
-        module_name = (
-            getattr(mod, "__name__", None)
-            or mod.__spec__.name
-        )
-        loader = (
-            getattr(mod, "__loader__", None)
-            or mod.__spec__.loader
-        )
-        spec = (
-            getattr(mod, "__spec__", None)
-            or spec_from_loader(module_name, loader)
-        )
-        module_parts = module_name.split(".")
-        try:
-            is_package = loader.is_package(module_name)
-        except ImportError:
-            is_package = False
-        if is_package:
-            package_name = module_name
-        else:
-            package_name = (
-                getattr(mod, "__package__", None)
-                or ".".join(module_parts[:-1])
-            )
+        module_name, loader, spec = get_module_info(mod)
+        is_package, package_name = get_package(mod)
 
         # first let's exclude everything that doesn't belong to the module to avoid infinite recursion and other nasty stuff
         if mod is None and not ignore_boundaries:
@@ -83,8 +62,8 @@ def _apply_aspect(
             continue
         if check(obj) and re.match(pattern, name):
             if decorator in _applied_decorators[obj.__qualname__] and not force:
-                raise RuntimeError(
-                    f"Applied decorator {decorator} to {obj} multiple times! Ff you intend this behaviour, use _apply_aspect with force=True"
+                warn(
+                    f"Applied decorator {decorator} to {obj} multiple times! If you intend this behaviour, use _apply_aspect with force=True"
                 )
             _applied_decorators[obj.__qualname__].append(decorator)
             _aspectized_functions[obj.__qualname__] = obj
@@ -122,5 +101,37 @@ def lookup_module(object):
         )
       )
     return object_mod
+    
+
+# @lru_cache(maxsize=0)
+def get_module_info(mod: ModuleType):
+        module_name = (
+            getattr(mod, "__name__", None)
+            or mod.__spec__.name
+        )
+        loader = (
+            getattr(mod, "__loader__", None)
+            or mod.__spec__.loader
+        )
+        spec = (
+            getattr(mod, "__spec__", None)
+            or spec_from_loader(module_name, loader)
+        )
+        return module_name, loader, spec
 
 
+def get_package(mod):
+        module_name, loader, spec = get_module_info(mod)
+        module_parts = module_name.split(".")
+        try:
+            is_package = loader.is_package(module_name)
+        except ImportError:
+            is_package = False
+        if is_package:
+            package_name = module_name
+        else:
+            package_name = (
+                getattr(mod, "__package__", None)
+                or ".".join(module_parts[:-1])
+            )
+        return is_package, package_name
