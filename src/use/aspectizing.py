@@ -40,9 +40,11 @@ def _apply_aspect(
     """Apply the aspect as a side-effect, no copy is created."""
     if visited is None:
         visited = set()
-
-    # object.__dir__ is the *only* reliable way to get all attributes of an object that nobody can override,
-    # dir() and inspect.getmembers both build on __dir__, but are not reliable.
+    regex = re.compile(pattern, re.DOTALL)
+    # object.__dir__ is the *only* reliable way to get all attributes 
+    # of an object that nobody can override,
+    # dir() and inspect.getmembers both build on __dir__, but are not
+    # reliable.
     for name in object.__dir__(thing):
         if name in (
             "__init_subclass__",
@@ -53,21 +55,34 @@ def _apply_aspect(
         obj = getattr(thing, name)
         if id(obj) in visited:
             continue
-        if not (check(obj) and re.match(pattern, name)):
-            continue
         visited.add(id(obj))
-        # then there are things that we really shouldn't aspectize (up for the user to fill)
+        if not check(obj) or not regex.match(name):
+            continue
+        # then there are things that we really shouldn't aspectize 
+        # (up for the user to fill)
         mod = lookup_module(obj)
         ispackage, package_name = get_package(mod)
 
         if mod.__name__ in modules_excluded_from_aspectizing:
-            log.debug(f"{str(obj)[:20]} [{type(obj)}] is skipped because {mod.__name__} is excluded.")
+            log.debug(
+                f"{str(obj)[:20]} [{type(obj)}] is skipped "
+                f"because {mod.__name__} is excluded."
+            )
             continue
         if package_name in packages_excluded_from_aspectizing:
-            log.debug(f"{str(obj)[:20]} [{type(obj)}] is skipped because {package_name} is excluded.")
+            log.debug(
+                f"{str(obj)[:20]} [{type(obj)}] is skipped "
+                f"because {package_name} is excluded."
+            )
             continue
-        if not aspectize_dunders and name.startswith("__") and name.endswith("__"):
-            log.debug(f"{str(obj)[:20]} [{type(obj)}] is skipped because it's a dunder")
+        if (not aspectize_dunders 
+            and name.startswith("__")
+            and name.endswith("__")
+        ):
+            log.debug(
+                f"{str(obj)[:20]} [{type(obj)}] is skipped "
+                f"because it's a dunder"
+            )
             continue
 
         try:
@@ -75,10 +90,14 @@ def _apply_aspect(
             wrapped = decorator(obj)
             new_object_id = id(wrapped)
 
-            _applied_decorators[new_object_id].extend(_applied_decorators[previous_object_id])
+            _applied_decorators[new_object_id].extend(
+                _applied_decorators[previous_object_id]
+            )
             _applied_decorators[new_object_id].append(decorator)
 
-            _aspectized_functions[new_object_id].extend(_aspectized_functions[previous_object_id])
+            _aspectized_functions[new_object_id].extend(
+                _aspectized_functions[previous_object_id]
+            )
             _aspectized_functions[new_object_id].append(obj)
 
             setattr(thing, name, decorator(obj))
@@ -89,11 +108,14 @@ def _apply_aspect(
         except TypeError:
             continue
         log.info(
-            f"{decorator.__qualname__} @ {obj.__module__}::{obj.__qualname__} [{obj.__class__.__name__}]"
+            f"{decorator.__qualname__} @ "
+            f"{obj.__module__}::{obj.__qualname__} "
+            f"[{obj.__class__.__name__}]"
         )
         if recursive:
             log.debug(
-                f"recursing on {str(obj)[:20]} [{type(obj)}] with ({check}, {pattern} {decorator.__qualname__}"
+                f"recursing on {str(obj)[:20]} [{type(obj)}] "
+                f"with ({check}, {pattern} {decorator.__qualname__}"
             )
             _apply_aspect(
                 obj,
@@ -121,13 +143,18 @@ def lookup_module(object):
             object_mod = object.__module__
         else:
             return None
-    elif hasattr(object, "__init__") and hasattr(object.__init__, "__module__"):
+    elif (
+            hasattr(object, "__init__") 
+        and hasattr(object.__init__, "__module__")
+    ):
         object_mod = sys.modules[object.__init__.__module__]
     elif not isinstance(object, type):
         object_mod = builtins
     if not object_mod:
         raise NotImplementedError(
-            "Don't know how to find module for '%s.%s' objects" % (object.__module__, object.__qualname__)
+            "Don't know how to find module for '%s.%s' objects" % (
+                object.__module__, object.__qualname__
+            )
         )
     return object_mod
 
@@ -136,7 +163,10 @@ def lookup_module(object):
 def get_module_info(mod: ModuleType):
     module_name = getattr(mod, "__name__", None) or mod.__spec__.name
     loader = getattr(mod, "__loader__", None) or mod.__spec__.loader
-    spec = getattr(mod, "__spec__", None) or spec_from_loader(module_name, loader)
+    spec = (
+        getattr(mod, "__spec__", None) 
+        or spec_from_loader(module_name, loader)
+    )
     return module_name, loader, spec
 
 
@@ -150,7 +180,10 @@ def get_package(mod):
     if is_package:
         package_name = module_name
     else:
-        package_name = getattr(mod, "__package__", None) or ".".join(module_parts[:-1])
+        package_name = (
+            getattr(mod, "__package__", None) 
+            or ".".join(module_parts[:-1])
+        )
     return is_package, package_name
 
 
