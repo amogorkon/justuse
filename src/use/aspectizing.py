@@ -35,27 +35,63 @@ def _apply_aspect(
     recursive=True,
     force=False,
     level=0,
+    visited: set = None,
 ) -> Any:
     """Apply the aspect as a side-effect, no copy is created."""
-    for name, obj in getmembers(thing):
+    if visited is None:
+        visited = set()
+
+    # object.__dir__ is the *only* reliable way to get all attributes of an object that nobody can override,
+    # dir() and inspect.getmembers both build on __dir__, but are not reliable.
+    for name in object.__dir__(thing):
         if name in (
             "__init_subclass__",
             "__new__",
             "__prepare__",
         ):
             continue
-        obj = getattr(obj, "__wrapped__", obj)
-        # by using `[-2:-1][-1]` we avoid an IndexError if there
-        # is only one item in the `__mro__` (e.g. `object`)
-        mod = lookup_module(obj)
-        if mod is None:
+        obj = getattr(thing, name)
+        if id(obj) in visited:
             continue
-        module_name, loader, spec = get_module_info(mod)
-        is_package, package_name = get_package(mod)
-        ignore_boundaries |= int(level > 0)
-        if level < 2 and isclass(obj):
-            if module_name == "use.pypi_model":
-                continue
+        if not (check(obj) and re.match(pattern, name)):
+            continue
+        visited.add(id(obj))
+        # then there are things that we really shouldn't aspectize (up for the user to fill)
+        mod = lookup_module(obj)
+        ispackage, package_name = get_package(mod)
+
+        if mod.__name__ in modules_excluded_from_aspectizing:
+            log.debug(f"{str(obj)[:20]} [{type(obj)}] is skipped because {mod.__name__} is excluded.")
+            continue
+        if package_name in packages_excluded_from_aspectizing:
+            log.debug(f"{str(obj)[:20]} [{type(obj)}] is skipped because {package_name} is excluded.")
+            continue
+        if not aspectize_dunders and name.startswith("__") and name.endswith("__"):
+            log.debug(f"{str(obj)[:20]} [{type(obj)}] is skipped because it's a dunder")
+            continue
+
+        try:
+            previous_object_id = id(obj)
+            wrapped = decorator(obj)
+            new_object_id = id(wrapped)
+
+            _applied_decorators[new_object_id].extend(_applied_decorators[previous_object_id])
+            _applied_decorators[new_object_id].append(decorator)
+
+            _aspectized_functions[new_object_id].extend(_aspectized_functions[previous_object_id])
+            _aspectized_functions[new_object_id].append(obj)
+
+            setattr(thing, name, decorator(obj))
+
+            # cleanup
+            del _applied_decorators[previous_object_id]
+            del _aspectized_functions[previous_object_id]
+        except TypeError:
+            continue
+        log.info(
+            f"{decorator.__qualname__} @ {obj.__module__}::{obj.__qualname__} [{obj.__class__.__name__}]"
+        )
+        if recursive:
             log.debug(
                 f"recursing on {str(obj)[:20]} [{type(obj)}] with ({check}, {pattern} {decorator.__qualname__}"
             )
@@ -68,48 +104,9 @@ def _apply_aspect(
                 ignore_boundaries=ignore_boundaries,
                 recursive=True,
                 force=force,
-                level=level + 1,
+                visited=visited,
             )
             log.debug("finished recursion on %s", obj)
-        # first let's exclude everything that doesn't belong to the module to avoid infinite recursion and other nasty stuff
-        if mod is None and not ignore_boundaries:
-            log.debug(
-                f"skipped {obj} because {getattr(obj, '__module__', None)} and {thing} {getattr(thing, '__module__', None)} are not the same."
-            )
-            continue
-        # we can't really tell where stuff is coming from if __package__ isn't set, so let's refuse the temptation to guess
-        if package_name is None and not ignore_boundaries:
-            raise AmbiguityWarning(
-                f"""Package of {obj} and its parent {thing} are not defined, thus we can't reliably enforce module boundaries.
-                If you want to fix this issue, make sure that obj.__package__ is set or if you want to ignore this issue,  
-                use._apply_aspect with ignore_boundaries=True."""
-            )
-        # then there are things that we really shouldn't aspectize (up for the user to fill)
-        if (
-            module_name in modules_excluded_from_aspectizing
-            or package_name in packages_excluded_from_aspectizing
-        ):
-            log.debug(
-                f"{str(obj)[:20]} [{type(obj)}] is skipped because {obj.__module__} or {obj.__package__} are excluded. "
-            )
-            continue
-        if not aspectize_dunders and name.startswith("__") and name.endswith("__"):
-            log.debug(f"{str(obj)[:20]} [{type(obj)}] is skipped because it's a dunder")
-            continue
-        if check(obj) and re.match(pattern, name):
-            if decorator in _applied_decorators[str(obj)[:20]] and not force:
-                warn(
-                    f"Applied decorator {decorator} to {str(obj)[:20]} [{type(obj)}] multiple times! If you intend this behaviour, use _apply_aspect with force=True"
-                )
-            _applied_decorators[obj.__qualname__].append(decorator)
-            _aspectized_functions[obj.__qualname__] = obj
-            try:
-                thing.__dict__[name] = decorator(obj)
-            except TypeError:
-                continue
-            log.info(
-                f"{decorator.__qualname__} @ {obj.__module__}::{obj.__qualname__} [{obj.__class__.__name__}]"
-            )
     return thing
 
 
