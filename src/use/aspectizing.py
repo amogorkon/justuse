@@ -51,23 +51,60 @@ def _apply_aspect(
             "__init_subclass__",
             "__new__",
             "__prepare__",
+            "__module__",
+            "__matmul__",
         ):
             continue
-        obj = getattr(thing, name)
+        from use.main import ProxyModule
+        try:
+            obj = object.__getattribute__(thing, name)
+        except AttributeError:
+            try:
+                obj = getattr(
+                    object.__getattribute__(
+                       thing, "_ProxyModule__implementation"
+                    ),
+                    name
+                )
+            except AttributeError:
+                continue
+        
         if id(obj) in visited:
             continue
-        visited.add(id(obj))
-        if not check(obj) or not regex.match(name):
+        if type(obj) is ProxyModule:
             continue
+        visited.add(id(obj))
+        
+        if isinstance(obj, ModuleType):
+            if recursive and obj.__name__.startswith(thing.__name__):
+                log.debug(
+                    f"{str(obj)[:20]} is being aspectized recursively"
+                )
+                newobj = ProxyModule(obj)
+                # Replace the module in sys.modules
+                sys.modules[obj.__name__] = newobj
+                # Replace in parent module
+                object.__setattr__(thing, name, newobj)
+                # Aspectize the new module
+                obj = newobj
+                visited.add(id(newobj))
+                mod = obj
+            else:
+                continue
+        else:
+            if not check(obj) or not regex.match(name):
+                continue
+            mod = lookup_module(obj)
+        
         # then there are things that we really shouldn't aspectize 
         # (up for the user to fill)
-        mod = lookup_module(obj)
+        module_name, loader, spec = get_module_info(mod)
         ispackage, package_name = get_package(mod)
 
-        if mod.__name__ in modules_excluded_from_aspectizing:
+        if module_name in modules_excluded_from_aspectizing:
             log.debug(
                 f"{str(obj)[:20]} [{type(obj)}] is skipped "
-                f"because {mod.__name__} is excluded."
+                f"because {module_name} is excluded."
             )
             continue
         if package_name in packages_excluded_from_aspectizing:
@@ -87,31 +124,32 @@ def _apply_aspect(
             continue
 
         try:
-            previous_object_id = id(obj)
-            wrapped = decorator(obj)
-            new_object_id = id(wrapped)
-
-            _applied_decorators[new_object_id].extend(
-                _applied_decorators[previous_object_id]
-            )
-            _applied_decorators[new_object_id].append(decorator)
-
-            _aspectized_functions[new_object_id].extend(
-                _aspectized_functions[previous_object_id]
-            )
-            _aspectized_functions[new_object_id].append(obj)
-
-            setattr(thing, name, decorator(obj))
-
-            # cleanup
-            del _applied_decorators[previous_object_id]
-            del _aspectized_functions[previous_object_id]
+            if not isinstance(obj, ProxyModule):
+                previous_object_id = id(obj)
+                wrapped = decorator(obj)
+                new_object_id = id(wrapped)
+    
+                _applied_decorators[new_object_id].extend(
+                    _applied_decorators[previous_object_id]
+                )
+                _applied_decorators[new_object_id].append(decorator)
+    
+                _aspectized_functions[new_object_id].extend(
+                    _aspectized_functions[previous_object_id]
+                )
+                _aspectized_functions[new_object_id].append(obj)
+    
+                setattr(thing, name, decorator(obj))
+    
+                # cleanup
+                del _applied_decorators[previous_object_id]
+                del _aspectized_functions[previous_object_id]
         except TypeError:
             continue
         log.info(
             f"{decorator.__qualname__} @ "
-            f"{obj.__module__}::"
-            f"{obj.__dict__.get('__qualname__','')} "
+            f"{module_name}::"
+            f"{obj.__dict__.get('__qualname__',obj.__dict__.get('__name__',''))} "
             f"[{obj.__class__.__name__}]"
         )
         if recursive:
