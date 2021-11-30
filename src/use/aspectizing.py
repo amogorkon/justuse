@@ -7,8 +7,9 @@ from inspect import getmembers, isclass
 from logging import getLogger
 from types import ModuleType
 from typing import Any, Callable
-from warnings import warn
+from warnings import warn, catch_warnings, filterwarnings
 
+from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
 from beartype import beartype
 
 log = getLogger(__name__)
@@ -109,7 +110,8 @@ def _apply_aspect(
             continue
         log.info(
             f"{decorator.__qualname__} @ "
-            f"{obj.__module__}::{obj.__qualname__} "
+            f"{obj.__module__}::"
+            f"{obj.__dict__.get('__qualname__','')} "
             f"[{obj.__class__.__name__}]"
         )
         if recursive:
@@ -188,13 +190,18 @@ def get_package(mod):
 
 
 def isbeartypeable(thing):
-    if type(thing).__name__.startswith("builtin_method"):
-        return False
-    if thing is type or thing is object or not hasattr(thing, "__dict__"):
-        return False
-
-    try:
-        beartype(thing)
-        return True
-    except:
-        return False
+    with catch_warnings():
+        filterwarnings(
+            action="ignore",
+            category=BeartypeDecorHintPep585DeprecationWarning
+        )
+        if type(thing).__name__.startswith("builtin_method"):
+            return False
+        if thing is type or thing is object or not hasattr(thing, "__dict__"):
+            return False
+    
+        try:
+            beartype(thing)
+            return True
+        except:
+            return False

@@ -40627,8 +40627,15 @@ ascii_characters = list(
 
 # emojis only cause interoperability issues
 # japanese alphabet would only add 100 individual chars, not worth the trouble (and GPL is prohibitive)
-alphabet = sorted(list(set(ascii_characters + chinese_characters + korean_characters)))
-reverse_alphabet = {c: i for i, c in enumerate(alphabet)}
+class AlphabetAccess:
+    global ascii_characters
+    global chinese_characters
+    global korean_characters
+    alphabet = sorted(list(set(ascii_characters + chinese_characters + korean_characters)))
+    reverse_alphabet = {c: i for i, c in enumerate(alphabet)}
+    del ascii_characters
+    del chinese_characters
+    del korean_characters
 
 
 def represent_num_as_base(num, base):
@@ -40644,14 +40651,14 @@ def represent_num_as_base(num, base):
 def hexdigest_as_JACK(string):
     if not string:
         return
-    return "".join(alphabet[c] for c in represent_num_as_base(int(string, 16), len(alphabet)))
+    return "".join(AlphabetAccess.alphabet[c] for c in represent_num_as_base(int(string, 16), len(AlphabetAccess.alphabet)))
 
 
 def JACK_as_num(string: str):
     if isinstance(string, bytes):
         string = string.decode()
     string = "".join(string.split())
-    return sum(len(reverse_alphabet) ** i * reverse_alphabet[x] for i, x in enumerate(reversed(string)))
+    return sum(len(AlphabetAccess.reverse_alphabet) ** i * AlphabetAccess.reverse_alphabet[x] for i, x in enumerate(reversed(string)))
 
 
 def num_as_hexdigest(num):
@@ -40659,4 +40666,4 @@ def num_as_hexdigest(num):
 
 
 def is_JACK(H):
-    return all(c in alphabet for c in H)
+    return all(c in AlphabetAccess.alphabet for c in H)
