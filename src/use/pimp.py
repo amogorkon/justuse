@@ -156,10 +156,9 @@ def get_supported() -> frozenset[PlatformTag]: # cov: exclude
     return frozenset(items)
 
 
-def _filter_by_version(project_: "PyPI_Project", version: str) -> "PyPI_Project":
+def _filter_by_version(project_: "PyPI_Project", version: Version) -> "PyPI_Project":
     v = Version(version)
     rels = project_.releases.get(v, project_.releases.get(version, []))
-
     if not rels:
       return project_
 
@@ -272,7 +271,7 @@ def _pebkac_no_version(
     *,
     name: str,
     func: Callable[..., Union[Exception, ModuleType]] = None,
-    version: Version = None,
+    version: Optional[Version] = None,
     hash_algo=None,
     package_name: str = None,
     module_name: str = None,
@@ -800,17 +799,18 @@ def _filter_by_platform(
 
 
 @pipes
-def _filtered_and_ordered_data(data: PyPI_Project, version: Version = None) -> list[PyPI_Release]:
+def _filtered_and_ordered_data(data: PyPI_Project, version: Optional[Version] = None) -> list[PyPI_Release]:
+    sys_version = Version(major=sys.version_info[0], minor=sys.version_info[1])
     if version:
         version = Version(str(version))
         filtered = (
             data
             >> _filter_by_version(version)
-            >> _filter_by_platform(tags=get_supported(), sys_version=sys.version_info[0:2])  # let's not filter by platform for now
+            >> _filter_by_platform(tags=get_supported(), sys_version=sys_version)  # let's not filter by platform for now
         )
     else:
         filtered = data
-        filtered = _filter_by_platform(data, tags=get_supported(), sys_version=sys.version_info[0:2])
+        filtered = _filter_by_platform(data, tags=get_supported(), sys_version=sys_version)
 
     flat = reduce(list.__add__, filtered.releases.values(), [])
     return sorted(
