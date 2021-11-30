@@ -80,14 +80,7 @@ def _apply_aspect(
                 log.debug(
                     f"{str(obj)[:20]} is being aspectized recursively"
                 )
-                newobj = ProxyModule(obj)
-                # Replace the module in sys.modules
-                sys.modules[obj.__name__] = newobj
-                # Replace in parent module
-                object.__setattr__(thing, name, newobj)
                 # Aspectize the new module
-                obj = newobj
-                visited.add(id(newobj))
                 mod = obj
             else:
                 continue
@@ -124,7 +117,7 @@ def _apply_aspect(
             continue
 
         try:
-            if not isinstance(obj, ProxyModule):
+            if not isinstance(obj, ModuleType):
                 previous_object_id = id(obj)
                 wrapped = decorator(obj)
                 new_object_id = id(wrapped)
