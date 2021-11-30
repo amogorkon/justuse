@@ -54,7 +54,6 @@ def reuse():
     """
     use._using.clear()
     use.main._reloaders.clear()
-    use.aspectizing._applied_decorators.clear()
     return use
 
 
@@ -296,28 +295,6 @@ def test_classic_import_diff_version(reuse):
     assert w[0].category == use.VersionWarning
 
 
-@pytest.mark.skipif(True, reason="Not working, needs investigation")
-def test_use_ugrade_version_warning(reuse):
-    version = "0.0.0"
-    with warnings.catch_warnings(record=True) as w:
-        filterwarnings(action="always", module="use")
-        # no other way to change __version__ before the actual import while the version check happens on import
-        test_use = reuse(
-            reuse.Path(reuse.__file__).absolute(),
-            initial_globals={
-                "test_version": version,
-                "test_config": {"version_warning": True},
-            },
-        )
-        assert (
-            reuse.Version(test_use.test_version)
-            == reuse.Version(test_use.__version__)
-            == reuse.Version(version)
-        )
-    assert len(w) != 0
-    assert w[0].category == use.VersionWarning
-
-
 class Restorer:
     def __enter__(self):
         self.locks = set(_shutdown_locks)
@@ -397,12 +374,11 @@ def installed_or_skip(reuse, name, version=None):
             "6.2.4",
             {"91ef2131a9bd6be8f76f1f08eac5c5317221d6ad1e143ae03894b862e8976890"},
         ),
-        # ("pytest-cov", "2.12.1"),
-        # ("pytest-env", "0.6.2"),
-        # ("requests", "2.24.0"),
-        # ("furl", "2.1.2"),
-        # ("wheel", "0.36.2"),
-        # ("icontract", "2.5.4"),
+        (
+            "pytest-cov",
+            "2.12.1",
+            {'261ceeb8c227b726249b376b8526b600f38667ee314f910353fa318caa01f4d7', '261bb9e47e65bd099c89c3edf92972865210c36813f80ede5277dceb77a4a62a'}
+        ),
     ),
 )
 def test_85_pywt_jupyter_ubuntu_case1010(reuse, name, version, hashes):
@@ -463,7 +439,6 @@ class ScopedCwd(AbstractContextManager):
         os.chdir(self._oldcwd)
 
 
-@pytest.mark.skipif(is_win, reason="Windows TODO")
 def test_read_wheel_metadata(reuse):
     bytes = requests.get(
         "https://files.pythonhosted.org/packages/45/80/cdf0df938fe63457f636d859499f4aab3d0411a90fd9472ad720a0b7eab6/justuse-0.5.0.tar.gz"
