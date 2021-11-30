@@ -146,7 +146,7 @@ def _apply_aspect(
                 del _aspectized_functions[previous_object_id]
         except TypeError:
             continue
-        log.info(
+        log.debug(
             f"{decorator.__qualname__} @ "
             f"{module_name}::"
             f"{obj.__dict__.get('__qualname__',obj.__dict__.get('__name__',''))} "
