@@ -177,6 +177,15 @@ def decorator_log_calling_function_and_args(func, *args):
 
 
 use @ (isbeartypeable, "", beartype)
+for k,v in list(sys.modules["use"].__dict__.items()):
+    if v.__class__ == ModuleType:
+        if not hasattr(v, "__package__") or not v.__package__.startswith("use"): continue
+        v = ProxyModule(v)
+        sys.modules["use"].__dict__[k] = v
+        try:
+            v @ (isbeartypeable, "", beartype)
+        except KeyError:
+            psss
 # use @ (isbeartypeable, "", decorator_log_calling_function_and_args)
 
 if not test_version:
