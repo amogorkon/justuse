@@ -42,6 +42,7 @@ def _apply_aspect(
     if visited is None:
         visited = set()
     regex = re.compile(pattern, re.DOTALL)
+    lvl = "".join([" "] * level)
     # object.__dir__ is the *only* reliable way to get all attributes 
     # of an object that nobody can override,
     # dir() and inspect.getmembers both build on __dir__, but are not
@@ -78,7 +79,7 @@ def _apply_aspect(
         if isinstance(obj, ModuleType):
             if recursive and obj.__name__.startswith(thing.__name__):
                 log.debug(
-                    f"{str(obj)[:20]} is being aspectized recursively"
+                    f"{lvl}{str(obj)[:20]} is being aspectized recursively"
                 )
                 # Aspectize the new module
                 mod = obj
@@ -93,6 +94,19 @@ def _apply_aspect(
                 pass
         if mod is None: mod = obj
         orig_obj = None
+        def recurse(t):
+            _apply_aspect(
+                t or orig_obj or obj,
+                check=check,
+                pattern=pattern,
+                decorator=decorator,
+                aspectize_dunders=aspectize_dunders,
+                ignore_boundaries=ignore_boundaries,
+                recursive=True,
+                force=force,
+                visited=visited,
+                level=level+1,
+            )
         try:
             # then there are things that we really shouldn't aspectize 
             # (up for the user to fill)
@@ -101,14 +115,14 @@ def _apply_aspect(
     
             if module_name in modules_excluded_from_aspectizing:
                 log.debug(
-                    f"{str(obj)[:20]} [{type(obj)}] is skipped "
-                    f"because {module_name} is excluded."
+                    f"{lvl}{str(obj)[:20]} [{type(obj)}] is skipped "
+                    f"{lvl}because {module_name} is excluded."
                 )
                 continue
             if package_name in packages_excluded_from_aspectizing:
                 log.debug(
-                    f"{str(obj)[:20]} [{type(obj)}] is skipped "
-                    f"because {package_name} is excluded."
+                    f"{lvl}{str(obj)[:20]} [{type(obj)}] is skipped "
+                    f"{lvl}because {package_name} is excluded."
                 )
                 continue
             if (not aspectize_dunders 
@@ -116,8 +130,8 @@ def _apply_aspect(
                 and name.endswith("__")
             ):
                 log.debug(
-                    f"{str(obj)[:20]} [{type(obj)}] is skipped "
-                    f"because it's a dunder"
+                    f"{lvl}{str(obj)[:20]} [{type(obj)}] is skipped "
+                    f"{lvl}because it's a dunder"
                 )
                 continue
             
@@ -147,27 +161,17 @@ def _apply_aspect(
         except (AttributeError, TypeError, BeartypeCallHintPepParamException):
             continue
         log.debug(
-            f"{decorator.__qualname__} @ "
-            f"{module_name}::"
-            f"{obj.__dict__.get('__qualname__',obj.__dict__.get('__name__',''))} "
-            f"[{obj.__class__.__name__}]"
+            f"{lvl}{decorator.__qualname__} @ "
+            f"{lvl}{module_name}::"
+            f"{lvl}{obj.__dict__.get('__qualname__',obj.__dict__.get('__name__',''))} "
+            f"{lvl}[{obj.__class__.__name__}]"
         )
         if recursive:
             log.debug(
-                f"recursing on {str(obj)[:20]} [{type(obj)}] "
-                f"with ({check}, {pattern} {decorator.__qualname__}"
+                f"{lvl}recursing on {str(obj)[:20]} [{type(obj)}] "
+                f"{lvl}with ({check}, {pattern} {decorator.__qualname__}"
             )
-            _apply_aspect(
-                orig_obj or obj,
-                check=check,
-                pattern=pattern,
-                decorator=decorator,
-                aspectize_dunders=aspectize_dunders,
-                ignore_boundaries=ignore_boundaries,
-                recursive=True,
-                force=force,
-                visited=visited,
-            )
+            recurse(obj)
             log.debug("finished recursion on %s", obj)
     return thing
 
