@@ -129,11 +129,12 @@ def _apply_aspect(
                 and name.startswith("__")
                 and name.endswith("__")
             ):
-                log.debug(
-                    f"{lvl}{str(obj)[:20]} [{type(obj)}] is skipped "
-                    f"{lvl}because it's a dunder"
-                )
-                continue
+                if name != "__call__" and name != "__func__":
+                    log.debug(
+                        f"{lvl}{str(obj)[:20]} [{type(obj)}] is skipped "
+                        f"{lvl}because it's a dunder"
+                    )
+                    continue
             
             if not isinstance(obj, ModuleType):
                 if isclass(obj):
@@ -163,7 +164,7 @@ def _apply_aspect(
         log.debug(
             f"{lvl}{decorator.__qualname__} @ "
             f"{lvl}{module_name}::"
-            f"{lvl}{obj.__dict__.get('__qualname__',obj.__dict__.get('__name__',''))} "
+            f"{lvl}{name} "
             f"{lvl}[{obj.__class__.__name__}]"
         )
         if recursive:
