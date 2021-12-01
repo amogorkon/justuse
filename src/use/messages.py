@@ -124,3 +124,29 @@ class TupleMessage(Message):
 
 class KwargsMessage(Message):
     pass
+
+
+def _web_aspectizing_overview(*, decorator, check, pattern, targets, hits):
+    with open(use.home / "aspectizing_overview.html", "w") as f:
+        f.write(
+            f"""
+<html>
+<head>
+<script src="/brython.js"></script>
+</head>
+<body onload="brython()">
+<script type="text/python">
+{decorator}
+{check}
+{pattern}
+{targets}
+{hits}
+</script>
+<input id="zone">
+<button id="echo">click !</button>
+</body>
+</html>"""
+        )
+    if not config["testing"]:
+        webbrowser.open(use.home / "aspectizing_overview.html")
+    return decorator, check, pattern, targets, hits

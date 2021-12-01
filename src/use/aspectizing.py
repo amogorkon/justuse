@@ -7,14 +7,15 @@ from inspect import getmembers, isclass
 from logging import getLogger
 from types import ModuleType
 from typing import Any, Callable
-from warnings import warn, catch_warnings, filterwarnings
+from warnings import catch_warnings, filterwarnings, warn
 
-from beartype.roar import BeartypeDecorHintPep585DeprecationWarning, BeartypeCallHintPepParamException
 from beartype import beartype
+from beartype.roar import BeartypeCallHintPepParamException, BeartypeDecorHintPep585DeprecationWarning
 
 log = getLogger(__name__)
 
 from use import AmbiguityWarning
+from use.messages import _web_aspectizing_overview
 
 packages_excluded_from_aspectizing: set = {}
 "Set of packages that should be excluded from decoration."
@@ -31,11 +32,13 @@ def _apply_aspect(
     check,
     pattern,
     decorator,
+    *,
     aspectize_dunders=False,
     ignore_boundaries=False,
     recursive=True,
     force=False,
     level=0,
+    dry_run=False,
     visited: set = None,
 ) -> Any:
     """Apply the aspect as a side-effect, no copy is created."""
@@ -43,7 +46,7 @@ def _apply_aspect(
         visited = set()
     regex = re.compile(pattern, re.DOTALL)
     lvl = "".join([" "] * level)
-    # object.__dir__ is the *only* reliable way to get all attributes 
+    # object.__dir__ is the *only* reliable way to get all attributes
     # of an object that nobody can override,
     # dir() and inspect.getmembers both build on __dir__, but are not
     # reliable.
@@ -57,30 +60,24 @@ def _apply_aspect(
         ):
             continue
         from use.main import ProxyModule
+
         try:
             obj = object.__getattribute__(thing, name)
         except AttributeError:
             try:
-                obj = getattr(
-                    object.__getattribute__(
-                       thing, "_ProxyModule__implementation"
-                    ),
-                    name
-                )
+                obj = getattr(object.__getattribute__(thing, "_ProxyModule__implementation"), name)
             except AttributeError:
                 continue
-        
+
         if id(obj) in visited:
             continue
         if type(obj) is ProxyModule:
             continue
         visited.add(id(obj))
-        
+
         if isinstance(obj, ModuleType):
             if recursive and obj.__name__.startswith(thing.__name__):
-                log.debug(
-                    f"{lvl}{str(obj)[:20]} is being aspectized recursively"
-                )
+                log.debug(f"{lvl}{str(obj)[:20]} is being aspectized recursively")
                 # Aspectize the new module
                 mod = obj
             else:
@@ -92,8 +89,10 @@ def _apply_aspect(
                 mod = lookup_module(obj)
             except:
                 pass
-        if mod is None: mod = obj
+        if mod is None:
+            mod = obj
         orig_obj = None
+
         def recurse(t):
             _apply_aspect(
                 t or orig_obj or obj,
@@ -105,14 +104,16 @@ def _apply_aspect(
                 recursive=True,
                 force=force,
                 visited=visited,
-                level=level+1,
+                level=level + 1,
+                dry_run=dry_run,
             )
+
         try:
-            # then there are things that we really shouldn't aspectize 
+            # then there are things that we really shouldn't aspectize
             # (up for the user to fill)
             module_name, loader, spec = get_module_info(mod)
             ispackage, package_name = get_package(mod)
-    
+
             if module_name in modules_excluded_from_aspectizing:
                 log.debug(
                     f"{lvl}{str(obj)[:20]} [{type(obj)}] is skipped "
@@ -125,17 +126,11 @@ def _apply_aspect(
                     f"{lvl}because {package_name} is excluded."
                 )
                 continue
-            if (not aspectize_dunders 
-                and name.startswith("__")
-                and name.endswith("__")
-            ):
+            if not aspectize_dunders and name.startswith("__") and name.endswith("__"):
                 if name != "__call__" and name != "__func__":
-                    log.debug(
-                        f"{lvl}{str(obj)[:20]} [{type(obj)}] is skipped "
-                        f"{lvl}because it's a dunder"
-                    )
+                    log.debug(f"{lvl}{str(obj)[:20]} [{type(obj)}] is skipped " f"{lvl}because it's a dunder")
                     continue
-            
+
             if not isinstance(obj, ModuleType):
                 if isclass(obj):
                     orig_obj = obj
@@ -143,27 +138,22 @@ def _apply_aspect(
                 previous_object_id = id(obj)
                 wrapped = decorator(obj)
                 new_object_id = id(wrapped)
-    
-                _applied_decorators[new_object_id].extend(
-                    _applied_decorators[previous_object_id]
-                )
-                _applied_decorators[new_object_id].append(decorator)
-    
-                _aspectized_functions[new_object_id].extend(
-                    _aspectized_functions[previous_object_id]
-                )
-                _aspectized_functions[new_object_id].append(obj)
-    
-                setattr(thing, name, decorator(obj))
-    
-                # cleanup
-                del _applied_decorators[previous_object_id]
-                del _aspectized_functions[previous_object_id]
+
+                if not dry_run:
+                    _applied_decorators[new_object_id].extend(_applied_decorators[previous_object_id])
+                    _applied_decorators[new_object_id].append(decorator)
+
+                    _aspectized_functions[new_object_id].extend(_aspectized_functions[previous_object_id])
+                    _aspectized_functions[new_object_id].append(obj)
+
+                    setattr(thing, name, decorator(obj))
+
+                    # cleanup
+                    del _applied_decorators[previous_object_id]
+                    del _aspectized_functions[previous_object_id]
         except (AttributeError, TypeError, BeartypeCallHintPepParamException):
             continue
-        log.info(
-            f"Applied {decorator.__qualname__} to {module_name}::{name} [{obj.__class__.__qualname__}]"
-        )
+        log.info(f"Applied {decorator.__qualname__} to {module_name}::{name} [{obj.__class__.__qualname__}]")
         if recursive:
             log.debug(
                 f"{lvl}recursing on {str(obj)[:20]} [{type(obj)}] "
@@ -171,6 +161,14 @@ def _apply_aspect(
             )
             recurse(obj)
             log.debug("finished recursion on %s", obj)
+    if level == 0 and dry_run:
+        _web_aspectizing_overview(
+            decoator=decorator,
+            pattern=pattern,
+            check=check,
+            targets=visited,
+            hits=[],
+        )
     return thing
 
 
@@ -185,18 +183,13 @@ def lookup_module(object):
             object_mod = object.__module__
         else:
             return None
-    elif (
-            hasattr(object, "__init__") 
-        and hasattr(object.__init__, "__module__")
-    ):
+    elif hasattr(object, "__init__") and hasattr(object.__init__, "__module__"):
         object_mod = sys.modules[object.__init__.__module__]
     elif not isinstance(object, type):
         object_mod = builtins
     if not object_mod:
         raise NotImplementedError(
-            "Don't know how to find module for '%s.%s' objects" % (
-                object.__module__, object.__qualname__
-            )
+            "Don't know how to find module for '%s.%s' objects" % (object.__module__, object.__qualname__)
         )
     return object_mod
 
@@ -205,10 +198,7 @@ def lookup_module(object):
 def get_module_info(mod: ModuleType):
     module_name = getattr(mod, "__name__", None) or mod.__spec__.name
     loader = getattr(mod, "__loader__", None) or mod.__spec__.loader
-    spec = (
-        getattr(mod, "__spec__", None) 
-        or spec_from_loader(module_name, loader)
-    )
+    spec = getattr(mod, "__spec__", None) or spec_from_loader(module_name, loader)
     return module_name, loader, spec
 
 
@@ -222,24 +212,18 @@ def get_package(mod):
     if is_package:
         package_name = module_name
     else:
-        package_name = (
-            getattr(mod, "__package__", None) 
-            or ".".join(module_parts[:-1])
-        )
+        package_name = getattr(mod, "__package__", None) or ".".join(module_parts[:-1])
     return is_package, package_name
 
 
 def isbeartypeable(thing):
     with catch_warnings():
-        filterwarnings(
-            action="ignore",
-            category=BeartypeDecorHintPep585DeprecationWarning
-        )
+        filterwarnings(action="ignore", category=BeartypeDecorHintPep585DeprecationWarning)
         if type(thing).__name__.startswith("builtin_method"):
             return False
         if thing is type or thing is object or not hasattr(thing, "__dict__"):
             return False
-    
+
         try:
             beartype(thing)
             return True
