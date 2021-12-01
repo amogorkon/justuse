@@ -312,10 +312,13 @@ def test_reloading(reuse):
         mod = None
         newfile = f"{file}.t"
         for check in range(1):
+            if sys.platform[0:3] == "win":
+                newfile = file
             with open(newfile, "w") as f:
                 f.write(f"def foo(): return {check}")
                 f.flush()
-            os.rename(newfile, file)
+            if sys.platform[0:3] != "win":
+                os.rename(newfile, file)
             mod = mod or reuse(Path(file), modes=reuse.reloading)
             while mod.foo() < check:
                 pass
