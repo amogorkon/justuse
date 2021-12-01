@@ -9,7 +9,7 @@ from types import ModuleType
 from typing import Any, Callable
 from warnings import warn, catch_warnings, filterwarnings
 
-from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
+from beartype.roar import BeartypeDecorHintPep585DeprecationWarning, BeartypeCallHintPepParamException
 from beartype import beartype
 
 log = getLogger(__name__)
@@ -87,37 +87,43 @@ def _apply_aspect(
         else:
             if not check(obj) or not regex.match(name):
                 continue
-            mod = lookup_module(obj)
+            try:
+                mod = lookup_module(obj)
+            except:
+                pass
+        if mod is None: mod = obj
         
-        # then there are things that we really shouldn't aspectize 
-        # (up for the user to fill)
-        module_name, loader, spec = get_module_info(mod)
-        ispackage, package_name = get_package(mod)
-
-        if module_name in modules_excluded_from_aspectizing:
-            log.debug(
-                f"{str(obj)[:20]} [{type(obj)}] is skipped "
-                f"because {module_name} is excluded."
-            )
-            continue
-        if package_name in packages_excluded_from_aspectizing:
-            log.debug(
-                f"{str(obj)[:20]} [{type(obj)}] is skipped "
-                f"because {package_name} is excluded."
-            )
-            continue
-        if (not aspectize_dunders 
-            and name.startswith("__")
-            and name.endswith("__")
-        ):
-            log.debug(
-                f"{str(obj)[:20]} [{type(obj)}] is skipped "
-                f"because it's a dunder"
-            )
-            continue
-
         try:
+            # then there are things that we really shouldn't aspectize 
+            # (up for the user to fill)
+            module_name, loader, spec = get_module_info(mod)
+            ispackage, package_name = get_package(mod)
+    
+            if module_name in modules_excluded_from_aspectizing:
+                log.debug(
+                    f"{str(obj)[:20]} [{type(obj)}] is skipped "
+                    f"because {module_name} is excluded."
+                )
+                continue
+            if package_name in packages_excluded_from_aspectizing:
+                log.debug(
+                    f"{str(obj)[:20]} [{type(obj)}] is skipped "
+                    f"because {package_name} is excluded."
+                )
+                continue
+            if (not aspectize_dunders 
+                and name.startswith("__")
+                and name.endswith("__")
+            ):
+                log.debug(
+                    f"{str(obj)[:20]} [{type(obj)}] is skipped "
+                    f"because it's a dunder"
+                )
+                continue
+
             if not isinstance(obj, ModuleType):
+                if isclass(obj):
+                    obj = object.__getattribute__(obj, "__call__")
                 previous_object_id = id(obj)
                 wrapped = decorator(obj)
                 new_object_id = id(wrapped)
@@ -137,7 +143,7 @@ def _apply_aspect(
                 # cleanup
                 del _applied_decorators[previous_object_id]
                 del _aspectized_functions[previous_object_id]
-        except TypeError:
+        except (AttributeError, TypeError, BeartypeCallHintPepParamException):
             continue
         log.debug(
             f"{decorator.__qualname__} @ "
