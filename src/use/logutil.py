@@ -1,12 +1,16 @@
 import os
-import sys
 import logging
+import sys
+import time
+
 from logging import *
 from logging import Formatter, StreamHandler, PercentStyle, StrFormatStyle, StringTemplateStyle
 from _io import _IOBase
 from collections.abc import *
 from typing import NamedTuple
-import time
+
+import use
+
 
 BASIC_FORMAT: str = "%(levelname)s:%(name)s:%(message)s"
 
@@ -284,8 +288,7 @@ class ConsoleHandler(StreamHandler):
     def __repr__(self):
         return '<%s>' % (self.__class__.__name__)
 
-import os
-if "DEBUG" in os.environ:
+if use.config["debugging"]:
   logging.root.setLevel(logging.DEBUG)
 handler = ConsoleHandler()
 logging.root.handlers.append(handler)

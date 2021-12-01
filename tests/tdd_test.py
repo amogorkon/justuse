@@ -12,6 +12,7 @@ import sys
 from contextlib import AbstractContextManager, closing
 from hashlib import sha256
 from pathlib import Path
+from collections.abc import Callable
 from warnings import catch_warnings,  filterwarnings, simplefilter
 
 import pytest
@@ -58,7 +59,7 @@ def test_pypi_model():
     assert type(info)(**info.dict()) == info
 
 
-@pytest.mark.skipif(is_win or Path.cwd().as_posix().startswith("/media/"), reason="Not enough hours in a day")
+	
 def test_setup_py_works(reuse):
     import subprocess
     with ScopedCwd(Path(__file__).parent.parent):
@@ -69,7 +70,7 @@ def test_setup_py_works(reuse):
         assert result
 
 
-@pytest.mark.skipif(not is_win or not Path.cwd().as_posix().startswith("/media/"), reason="Not enough hours in a day")
+	
 @given(st.text())
 def test_jack(text):
     assume(text.isprintable())

@@ -8,7 +8,7 @@ from itertools import takewhile
 from textwrap import dedent
 
 from functools import singledispatch, update_wrapper
-from typing import Callable
+from collections.abc import Callable
 
 
 class _PipeTransformer(ast.NodeTransformer):

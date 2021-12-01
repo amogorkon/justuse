@@ -161,11 +161,8 @@ def _apply_aspect(
                 del _aspectized_functions[previous_object_id]
         except (AttributeError, TypeError, BeartypeCallHintPepParamException):
             continue
-        log.debug(
-            f"{lvl}{decorator.__qualname__} @ "
-            f"{lvl}{module_name}::"
-            f"{lvl}{name} "
-            f"{lvl}[{obj.__class__.__name__}]"
+        log.info(
+            f"Applied {decorator.__qualname__} to {module_name}::{name} [{obj.__class__.__qualname__}]"
         )
         if recursive:
             log.debug(

@@ -14,6 +14,7 @@ import sys
 import tarfile
 import zipfile
 import zipimport
+from collections.abc import Callable
 from functools import lru_cache as cache
 from functools import reduce
 from importlib import metadata
@@ -25,7 +26,7 @@ from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
 from subprocess import run
 from types import ModuleType
-from typing import (Any, Callable, Optional, Protocol, TypeVar, Union,
+from typing import (Any, Optional, Protocol, TypeVar, Union,
                     runtime_checkable)
 from warnings import catch_warnings, filterwarnings, warn
 
@@ -294,21 +295,16 @@ def _pebkac_no_hash(
     package_name: str = None,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
-    try:
-        hashes = {
-            hexdigest_as_JACK(entry.digests.get(hash_algo.name))
-            for entry in _get_package_data(package_name).releases[version]
-        }
-        if hashes:
-            return RuntimeWarning(Message.pebkac_missing_hash(name=package_name, package_name=package_name, version=version, hashes=hashes))
-        else:
-            return RuntimeWarning(Message.no_distribution_found(package_name, version))
-    except KeyError:
-        versions = "\n  - ".join(
-            str(k)
-            for k in _get_package_data(package_name).releases
-        )
-        return RuntimeWarning(f"'{version}' is not a valid version for {package_name}. Available versions are:\x0a\x0a  - {versions}")
+    if version is None or version not in _get_package_data(package_name).releases:
+        version = next(iter(reversed(_get_package_data(package_name).releases)))
+    hashes = {
+        hexdigest_as_JACK(entry.digests.get(hash_algo.name))
+        for entry in _get_package_data(package_name).releases[version]
+    }
+    if hashes:
+        return RuntimeWarning(Message.pebkac_missing_hash(name=package_name, package_name=package_name, version=version, hashes=hashes))
+    else:
+        return RuntimeWarning(Message.no_distribution_found(package_name, version))
 
 
 @pipes

@@ -19,7 +19,7 @@ from atexit import register
 from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, Optional, Type, Union
+from typing import Any, Optional, Type, Union
 from warnings import warn
 
 import requests
@@ -758,7 +758,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if name in self._using:
             spec = self._using[name].spec
         elif not auto_install:
-            spec = importlib.util.find_spec(package_name)
+            spec = importlib.util.find_spec(package_name.replace("-", "_"))
 
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
         log.info("case = %s", case)

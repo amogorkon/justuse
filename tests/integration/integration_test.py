@@ -4,6 +4,7 @@ import re
 import sys
 import tempfile
 import warnings
+from collections.abc import Callable
 from contextlib import closing
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -33,7 +34,7 @@ from tests.unit_test import reuse, ScopedCwd
 import logging
 
 log = logging.getLogger(".".join((__package__, __name__)))
-log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)
+log.setLevel(logging.DEBUG if use.config["debugging"] else logging.NOTSET)
 
 
 params = [
@@ -77,7 +78,6 @@ def test_86_numpy(reuse, name, version):
     return mod  # for the redownload test
 
 
-@pytest.mark.skipif(True, reason="Needs investigation")
 def test_redownload_module(reuse):
     def inject_fault(*, path, **kwargs):
         log.info("fault_inject: deleting %s", path)

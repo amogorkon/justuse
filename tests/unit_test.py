@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import warnings
+from collections.abc import Callable
 from contextlib import AbstractContextManager, closing
 from datetime import datetime
 from hashlib import sha256
@@ -304,7 +305,7 @@ class Restorer:
             lock.release()
 
 
-@pytest.mark.skipif(is_win, reason="windows reloading")
+	
 def test_reloading(reuse):
     fd, file = tempfile.mkstemp(".py", "test_module")
     with Restorer():
