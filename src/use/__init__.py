@@ -186,7 +186,7 @@ def decorator_log_calling_function_and_args(func, *args):
     return wrapper
 
 
-use @ (callable, "", beartype)
+use @ (isbeartypeable, "", beartype)
 # use @ (isbeartypeable, "", decorator_log_calling_function_and_args)
 
 if not test_version:
