@@ -29,14 +29,15 @@ from datetime import datetime
 from enum import Enum, IntEnum
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from logging import DEBUG, INFO, NOTSET, basicConfig, getLogger, root
-from use.logutil import *
 from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
 from warnings import catch_warnings, filterwarnings, simplefilter
 
 from beartype import beartype
 
-home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
+home = Path(os.getenv("JUSTUSE_HOME", 
+    str(Path.home() / ".justuse-python"))
+).absolute()
 
 try:
     home.mkdir(mode=0o755, parents=True, exist_ok=True)
@@ -56,8 +57,17 @@ for file in (
     (home / file).touch(mode=0o755, exist_ok=True)
 
 
-config = {"version_warning": True, "debugging": False, "use_db": True, "testing": False}
-
+config = {
+  "version_warning": True,
+  "disable_jack": bool(int(os.getenv("DISABLE_JACK", "0"))),
+  "debugging": bool(int(os.getenv("DEBUG", "0"))),
+  "use_db": bool(int(os.getenv("USE_DB", "1"))),
+  "testing": bool(int(os.getenv("TESTING", "0"))),
+}
+from toml import loads as toml
+config.update(toml((home / "config_defaults.toml").read_text()))
+config.update(toml((home / "config.toml").read_text()))
+import use.logutil
 
 def fraction_of_day(now: datetime = None) -> float:
     if now is None:
@@ -176,7 +186,7 @@ def decorator_log_calling_function_and_args(func, *args):
     return wrapper
 
 
-use @ (isbeartypeable, "", beartype)
+use @ (callable, "", beartype)
 # use @ (isbeartypeable, "", decorator_log_calling_function_and_args)
 
 if not test_version:
