@@ -92,7 +92,7 @@ def _apply_aspect(
             except:
                 pass
         if mod is None: mod = obj
-        
+        orig_obj = None
         try:
             # then there are things that we really shouldn't aspectize 
             # (up for the user to fill)
@@ -120,9 +120,10 @@ def _apply_aspect(
                     f"because it's a dunder"
                 )
                 continue
-
+            
             if not isinstance(obj, ModuleType):
                 if isclass(obj):
+                    orig_obj = obj
                     obj = object.__getattribute__(obj, "__call__")
                 previous_object_id = id(obj)
                 wrapped = decorator(obj)
@@ -157,7 +158,7 @@ def _apply_aspect(
                 f"with ({check}, {pattern} {decorator.__qualname__}"
             )
             _apply_aspect(
-                obj,
+                orig_obj or obj,
                 check=check,
                 pattern=pattern,
                 decorator=decorator,
