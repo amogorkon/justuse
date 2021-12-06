@@ -27,14 +27,26 @@ import toml
 from furl import furl as URL
 from icontract import ensure, invariant, require
 
-from use import (AmbiguityWarning, Hash, Modes, ModInUse, NotReloadableWarning,
-                 NoValidationWarning, UnexpectedHash, VersionWarning,
-                 __version__, buffet_table, config, home, isfunction)
-from use.aspectizing import _apply_aspect
+from use import (
+    AmbiguityWarning,
+    Hash,
+    Modes,
+    ModInUse,
+    NotReloadableWarning,
+    NoValidationWarning,
+    UnexpectedHash,
+    VersionWarning,
+    __version__,
+    buffet_table,
+    config,
+    home,
+    isfunction,
+)
+from use.aspectizing import apply_aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import Message
 from use.pimp import _build_mod, _ensure_path, _fail_or_default, _parse_name
-from use.pypi_model import PyPI_Project, PyPI_Release, Version
+from use.pypi_model import Version
 from use.tools import methdispatch
 
 log = getLogger(__name__)
@@ -85,7 +97,17 @@ class ProxyModule(ModuleType):
     def __matmul__(self, other: tuple):
         thing = self.__implementation
         check, pattern, decorator = other
-        return _apply_aspect(thing, check, pattern, decorator, aspectize_dunders=False)
+        return apply_aspect(
+            thing,
+            check,
+            pattern,
+            decorator,
+            aspectize_dunders=False,
+            excluded_names={},
+            excluded_types={
+                ProxyModule,
+            },
+        )
 
     def __call__(self, *args, **kwargs):
         with self.__condition:
@@ -504,7 +526,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 name = path.relative_to(source_dir)
             ext = name.as_posix().rpartition(".")[-1]
             name_as_path_with_ext = name.as_posix()
-            name_as_path = name_as_path_with_ext[0: -len(ext) - (1 if ext else 0)]
+            name_as_path = name_as_path_with_ext[0 : -len(ext) - (1 if ext else 0)]
             name = name_as_path.replace("/", ".")
             name_parts = name.split(".")
             package_name = package_name or ".".join(name_parts[:-1])

@@ -1,7 +1,9 @@
-from hashlib import sha256
-from use.hash_alphabet import hexdigest_as_JACK, JACK_as_num, num_as_hexdigest
+print(0)
+import use
 
-s = b'\x9a\xe6\xa8'
-h = sha256(s).hexdigest()
-
-h == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(h)))
+print(1)
+np = use("numpy")
+print(2)
+use.apply_aspect(np, use.is_callable, "", use.log_call, dry_run=True)
+print(3)
+np.array([1,2,3])

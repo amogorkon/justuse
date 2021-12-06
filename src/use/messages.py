@@ -126,27 +126,22 @@ class KwargsMessage(Message):
     pass
 
 
-def _web_aspectizing_overview(*, decorator, check, pattern, targets, hits):
-    with open(use.home / "aspectizing_overview.html", "w") as f:
-        f.write(
-            f"""
+def _web_aspectizing_overview(*, decorator, check, pattern, visited, hits):
+    msg = f"""
 <html>
 <head>
 <script src="/brython.js"></script>
 </head>
-<body onload="brython()">
-<script type="text/python">
-{decorator}
-{check}
-{pattern}
-{targets}
-{hits}
-</script>
-<input id="zone">
-<button id="echo">click !</button>
+<body>
+<ul>
+    {''.join(f"<li>{h}</li>" for h in hits)}
+</ul>
 </body>
-</html>"""
-        )
+</html>
+"""
+
+    with open(use.home / "aspectizing_overview.html", "w") as f:
+        f.write(msg)
     if not config["testing"]:
         webbrowser.open(use.home / "aspectizing_overview.html")
-    return decorator, check, pattern, targets, hits
+    return msg

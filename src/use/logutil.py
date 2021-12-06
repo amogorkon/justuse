@@ -15,20 +15,31 @@ import use
 BASIC_FORMAT: str = "%(levelname)s:%(name)s:%(message)s"
 
 _STYLES: dict[str, tuple[PercentStyle, str]] = {
-    '%': (PercentStyle, BASIC_FORMAT),
-    '{': (StrFormatStyle, '{levelname}:{name}:{message}'),
-    '$': (StringTemplateStyle, '\x1b[1;3${levelno}m${levelname}\x1b[1;30m: \x1b[0m\x1b[1;36m${name}\x1b[1;30m: \x1b[0m${message}'),
+    "%": (PercentStyle, BASIC_FORMAT),
+    "{": (StrFormatStyle, "{levelname}:{name}:{message}"),
+    "$": (
+        StringTemplateStyle,
+        "\x1b[1;3${levelno}m${levelname}\x1b[1;30m: \x1b[0m\x1b[1;36m${name}\x1b[1;30m: \x1b[0m${message}",
+    ),
 }
+
 
 class TimeResult(
     NamedTuple(
         "TimeResult",
-        tm_year=int, tm_mon=int, tm_mday=int,
-        tm_hour=int, tm_min=int, tm_sec=int,
-        tm_wday=int, tm_yday=int, tm_isdst=bool
+        tm_year=int,
+        tm_mon=int,
+        tm_mday=int,
+        tm_hour=int,
+        tm_min=int,
+        tm_sec=int,
+        tm_wday=int,
+        tm_yday=int,
+        tm_isdst=bool,
     )
 ):
     pass
+
 
 class ConsoleFormatter(Formatter):
     """
@@ -75,10 +86,10 @@ class ConsoleFormatter(Formatter):
 
     converter: Callable[[int], TimeResult]
     style: tuple[PercentStyle, str]
-    default_time_format: str = '%Y-%m-%d %H:%M:%S'
-    default_msec_format: str = '%s,%03d'
+    default_time_format: str = "%Y-%m-%d %H:%M:%S"
+    default_msec_format: str = "%s,%03d"
     level = property(lambda self: logging.root.level)
-    
+
     def __init__(self):
         """
         Initialize the formatter
@@ -87,12 +98,7 @@ class ConsoleFormatter(Formatter):
         self.timefmt = "%H:%M:%S"
         style = "$"
         fmt = _STYLES[style][1]
-        super(ConsoleFormatter, self).__init__(
-            fmt=fmt,
-            datefmt=self.datefmt,
-            style=style,
-            validate=True
-        )
+        super(ConsoleFormatter, self).__init__(fmt=fmt, datefmt=self.datefmt, style=style, validate=True)
 
     def formatTime(self, record, datefmt=None):
         """
@@ -133,7 +139,7 @@ class ConsoleFormatter(Formatter):
         sio = io.StringIO()
         tb = ei[2]
         # See issues #9427, #1553375. Commented out for now.
-        #if getattr(self, 'fullstack', False):
+        # if getattr(self, 'fullstack', False):
         #    traceback.print_stack(tb.tb_frame.f_back, file=sio)
         traceback.print_exception(ei[0], ei[1], tb, None, sio)
         s = sio.getvalue()
@@ -196,16 +202,18 @@ class ConsoleFormatter(Formatter):
             s = s + self.formatStack(record.stack_info)
         return s
 
+
 class ConsoleHandler(StreamHandler):
     """
     A handler class which writes logging records, appropriately formatted,
     to a stream. Note that this class does not close the stream, as
     sys.stdout or sys.stderr may be used.
     """
+
     terminator: str
     stream: _IOBase
     formatter: ConsoleFormatter
-    
+
     def __init__(self):
         """
         Initialize the handler.
@@ -218,7 +226,7 @@ class ConsoleHandler(StreamHandler):
         super(StreamHandler, self).__init__(level=logging.DEBUG)
         self.formatter = formatter
         self.fmt = formatter
-        
+
     def flush(self):
         """
         Flushes the stream.
@@ -229,7 +237,7 @@ class ConsoleHandler(StreamHandler):
                 self.stream.flush()
         finally:
             self.release()
-            
+
     def format(self, record):
         """
         Format the specified record.
@@ -286,9 +294,10 @@ class ConsoleHandler(StreamHandler):
         return result
 
     def __repr__(self):
-        return '<%s>' % (self.__class__.__name__)
+        return "<%s>" % (self.__class__.__name__)
+
 
 if use.config["debugging"]:
-  logging.root.setLevel(logging.DEBUG)
+    logging.root.setLevel(logging.DEBUG)
 handler = ConsoleHandler()
 logging.root.handlers.append(handler)
