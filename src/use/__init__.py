@@ -163,7 +163,7 @@ from use.pypi_model import *
 from use.tools import *
 
 use = Use()
-use.__dict__.update({k: v for k, v in globals().items()})  # to avoid recursion-confusion
+use.__dict__.update(dict(globals()))
 use = ProxyModule(use)
 
 use @ (isbeartypeable, "", beartype)
