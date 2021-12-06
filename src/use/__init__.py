@@ -25,19 +25,17 @@ if sys.version_info < (3, 9) and "tests" not in sys.modules:
 import hashlib
 import os
 from collections import defaultdict, deque, namedtuple
+from collections.abc import Callable
 from datetime import datetime
 from enum import Enum, IntEnum
 from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from logging import DEBUG, INFO, NOTSET, basicConfig, getLogger, root
 from pathlib import Path
-from collections.abc import Callable
 from warnings import catch_warnings, filterwarnings, simplefilter
 
 from beartype import beartype
 
-home = Path(os.getenv("JUSTUSE_HOME", 
-    str(Path.home() / ".justuse-python"))
-).absolute()
+home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
 
 try:
     home.mkdir(mode=0o755, parents=True, exist_ok=True)
@@ -58,16 +56,18 @@ for file in (
 
 
 config = {
-  "version_warning": True,
-  "disable_jack": bool(int(os.getenv("DISABLE_JACK", "0"))),
-  "debugging": bool(int(os.getenv("DEBUG", "0"))),
-  "use_db": bool(int(os.getenv("USE_DB", "1"))),
-  "testing": bool(int(os.getenv("TESTING", "0"))),
+    "version_warning": True,
+    "disable_jack": bool(int(os.getenv("DISABLE_JACK", "0"))),
+    "debugging": bool(int(os.getenv("DEBUG", "0"))),
+    "use_db": bool(int(os.getenv("USE_DB", "1"))),
+    "testing": bool(int(os.getenv("TESTING", "0"))),
 }
 from toml import loads as toml
+
 config.update(toml((home / "config_defaults.toml").read_text()))
 config.update(toml((home / "config.toml").read_text()))
 import use.logutil
+
 
 def fraction_of_day(now: datetime = None) -> float:
     if now is None:
@@ -90,7 +90,7 @@ basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
     datefmt=f"%Y%m%d {fraction_of_day()}",
     # datefmt="%Y-%m-%d %H:%M:%S",
-    level=INFO,
+    level=DEBUG,
 )
 
 # !!! SEE NOTE !!!
@@ -155,39 +155,18 @@ from use.aspectizing import *
 from use.buffet_old import buffet_table
 from use.main import *
 from use.messages import *
-
 ### NEEDED FOR TESTS!! ###
 from use.pimp import *
-from use.pimp import _get_package_data, _get_version, _is_version_satisfied, _parse_name, get_supported
+from use.pimp import (_get_package_data, _get_version, _is_version_satisfied,
+                      _parse_name, get_supported)
 from use.pypi_model import *
 from use.tools import *
 
 use = Use()
-use.__dict__.update({k: v for k, v in globals().items()})  # to avoid recursion-confusion
+use.__dict__.update(dict(globals()))
 use = ProxyModule(use)
 
-
-def decorator_log_calling_function_and_args(func, *args):
-    """
-    Decorator to log the calling function and its arguments.
-
-    Args:
-        func (function): The function to decorate.
-        *args: The arguments to pass to the function.
-
-    Returns:
-        function: The decorated function.
-    """
-
-    def wrapper(*args, **kwargs):
-        log.debug(f"{func.__name__}({args}, {kwargs})")
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
 use @ (isbeartypeable, "", beartype)
-# use @ (isbeartypeable, "", decorator_log_calling_function_and_args)
 
 if not test_version:
     sys.modules["use"] = use

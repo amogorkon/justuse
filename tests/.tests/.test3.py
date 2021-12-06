@@ -1,7 +1,3 @@
-class B:
-    __slots__ = ["__dir__", "x"]
-    
-    def __dir__(self):
-        return None
-    
-    
+from hashlib import sha256
+
+print(sha256("foo".encode("utf8")).hexdigest())
