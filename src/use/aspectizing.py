@@ -25,7 +25,7 @@ _aspectized_functions: dict[str, deque[Callable]] = defaultdict(deque)
 "{qualname: [callable]} - the actually decorated functions to undo aspectizing"
 
 
-def apply_aspect(
+def aspect(
     thing,
     check,
     pattern,
@@ -37,10 +37,10 @@ def apply_aspect(
     recursive=True,
     level=0,
     dry_run=False,
-    visited: set = None,
-    excluded_names: set = None,
-    excluded_types: set = None,
-    hits: list = None,
+    visited: set[int] = None,
+    excluded_names: set[str] = None,
+    excluded_types: set[type] = None,
+    hits: list[str] = None,
     last=True,  # and first
 ) -> Any:
     """Apply the aspect as a side-effect, no copy is created."""
@@ -74,11 +74,11 @@ def apply_aspect(
         # object.__dir__ returns *EVERYTHING*, including stuff that is only
         # there on demand but not really used, so we ignore those.
 
-        # We can't really filter by name if it doesn't have a qualname
-        name = getattr(obj, "__qualname__", None) or name
-
         if obj is None:
             continue
+
+        # We can't really filter by name if it doesn't have a qualname
+        name = getattr(obj, "__qualname__", None) or name
 
         if id(obj) in visited:
             continue
@@ -93,10 +93,7 @@ def apply_aspect(
         module_name, loader, spec = get_module_info(lookup_module(obj))
 
         if dry_run:
-            try:
-                hits.append(obj.__qualname__)
-            except AttributeError:  # no qualname
-                hits.append(obj)
+            hits.append(f"{obj.__module__}::{getattr(obj, '__qualname__', name)}")
         else:
             try:
                 previous_object_id = id(obj)
@@ -128,7 +125,7 @@ def apply_aspect(
                 f"{lvl}with ({check}, {pattern} {decorator.__qualname__}"
             )
 
-            apply_aspect(
+            aspect(
                 obj,
                 check,
                 pattern,
@@ -146,6 +143,7 @@ def apply_aspect(
             )
             log.debug("finished recursion on %s", obj)
 
+    # this the last thing in the original call, after all the recursion
     if last and dry_run:
         print("check your browser!")
         _web_aspectizing_overview(
@@ -218,7 +216,7 @@ def isbeartypeable(thing):
             return False
 
 
-def is_callable(thing):
+def any_callable(thing):
     try:
         object.__getattribute__(thing, "__call__")
         return True
@@ -226,23 +224,28 @@ def is_callable(thing):
         return False
 
 
-def log_call(func):
+def woody_logger(func: callable) -> callable:
     """
-    Decorator to log the calling function and its arguments.
+    Decorator to log/track/debug calls and results.
 
     Args:
         func (function): The function to decorate.
-        *args: The arguments to pass to the function.
-
     Returns:
-        function: The decorated function.
+        function: The decorated callable.
     """
 
+    # @wraps(func)
     def wrapper(*args, **kwargs):
-        wraps(func)
-        log.debug(f"{func.__name__}({args}, {kwargs})")
-        print(args, kwargs, "->", func.__qualname__)
+        # log.debug(f"{func.__name__}({args}, {kwargs})")
+        # print(f"{args} {kwargs} -> {func.__module__}::{func.__qualname__}")
         res = func(*args, **kwargs)
-        print(func.__qualname__, "->", res)
+        # print(type(res), res)
+        # print(f"{func.__module__}::")
+        # print(f"{func.__qualname__} -> ")
+        # try:
+        #     print(f'{res}')
+        # except AttributeError:
+        #     pass
+        return res
 
     return wrapper

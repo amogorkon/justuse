@@ -42,7 +42,7 @@ from use import (
     home,
     isfunction,
 )
-from use.aspectizing import apply_aspect
+from use.aspectizing import aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import Message
 from use.pimp import _build_mod, _ensure_path, _fail_or_default, _parse_name
@@ -97,7 +97,7 @@ class ProxyModule(ModuleType):
     def __matmul__(self, other: tuple):
         thing = self.__implementation
         check, pattern, decorator = other
-        return apply_aspect(
+        return aspect(
             thing,
             check,
             pattern,
@@ -526,7 +526,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 name = path.relative_to(source_dir)
             ext = name.as_posix().rpartition(".")[-1]
             name_as_path_with_ext = name.as_posix()
-            name_as_path = name_as_path_with_ext[:-len(ext) - (1 if ext else 0)]
+            name_as_path = name_as_path_with_ext[: -len(ext) - (1 if ext else 0)]
             name = name_as_path.replace("/", ".")
             name_parts = name.split(".")
             package_name = package_name or ".".join(name_parts[:-1])
