@@ -16,7 +16,11 @@ import pytest
 
 if Path("src").is_dir():
     sys.path.insert(0, "") if "" not in sys.path else None
-    lpath, rpath = (sys.path[0 : sys.path.index("") + 1], sys.path[sys.path.index("") + 2 :])
+    lpath, rpath = (
+        sys.path[: sys.path.index("") + 1],
+        sys.path[sys.path.index("") + 2 :],
+    )
+
     try:
         sys.path.clear()
         sys.path.__iadd__(lpath + [os.path.join(os.getcwd(), "src")] + rpath)

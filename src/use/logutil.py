@@ -187,11 +187,8 @@ class ConsoleFormatter(Formatter):
         if self.usesTime():
             record.asctime = self.formatTime(record, self.datefmt)
         s = self.formatMessage(record)
-        if record.exc_info:
-            # Cache the traceback text to avoid converting it multiple times
-            # (it's constant anyway)
-            if not record.exc_text:
-                record.exc_text = self.formatException(record.exc_info)
+        if record.exc_info and not record.exc_text:
+            record.exc_text = self.formatException(record.exc_info)
         if record.exc_text:
             if s[-1:] != "\n":
                 s = s + "\n"
@@ -267,11 +264,8 @@ class ConsoleHandler(StreamHandler):
             # issue 35046: merged two stream.writes into one.
             stream.write(msg + self.terminator)
             self.flush()
-        except RecursionError:  # See issue 36272
+        except (RecursionError, Exception):  # See issue 36272
             raise
-        except Exception:
-            raise
-            self.handleError(record)
 
     def setStream(self, stream):
         """

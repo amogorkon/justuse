@@ -526,7 +526,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 name = path.relative_to(source_dir)
             ext = name.as_posix().rpartition(".")[-1]
             name_as_path_with_ext = name.as_posix()
-            name_as_path = name_as_path_with_ext[0 : -len(ext) - (1 if ext else 0)]
+            name_as_path = name_as_path_with_ext[:-len(ext) - (1 if ext else 0)]
             name = name_as_path.replace("/", ".")
             name_parts = name.split(".")
             package_name = package_name or ".".join(name_parts[:-1])
@@ -797,8 +797,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "fastfail": Modes.fastfail & modes,
             "no_public_installation": Modes.no_public_installation & modes,
             "fatal_exceptions": Modes.fatal_exceptions & modes,
-            "sys_version": Version(".".join(map(str, sys.version_info[0:3]))),
+            "sys_version": Version(".".join(map(str, sys.version_info[:3]))),
         }
+
         result = buffet_table(case, kwargs)
         assert result
 

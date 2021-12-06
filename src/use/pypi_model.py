@@ -117,7 +117,7 @@ class PyPI_Release(BaseModel):
             ext = self.filename[self.filename.index(".tar") + 1 :]
         else:
             ext = pp.name[len(pp.stem) + 1 :]
-        rest = pp.name[0 : -len(ext) - 1]
+        rest = pp.name[:-len(ext) - 1]
 
         not_dash = lambda name: f"(?P<{name}>[^-]+)"
         not_dash_with_int = lambda name: f"(?P<{name}>[0-9][^-]*)"
@@ -254,21 +254,21 @@ def _parse_filename(filename) -> dict:
     else:
         ext = pp.name[len(pp.stem) + 1 :]
         packagetype = "bdist"
-    rest = pp.name[0 : -len(ext) - 1]
+    rest = pp.name[:-len(ext) - 1]
 
     p = rest.split("-")
     np = len(p)
-    if np == 5:
+    if np == 2:
+        distribution, version = p
+    elif np == 3:
+        distribution, version, python_tag = p
+    elif np == 5:
         distribution, version, python_tag, abi_tag, platform_tag = p
     elif np == 6:
         distribution, version, build_tag, python_tag, abi_tag, platform_tag = p
-    elif np == 3:  # ['SQLAlchemy', '0.1.1', 'py2.4']
-        distribution, version, python_tag = p
-    elif np == 2:
-        distribution, version = p
     else:
         return {}
-    
+
     return {
             "distribution": distribution,
             "version": version,
@@ -281,5 +281,5 @@ def _parse_filename(filename) -> dict:
             "packagetype": packagetype,
             "yanked_reason": "",
             "bugtrack_url": "",
-            
+
     }
