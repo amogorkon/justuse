@@ -96,26 +96,16 @@ def aspect(
             hits.append(f"{obj.__module__}::{getattr(obj, '__qualname__', name)}")
         else:
             try:
-                previous_object_id = id(obj)
-                wrapped = decorator(obj)
-                new_object_id = id(wrapped)
-                # We already are there, mustn't forget to track!
-                visited.add(new_object_id)
-
-                _applied_decorators[new_object_id].extend(_applied_decorators[previous_object_id])
-                _applied_decorators[new_object_id].append(decorator)
-
-                _aspectized_functions[new_object_id].extend(_aspectized_functions[previous_object_id])
-                _aspectized_functions[new_object_id].append(obj)
-
-                setattr(thing, name, decorator(obj))
-
-                # cleanup
-                del _applied_decorators[previous_object_id]
-                del _aspectized_functions[previous_object_id]
-                log.info(
-                    f"Applied {decorator.__qualname__} to {module_name}::{name} [{obj.__class__.__qualname__}]"
+                wrapped = _apply_decorator(
+                    thing=thing,
+                    obj=obj,
+                    decorator=decorator,
+                    name=name,
+                    module_name=module_name,
                 )
+                # Mustn't forget to track!
+                visited.add(id(wrapped))
+
             # AttributeError: readonly attribute
             except AttributeError:
                 pass
@@ -154,6 +144,26 @@ def aspect(
             hits=hits,
         )
     return thing
+
+
+def _apply_decorator(*, thing, obj, decorator, name, module_name):
+    previous_object_id = id(obj)
+    wrapped = decorator(obj)
+    new_object_id = id(wrapped)
+
+    _applied_decorators[new_object_id].extend(_applied_decorators[previous_object_id])
+    _applied_decorators[new_object_id].append(decorator)
+
+    _aspectized_functions[new_object_id].extend(_aspectized_functions[previous_object_id])
+    _aspectized_functions[new_object_id].append(obj)
+
+    setattr(thing, name, decorator(obj))
+
+    # cleanup
+    del _applied_decorators[previous_object_id]
+    del _aspectized_functions[previous_object_id]
+    log.info(f"Applied {decorator.__qualname__} to {module_name}::{name} [{obj.__class__.__qualname__}]")
+    return wrapped
 
 
 @require(lambda obj: obj is not None)
@@ -249,3 +259,16 @@ def woody_logger(func: callable) -> callable:
         return res
 
     return wrapper
+
+
+def deaspect(thing, name):
+    obj = getattr(thing, name)
+    unwrapped = _aspectized_functions[id(obj)].pop()
+    _applied_decorators[id(obj)].pop()
+    setattr(thing, name, unwrapped)
+
+    _aspectized_functions[id(unwrapped)].extend(_aspectized_functions[id(obj)])
+    _applied_decorators[id(unwrapped)].extend(_applied_decorators[id(obj)])
+
+    del _aspectized_functions[id(obj)]
+    del _applied_decorators[id(obj)]
