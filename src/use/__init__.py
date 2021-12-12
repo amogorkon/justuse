@@ -149,16 +149,17 @@ with catch_warnings():
         reloading = 2 ** 2
         no_public_installation = 2 ** 4
         fastfail = 2 ** 5
+        recklessness = 2 ** 6
 
 
 from use.aspectizing import *
 from use.buffet_old import buffet_table
 from use.main import *
 from use.messages import *
+
 ### NEEDED FOR TESTS!! ###
 from use.pimp import *
-from use.pimp import (_get_package_data, _get_version, _is_version_satisfied,
-                      _parse_name, get_supported)
+from use.pimp import _get_package_data, _get_version, _is_version_satisfied, _parse_name, get_supported
 from use.pypi_model import *
 from use.tools import *
 

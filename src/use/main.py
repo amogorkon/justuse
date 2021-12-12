@@ -413,12 +413,14 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     ) -> ProxyModule:
         log.debug(f"use-url: {url}")
         exc = None
+        reckless = Modes.recklessness & modes
 
         response = requests.get(str(url))
         if response.status_code != 200:
             raise ImportError(Message.web_error(url, response))
         this_hash = hash_algo.value(response.content).hexdigest()
-        if hash_value:
+
+        if hash_value and not reckless:
             if this_hash != hash_value:
                 return _fail_or_default(
                     UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!"),
