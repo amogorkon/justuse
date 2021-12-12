@@ -643,7 +643,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             RuntimeWarning: May be raised if the auto-installation of the pkg fails for some reason.
 
         Returns:
-            Optional[ModuleType]: Module if successful, default as specified otherwise.
+            ProxyModule|Any: Module if successful, default as specified otherwise.
         """
         log.debug(f"use-kwargs: {package_name} {module_name} {version} {hashes}")
         return self._use_package(
@@ -654,7 +654,10 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
-            modes=modes,
+            auto_install=Modes.auto_install & modes,
+            no_public_installation=Modes.no_public_installation & modes,
+            fastfail=Modes.fastfail & modes,
+            fatal_exceptions=Modes.fatal_exceptions & modes,
         )
 
     @__call__.register(tuple)
@@ -686,7 +689,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             RuntimeWarning: May be raised if the auto-installation of the pkg fails for some reason.
 
         Returns:
-            Optional[ModuleType]: Module if successful, default as specified otherwise.
+            ProxyModule|Any: Module if successful, default as specified otherwise.
         """
         log.debug(f"use-tuple: {pkg_tuple} {version} {hashes}")
         package_name, module_name = pkg_tuple
@@ -698,7 +701,10 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
-            modes=modes,
+            auto_install=Modes.auto_install & modes,
+            no_public_installation=Modes.no_public_installation & modes,
+            fastfail=Modes.fastfail & modes,
+            fatal_exceptions=Modes.fatal_exceptions & modes,
         )
 
     @__call__.register(str)
@@ -742,33 +748,38 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
-            modes=modes,
+            auto_install=Modes.auto_install & modes,
+            no_public_installation=Modes.no_public_installation & modes,
+            fastfail=Modes.fastfail & modes,
+            fatal_exceptions=Modes.fatal_exceptions & modes,
         )
 
+
+    @require(lambda hash_algo: hash_algo != None)
     def _use_package(
         self,
         *,
         name,
-        package_name,
-        module_name,
-        version,
-        hashes,
-        modes,
-        default,
-        hash_algo,
+        package_name: str,
+        module_name: str,
+        version: Version,
+        hashes: set,
+        default: Any,
+        hash_algo: Hash,
         user_msg=Message,
+        no_public_installation: bool = False,
+        auto_install: bool = False,
+        fastfail: bool = False,
+        fatal_exceptions: bool = False,
     ):
         if module_name:
             module_name = module_name.replace("/", ".").replace("-", "_")
-        assert hash_algo != None, "Hash algorithm must be specified"
 
         if isinstance(hashes, str):
             hashes = set(hashes.split())
         if not hashes:
             hashes = set()
         hashes: set = {num_as_hexdigest(JACK_as_num(H)) if is_JACK(H) else H for H in hashes}
-        # we use boolean flags to reduce the complexity of the call signature
-        auto_install: bool = Modes.auto_install & modes
 
         version: Version = Version(version) if version else None
 
@@ -796,9 +807,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "hash_algo": hash_algo,
             "user_msg": user_msg,
             "spec": spec,
-            "fastfail": Modes.fastfail & modes,
-            "no_public_installation": Modes.no_public_installation & modes,
-            "fatal_exceptions": Modes.fatal_exceptions & modes,
+            "fastfail": fastfail,
+            "no_public_installation": no_public_installation,
+            "fatal_exceptions": fatal_exceptions,
             "sys_version": Version(".".join(map(str, sys.version_info[:3]))),
         }
 
