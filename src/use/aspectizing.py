@@ -19,9 +19,9 @@ log = getLogger(__name__)
 from use import AmbiguityWarning
 from use.messages import _web_aspectizing_overview
 
-_applied_decorators: dict[str, deque[Callable]] = defaultdict(deque)
+_applied_decorators: dict[str, deque] = defaultdict(deque)
 "{qualname: [callable]} - to see which decorators are applied, in which order"
-_aspectized_functions: dict[str, deque[Callable]] = defaultdict(deque)
+_aspectized_functions: dict[str, deque] = defaultdict(deque)
 "{qualname: [callable]} - the actually decorated functions to undo aspectizing"
 
 
