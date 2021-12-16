@@ -30,7 +30,7 @@ def aspect(
     check,
     pattern,
     decorator,
-    /,
+   
     *,
     regex=None,
     aspectize_dunders=False,

@@ -892,7 +892,7 @@ def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist
     )
 
 
-def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> Optional[Version]:
+def _get_version(name: Optional[str] = None, package_name=None, mod=None) -> Optional[Version]:
     version: Optional[Union[Callable[...], Version, Version, str]] = None
     for lookup_name in (name, package_name):
         if not lookup_name:

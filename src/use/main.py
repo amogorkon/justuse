@@ -393,7 +393,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         self._using[name] = ModInUse(name, mod, path, spec, frame)
 
     @methdispatch
-    def __call__(self, thing, /, *args, **kwargs):
+    def __call__(self, thing, *args, **kwargs):
         raise NotImplementedError(Message.cant_use(thing))
 
     @require(lambda hash_algo: hash_algo in Hash)
@@ -402,7 +402,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     def _use_url(
         self,
         url: URL,
-        /,
+       
         *,
         hash_algo=Hash.sha256,
         hash_value=None,
@@ -453,7 +453,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     def _use_path(
         self,
         path,
-        /,
+       
         *,
         package_name=None,
         initial_globals=None,
@@ -616,7 +616,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     def _use_kwargs(
         self,
         _: None,  # sic! otherwise single-dispatch with 'empty' *args won't work
-        /,
+       
         *,
         package_name: str = None,
         module_name: str = None,
@@ -664,7 +664,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     def _use_tuple(
         self,
         pkg_tuple,
-        /,
+       
         *,
         version: str = None,
         hash_algo=Hash.sha256,
@@ -711,7 +711,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     def _use_str(
         self,
         name: str,
-        /,
+       
         *,
         version: str = None,
         hash_algo=Hash.sha256,
