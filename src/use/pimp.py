@@ -927,7 +927,7 @@ def _build_mod(
 
     package_name = package_name or ""
     mod = ModuleType(name)
-    log.info(f"{Path.cwd()=} {package_name=} {name=} {module_path=}")
+    log.info(f"{Path.cwd()} {package_name} {name} {module_path}")
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = str(module_path)
     mod.__path__ = [str(module_path.parent)]

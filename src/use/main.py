@@ -474,7 +474,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         Returns:
             Optional[ModuleType]: The module if it was imported, otherwise whatever was specified as default.
         """
-        log.info(f"use-path: {path}: {Path.cwd()=} {package_name=}")
+        log.info(f"use-path: {path}: {Path.cwd()} {package_name}")
         initial_globals = initial_globals or {}
 
         reloading = bool(Use.reloading & modes)
@@ -486,7 +486,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             return _fail_or_default(ImportError(f"Can't import directory {path}"), default)
 
         original_cwd = source_dir = Path.cwd()
-        log.info(f"{original_cwd=} {source_dir=}")
+        log.info(f"{original_cwd} {source_dir}")
         try:
             # calling from another use()d module
             # let's see where we started
@@ -533,7 +533,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             name_parts = name.split(".")
             package_name = package_name or ".".join(name_parts[:-1])
 
-            log.info(f"{package_name=}, {name=}")
+            log.info(f"{package_name}, {name}")
             # os.chdir(path.parent)
             # name = path.stem
             if reloading:
