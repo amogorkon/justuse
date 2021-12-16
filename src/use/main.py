@@ -823,4 +823,4 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=result, spec=spec, frame=frame)
             return ProxyModule(result)
-        raise RuntimeError(f"{result=!r} is neither a module nor an Exception")
+        raise RuntimeError(f"{result} is neither a module nor an Exception")
