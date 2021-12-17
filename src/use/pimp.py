@@ -17,9 +17,12 @@ import zipimport
 from collections.abc import Callable
 from functools import lru_cache as cache
 from functools import reduce
-from importlib import metadata
+try:
+    from importlib import metadata
+except ImportError:
+    # Backport for 3.7 / mypy thinks this is a redefinition
+    import importlib_metadata as metadata # type: ignore
 from importlib.machinery import ModuleSpec, SourceFileLoader
-from importlib.metadata import PackageNotFoundError
 from itertools import chain
 from logging import getLogger
 from pathlib import Path, PureWindowsPath, WindowsPath
@@ -561,7 +564,7 @@ def _find_module_in_venv(package_name, version, relp):
         sys.path.clear()
         sys.path.insert(0, str(site_dir))
         try:
-            dist = importlib.metadata.Distribution.from_name(package_name)
+            dist = metadata.Distribution.from_name(package_name)
             while not mod_relative_to_site:
                 pps = [pp for pp in dist.files if pp.as_posix() == relp]
                 if pps:
@@ -570,7 +573,7 @@ def _find_module_in_venv(package_name, version, relp):
                 if len(relp.split("/")) == 0:
                     break
                 relp = "/".join(relp.split("/")[1:])
-        except PackageNotFoundError:
+        except metadata.PackageNotFoundError:
             continue
         finally:
             sys.path.remove(str(site_dir))

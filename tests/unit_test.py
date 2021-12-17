@@ -8,7 +8,15 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, closing
 from datetime import datetime
 from hashlib import sha256
-from importlib.metadata import PackageNotFoundError, distribution
+try:
+    from importlib.metadata import (
+        PackageNotFoundError, distribution
+    )
+except ImportError:
+    # Backport for 3.7 / mypy thinks this is a redefinition
+    from importlib_metadata import ( # type: ignore
+        PackageNotFoundError, distribution
+    )
 from importlib.util import find_spec
 from pathlib import Path
 from subprocess import STDOUT, check_output
