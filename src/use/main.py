@@ -59,10 +59,16 @@ _reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
 _using = {}
 
 # sometimes all you need is a sledge hammer..
+
 @register
 def _release_locks():
+    try:
+        locks = threading._shutdown_locks
+    except AttributeError:
+        # Early versions of 3.7 and below
+        locks = [l for l in (threading._active_limbo_lock, threading._main_thread._tstate_lock) if l.locked()]
     for _ in range(2):
-        [lock.unlock() for lock in threading._shutdown_locks]
+        [lock.unlock() for lock in locks]
         [reloader.stop() for reloader in _reloaders.values()]
 
 
