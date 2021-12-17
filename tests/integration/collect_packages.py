@@ -52,7 +52,7 @@ def find_meta(pkg: dict[str, str]):
         return
     meta = r.json()
     link_options = [meta["info"]["home_page"]]
-    if (project_urls := meta["info"].get("project_urls")) is not None:
+    if (project_urls = meta["info"].get("project_urls")) is not None:
         link_options += list(project_urls.values())
     owner, repo, url = get_github(link_options)
     stars = get_stars(owner, repo)

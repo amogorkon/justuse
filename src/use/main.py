@@ -505,7 +505,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 else:
                     source_dir = Path.cwd()
             if not source_dir.joinpath(path).exists():
-                if files := [*[*source_dir.rglob(f"**/{path}")]]:
+                files = [*[*source_dir.rglob(f"**/{path}")]]
+                if files:
                     source_dir = _ensure_path(files[0]).parent
                 else:
                     source_dir = Path.cwd()

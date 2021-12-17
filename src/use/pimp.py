@@ -211,13 +211,13 @@ def archive_meta(artifact_path):
 
     archive, names = functions.get()
     meta = dict(names << filter(DIST_PKG_INFO_REGEX.search) << map(functions.read_entry))
-    meta.update(
-        dict(
-            (lp := l.partition(": "), (lp[0].lower().replace("-", "_"), lp[2]))[-1]
-            for l in meta.get("METADATA", meta.get("PKG-INFO"))
-            if ": " in l
-        )
-    )
+    
+    for l in meta.get("METADATA", meta.get("PKG-INFO")):
+        if not ": " in l:
+            continue
+        lp = l.partition(": ")
+        k, v = lp[0].lower().replace("-", "_"), lp[2]
+        meta[k] = v
     name = meta.get("name", Path(artifact_path).stem.split("-")[0])
     meta["name"] = name
     if "top_level" not in meta:
@@ -443,14 +443,15 @@ def _auto_install(
             .replace("/__init__.py", "")
             .replace("-", "_")
         )
-        return (
-            mod := _load_venv_entry(
-                package_name=package_name,
-                module_name=module_name,
-                module_path=module_path,
-                installation_path=installation_path,
-            )
+        
+        mod = _load_venv_entry(
+            package_name=package_name,
+            module_name=module_name,
+            module_path=module_path,
+            installation_path=installation_path,
         )
+        return mod
+        
 
     finally:
         os.chdir(orig_cwd)
@@ -472,25 +473,23 @@ def _process(*argv, env={}):
     _realenv = {
         k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)
     }
-    o = run(
-        **(
-            setup := dict(
-                executable=(exe := argv[0]),
-                args=[*map(str, argv)],
-                bufsize=1024,
-                input="",
-                capture_output=False,
-                timeout=45000,
-                check=True,
-                close_fds=True,
-                env=_realenv,
-                encoding="ISO-8859-1",
-                errors="ISO-8859-1",
-                text=True,
-                shell=False,
-            )
-        )
+    exe = argv[0]
+    setup = dict(
+         executable=exe,
+         args=[*map(str, argv)],
+         bufsize=1024,
+         input="",
+         capture_output=False,
+         timeout=45000,
+         check=True,
+         close_fds=True,
+         env=_realenv,
+         encoding="ISO-8859-1",
+         errors="ISO-8859-1",
+         text=True,
+         shell=False,
     )
+    o = run(**setup)
     if o.returncode == 0:
         return o
     raise RuntimeError(  # cov: exclude
@@ -578,7 +577,7 @@ def _find_module_in_venv(package_name, version, relp):
             sys.path += osp
     if mod_relative_to_site:
         module_path = site_dir / mod_relative_to_site.as_posix()
-        return (ret := site_dir, module_path)
+        return site_dir, module_path
     return ret
 
 

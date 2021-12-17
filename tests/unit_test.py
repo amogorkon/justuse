@@ -349,16 +349,17 @@ def test_clear_registry(reuse):
 
 
 def installed_or_skip(reuse, name, version=None):
-    if not (spec := find_spec(name)):
+    spec = find_spec(name)
+    if not spec:
         pytest.skip(f"{name} not installed")
         return False
     try:
         dist = distribution(spec.name)
     except PackageNotFoundError as pnfe:
         pytest.skip(f"{name} partially installed: {spec=}, {pnfe}")
-
+    ver = dist.metadata["version"]
     if not (
-        (ver := dist.metadata["version"]) and (not version or reuse.Version(ver) == reuse.Version(version))
+        ver and (not version or reuse.Version(ver) == reuse.Version(version))
     ):
         pytest.skip(f"found '{name}' v{ver}, but require v{version}")
         return False
@@ -421,7 +422,8 @@ def test_86_numpy_case1011(reuse, name, version, hashes):
         hashes=hashes,
         modes=use.auto_install,
     )
-    assert (reuse.Version(modver) if (modver := reuse._get_version(mod=mod)) else version) == reuse.Version(
+    modver = reuse._get_version(mod=mod)
+    assert (reuse.Version(modver) if modver else version) == reuse.Version(
         version
     )
 
