@@ -29,8 +29,7 @@ from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
 from subprocess import run
 from types import ModuleType
-from typing import (Any, Optional, Protocol, TypeVar, Union,
-                    runtime_checkable)
+from typing import Any, Optional, TypeVar, Union
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -42,6 +41,10 @@ from packaging import tags
 from packaging.specifiers import SpecifierSet
 
 import use
+try:
+    from typing import Generic, Protocol, runtime_checkable
+except ImportError:
+    from use.typing_shims import *
 from use import Hash, Modes, VersionWarning, config
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import Message, _web_no_version_or_hash_provided
@@ -53,7 +56,7 @@ log = getLogger(__name__)
 
 T = TypeVar("T", bound=Callable[[str, str, Version, set[str]], str])
 @runtime_checkable
-class MissingHashFotmatter(Protocol[T]):
+class MissingHashFormatter(Generic[T], Protocol[T]):
     pass
 
 
@@ -113,7 +116,7 @@ def execute_wrapped(sql: str, params: tuple):
     return getattr(___use, "registry").execute(sql, params)
 
 
-@cache
+@cache(maxsize=0)
 def get_supported() -> frozenset[PlatformTag]: # cov: exclude
     """
     Results of this function are cached. They are expensive to
@@ -279,7 +282,7 @@ def _pebkac_no_version(
     hash_algo=None,
     package_name: str = None,
     module_name: str = None,
-    message_formatter: MissingHashFotmatter = Message.pebkac_missing_hash,
+    message_formatter: MissingHashFormatter = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
 
@@ -751,7 +754,7 @@ def _load_venv_entry(*, package_name, module_name, installation_path, module_pat
                 sys.path.append(p)
 
 
-@cache(maxsize=512)
+@cache(maxsize=0)
 def _get_package_data(package_name: str) -> PyPI_Project:
     json_url = f"https://pypi.org/pypi/{package_name}/json"
     response = requests.get(json_url)
@@ -822,7 +825,7 @@ def _filtered_and_ordered_data(data: PyPI_Project, version: Optional[Version] = 
     )
 
 
-@cache
+@cache(maxsize=0)
 def _is_version_satisfied(specifier: str, sys_version) -> bool:
     """
     SpecifierSet("") matches anything, no need to artificially
