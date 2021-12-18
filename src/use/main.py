@@ -59,16 +59,10 @@ _reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
 _using = {}
 
 # sometimes all you need is a sledge hammer..
-
 @register
 def _release_locks():
-    try:
-        locks = threading._shutdown_locks
-    except AttributeError:
-        # Early versions of 3.7 and below
-        locks = [l for l in (threading._active_limbo_lock, threading._main_thread._tstate_lock) if l and l.locked()]
     for _ in range(2):
-        [lock.unlock() for lock in locks]
+        [lock.unlock() for lock in threading._shutdown_locks]
         [reloader.stop() for reloader in _reloaders.values()]
 
 
@@ -399,7 +393,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         self._using[name] = ModInUse(name, mod, path, spec, frame)
 
     @methdispatch
-    def __call__(self, thing, *args, **kwargs):
+    def __call__(self, thing, /, *args, **kwargs):
         raise NotImplementedError(Message.cant_use(thing))
 
     @require(lambda hash_algo: hash_algo in Hash)
@@ -408,7 +402,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     def _use_url(
         self,
         url: URL,
-       
+        /,
         *,
         hash_algo=Hash.sha256,
         hash_value=None,
@@ -459,7 +453,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     def _use_path(
         self,
         path,
-       
+        /,
         *,
         package_name=None,
         initial_globals=None,
@@ -480,7 +474,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         Returns:
             Optional[ModuleType]: The module if it was imported, otherwise whatever was specified as default.
         """
-        log.info(f"use-path: {path}: {Path.cwd()} {package_name}")
+        log.info(f"use-path: {path}: {Path.cwd()=} {package_name=}")
         initial_globals = initial_globals or {}
 
         reloading = bool(Use.reloading & modes)
@@ -492,7 +486,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             return _fail_or_default(ImportError(f"Can't import directory {path}"), default)
 
         original_cwd = source_dir = Path.cwd()
-        log.info(f"{original_cwd} {source_dir}")
+        log.info(f"{original_cwd=} {source_dir=}")
         try:
             # calling from another use()d module
             # let's see where we started
@@ -511,8 +505,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                 else:
                     source_dir = Path.cwd()
             if not source_dir.joinpath(path).exists():
-                files = [*[*source_dir.rglob(f"**/{path}")]]
-                if files:
+                if files := [*[*source_dir.rglob(f"**/{path}")]]:
                     source_dir = _ensure_path(files[0]).parent
                 else:
                     source_dir = Path.cwd()
@@ -540,7 +533,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             name_parts = name.split(".")
             package_name = package_name or ".".join(name_parts[:-1])
 
-            log.info(f"{package_name}, {name}")
+            log.info(f"{package_name=}, {name=}")
             # os.chdir(path.parent)
             # name = path.stem
             if reloading:
@@ -623,7 +616,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     def _use_kwargs(
         self,
         _: None,  # sic! otherwise single-dispatch with 'empty' *args won't work
-       
+        /,
         *,
         package_name: str = None,
         module_name: str = None,
@@ -671,7 +664,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     def _use_tuple(
         self,
         pkg_tuple,
-       
+        /,
         *,
         version: str = None,
         hash_algo=Hash.sha256,
@@ -718,7 +711,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     def _use_str(
         self,
         name: str,
-       
+        /,
         *,
         version: str = None,
         hash_algo=Hash.sha256,
@@ -830,4 +823,4 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=result, spec=spec, frame=frame)
             return ProxyModule(result)
-        raise RuntimeError(f"{result} is neither a module nor an Exception")
+        raise RuntimeError(f"{result=!r} is neither a module nor an Exception")

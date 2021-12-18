@@ -12,9 +12,9 @@ from typing import NamedTuple
 import use
 
 
-BASIC_FORMAT = "%(levelname)s:%(name)s:%(message)s"
+BASIC_FORMAT: str = "%(levelname)s:%(name)s:%(message)s"
 
-_STYLES = {
+_STYLES: dict[str, tuple[PercentStyle, str]] = {
     "%": (PercentStyle, BASIC_FORMAT),
     "{": (StrFormatStyle, "{levelname}:{name}:{message}"),
     "$": (
@@ -84,9 +84,11 @@ class ConsoleFormatter(Formatter):
                         the record is emitted
     """
 
-    default_time_format = "%Y-%m-%d %H:%M:%S"
-    default_msec_format = "%s,%03d"
-    level = property(lambda : self )
+    converter: Callable[[int], TimeResult]
+    style: tuple[PercentStyle, str]
+    default_time_format: str = "%Y-%m-%d %H:%M:%S"
+    default_msec_format: str = "%s,%03d"
+    level = property(lambda self: logging.root.level)
 
     def __init__(self):
         """
@@ -96,7 +98,7 @@ class ConsoleFormatter(Formatter):
         self.timefmt = "%H:%M:%S"
         style = "$"
         fmt = _STYLES[style][1]
-        super(ConsoleFormatter, self).__init__(fmt=fmt, datefmt=self.datefmt, style=style)
+        super(ConsoleFormatter, self).__init__(fmt=fmt, datefmt=self.datefmt, style=style, validate=True)
 
     def formatTime(self, record, datefmt=None):
         """
@@ -105,7 +107,7 @@ class ConsoleFormatter(Formatter):
         This method should be called from format() by a formatter which
         wants to make use of a formatted time. This method can be overridden
         in formatters to provide for any specific requirement, but the
-        basic behaviour is as follows (a string) is specified,
+        basic behaviour is as follows: if datefmt (a string) is specified,
         it is used with time.strftime() to format the creation time of the
         record. Otherwise, an ISO8601-like (or RFC 3339-like) format is used.
         The resulting string is returned. This function uses a user-configurable
@@ -205,6 +207,9 @@ class ConsoleHandler(StreamHandler):
     sys.stdout or sys.stderr may be used.
     """
 
+    terminator: str
+    stream: _IOBase
+    formatter: ConsoleFormatter
 
     def __init__(self):
         """
@@ -239,7 +244,7 @@ class ConsoleHandler(StreamHandler):
         """
         if self.formatter is None:
             self.formatter = ConsoleFormatter()
-        fmt = self.formatter
+        fmt: ConsoleFormatter = self.formatter
         return fmt.format(record)
 
     def emit(self, record):
@@ -256,10 +261,10 @@ class ConsoleHandler(StreamHandler):
         try:
             msg = self.format(record)
             stream = self.stream
-            # issue 35046 
+            # issue 35046: merged two stream.writes into one.
             stream.write(msg + self.terminator)
             self.flush()
-        except (RecursionError, Exception): # See issue 36272
+        except (RecursionError, Exception):  # See issue 36272
             raise
 
     def setStream(self, stream):

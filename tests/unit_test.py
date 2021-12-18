@@ -8,15 +8,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, closing
 from datetime import datetime
 from hashlib import sha256
-try:
-    from importlib.metadata import (
-        PackageNotFoundError, distribution
-    )
-except ImportError:
-    # Backport for 3.7 / mypy thinks this is a redefinition
-    from importlib_metadata import ( # type: ignore
-        PackageNotFoundError, distribution
-    )
+from importlib.metadata import PackageNotFoundError, distribution
 from importlib.util import find_spec
 from pathlib import Path
 from subprocess import STDOUT, check_output
@@ -357,17 +349,16 @@ def test_clear_registry(reuse):
 
 
 def installed_or_skip(reuse, name, version=None):
-    spec = find_spec(name)
-    if not spec:
+    if not (spec := find_spec(name)):
         pytest.skip(f"{name} not installed")
         return False
     try:
         dist = distribution(spec.name)
     except PackageNotFoundError as pnfe:
         pytest.skip(f"{name} partially installed: {spec=}, {pnfe}")
-    ver = dist.metadata["version"]
+
     if not (
-        ver and (not version or reuse.Version(ver) == reuse.Version(version))
+        (ver := dist.metadata["version"]) and (not version or reuse.Version(ver) == reuse.Version(version))
     ):
         pytest.skip(f"found '{name}' v{ver}, but require v{version}")
         return False
@@ -430,8 +421,7 @@ def test_86_numpy_case1011(reuse, name, version, hashes):
         hashes=hashes,
         modes=use.auto_install,
     )
-    modver = reuse._get_version(mod=mod)
-    assert (reuse.Version(modver) if modver else version) == reuse.Version(
+    assert (reuse.Version(modver) if (modver := reuse._get_version(mod=mod)) else version) == reuse.Version(
         version
     )
 

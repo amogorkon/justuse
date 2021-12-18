@@ -17,19 +17,17 @@ import zipimport
 from collections.abc import Callable
 from functools import lru_cache as cache
 from functools import reduce
-try:
-    from importlib import metadata
-except ImportError:
-    # Backport for 3.7 / mypy thinks this is a redefinition
-    import importlib_metadata as metadata # type: ignore
+from importlib import metadata
 from importlib.machinery import ModuleSpec, SourceFileLoader
+from importlib.metadata import PackageNotFoundError
 from itertools import chain
 from logging import getLogger
 from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
 from subprocess import run
 from types import ModuleType
-from typing import Any, Optional, TypeVar, Union
+from typing import (Any, Optional, Protocol, TypeVar, Union,
+                    runtime_checkable)
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -41,10 +39,6 @@ from packaging import tags
 from packaging.specifiers import SpecifierSet
 
 import use
-try:
-    from typing import Generic, Protocol, runtime_checkable
-except ImportError:
-    from use.typing_shims import *
 from use import Hash, Modes, VersionWarning, config
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import Message, _web_no_version_or_hash_provided
@@ -56,7 +50,7 @@ log = getLogger(__name__)
 
 T = TypeVar("T", bound=Callable[[str, str, Version, set[str]], str])
 @runtime_checkable
-class MissingHashFormatter(Generic[T], Protocol[T]):
+class MissingHashFotmatter(Protocol[T]):
     pass
 
 
@@ -116,7 +110,7 @@ def execute_wrapped(sql: str, params: tuple):
     return getattr(___use, "registry").execute(sql, params)
 
 
-@cache(maxsize=0)
+@cache
 def get_supported() -> frozenset[PlatformTag]: # cov: exclude
     """
     Results of this function are cached. They are expensive to
@@ -217,13 +211,13 @@ def archive_meta(artifact_path):
 
     archive, names = functions.get()
     meta = dict(names << filter(DIST_PKG_INFO_REGEX.search) << map(functions.read_entry))
-    
-    for l in meta.get("METADATA", meta.get("PKG-INFO")):
-        if not ": " in l:
-            continue
-        lp = l.partition(": ")
-        k, v = lp[0].lower().replace("-", "_"), lp[2]
-        meta[k] = v
+    meta.update(
+        dict(
+            (lp := l.partition(": "), (lp[0].lower().replace("-", "_"), lp[2]))[-1]
+            for l in meta.get("METADATA", meta.get("PKG-INFO"))
+            if ": " in l
+        )
+    )
     name = meta.get("name", Path(artifact_path).stem.split("-")[0])
     meta["name"] = name
     if "top_level" not in meta:
@@ -282,7 +276,7 @@ def _pebkac_no_version(
     hash_algo=None,
     package_name: str = None,
     module_name: str = None,
-    message_formatter: MissingHashFormatter = Message.pebkac_missing_hash,
+    message_formatter: MissingHashFotmatter = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
 
@@ -449,15 +443,14 @@ def _auto_install(
             .replace("/__init__.py", "")
             .replace("-", "_")
         )
-        
-        mod = _load_venv_entry(
-            package_name=package_name,
-            module_name=module_name,
-            module_path=module_path,
-            installation_path=installation_path,
+        return (
+            mod := _load_venv_entry(
+                package_name=package_name,
+                module_name=module_name,
+                module_path=module_path,
+                installation_path=installation_path,
+            )
         )
-        return mod
-        
 
     finally:
         os.chdir(orig_cwd)
@@ -479,23 +472,25 @@ def _process(*argv, env={}):
     _realenv = {
         k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)
     }
-    exe = argv[0]
-    setup = dict(
-         executable=exe,
-         args=[*map(str, argv)],
-         bufsize=1024,
-         input="",
-         capture_output=False,
-         timeout=45000,
-         check=True,
-         close_fds=True,
-         env=_realenv,
-         encoding="ISO-8859-1",
-         errors="ISO-8859-1",
-         text=True,
-         shell=False,
+    o = run(
+        **(
+            setup := dict(
+                executable=(exe := argv[0]),
+                args=[*map(str, argv)],
+                bufsize=1024,
+                input="",
+                capture_output=False,
+                timeout=45000,
+                check=True,
+                close_fds=True,
+                env=_realenv,
+                encoding="ISO-8859-1",
+                errors="ISO-8859-1",
+                text=True,
+                shell=False,
+            )
+        )
     )
-    o = run(**setup)
     if o.returncode == 0:
         return o
     raise RuntimeError(  # cov: exclude
@@ -567,7 +562,7 @@ def _find_module_in_venv(package_name, version, relp):
         sys.path.clear()
         sys.path.insert(0, str(site_dir))
         try:
-            dist = metadata.Distribution.from_name(package_name)
+            dist = importlib.metadata.Distribution.from_name(package_name)
             while not mod_relative_to_site:
                 pps = [pp for pp in dist.files if pp.as_posix() == relp]
                 if pps:
@@ -576,14 +571,14 @@ def _find_module_in_venv(package_name, version, relp):
                 if len(relp.split("/")) == 0:
                     break
                 relp = "/".join(relp.split("/")[1:])
-        except metadata.PackageNotFoundError:
+        except PackageNotFoundError:
             continue
         finally:
             sys.path.remove(str(site_dir))
             sys.path += osp
     if mod_relative_to_site:
         module_path = site_dir / mod_relative_to_site.as_posix()
-        return site_dir, module_path
+        return (ret := site_dir, module_path)
     return ret
 
 
@@ -754,7 +749,7 @@ def _load_venv_entry(*, package_name, module_name, installation_path, module_pat
                 sys.path.append(p)
 
 
-@cache(maxsize=0)
+@cache(maxsize=512)
 def _get_package_data(package_name: str) -> PyPI_Project:
     json_url = f"https://pypi.org/pypi/{package_name}/json"
     response = requests.get(json_url)
@@ -825,7 +820,7 @@ def _filtered_and_ordered_data(data: PyPI_Project, version: Optional[Version] = 
     )
 
 
-@cache(maxsize=0)
+@cache
 def _is_version_satisfied(specifier: str, sys_version) -> bool:
     """
     SpecifierSet("") matches anything, no need to artificially
@@ -897,7 +892,7 @@ def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist
     )
 
 
-def _get_version(name: Optional[str] = None, package_name=None, mod=None) -> Optional[Version]:
+def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> Optional[Version]:
     version: Optional[Union[Callable[...], Version, Version, str]] = None
     for lookup_name in (name, package_name):
         if not lookup_name:
@@ -932,7 +927,7 @@ def _build_mod(
 
     package_name = package_name or ""
     mod = ModuleType(name)
-    log.info(f"{Path.cwd()} {package_name} {name} {module_path}")
+    log.info(f"{Path.cwd()=} {package_name=} {name=} {module_path=}")
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = str(module_path)
     mod.__path__ = [str(module_path.parent)]
