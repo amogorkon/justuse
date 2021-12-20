@@ -97,6 +97,7 @@ class ProxyModule(ModuleType):
     def __matmul__(self, other: tuple):
         thing = self.__implementation
         check, pattern, decorator = other
+		#inside return aspect we should have our own qualname which contains name, path and version
         return aspect(
             thing,
             check,
