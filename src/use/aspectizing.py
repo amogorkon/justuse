@@ -29,6 +29,7 @@ def aspect(
     thing,
     check,
     pattern,
+    qual_name,
     decorator,
     /,
     *,
@@ -43,6 +44,8 @@ def aspect(
     hits: list[str] = None,
     last=True,  # and first
 ) -> Any:
+    __name__ = func.__module__.__name__
+    qual_name = (func.__name__)
     """Apply the aspect as a side-effect, no copy is created."""
     if visited is None:
         visited = set()
