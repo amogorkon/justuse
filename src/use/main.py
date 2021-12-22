@@ -97,8 +97,15 @@ class ProxyModule(ModuleType):
     def __matmul__(self, other: tuple):
         thing = self.__implementation
         check, qual_name, decorator = other
-	
-        return aspect(
+	if len(other) == 2:
+		pass
+	if len(other) >= 3:
+		#instead of pass: We have the behavior of not decorating anything with the function
+		#after that we have the func.__name__ as an exception, we can put those into a tuple
+		pass
+		#after this we return the a non-recursive copy of aspect()
+		
+        return Dynamic_aspect(
             thing,
             check,
             pattern,
