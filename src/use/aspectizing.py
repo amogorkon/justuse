@@ -23,7 +23,79 @@ _applied_decorators: dict[str, deque[Callable]] = defaultdict(deque)
 "{qualname: [callable]} - to see which decorators are applied, in which order"
 _aspectized_functions: dict[str, deque[Callable]] = defaultdict(deque)
 "{qualname: [callable]} - the actually decorated functions to undo aspectizing"
-
+def Dynamic_aspect(
+    thing,
+    check,
+    pattern,
+    qual_name,
+    decorator,
+    /,
+    *,
+    regex=None,
+    aspectize_dunders=False,
+    level=0,
+    dry_run=False,
+    visited: set[int] = None,
+    excluded_names: set[str] = None,
+    excluded_types: set[type] = None,
+    hits: list[str] = None,
+    last=True,
+) -> Any:
+    """Apply the aspect as a side-effect, no copy is created."""
+    if visited is None:
+        visited = set()
+    if id(thing) in visited:
+        return
+    if hits is None:
+        hits = []
+    if excluded_names is None:
+        excluded_names = set()
+    if excluded_types is None:
+        excluded_types = set()
+    if not regex:
+        regex = re.compile(pattern, re.DOTALL)
+    lvl = "".join([" "] * level)
+    for name in object.__dir__(thing):
+        obj = getattr(thing, name, None)
+        if obj is None:
+            continue
+        name = getattr(obj, "__qualname__", None) or name
+        if id(obj) in visited:
+            continue
+        visited.add(id(obj))
+        if name in excluded_names or type(obj) in excluded_types or not check(obj) or not regex.match(name):
+            continue
+        module_name, loader, spec = get_module_info(lookup_module(obj))
+        if dry_run:
+            hits.append(f"{obj.__module__}::{getattr(obj, '__qualname__', name)}")
+        else:
+            try:
+                wrapped = _apply_decorator(
+                    thing=thing,
+                    obj=obj,
+                    decorator=decorator,
+                    name=name,
+                    module_name=module_name,
+                )
+                # Mustn't forget to track!
+                visited.add(id(wrapped))
+            except AttributeError:
+                pass
+            Dynamic_aspect(
+                obj,
+                check,
+                pattern,
+                decorator,
+                regex=regex,
+                aspectize_dunders=aspectize_dunders,
+                excluded_names=excluded_names,
+                excluded_types=excluded_types,
+                visited=visited,
+                level=level + 1,
+                dry_run=dry_run,
+                hits=hits,
+                last=False,
+            )
 
 def aspect(
     thing,
