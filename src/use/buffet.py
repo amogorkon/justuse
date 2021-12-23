@@ -12,6 +12,14 @@ from use.pimp import (_auto_install, _ensure_version,
 
 def buffet_table(case, kwargs):
     match case: # type: ignore
+#            +-------------------------- version specified?
+#            |  +----------------------- hash specified?
+#            |  |  +-------------------- already publicly available?
+#            |  |  |  +----------------- auto-install requested?
+#            |  |  |  |
+#            v  v  v  v      
+#            |  |  |  | 
+#            |  |  |  |      
         case _, _, 0, 0: return ImportError(Message.cant_import(**kwargs))
         case 0, _, 1, 0: return _import_public_no_install(**kwargs)
         case 1, _, 1, 0: return _import_public_no_install(**kwargs) >> _ensure_version(**kwargs)
