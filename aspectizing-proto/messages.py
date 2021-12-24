@@ -4,6 +4,7 @@ How it works is quite magical - the lambdas prevent the f-strings from being pre
 Fun fact: f-strings are firmly rooted in the AST.
 """
 
+# importing libraries
 import webbrowser
 from enum import Enum
 
@@ -11,7 +12,7 @@ import use
 from use import __version__, config
 from use.pypi_model import Version
 
-
+# message to be send if no hash or version is provided while auto-installation.
 def _web_no_version_or_hash_provided(*, name, package_name, version, hashes):
     if not config["testing"]:
         webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
@@ -20,7 +21,7 @@ A webbrowser will open to the Snyk Advisor to check whether the package is vulne
 If you want to auto-install the latest version:
 use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
 
-
+# message to be send if no hash provided while auto-installation.
 def _web_pebkac_missing_hash(name, package_name, version, hashes):
     if not config["testing"]:
         with open(use.home / "web_exception.html", "w") as f:
@@ -41,7 +42,7 @@ def _web_pebkac_missing_hash(name, package_name, version, hashes):
         If you only want to use the package on this platform, this may work:
     use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
 
-
+# warnings and problems in the below class
 class Message(Enum):
     not_reloadable = (
         lambda name: f"Beware {name} also contains non-function objects, it may not be safe to reload!"
