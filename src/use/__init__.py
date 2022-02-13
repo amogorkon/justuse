@@ -21,16 +21,15 @@ if sys.version_info < (3, 9) and "tests" not in sys.modules:
             }
         )
 
-
 import hashlib
 import os
-from collections import defaultdict, deque, namedtuple
-from collections.abc import Callable
+import tempfile
+from collections import namedtuple
 from datetime import datetime
 from enum import Enum, IntEnum
-from inspect import isfunction, ismethod  # for aspectizing, DO NOT REMOVE
 from logging import DEBUG, INFO, NOTSET, basicConfig, getLogger, root
 from pathlib import Path
+from typing import NamedTuple
 from warnings import catch_warnings, filterwarnings, simplefilter
 
 from beartype import beartype
@@ -98,7 +97,7 @@ basicConfig(
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.6.5"  # IMPORTANT; Must leave exactly as-is for setup
+__version__ = "0.6.6"
 # for tests
 __version__ = os.getenv("USE_VERSION", __version__)
 __name__ = "use"

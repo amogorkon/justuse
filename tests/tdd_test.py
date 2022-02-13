@@ -8,20 +8,20 @@ Test-Driven Development is done in the following order:
 
 import os
 import sys
-
+from collections.abc import Callable
 from contextlib import AbstractContextManager, closing
 from hashlib import sha256
 from pathlib import Path
-from collections.abc import Callable
-from warnings import catch_warnings,  filterwarnings, simplefilter
+from warnings import catch_warnings, filterwarnings, simplefilter
 
 import pytest
+import use
 from hypothesis import assume, example, given
 from hypothesis import strategies as st
-import use
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
 from use.pypi_model import JustUse_Info, PyPI_Project, PyPI_Release, Version
-from tests.unit_test import reuse, ScopedCwd
+
+from tests.unit_test import ScopedCwd, reuse
 
 not_local = "GITHUB_REF" in os.environ
 is_win = sys.platform.lower().startswith("win")
@@ -59,22 +59,17 @@ def test_pypi_model():
     assert type(info)(**info.dict()) == info
 
 
-	
 def test_setup_py_works(reuse):
     import subprocess
+
     with ScopedCwd(Path(__file__).parent.parent):
-        result = subprocess.check_output(
-            [sys.executable, "setup.py", "--help"],
-            shell=False
-        )
+        result = subprocess.check_output([sys.executable, "setup.py", "--help"], shell=False)
         assert result
 
 
-	
 @given(st.text())
+@example("1t")
 def test_jack(text):
     assume(text.isprintable())
     sha = sha256(text.encode("utf-8")).hexdigest()
     assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))
-
-
