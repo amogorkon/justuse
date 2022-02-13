@@ -11,7 +11,6 @@ import inspect
 import os
 import sqlite3
 import sys
-import tempfile
 import threading
 import time
 import traceback
@@ -27,21 +26,9 @@ import toml
 from furl import furl as URL
 from icontract import ensure, invariant, require
 
-from use import (
-    AmbiguityWarning,
-    Hash,
-    Modes,
-    ModInUse,
-    NotReloadableWarning,
-    NoValidationWarning,
-    UnexpectedHash,
-    VersionWarning,
-    __version__,
-    buffet_table,
-    config,
-    home,
-    isfunction,
-)
+from use import (AmbiguityWarning, Hash, Modes, ModInUse, NotReloadableWarning,
+                 NoValidationWarning, UnexpectedHash, VersionWarning,
+                 __version__, buffet_table, config, home)
 from use.aspectizing import aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import Message
@@ -96,20 +83,12 @@ class ProxyModule(ModuleType):
 
     def __matmul__(self, other: tuple):
         thing = self.__implementation
-        check, qual_name, decorator = other
-	if len(other) == 2:
-		pass
-	if len(other) >= 3:
-		#instead of pass: We have the behavior of not decorating anything with the function
-		#after that we have the func.__name__ as an exception, we can put those into a tuple
-		pass
-		#after this we return the a non-recursive copy of aspect()
-		
-        return Dynamic_aspect(
+        check, pattern, decorator = other
+        # inside return aspect we should have our own qualname which contains name, path and version
+        return aspect(
             thing,
             check,
             pattern,
-	    qual_name,
             decorator,
             aspectize_dunders=False,
             excluded_names={},
@@ -254,46 +233,46 @@ class Use(ModuleType):
             try:
                 registry = sqlite3.connect(home / "registry.db").cursor()
             except Exception as e:
-                raise RuntimeError(Message.couldnt_connect_to_db(e))
+                raise RuntimeError(Message.couldnt_connect_to_db(e)) from e
         registry.row_factory = self._sqlite_row_factory
         registry.execute("PRAGMA foreign_keys=ON")
         registry.execute("PRAGMA auto_vacuum = FULL")
         registry.executescript(
             """
 CREATE TABLE IF NOT EXISTS "artifacts" (
-	"id"	INTEGER,
-	"distribution_id"	INTEGER,
-	"import_relpath" TEXT,
-	"artifact_path"	TEXT,
+    "id"    INTEGER,
+    "distribution_id"   INTEGER,
+    "import_relpath" TEXT,
+    "artifact_path" TEXT,
   "module_path" TEXT,
-	PRIMARY KEY("id" AUTOINCREMENT),
-	FOREIGN KEY("distribution_id") REFERENCES "distributions"("id") ON DELETE CASCADE
+    PRIMARY KEY("id" AUTOINCREMENT),
+    FOREIGN KEY("distribution_id") REFERENCES "distributions"("id") ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS "distributions" (
-	"id"	INTEGER,
-	"name"	TEXT NOT NULL,
-	"version"	TEXT NOT NULL,
-	"installation_path"	TEXT,
-	"date_of_installation"	INTEGER,
-	"number_of_uses"	INTEGER,
-	"date_of_last_use"	INTEGER,
-	"pure_python_package"	INTEGER NOT NULL DEFAULT 1,
-	PRIMARY KEY("id" AUTOINCREMENT)
+    "id"    INTEGER,
+    "name"  TEXT NOT NULL,
+    "version"   TEXT NOT NULL,
+    "installation_path" TEXT,
+    "date_of_installation"  INTEGER,
+    "number_of_uses"    INTEGER,
+    "date_of_last_use"  INTEGER,
+    "pure_python_package"   INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY("id" AUTOINCREMENT)
 );
 
 CREATE TABLE IF NOT EXISTS "hashes" (
-	"algo"	TEXT NOT NULL,
-	"value"	TEXT NOT NULL,
-	"artifact_id"	INTEGER NOT NULL,
-	PRIMARY KEY("algo","value"),
-	FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id") ON DELETE CASCADE
+    "algo"  TEXT NOT NULL,
+    "value" TEXT NOT NULL,
+    "artifact_id"   INTEGER NOT NULL,
+    PRIMARY KEY("algo","value"),
+    FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id") ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS "depends_on" (
-	"origin_path"	TEXT,
-	"target_path"	TEXT
-, "time_of_use"	INTEGER)
+    "origin_path"   TEXT,
+    "target_path"   TEXT
+, "time_of_use" INTEGER)
         """
         )
         registry.connection.commit()
@@ -421,7 +400,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         modes=0,
     ) -> ProxyModule:
         log.debug(f"use-url: {url}")
-        exc = None
         reckless = Modes.recklessness & modes
 
         response = requests.get(str(url))
@@ -448,7 +426,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             )
         except KeyError:
             raise
-        if exc:
+        if exc := None:
             return _fail_or_default(ImportError(exc), default)
 
         frame = inspect.getframeinfo(inspect.currentframe())
@@ -586,7 +564,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     reloader.start_threaded()
 
                 if not all(
-                    isfunction(value)
+                    inspect.isfunction(value)
                     for key, value in mod.__dict__.items()
                     if key not in initial_globals.keys() and not key.startswith("__")
                 ):
@@ -762,7 +740,6 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             fastfail=Modes.fastfail & modes,
             fatal_exceptions=Modes.fatal_exceptions & modes,
         )
-
 
     @require(lambda hash_algo: hash_algo != None)
     def _use_package(

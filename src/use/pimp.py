@@ -26,8 +26,7 @@ from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
 from subprocess import run
 from types import ModuleType
-from typing import (Any, Optional, Protocol, TypeVar, Union,
-                    runtime_checkable)
+from typing import Any, Optional, Protocol, TypeVar, Union, runtime_checkable
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -49,8 +48,10 @@ log = getLogger(__name__)
 
 
 T = TypeVar("T", bound=Callable[[str, str, Version, set[str]], str])
+
+
 @runtime_checkable
-class MissingHashFotmatter(Protocol[T]):
+class MissingHashFormatter(Protocol[T]):
     pass
 
 
@@ -111,7 +112,7 @@ def execute_wrapped(sql: str, params: tuple):
 
 
 @cache
-def get_supported() -> frozenset[PlatformTag]: # cov: exclude
+def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
     """
     Results of this function are cached. They are expensive to
     compute, thanks to some heavyweight usual players
@@ -125,34 +126,30 @@ def get_supported() -> frozenset[PlatformTag]: # cov: exclude
     with catch_warnings():
         filterwarnings(action="ignore", category=DeprecationWarning)
         try:
-          from pip._internal.resolution.legacy.resolver import get_supported
+            from pip._internal.resolution.legacy.resolver import get_supported
         except ImportError:
-          pass
-        if not get_supported:
-          try:
-            from pip._internal.models.target_python import get_supported
-          except ImportError:
             pass
         if not get_supported:
-          try:
-            from pip._internal.utils.compatibility_tags import get_supported
-          except ImportError:
-            pass
+            try:
+                from pip._internal.models.target_python import get_supported
+            except ImportError:
+                pass
         if not get_supported:
-          try:
-            from pip._internal.resolution.resolvelib.factory import \
-                get_supported
-          except ImportError:
-            pass
-    
+            try:
+                from pip._internal.utils.compatibility_tags import get_supported
+            except ImportError:
+                pass
+        if not get_supported:
+            try:
+                from pip._internal.resolution.resolvelib.factory import get_supported
+            except ImportError:
+                pass
+
     get_supported = get_supported or (lambda: [])
 
-    items: list[PlatformTag] = [
-        PlatformTag(platform=tag.platform) for tag in get_supported()
-    ]
+    items: list[PlatformTag] = [PlatformTag(platform=tag.platform) for tag in get_supported()]
 
-    for tag in packaging.tags._platform_tags():
-        items.append(PlatformTag(platform=str(tag)))
+    items.extend(PlatformTag(platform=str(tag)) for tag in packaging.tags._platform_tags())
 
     return frozenset(items)
 
@@ -161,9 +158,9 @@ def _filter_by_version(project_: "PyPI_Project", version: Version) -> "PyPI_Proj
     v = Version(version)
     rels = project_.releases.get(v, project_.releases.get(version, []))
     if not rels:
-      return project_
+        return project_
 
-    project_.releases = { v: rels }
+    project_.releases = {v: rels}
     project_.urls = rels
     print(repr(project_))
 
@@ -240,7 +237,7 @@ def archive_meta(artifact_path):
         meta["import_relpath"] = relpath
         break
     else:
-        meta["import_relpath"] = import_name + ".py"
+        meta["import_relpath"] = f"{import_name}.py"
     archive.close()
     return meta
 
@@ -276,7 +273,7 @@ def _pebkac_no_version(
     hash_algo=None,
     package_name: str = None,
     module_name: str = None,
-    message_formatter: MissingHashFotmatter = Message.pebkac_missing_hash,
+    message_formatter: MissingHashFormatter = Message.pebkac_missing_hash,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
 
@@ -297,12 +294,15 @@ def _pebkac_no_hash(
 ) -> Union[Exception, ModuleType]:
     if version is None or version not in _get_package_data(package_name).releases:
         version = next(iter(reversed(_get_package_data(package_name).releases)))
-    hashes = {
+    if hashes := {
         hexdigest_as_JACK(entry.digests.get(hash_algo.name))
         for entry in _get_package_data(package_name).releases[version]
-    }
-    if hashes:
-        return RuntimeWarning(Message.pebkac_missing_hash(name=package_name, package_name=package_name, version=version, hashes=hashes))
+    }:
+        return RuntimeWarning(
+            Message.pebkac_missing_hash(
+                name=package_name, package_name=package_name, version=version, hashes=hashes
+            )
+        )
     else:
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
 
@@ -324,7 +324,7 @@ def _pebkac_no_version_no_hash(
     # we found something that could work, but it may not fit to the user's requirements
     version = ordered[0].version
     hash = ordered[0].digests.get(hash_algo.name)
-    hashes = { hexdigest_as_JACK(hash) }
+    hashes = {hexdigest_as_JACK(hash)}
     return RuntimeWarning(
         Message.no_version_or_hash_provided(
             name=name,
@@ -564,8 +564,7 @@ def _find_module_in_venv(package_name, version, relp):
         try:
             dist = importlib.metadata.Distribution.from_name(package_name)
             while not mod_relative_to_site:
-                pps = [pp for pp in dist.files if pp.as_posix() == relp]
-                if pps:
+                if pps := [pp for pp in dist.files if pp.as_posix() == relp]:
                     mod_relative_to_site = pps[0]
                     break
                 if len(relp.split("/")) == 0:
@@ -702,10 +701,11 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
             "artifact_path": artifact_path,
             "installation_path": installation_path,
             "module_path": module_path,
-            "import_relpath": ".".join(relp.split("/")[0:-1]),
+            "import_relpath": ".".join(relp.split("/")[:-1]),
             "info": info,
         }
     )
+
     return _delete_none(out_info)
 
 
@@ -777,19 +777,19 @@ def _filter_by_platform(
         for ver, releases in project.releases.items()
     }
     if not filtered:
-      filtered = {
-          ver: [
-              rel.dict()
-              for rel in releases
-              if _is_compatible(
-                  rel,
-                  sys_version=sys_version,
-                  platform_tags=tags,
-                  include_sdist=True,
-              )
-          ]
-          for ver, releases in project.releases.items()
-      }
+        filtered = {
+            ver: [
+                rel.dict()
+                for rel in releases
+                if _is_compatible(
+                    rel,
+                    sys_version=sys_version,
+                    platform_tags=tags,
+                    include_sdist=True,
+                )
+            ]
+            for ver, releases in project.releases.items()
+        }
 
     return PyPI_Project(**{**project.dict(), **{"releases": filtered}})
 
@@ -802,7 +802,9 @@ def _filtered_and_ordered_data(data: PyPI_Project, version: Optional[Version] = 
         filtered = (
             data
             >> _filter_by_version(version)
-            >> _filter_by_platform(tags=get_supported(), sys_version=sys_version)  # let's not filter by platform for now
+            >> _filter_by_platform(
+                tags=get_supported(), sys_version=sys_version
+            )  # let's not filter by platform for now
         )
     else:
         filtered = data
@@ -811,11 +813,13 @@ def _filtered_and_ordered_data(data: PyPI_Project, version: Optional[Version] = 
     flat = reduce(list.__add__, filtered.releases.values(), [])
     return sorted(
         flat,
-        key=(lambda r: (
-            1 - int(r.filename.endswith(".tar.gz")),
-            1 - int(r.is_sdist),
-            r.version,
-        )),
+        key=(
+            lambda r: (
+                1 - int(r.filename.endswith(".tar.gz")),
+                1 - int(r.is_sdist),
+                r.version,
+            )
+        ),
         reverse=True,
     )
 
@@ -843,7 +847,7 @@ def _is_platform_compatible(
 
     if "win" in (info.packagetype or "unknown") and sys.platform != "win32":
         return False
-    
+
     if info.platform_tag:
         if "win32" in info.platform_tag and sys.platform != "win32":
             return False
@@ -865,7 +869,7 @@ def _is_platform_compatible(
         given_platform_tags = info.platform_tag.split(".") << map(PlatformTag) >> frozenset
     else:
         return include_sdist
-    
+
     if info.is_sdist and info.requires_python:
         given_python_tag = {
             our_python_tag
@@ -873,8 +877,8 @@ def _is_platform_compatible(
             if Version(platform.python_version()) in SpecifierSet(p)
         }
     else:
-        given_python_tag = set(info.python_tag.split(".")) 
-    
+        given_python_tag = set(info.python_tag.split("."))
+
     return any(supported_tags.intersection(given_python_tag)) and (
         (info.is_sdist and include_sdist) or any(given_platform_tags.intersection(platform_tags))
     )

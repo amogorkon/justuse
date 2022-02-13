@@ -19,7 +19,6 @@ def buffet_table(case, kwargs):
 #            |  |  |  |
 #            v  v  v  v      
 #            |  |  |  | 
-#            |  |  |  |      
         case _, _, 0, 0: return ImportError(Message.cant_import(**kwargs))
         case 0, _, 1, 0: return _import_public_no_install(**kwargs)
         case 1, _, 1, 0: return _import_public_no_install(**kwargs) >> _ensure_version(**kwargs)

@@ -1,16 +1,13 @@
-import os
+import io
 import logging
+import os
 import sys
 import time
-
-from logging import *
-from logging import Formatter, StreamHandler, PercentStyle, StrFormatStyle, StringTemplateStyle
-from _io import _IOBase
-from collections.abc import *
-from typing import NamedTuple
+import traceback
+from logging import Formatter, PercentStyle, StreamHandler, StrFormatStyle, StringTemplateStyle
+from typing import Callable, NamedTuple, Deque
 
 import use
-
 
 BASIC_FORMAT: str = "%(levelname)s:%(name)s:%(message)s"
 
@@ -208,7 +205,7 @@ class ConsoleHandler(StreamHandler):
     """
 
     terminator: str
-    stream: _IOBase
+    stream: io.IOBase
     formatter: ConsoleFormatter
 
     def __init__(self):
