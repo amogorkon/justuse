@@ -47,7 +47,7 @@ from use.tools import pipes
 log = getLogger(__name__)
 
 
-T = TypeVar("T", bound=Callable[[str, str, Version, set[str]], str])
+T = TypeVar("T")
 
 
 @runtime_checkable
