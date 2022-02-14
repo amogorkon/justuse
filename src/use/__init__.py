@@ -12,8 +12,10 @@ if sys.version_info < (3, 9) and "tests" not in sys.modules:
     import types
     import typing
     from typing import _GenericAlias as GenericAlias
-
-    for t in (list, dict, set, tuple, frozenset):
+    from abc import ABCMeta
+    from collections.abc import Callable
+    from types import CellType
+    for t in (list, dict, set, tuple, frozenset, ABCMeta, Callable, CellType):
         r = gc.get_referents(t.__dict__)[0]
         r.update(
             {
