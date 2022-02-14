@@ -40614,8 +40614,7 @@ korean_characters = """←
 﨤
 﨧
 﨨
-﨩
-""".split(
+﨩""".split(
     "\n"
 )
 
