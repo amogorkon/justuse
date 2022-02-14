@@ -7,7 +7,7 @@ import use
 # korean characters: https://github.com/arcsecw/wubi/blob/master/wubi/cw.py
 # chinese characters: https://github.com/tsroten/zhon/blob/develop/zhon/cedict/all.py
 
-__version__ = "4"
+__version__ = "5"
 
 chinese_characters = """○
 、
