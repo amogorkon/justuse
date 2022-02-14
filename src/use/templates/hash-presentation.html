@@ -13,162 +13,65 @@
         integrity="sha256-Gnrw9tIjrsXcZSCh/wos5Jrpn0bNVNFJuNJI9d71TDs=" crossorigin="anonymous"></script>
 
 
-    <title>Brython Demo</title>
+    <title>Justuse</title>
 </head>
 
 <body onload="brython()">
     <h1>{{name}} {{package_name}} {{version}}</h1>
     <p>
-        Please specify the hash for auto-installation.
+        Please specify the hash for auto-installation. Select the kind of hash you want to use.
 
-    <table>
+<div>
+  <input type="radio" id="button-jack" name="hash type" value="jack"
+         checked>
+  <label for="button-jack">JACK</label>
+</div>
+
+<div>
+  <input type="radio" id="button-sha256" name="hash type" value="sha256">
+  <label for="button-sha256">SHA 256</label>
+</div>
+
+    <table id="table-jack">
         <tr>
-        <th> System </th>
-        <th> sha256 hash </th>
-        <th> JACK hash </th>
+        <th> target? </th>
+        <th> Platform </th>
+        <th> Hash </th>
+        </tr>
+        {% for hash in hashes %}
+        <tr>
+            <td><input type='checkbox' id="check-jack" /> </td>
+            <td> {{ hash.platform }} </td>
+            <td> {{ hash.jack }} </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <table id="table-sha256" style="display: none;">
+        <tr></th>
+        <th> Platform </th>
+        <th> Hash </th>
         </tr>
         {% for hash in hashes %}
         <tr>
             <td><input type='checkbox' /> </td>
             <td> {{ hash.platform }} </td>
             <td> {{ hash.sha256 }} </td>
-            <td> {{ hash.jack }} </td>
         </tr>
         {% endfor %}
     </table>
 
-
-
-    <h1>Brython Crash Course</h1>
-
-    <h2 id="hello"></h2>
-    <button id="alert-btn">Alert & Insert</button>
-
-    <input type="text" id="text" placeholder="Enter something">
-    <span id="output"></span>
-
-    <h2 id="greet">Hello {name}</h2>
-
-    <button id="joke-btn">Get Joke</button>
-    <div id="joke" class="card">Click the "get joke" button</div>
-
-    <input type="file" id="file-upload">
-    <br>
-    <textarea id="file-text" cols="60" rows="10"></textarea>
-
-    <div class="card">
-        <button id="rotate-btn">Rotate</button>
-        <div id="rotate-box" class="box"></div>
-    </div>
-
-    <h2>Saved Item: <span id="item"></span></h2>
-    <input type="text" id="item-input" placeholder="Add to local storage">
-    <button id="add-btn" style="display: inline;">Add</button>
-    <button id="remove-btn" style="display: inline;">Remove</button>
-
-    <!-- Alert & DOM insert -->
-    <script type="text/python" id="script0">
-        from browser import document, console, alert
-
-        def show(e):
-            console.log(e)
-            alert('Hello World')
-            document['hello'] <= 'Hello World'
-
-        document['alert-btn'].bind('click', show)
-    </script>
-
-    <!-- Text bind -->
-    <script type="text/python" id="script1">
-        from browser import document
-
-        def show_text(e):
-            document['output'].textContent = e.target.value;
-
-        document['text'].bind('input', show_text)
-    </script>
-
-    <!-- Template and variable -->
-    <script type="text/python" id="script2">
-        from browser import document
-        from browser.template import Template
-
-        Template(document['greet']).render(name='Brad')
-    </script>
-
-    <!-- Ajax call -->
-    <script type="text/python" id="script3">
-        from browser import document, ajax
-
-        url = 'https://api.chucknorris.io/jokes/random'
-
-        def on_complete(req):
-            import json
-            data = json.loads(req.responseText)
-            joke = data['value']
-            document['joke'].text = joke
-
-        def get_joke(e):
-            req = ajax.ajax()
-            req.open('GET', url, True)
-            req.bind('complete', on_complete)
-            document['joke'].text = 'Loading...'
-            req.send()
-
-        document['joke-btn'].bind('click', get_joke)
-    </script>
-
-    <!-- Load file data -->
-    <script type="text/python" id="script4">
-        from browser import document, window
-
-        def file_read(e):
-            def onload(e):
-                document['file-text'].value = e.target.result 
-            
-            file = document['file-upload'].files[0]
-            reader = window.FileReader.new()
-            reader.readAsText(file)
-            reader.bind('load', onload)
-        
-        document['file-upload'].bind('input', file_read)
-    </script>
-
-    <!-- Rotate - manipulate style -->
+    <!-- Switch types of hashes -->
     <script type="text/python" id="script5">
         from browser import document, html
 
-        box = document['rotate-box']
-        angle = 10
+        switch = document["button-jack"]
+        table = document["table-jack"]
 
         def change(e):
-            global angle
-            box.style.transform = f"rotate({angle}deg)"
-            angle += 10
+            box.style.display = "none"
 
-        document['rotate-btn'].bind('click', change)
-    </script>
-
-    <!-- Local storage -->
-    <script type="text/python" id="script6">
-        from browser import document, html, window, console
-
-        storage = window.localStorage
-
-        if storage.getItem('item'):
-            document['item'] <= storage.getItem('item')
-
-        def add_item(e):
-            item = document['item-input'].value
-            storage.setItem('item', item)
-            document['item'].textContent = item
-
-        def remove_item(e):
-            storage.removeItem('item')
-            document['item'].textContent = ''
-
-        document['add-btn'].bind('click', add_item)
-        document['remove-btn'].bind('click', remove_item)
+        document['button-jack'].bind('click', change)
     </script>
 </body>
 

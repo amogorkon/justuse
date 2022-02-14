@@ -16,11 +16,7 @@ import use
 from use import __version__, config, home
 from use.pypi_model import Version
 
-print(__file__)
-src = Path(__file__).absolute().parent / r"templates/stylesheet.css"
-print(src)
-copy(src, home / "stylesheet.css")
-
+copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", home / "stylesheet.css")
 
 env = Environment(
     loader=FileSystemLoader(Path(__file__).parent / "templates"), autoescape=select_autoescape()
