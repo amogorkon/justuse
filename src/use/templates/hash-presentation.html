@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="stylesheet.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/brython/3.8.8/brython.js"
+        integrity="sha256-rA89wPrTJJQFWJaZveKW8jpdmC3t5F9rRkPyBjz8G04=" crossorigin="anonymous"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/brython/3.8.8/brython_stdlib.js"
+        integrity="sha256-Gnrw9tIjrsXcZSCh/wos5Jrpn0bNVNFJuNJI9d71TDs=" crossorigin="anonymous"></script>
+
+
+    <title>Justuse</title>
+</head>
+
+<body onload="brython()">
+    <h1>{{name}} {{package_name}} {{version}}</h1>
+    <p>
+        Please specify the hash for auto-installation. Select the kind of hash you want to use.
+
+<div>
+  <input type="radio" id="button-jack" name="hash type" value="jack"
+         checked>
+  <label for="button-jack">JACK</label>
+</div>
+
+<div>
+  <input type="radio" id="button-sha256" name="hash type" value="sha256">
+  <label for="button-sha256">SHA 256</label>
+</div>
+
+    <table id="table-jack">
+        <tr>
+        <th> target? </th>
+        <th> Platform </th>
+        <th> Hash </th>
+        </tr>
+        {% for hash in hashes %}
+        <tr>
+            <td><input type='checkbox' id="check-jack" /> </td>
+            <td> {{ hash.platform }} </td>
+            <td> {{ hash.jack }} </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <table id="table-sha256" style="display: none;">
+        <tr></th>
+        <th> Platform </th>
+        <th> Hash </th>
+        </tr>
+        {% for hash in hashes %}
+        <tr>
+            <td><input type='checkbox' /> </td>
+            <td> {{ hash.platform }} </td>
+            <td> {{ hash.sha256 }} </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <!-- Switch types of hashes -->
+    <script type="text/python" id="script5">
+        from browser import document, html
+
+        switch = document["button-jack"]
+        table = document["table-jack"]
+
+        def change(e):
+            box.style.display = "none"
+
+        document['button-jack'].bind('click', change)
+    </script>
+</body>
+
+</html>

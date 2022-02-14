@@ -789,7 +789,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "package_name": package_name,
             "module_name": module_name,
             "version": version,
-            "hashes": hashes,
+            "user_provided_hashes": hashes,
             "hash_algo": hash_algo,
             "user_msg": user_msg,
             "spec": spec,

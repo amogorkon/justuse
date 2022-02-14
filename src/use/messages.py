@@ -5,11 +5,22 @@ Fun fact: f-strings are firmly rooted in the AST.
 """
 
 import webbrowser
+from base64 import b64encode
 from enum import Enum
+from pathlib import Path
+from shutil import copy
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 import use
-from use import __version__, config
+from use import __version__, config, home
 from use.pypi_model import Version
+
+copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", home / "stylesheet.css")
+
+env = Environment(
+    loader=FileSystemLoader(Path(__file__).parent / "templates"), autoescape=select_autoescape()
+)
 
 
 def _web_no_version_or_hash_provided(*, name, package_name, version, hashes):
@@ -17,29 +28,20 @@ def _web_no_version_or_hash_provided(*, name, package_name, version, hashes):
         webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
     return f"""Please specify version and hash for auto-installation of {package_name!r}.
 A webbrowser will open to the Snyk Advisor to check whether the package is vulnerable.
-If you want to auto-install the latest version:
-use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
+If you want to auto-install the latest version, try the following line to select all viable hashes:
+use("{name}", version="{version!s}", modes=use.auto_install)"""
 
 
-def _web_pebkac_missing_hash(name, package_name, version, hashes):
+def _web_pebkac_missing_hash(name, package_name, version, hashes, recommended_hash):
     if not config["testing"]:
-        with open(use.home / "web_exception.html", "w") as f:
-            f.write(
-                f"""<html><body>
-    <h1>{package_name!r}</h1>
-    {config}
-    <p>
-    Please specify the hash for auto-installation.
-    </p>
-    <p>
-    </p>
-    </body></html>"""
-            )
-        webbrowser.open(f"file://{use.home / 'web_exception.html'}")
+        with open(home / "web_exception.html", "w", encoding="utf-8") as file:
+            template = env.get_template("hash-presentation.html")
+            file.write(template.render(**locals()))
+        webbrowser.open(f"file://{home}/web_exception.html")
     return f"""Failed to auto-install {package_name!r} because hashes aren't specified.
-        A webbrowser will open with a list of available hashes for different platforms.
+        A webbrowser should open with a list of available hashes for different platforms.
         If you only want to use the package on this platform, this may work:
-    use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
+    use("{name}", version="{version!s}", hashes={recommended_hash!r}, modes=use.auto_install)"""
 
 
 class Message(Enum):
