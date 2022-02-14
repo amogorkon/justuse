@@ -17,9 +17,10 @@
 </head>
 
 <body onload="brython()">
-    <h1>{{name}} {{package_name}} {{version}}</h1>
+    <h1>Auto-installation of {{name}} version {{version}}</h1>
     <p>
-        Please specify the hash for auto-installation. Select the kind of hash you want to use.
+        Please specify the hash corresponding to the platform you want to run your code on. 
+        Different types of hash can't be mixed together but should be interchangeable, choose the type you prefer.
 
 <div>
   <input type="radio" id="button-jack" name="hash type" value="jack"
@@ -60,6 +61,10 @@
         </tr>
         {% endfor %}
     </table>
+
+    <p> Copy&paste the line below into your code to auto-install {{ name }} version {{ version }} on any of the selected platforms:
+    <p>
+        <textarea id="result" rows="2" cols="120">use('{{name}}', version='{{version}}', hashes={ ... }, modes=use.auto_install)</textarea>
 
     <!-- Switch types of hashes -->
     <script type="text/python" id="script5">
