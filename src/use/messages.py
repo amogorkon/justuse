@@ -8,11 +8,23 @@ import webbrowser
 from base64 import b64encode
 from enum import Enum
 from pathlib import Path
-from string import Template
+from shutil import copy
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 import use
 from use import __version__, config, home
 from use.pypi_model import Version
+
+print(__file__)
+src = Path(__file__).absolute().parent / r"templates/stylesheet.css"
+print(src)
+copy(src, home / "stylesheet.css")
+
+
+env = Environment(
+    loader=FileSystemLoader(Path(__file__).parent / "templates"), autoescape=select_autoescape()
+)
 
 
 def _web_no_version_or_hash_provided(*, name, package_name, version, hashes):
@@ -24,17 +36,16 @@ If you want to auto-install the latest version, try the following line to select
 use("{name}", version="{version!s}", modes=use.auto_install)"""
 
 
-def _web_pebkac_missing_hash(name, package_name, version, hashes):
+def _web_pebkac_missing_hash(name, package_name, version, hashes, recommended_hash):
     if not config["testing"]:
-        with open(home / "web_exception.html", "w", encoding="utf-8") as file, open(
-            Path(__file__).parent / "hash-presentation-template.html"
-        ) as template:
-            file.write(Template(template.read()).substitute(**locals()))
+        with open(home / "web_exception.html", "w", encoding="utf-8") as file:
+            template = env.get_template("hash-presentation.html")
+            file.write(template.render(**locals()))
         webbrowser.open(f"file://{home}/web_exception.html")
     return f"""Failed to auto-install {package_name!r} because hashes aren't specified.
         A webbrowser should open with a list of available hashes for different platforms.
         If you only want to use the package on this platform, this may work:
-    use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"""
+    use("{name}", version="{version!s}", hashes={recommended_hash!r}, modes=use.auto_install)"""
 
 
 class Message(Enum):

@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="stylesheet.css">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/brython/3.8.8/brython.js"
         integrity="sha256-rA89wPrTJJQFWJaZveKW8jpdmC3t5F9rRkPyBjz8G04=" crossorigin="anonymous"></script>
@@ -11,69 +12,32 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/brython/3.8.8/brython_stdlib.js"
         integrity="sha256-Gnrw9tIjrsXcZSCh/wos5Jrpn0bNVNFJuNJI9d71TDs=" crossorigin="anonymous"></script>
 
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
 
-        body {
-            font-family: Arial, Helvetica, sans-serif;
-            font-size: 25px;
-            padding: 30px;
-            line-height: 1.6;
-        }
-
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-            border-bottom: 1px #ccc solid;
-        }
-
-        h2 {
-            margin-top: 20px;
-        }
-
-        button {
-            cursor: pointer;
-            display: block;
-            background: #333;
-            color: #fff;
-            border: 0;
-            border-radius: 5px;
-            padding: 10px 20px;
-            margin: 20px 0;
-        }
-
-        input[type="text"] {
-            border: 1px #ccc solid;
-            width: 300px;
-            padding: 4px;
-            height: 35px;
-            margin-top: 20px;
-        }
-
-        .card {
-            margin: 20px 0;
-            border: #ccc 1px solid;
-            padding: 20px;
-        }
-
-        .box {
-            background: steelblue;
-            width: 1.6em;
-            height: 1.6em;
-        }
-    </style>
     <title>Brython Demo</title>
 </head>
 
 <body onload="brython()">
-    <h1>$name $package_name $version</h1>
+    <h1>{{name}} {{package_name}} {{version}}</h1>
     <p>
         Please specify the hash for auto-installation.
-        $hashes
+
+    <table>
+        <tr>
+        <th> System </th>
+        <th> sha256 hash </th>
+        <th> JACK hash </th>
+        </tr>
+        {% for hash in hashes %}
+        <tr>
+            <td><input type='checkbox' /> </td>
+            <td> {{ hash.platform }} </td>
+            <td> {{ hash.sha256 }} </td>
+            <td> {{ hash.jack }} </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+
 
     <h1>Brython Crash Course</h1>
 

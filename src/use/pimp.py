@@ -14,6 +14,7 @@ import sys
 import tarfile
 import zipfile
 import zipimport
+from collections import namedtuple
 from collections.abc import Callable
 from functools import lru_cache as cache
 from functools import reduce
@@ -38,7 +39,7 @@ from packaging import tags
 from packaging.specifiers import SpecifierSet
 
 import use
-from use import Hash, Modes, VersionWarning, config
+from use import Hash, Modes, PkgHash, VersionWarning, config
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import Message, _web_no_version_or_hash_provided
 from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none
@@ -136,12 +137,14 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 pass
         if not get_supported:
             try:
-                from pip._internal.utils.compatibility_tags import get_supported
+                from pip._internal.utils.compatibility_tags import \
+                    get_supported
             except ImportError:
                 pass
         if not get_supported:
             try:
-                from pip._internal.resolution.resolvelib.factory import get_supported
+                from pip._internal.resolution.resolvelib.factory import \
+                    get_supported
             except ImportError:
                 pass
 
@@ -285,6 +288,7 @@ def _pebkac_no_version(
     return RuntimeWarning(Message.cant_import_no_version(name))
 
 
+@pipes
 def _pebkac_no_hash(
     *,
     version: Version = None,
@@ -295,12 +299,24 @@ def _pebkac_no_hash(
     if version is None or version not in _get_package_data(package_name).releases:
         version = next(iter(reversed(_get_package_data(package_name).releases)))
     if hashes := {
-        hexdigest_as_JACK(entry.digests.get(hash_algo.name))
+        PkgHash(
+            "foobar", hexdigest_as_JACK(entry.digests.get(hash_algo.name)), entry.digests.get(hash_algo.name)
+        )
         for entry in _get_package_data(package_name).releases[version]
     }:
+
+        proj = _get_package_data(package_name)
+        ordered = _filtered_and_ordered_data(proj, version=None)
+        recommended_hash = {
+            hexdigest_as_JACK(ordered[0].digests.get(hash_algo.name))
+        }
         return RuntimeWarning(
             Message.pebkac_missing_hash(
-                name=package_name, package_name=package_name, version=version, hashes=hashes
+                name=package_name,
+                package_name=package_name,
+                version=version,
+                hashes=hashes,
+                recommended_hash=recommended_hash,
             )
         )
     else:
@@ -324,11 +340,11 @@ def _pebkac_no_version_no_hash(
     # we found something that could work, but it may not fit to the user's requirements
     version = ordered[0].version
     hash = ordered[0].digests.get(hash_algo.name)
-    hashes = {hexdigest_as_JACK(hash)}
+    recommended_hashes = {hexdigest_as_JACK(hash)}
     return RuntimeWarning(
         Message.no_version_or_hash_provided(
             name=name,
-            hashes=hashes,
+            hashes=recommended_hashes,
             package_name=package_name,
             version=version,
         )
@@ -533,7 +549,7 @@ def _download_artifact(name, version, filename, url) -> Path:
     return artifact_path
 
 
-def _pure_python_package(artifact_path, meta):
+def _is_pure_python_package(artifact_path, meta):
     not_pure_python = any(
         any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES) for n in meta["names"]
     )
@@ -640,7 +656,7 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     out_info["import_name"] = import_name
     if (
         not force_install
-        and _pure_python_package(artifact_path, meta)
+        and _is_pure_python_package(artifact_path, meta)
         and str(artifact_path).endswith(".whl")
     ):
         return out_info
