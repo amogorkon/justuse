@@ -36,6 +36,7 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [ ] module-level variable guards aka "module-properties"
 - [ ] isolation of packages via subprocess/subinterpreter for clean un-/reloading
 - [ ] slot-based plugin architecture (to ensure reproducable testability of plugin-combinations)
+- [ ] optional on-site compilation of fully annotated python code via cython
 - [ ] document everything!
 - [ ] test everything!
 
