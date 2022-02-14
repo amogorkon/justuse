@@ -137,14 +137,12 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 pass
         if not get_supported:
             try:
-                from pip._internal.utils.compatibility_tags import \
-                    get_supported
+                from pip._internal.utils.compatibility_tags import get_supported
             except ImportError:
                 pass
         if not get_supported:
             try:
-                from pip._internal.resolution.resolvelib.factory import \
-                    get_supported
+                from pip._internal.resolution.resolvelib.factory import get_supported
             except ImportError:
                 pass
 
@@ -307,9 +305,7 @@ def _pebkac_no_hash(
 
         proj = _get_package_data(package_name)
         ordered = _filtered_and_ordered_data(proj, version=None)
-        recommended_hash = {
-            hexdigest_as_JACK(ordered[0].digests.get(hash_algo.name))
-        }
+        recommended_hash = {hexdigest_as_JACK(ordered[0].digests.get(hash_algo.name))}
         return RuntimeWarning(
             Message.pebkac_missing_hash(
                 name=package_name,
@@ -938,25 +934,23 @@ def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> 
 
 def _build_mod(
     *,
-    name,  # TODO: this should be a package name and module name
+    module_name,
     code,
     initial_globals: Optional[dict[str, Any]],
     module_path,
-    package_name=None,
+    package_name="",
 ) -> ModuleType:
-
-    package_name = package_name or ""
-    mod = ModuleType(name)
-    log.info(f"{Path.cwd()=} {package_name=} {name=} {module_path=}")
+    mod = ModuleType(module_name)
+    log.info(f"{Path.cwd()=} {package_name=} {module_name=} {module_path=}")
     mod.__dict__.update(initial_globals or {})
     mod.__file__ = str(module_path)
     mod.__path__ = [str(module_path.parent)]
     mod.__package__ = package_name
-    mod.__name__ = name
-    loader = SourceFileLoader(name, str(module_path))
+    mod.__name__ = module_name
+    loader = SourceFileLoader(module_name, str(module_path))
     mod.__loader__ = loader
-    mod.__spec__ = ModuleSpec(name, loader)
-    sys.modules[name] = mod
+    mod.__spec__ = ModuleSpec(module_name, loader)
+    sys.modules[module_name] = mod
     code_text = codecs.decode(code)
     # module file "<", ">" chars are specially handled by inspect
     getattr(linecache, "cache")[module_path] = (

@@ -305,7 +305,6 @@ class Restorer:
             lock.release()
 
 
-	
 def test_reloading(reuse):
     fd, file = tempfile.mkstemp(".py", "test_module")
     with Restorer():
@@ -381,7 +380,10 @@ def installed_or_skip(reuse, name, version=None):
         (
             "pytest-cov",
             "2.12.1",
-            {'261ceeb8c227b726249b376b8526b600f38667ee314f910353fa318caa01f4d7', '261bb9e47e65bd099c89c3edf92972865210c36813f80ede5277dceb77a4a62a'}
+            {
+                "261ceeb8c227b726249b376b8526b600f38667ee314f910353fa318caa01f4d7",
+                "261bb9e47e65bd099c89c3edf92972865210c36813f80ede5277dceb77a4a62a",
+            },
         ),
     ),
 )
@@ -394,6 +396,11 @@ def test_85_pywt_jupyter_ubuntu_case1010(reuse, name, version, hashes):
     if not installed_or_skip(reuse, name, version):
         return
     mod = reuse(name, version=reuse.Version(version))
+    assert mod
+
+
+def test_387_usepath_filename(reuse):
+    mod = use(use.Path(".tests/.file_for_test387.py"))
     assert mod
 
 

@@ -26,9 +26,20 @@ import toml
 from furl import furl as URL
 from icontract import ensure, invariant, require
 
-from use import (AmbiguityWarning, Hash, Modes, ModInUse, NotReloadableWarning,
-                 NoValidationWarning, UnexpectedHash, VersionWarning,
-                 __version__, buffet_table, config, home)
+from use import (
+    AmbiguityWarning,
+    Hash,
+    Modes,
+    ModInUse,
+    NotReloadableWarning,
+    NoValidationWarning,
+    UnexpectedHash,
+    VersionWarning,
+    __version__,
+    buffet_table,
+    config,
+    home,
+)
 from use.aspectizing import aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import Message
@@ -134,7 +145,7 @@ class ModuleReloader:
             if current_filehash != last_filehash:
                 try:
                     mod = _build_mod(
-                        name=self.name,
+                        module_name=self.name,
                         code=code,
                         initial_globals=self.initial_globals,
                         module_path=self.path.resolve(),
@@ -155,7 +166,7 @@ class ModuleReloader:
                 if current_filehash != last_filehash:
                     try:
                         mod = _build_mod(
-                            name=self.name,
+                            module_name=self.name,
                             code=code,
                             initial_globals=self.initial_globals,
                             module_path=self.path,
@@ -419,7 +430,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         name = url.path.segments[-1]
         try:
             mod = _build_mod(
-                name=name,
+                module_name=name,
                 code=response.content,
                 module_path=_ensure_path(url.path),
                 initial_globals=initial_globals,
@@ -522,14 +533,14 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
             log.info(f"{package_name=}, {name=}")
             # os.chdir(path.parent)
-            # name = path.stem
+            module_name = path.stem  # sic!
             if reloading:
                 try:
                     with open(path, "rb") as rfile:
                         code = rfile.read()
                     # initial instance, if this doesn't work, just throw the towel
                     mod = _build_mod(
-                        name=name,
+                        module_name=module_name,
                         code=code,
                         initial_globals=initial_globals,
                         module_path=path.resolve(),
@@ -574,10 +585,10 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     code = rfile.read()
                 # the path needs to be set before attempting to load the new module - recursion confusing ftw!
                 frame = inspect.getframeinfo(inspect.currentframe())
-                self._set_mod(name=name, mod=mod, frame=frame)
+                self._set_mod(name=module_name, mod=mod, frame=frame)
                 try:
                     mod = _build_mod(
-                        name=name,
+                        module_name=module_name,
                         code=code,
                         initial_globals=initial_globals,
                         module_path=path,
