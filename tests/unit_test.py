@@ -331,8 +331,13 @@ def test_suggestion_works(reuse):
         except (RuntimeWarning, RuntimeError) as rw:
             last_line = rw.args[0].strip().splitlines()[-1]
             log.info("Using last line as suggested artifact: %s", repr(last_line))
+        try:
             mod = eval(last_line)
-            log.info("suggest artifact returning: %s", mod)
+            assert False, f"Actually returned mod: {mod}"
+        except (RuntimeWarning, RuntimeError) as rw:
+            last_line = rw.args[0].strip().splitlines()[-1]
+            log.info("Using last line as suggested artifact: %s", repr(last_line))
+        mod = eval(last_line)
         assert mod
 
 
