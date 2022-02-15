@@ -4,11 +4,12 @@ Module to hold the decorators and other utility functions used in justuse.
 
 import ast
 import inspect
+from collections.abc import Callable
+from functools import singledispatch, update_wrapper
 from itertools import takewhile
 from textwrap import dedent
 
-from functools import singledispatch, update_wrapper
-from collections.abc import Callable
+from use import NirvanaWarning
 
 
 class _PipeTransformer(ast.NodeTransformer):
@@ -32,14 +33,17 @@ class _PipeTransformer(ast.NodeTransformer):
 
 
 # singledispatch for methods
-def methdispatch(func) :
+def methdispatch(func):
     dispatcher = singledispatch(func)
 
-    def wrapper(*args, **kw):
+    def wrapper(*args, **kwargs):
+
         # so we can dispatch on None
         if len(args) == 1:
+            if not kwargs:
+                raise NirvanaWarning("No use trying to use Nothing.")
             args = args + (None,)
-        return dispatcher.dispatch(args[1].__class__)(*args, **kw)
+        return dispatcher.dispatch(args[1].__class__)(*args, **kwargs)
 
     wrapper.register = dispatcher.register
     update_wrapper(wrapper, func)

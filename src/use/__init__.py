@@ -11,10 +11,11 @@ if sys.version_info < (3, 9) and "tests" not in sys.modules:
     import gc
     import types
     import typing
-    from typing import _GenericAlias as GenericAlias
     from abc import ABCMeta
     from collections.abc import Callable
     from types import CellType
+    from typing import _GenericAlias as GenericAlias
+
     for t in (list, dict, set, tuple, frozenset, ABCMeta, Callable, CellType):
         r = gc.get_referents(t.__dict__)[0]
         r.update(
@@ -106,27 +107,35 @@ __name__ = "use"
 __package__ = "use"
 
 
-class VersionWarning(Warning):
+class JustuseIssue:
     pass
 
 
-class NotReloadableWarning(Warning):
+class NirvanaWarning(Warning, JustuseIssue):
     pass
 
 
-class NoValidationWarning(Warning):
+class VersionWarning(Warning, JustuseIssue):
     pass
 
 
-class AmbiguityWarning(Warning):
+class NotReloadableWarning(Warning, JustuseIssue):
     pass
 
 
-class UnexpectedHash(ImportError):
+class NoValidationWarning(Warning, JustuseIssue):
     pass
 
 
-class AutoInstallationError(ImportError):
+class AmbiguityWarning(Warning, JustuseIssue):
+    pass
+
+
+class UnexpectedHash(ImportError, JustuseIssue):
+    pass
+
+
+class AutoInstallationError(ImportError, JustuseIssue):
     pass
 
 
