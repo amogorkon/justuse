@@ -652,10 +652,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
-            auto_install=Modes.auto_install & modes,
-            no_public_installation=Modes.no_public_installation & modes,
-            fastfail=Modes.fastfail & modes,
-            fatal_exceptions=Modes.fatal_exceptions & modes,
+            modes=modes,
         )
 
     @__call__.register(tuple)
@@ -699,10 +696,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
-            auto_install=Modes.auto_install & modes,
-            no_public_installation=Modes.no_public_installation & modes,
-            fastfail=Modes.fastfail & modes,
-            fatal_exceptions=Modes.fatal_exceptions & modes,
+            modes=modes,
         )
 
     @__call__.register(str)
@@ -746,10 +740,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
-            auto_install=Modes.auto_install & modes,
-            no_public_installation=Modes.no_public_installation & modes,
-            fastfail=Modes.fastfail & modes,
-            fatal_exceptions=Modes.fatal_exceptions & modes,
+            modes=modes,
         )
 
     @require(lambda hash_algo: hash_algo != None)
@@ -764,11 +755,14 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         default: Any,
         hash_algo: Hash,
         user_msg=Message,
-        no_public_installation: bool = False,
-        auto_install: bool = False,
-        fastfail: bool = False,
-        fatal_exceptions: bool = False,
+        modes: int = 0,
     ):
+        auto_install = Modes.auto_install & modes
+        no_public_installation = Modes.no_public_installation & modes
+        fastfail = Modes.fastfail & modes
+        fatal_exceptions = Modes.fatal_exceptions & modes
+        no_browser = Modes.no_browser & modes
+
         if module_name:
             module_name = module_name.replace("/", ".").replace("-", "_")
 
@@ -808,6 +802,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "no_public_installation": no_public_installation,
             "fatal_exceptions": fatal_exceptions,
             "sys_version": Version(".".join(map(str, sys.version_info[:3]))),
+            "no_browser": no_browser,
         }
 
         result = buffet_table(case, kwargs)

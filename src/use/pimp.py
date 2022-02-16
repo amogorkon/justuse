@@ -292,6 +292,7 @@ def _pebkac_no_hash(
     version: Version = None,
     hash_algo: Hash,
     package_name: str = None,
+    no_browser: bool,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     if version is None or version not in _get_package_data(package_name).releases:
@@ -313,6 +314,7 @@ def _pebkac_no_hash(
                 version=version,
                 hashes=hashes,
                 recommended_hash=recommended_hash,
+                no_browser=no_browser,
             )
         )
     else:
@@ -325,6 +327,7 @@ def _pebkac_no_version_no_hash(
     name: str,
     hash_algo: Hash,
     package_name: str,
+    no_browser: bool,
     **kwargs,
 ) -> Exception:
     # let's try to make an educated guess and give a useful suggestion
@@ -343,6 +346,7 @@ def _pebkac_no_version_no_hash(
             hashes=recommended_hashes,
             package_name=package_name,
             version=version,
+            no_browser=no_browser,
         )
     )
 

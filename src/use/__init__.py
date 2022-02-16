@@ -162,6 +162,7 @@ with catch_warnings():
         no_public_installation = 2 ** 4
         fastfail = 2 ** 5
         recklessness = 2 ** 6
+        no_browser = 2 ** 7
 
 
 from use.aspectizing import *

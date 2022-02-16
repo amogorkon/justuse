@@ -397,7 +397,6 @@ def test_85_pywt_jupyter_ubuntu_case1010(reuse, name, version, hashes):
     In jupyter (Lubuntu VM):
     pywt = use("pywt", version="1.1.1")
     """
-    # TODO
     if not installed_or_skip(reuse, name, version):
         return
     mod = reuse(name, version=reuse.Version(version))
