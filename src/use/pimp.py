@@ -41,7 +41,7 @@ from packaging.specifiers import SpecifierSet
 import use
 from use import Hash, Modes, PkgHash, VersionWarning, config
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-from use.messages import Message, _web_no_version_or_hash_provided
+from use.messages import Message, _web_pebkac_no_version_no_hash
 from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none
 from use.tools import pipes
 

@@ -32,6 +32,7 @@ import logging
 
 from use import use
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
+from use.pypi_model import JustUse_Info, PyPI_Project, PyPI_Release, Version
 
 log = logging.getLogger(".".join((__package__, __name__)))
 log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)
@@ -311,7 +312,7 @@ def test_reloading(reuse):
         mod = None
         newfile = f"{file}.t"
         for check in range(1):
-            if sys.platform[0:3] == "win":
+            if sys.platform[:3] == "win":
                 newfile = file
             with open(newfile, "w") as f:
                 f.write(f"def foo(): return {check}")
@@ -511,3 +512,48 @@ def test_fraction_of_day(reuse):
 def test_nirvana(reuse):
     with pytest.raises(reuse.NirvanaWarning):
         reuse()
+
+
+@given(st.text())
+@example("1t")
+def test_jack(text):
+    assume(text.isprintable())
+    sha = sha256(text.encode("utf-8")).hexdigest()
+    assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))
+
+
+def test_pypi_model():
+    release = PyPI_Release(
+        comment_text="test",
+        digests={"md5": "asdf"},
+        url="https://files.pythonhost",
+        ext=".whl",
+        packagetype="bdist_wheel",
+        distribution="numpy",
+        requires_python=False,
+        python_version="cp3",
+        python_tag="cp3",
+        platform_tag="cp4",
+        filename="numpy-1.19.5-cp3-cp3-cp4-bdist_wheel.whl",
+        abi_tag="cp3",
+        yanked=False,
+        version="1.19.5",
+    )
+    assert type(release)(**release.dict()) == release
+
+    info = JustUse_Info(
+        distribution="numpy",
+        version="1.19.5",
+        build_tag="cp4",
+        python_tag="cp4",
+        abi_tag="cp4",
+        platform_tag="cp4",
+        ext="whl",
+    )
+    assert type(info)(**info.dict()) == info
+
+
+def test_setup_py_works(reuse):
+    with ScopedCwd(Path(__file__).parent.parent):
+        result = subprocess.check_output([sys.executable, "setup.py", "--help"], shell=False)
+        assert result

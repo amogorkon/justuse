@@ -23,7 +23,7 @@ env = Environment(
 )
 
 
-def _web_no_version_or_hash_provided(*, name, package_name, version, hashes, no_browser: bool):
+def _web_pebkac_no_version_no_hash(*, name, package_name, version, hashes, no_browser: bool):
     if not no_browser:
         webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
     return f"""Please specify version and hash for auto-installation of {package_name!r}.
@@ -32,7 +32,7 @@ If you want to auto-install the latest version, try the following line to select
 use("{name}", version="{version!s}", modes=use.auto_install)"""
 
 
-def _web_pebkac_missing_hash(name, package_name, version, hashes, recommended_hash, no_browser: bool):
+def _web_pebkac_no_hash(name, package_name, version, hashes, recommended_hash, no_browser: bool):
     if not no_browser:
         with open(home / "web_exception.html", "w", encoding="utf-8") as file:
             template = env.get_template("hash-presentation.html")
@@ -81,14 +81,14 @@ use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
     classically_imported = (
         lambda name, this_version: f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")'
     )
-    pebkac_missing_hash = _web_pebkac_missing_hash
+    pebkac_missing_hash = _web_pebkac_no_hash
     pebkac_unsupported = (
         lambda package_name: f"We could not find any version or release for {package_name} that could satisfy our requirements!"
     )
     pip_json_mess = (
         lambda package_name, target_version: f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI."
     )
-    no_version_or_hash_provided = _web_no_version_or_hash_provided
+    no_version_or_hash_provided = _web_pebkac_no_version_no_hash
     cant_import = lambda name: f"No pkg installed named {name} and auto-installation not requested. Aborting."
     cant_import_no_version = (
         lambda package_name: f"Failed to auto-install '{package_name}' because no version was specified."
