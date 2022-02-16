@@ -41,7 +41,7 @@ from packaging.specifiers import SpecifierSet
 import use
 from use import Hash, Modes, PkgHash, VersionWarning, config
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-from use.messages import Message, _web_no_version_or_hash_provided
+from use.messages import Message, _web_pebkac_no_version_no_hash
 from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none
 from use.tools import pipes
 
@@ -289,6 +289,7 @@ def _pebkac_no_version(
 @pipes
 def _pebkac_no_hash(
     *,
+    name: str,
     version: Version = None,
     hash_algo: Hash,
     package_name: str = None,
@@ -309,7 +310,7 @@ def _pebkac_no_hash(
         recommended_hash = {hexdigest_as_JACK(ordered[0].digests.get(hash_algo.name))}
         return RuntimeWarning(
             Message.pebkac_missing_hash(
-                name=package_name,
+                name=name,
                 package_name=package_name,
                 version=version,
                 hashes=hashes,
@@ -353,47 +354,66 @@ def _pebkac_no_version_no_hash(
 
 def _import_public_no_install(
     *,
-    func: Callable[..., Union[Exception, ModuleType]] = None,
     package_name: str = None,
     module_name: str = None,
-    spec=None,
+    name: str,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
-    if func:
-        result = func()
-        if isinstance(result, (Exception, ModuleType)):
-            return result
     # builtin?
     builtin = False
     try:
-        metadata.PathDistribution.from_name(package_name)
+        metadata.PathDistribution.from_name(name)
     except metadata.PackageNotFoundError:  # indeed builtin!
         builtin = True
+    # TODO ehhh.. builtin needs to be handled differently?
 
-    if builtin:
-        if spec.name in sys.modules:
-            mod = sys.modules[spec.name]
-        if mod is None:
-            mod = importlib.import_module(module_name)
-        assert mod
-        sys.modules[spec.name] = mod
-        spec.loader.exec_module(mod)  # ! => cache
-        return mod
-    # it seems to be installed in some way, for instance via pip
-    return importlib.import_module(module_name)  # ! => cache
+    mod = sys.modules.get(module_name)
+    imported = bool(mod)
+    if not mod:
+        mod = importlib.import_module(module_name)
+
+    # ? does this solve the caching issue?
+    if not imported:
+        del sys.modules[module_name]
+    return mod
 
 
-def _parse_name(name) -> tuple[str, str]:
-    match = re.match(r"(?P<package_name>[^/.]+)/?(?P<rest>[a-zA-Z0-9._]+)?$", name)
-    assert match, f"Invalid name spec: {name!r}"
-    names = match.groupdict()
-    package_name = names["package_name"]
-    rest = names["rest"]
-    if not package_name:
-        package_name = rest
-    if not rest:
-        rest = package_name
-    return (package_name, rest)
+def _parse_name(name: str) -> tuple[str, str]:
+    """Parse the user-provided name into a package name for installation and a module name for import.
+
+    The package name is whatever pip would expect.
+    The module name is whatever import would expect.
+
+    Mini-DSL: / separates the package name from the module name.
+    """
+    if not name:
+        return None, None
+
+    def old():
+        # as fallback
+        match = re.match(r"(?P<package_name>[^/.]+)/?(?P<rest>[a-zA-Z0-9._]+)?$", name)
+        assert match, f"Invalid name spec: {name!r}"
+        names = match.groupdict()
+        package_name = names["package_name"]
+        rest = names["rest"]
+        if not package_name:
+            package_name = rest
+        if not rest:
+            rest = package_name
+        return package_name
+
+    package_name = None
+    module_name = ""
+    if "/" in name:
+        if name.count("/") > 1:
+            raise ImportError(
+                f"Invalid name spec: {name!r}, can't have multiple / characters as package/module separator."
+            )
+        package_name, _, module_name = name.partition("/")
+    else:
+        package_name = old()
+        module_name = name
+    return (package_name, module_name)
 
 
 def _auto_install(

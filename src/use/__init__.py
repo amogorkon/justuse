@@ -176,7 +176,11 @@ from use.pimp import _get_package_data, _get_version, _is_version_satisfied, _pa
 from use.pypi_model import *
 from use.tools import *
 
+for member in Modes:
+    setattr(Use, member.name, member.value)
+
 use = Use()
+
 use.__dict__.update(dict(globals()))
 use = ProxyModule(use)
 
