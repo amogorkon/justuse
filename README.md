@@ -14,6 +14,11 @@
 
 # Just use() python the way you want!
 
+```mermaid
+graph TD;
+    A[just]-->B["use()"];
+```
+
 ## Installation
 To install, enter `python -m pip install justuse` in a commandline, then you can `import use` in your code and simply use() stuff. Check for examples below and our [Showcase](https://github.com/amogorkon/justuse/blob/unstable/docs/Showcase.ipynb)!
 
