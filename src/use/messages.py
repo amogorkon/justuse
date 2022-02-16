@@ -27,7 +27,7 @@ def _web_no_version_or_hash_provided(*, name, package_name, version, hashes, no_
     if not no_browser:
         webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
     return f"""Please specify version and hash for auto-installation of {package_name!r}.
-A webbrowser will open to the Snyk Advisor to check whether the package is vulnerable.
+{"" if no_browser else "A webbrowser should open to the Snyk Advisor to check whether the package is vulnerable or malicious."}
 If you want to auto-install the latest version, try the following line to select all viable hashes:
 use("{name}", version="{version!s}", modes=use.auto_install)"""
 
@@ -39,8 +39,8 @@ def _web_pebkac_missing_hash(name, package_name, version, hashes, recommended_ha
             file.write(template.render(**locals()))
         webbrowser.open(f"file://{home}/web_exception.html")
     return f"""Failed to auto-install {package_name!r} because hashes aren't specified.
-        A webbrowser should open with a list of available hashes for different platforms.
-        If you only want to use the package on this platform, this may work:
+        {"" if no_browser else "A webbrowser should open with a list of available hashes for different platforms for you to pick."}"
+        If you want to use the package only on this platform, this should work:
     use("{name}", version="{version!s}", hashes={recommended_hash!r}, modes=use.auto_install)"""
 
 

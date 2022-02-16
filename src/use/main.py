@@ -185,13 +185,6 @@ class ModuleReloader:
 
 
 class Use(ModuleType):
-    # MODES to reduce signature complexity
-    # enum.Flag wasn't viable, but this alternative is actually pretty cool
-    auto_install = Modes.auto_install
-    fatal_exceptions = Modes.fatal_exceptions
-    reloading = Modes.reloading
-    no_public_installation = Modes.no_public_installation
-
     def __init__(self):
         # TODO for some reason removing self._using isn't as straight forward..
         self._using = _using
