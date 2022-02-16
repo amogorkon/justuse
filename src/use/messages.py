@@ -32,7 +32,7 @@ If you want to auto-install the latest version, try the following line to select
 use("{name}", version="{version!s}", modes=use.auto_install)"""
 
 
-def _web_pebkac_no_hash(name, package_name, version, hashes, recommended_hash, no_browser: bool):
+def _web_pebkac_no_hash(*, name, package_name, version, hashes, recommended_hash, no_browser: bool):
     if not no_browser:
         with open(home / "web_exception.html", "w", encoding="utf-8") as file:
             template = env.get_template("hash-presentation.html")

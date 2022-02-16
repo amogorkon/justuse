@@ -17,27 +17,26 @@
 </head>
 
 <body onload="brython()">
-    <h1>Auto-installation of {{name}} version {{version}}</h1>
+    <h1>Auto-installation of {{package_name}} version {{version}}</h1>
     <p>
-        Please specify the hash corresponding to the platform you want to run your code on. 
+        Please specify the hash corresponding to the platform you want to run your code on.
         Different types of hash can't be mixed together but should be interchangeable, choose the type you prefer.
 
-<div>
-  <input type="radio" id="button-jack" name="hash type" value="jack"
-         checked>
-  <label for="button-jack">JACK</label>
-</div>
+    <div>
+        <input type="radio" id="button-jack" name="hash type" value="jack" checked>
+        <label for="button-jack">JACK</label>
+    </div>
 
-<div>
-  <input type="radio" id="button-sha256" name="hash type" value="sha256">
-  <label for="button-sha256">SHA 256</label>
-</div>
+    <div>
+        <input type="radio" id="button-sha256" name="hash type" value="sha256">
+        <label for="button-sha256">SHA 256</label>
+    </div>
 
     <table id="table-jack">
         <tr>
-        <th> target? </th>
-        <th> Platform </th>
-        <th> Hash </th>
+            <th> target? </th>
+            <th> Platform </th>
+            <th> Hash </th>
         </tr>
         {% for hash in hashes %}
         <tr>
@@ -49,9 +48,10 @@
     </table>
 
     <table id="table-sha256" style="display: none;">
-        <tr></th>
-        <th> Platform </th>
-        <th> Hash </th>
+        <tr>
+            </th>
+            <th> Platform </th>
+            <th> Hash </th>
         </tr>
         {% for hash in hashes %}
         <tr>
@@ -62,12 +62,14 @@
         {% endfor %}
     </table>
 
-    <p> Copy&paste the line below into your code to auto-install {{ name }} version {{ version }} on any of the selected platforms:
+    <p> Copy&paste the line below into your code to auto-install {{ name }} version {{ version }} on any of the selected
+        platforms:
     <p>
-        <textarea id="result" rows="2" cols="120">use('{{name}}', version='{{version}}', hashes={ ... }, modes=use.auto_install)</textarea>
+        <textarea id="result" rows="2"
+            cols="120">use('{{name}}', version='{{version}}', hashes={ ... }, modes=use.auto_install)</textarea>
 
-    <!-- Switch types of hashes -->
-    <script type="text/python" id="script5">
+        <!-- Switch types of hashes -->
+        <script type="text/python" id="script5">
         from browser import document, html
 
         switch = document["button-jack"]

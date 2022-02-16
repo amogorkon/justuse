@@ -777,7 +777,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if name in self._using:
             spec = self._using[name].spec
         elif not auto_install:
-            spec = importlib.util.find_spec(package_name.replace("-", "_"))
+            spec = importlib.util.find_spec(module_name.replace("-", "_"))
 
         case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
         log.info("case = %s", case)

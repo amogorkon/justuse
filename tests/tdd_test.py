@@ -14,11 +14,12 @@ from hashlib import sha256
 from pathlib import Path
 from warnings import catch_warnings, filterwarnings, simplefilter
 
-import pytest
 import use
 from hypothesis import assume, example, given
 from hypothesis import strategies as st
+from pytest import mark, skip
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
+from use.pimp import _parse_name
 from use.pypi_model import JustUse_Info, PyPI_Project, PyPI_Release, Version
 
 from tests.unit_test import ScopedCwd, reuse
@@ -49,7 +50,7 @@ def test_441_discord(reuse):
         if not imported:
             del sys.modules["discord"]
     except ImportError:
-        pytest.skip("discord is not installed")
+        skip("discord is not installed")
         return
     mod = use("discord")
     assert mod
@@ -63,11 +64,15 @@ def test_441_discord(reuse):
         if not imported:
             del sys.modules["discord"]
     except ImportError:
-        pytest.skip("discord is not installed")
+        skip("discord is not installed")
         return
     mod = use("discord")
     assert mod
 
 
-def test_444_discordpy_autoinstall(reuse):
-    mod = use("discord.py", modes=use.auto_install | use.no_browser)
+@mark.parametrize(
+    "name,expected",
+    [("", (None, None)), ("foo", ("foo", "foo")), ("foo/bar", ("foo", "bar")), ("foo.py", ("foo", "foo.py"))],
+)
+def test_parse_name(name, expected):
+    assert _parse_name(name) == expected
