@@ -24,6 +24,7 @@ import requests
 from furl import furl as URL
 from hypothesis import assume, example, given
 from hypothesis import strategies as st
+from pytest import fixture, mark, raises, skip
 
 is_win = sys.platform.startswith("win")
 
@@ -32,6 +33,7 @@ import logging
 
 from use import use
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
+from use.pimp import _parse_name
 from use.pypi_model import JustUse_Info, PyPI_Project, PyPI_Release, Version
 
 log = logging.getLogger(".".join((__package__, __name__)))
@@ -43,7 +45,7 @@ use.config["testing"] = True
 from tests.simple_funcs import three
 
 
-@pytest.fixture()
+@fixture()
 def reuse():
     """
     Return the `use` module in a clean state for "reuse."
@@ -70,12 +72,12 @@ def test_access_to_home(reuse):
 
 
 def test_other_case(reuse):
-    with pytest.raises(NotImplementedError):
+    with raises(NotImplementedError):
         reuse(2, modes=reuse.fatal_exceptions)
 
 
 def test_fail_dir(reuse):
-    with pytest.raises(ImportError):
+    with raises(ImportError):
         reuse(Path(""))
 
 
@@ -135,7 +137,7 @@ def test_classical_install_no_version(reuse):
 
 
 def test_PEBKAC_hash_no_version(reuse):
-    with pytest.raises(RuntimeWarning):
+    with raises(RuntimeWarning):
         reuse(
             "pytest",
             hashes="asdf",
@@ -145,7 +147,7 @@ def test_PEBKAC_hash_no_version(reuse):
 
 def test_PEBKAC_nonexisting_pkg(reuse):
     # non-existing pkg
-    with pytest.raises(ImportError):
+    with raises(ImportError):
         reuse(
             "4-^df",
             modes=reuse.auto_install,
@@ -156,7 +158,7 @@ def test_PEBKAC_nonexisting_pkg(reuse):
 
 def test_PEBKAC_impossible_version(reuse):
     # impossible version
-    with pytest.raises(TypeError):  # version must be either str or tuple
+    with raises(TypeError):  # version must be either str or tuple
         reuse(
             "pytest",
             modes=reuse.auto_install,
@@ -168,11 +170,11 @@ def test_PEBKAC_impossible_version(reuse):
 def test_autoinstall_PEBKAC(reuse):
     with patch("webbrowser.open"):
         # auto-install requested, but no version or hashes specified
-        with pytest.raises(RuntimeWarning):
+        with raises(RuntimeWarning):
             reuse("pytest", modes=reuse.auto_install)
 
         # forgot hashes
-        with pytest.raises(packaging.version.InvalidVersion):
+        with raises(packaging.version.InvalidVersion):
             reuse("pytest", version="-1", modes=reuse.auto_install)
 
 
@@ -188,7 +190,7 @@ def test_version_warning(reuse):
 def test_use_global_install(reuse):
     from . import foo
 
-    with pytest.raises(NameError):
+    with raises(NameError):
         foo.bar()
 
     reuse.install()
@@ -355,22 +357,22 @@ def test_clear_registry(reuse):
 
 def installed_or_skip(reuse, name, version=None):
     if not (spec := find_spec(name)):
-        pytest.skip(f"{name} not installed")
+        skip(f"{name} not installed")
         return False
     try:
         dist = distribution(spec.name)
     except PackageNotFoundError as pnfe:
-        pytest.skip(f"{name} partially installed: {spec=}, {pnfe}")
+        skip(f"{name} partially installed: {spec=}, {pnfe}")
 
     if not (
         (ver := dist.metadata["version"]) and (not version or reuse.Version(ver) == reuse.Version(version))
     ):
-        pytest.skip(f"found '{name}' v{ver}, but require v{version}")
+        skip(f"found '{name}' v{ver}, but require v{version}")
         return False
     return True
 
 
-@pytest.mark.parametrize(
+@mark.parametrize(
     "name, version, hashes",
     (
         (
@@ -409,7 +411,7 @@ def test_387_usepath_filename(reuse):
     assert mod
 
 
-@pytest.mark.parametrize(
+@mark.parametrize(
     "name, version, hashes",
     (
         (
@@ -510,7 +512,7 @@ def test_fraction_of_day(reuse):
 
 
 def test_nirvana(reuse):
-    with pytest.raises(reuse.NirvanaWarning):
+    with raises(reuse.NirvanaWarning):
         reuse()
 
 
@@ -557,3 +559,53 @@ def test_setup_py_works(reuse):
     with ScopedCwd(Path(__file__).parent.parent):
         result = subprocess.check_output([sys.executable, "setup.py", "--help"], shell=False)
         assert result
+
+
+def test_443_py_test(reuse):
+    try:
+        imported = "py" in sys.modules
+        import py.test
+
+        if not imported:
+            del sys.modules["py"]
+    except ImportError:
+        skip("py.test is not installed")
+        return
+    mod = use("py.test")
+    assert mod
+
+
+def test_441_discord(reuse):
+    try:
+        imported = "discord" in sys.modules
+        import discord
+
+        if not imported:
+            del sys.modules["discord"]
+    except ImportError:
+        skip("discord is not installed")
+        return
+    mod = use("discord")
+    assert mod
+
+
+def test_441_discord(reuse):
+    try:
+        imported = "discord" in sys.modules
+        import discord
+
+        if not imported:
+            del sys.modules["discord"]
+    except ImportError:
+        skip("discord is not installed")
+        return
+    mod = use("discord")
+    assert mod
+
+
+@mark.parametrize(
+    "name,expected",
+    [("", (None, None)), ("foo", ("foo", "foo")), ("foo/bar", ("foo", "bar")), ("foo.py", ("foo", "foo.py"))],
+)
+def test_parse_name(name, expected):
+    assert _parse_name(name) == expected
