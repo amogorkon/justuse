@@ -51,6 +51,8 @@ def methdispatch(func):
 
 
 def pipes(func_or_class):
+    from beartype import beartype
+
     if inspect.isclass(func_or_class):
         decorator_frame = inspect.stack()[1]
         ctx = decorator_frame[0].f_locals

@@ -33,13 +33,15 @@ from warnings import catch_warnings, filterwarnings, warn
 import furl
 import packaging
 import requests
+from beartype import beartype
 from furl import furl as URL
 from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
+from sklearn.naive_bayes import BernoulliNB
 
 import use
-from use import Hash, Modes, PkgHash, VersionWarning, config
+from use import Hash, Modes, PkgHash, VersionWarning, config, home
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import Message, _web_pebkac_no_version_no_hash
 from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none
@@ -74,6 +76,7 @@ class PlatformTag:
         return self.platform == other.platform
 
 
+@beartype
 def _ensure_version(
     result: Union[ModuleType, Exception], *, name, version, **kwargs
 ) -> Union[ModuleType, Exception]:
@@ -113,6 +116,7 @@ def execute_wrapped(sql: str, params: tuple):
 
 
 @cache
+@beartype
 def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
     """
     Results of this function are cached. They are expensive to
@@ -155,6 +159,7 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
     return frozenset(items)
 
 
+@beartype
 def _filter_by_version(project_: "PyPI_Project", version: Version) -> "PyPI_Project":
     v = Version(version)
     rels = project_.releases.get(v, project_.releases.get(version, []))
@@ -198,6 +203,7 @@ class TarFunctions:
 
 
 @pipes
+@beartype
 def archive_meta(artifact_path):
     DIST_PKG_INFO_REGEX = re.compile("(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$")
     meta = archive = names = functions = None
@@ -266,6 +272,7 @@ def _venv_root(package_name, version, home) -> Path:
     return home / "venv" / package_name / str(version)
 
 
+@beartype
 def _pebkac_no_version(
     *,
     name: str,
@@ -286,6 +293,7 @@ def _pebkac_no_version(
     return RuntimeWarning(Message.cant_import_no_version(name))
 
 
+@beartype
 @pipes
 def _pebkac_no_hash(
     *,
@@ -322,6 +330,7 @@ def _pebkac_no_hash(
         return RuntimeWarning(Message.no_distribution_found(package_name, version))
 
 
+@beartype
 @pipes
 def _pebkac_no_version_no_hash(
     *,
@@ -352,6 +361,7 @@ def _pebkac_no_version_no_hash(
     )
 
 
+@beartype
 def _import_public_no_install(
     *,
     package_name: str = None,
@@ -416,6 +426,7 @@ def _parse_name(name: str) -> tuple[str, str]:
     return (package_name, module_name)
 
 
+@beartype
 def _auto_install(
     *,
     name: str,
@@ -448,7 +459,7 @@ def _auto_install(
     ).fetchone()
 
     if not query or not _ensure_path(query["artifact_path"]).exists():
-        query = _find_or_install(package_name, version)
+        query = _find_or_install(package_name=package_name, version=version)
 
     artifact_path = _ensure_path(query["artifact_path"])
     module_path = _ensure_path(query["module_path"])
@@ -464,7 +475,7 @@ def _auto_install(
     if "installation_path" not in query or not _ensure_path(query["installation_path"]).exists():
         if query:
             sys.modules["use"].del_entry(name, version)
-        query = _find_or_install(package_name, version, force_install=True)
+        query = _find_or_install(package_name=package_name, version=version, force_install=True)
         artifact_path = _ensure_path(query["artifact_path"])
         module_path = _ensure_path(query["module_path"])
     assert "installation_path" in query  # why redundant assertions?
@@ -551,7 +562,7 @@ def _process(*argv, env={}):
     )
 
 
-def _get_venv_env(venv_root: Path) -> dict[str, str]:
+def _get__env(venv_root: Path) -> dict[str, str]:
     pathvar = os.environ.get("PATH")
     python_exe = Path(sys.executable)
     if not venv_root.exists():
@@ -560,13 +571,12 @@ def _get_venv_env(venv_root: Path) -> dict[str, str]:
     return {}
 
 
-@ensure(lambda url: str(url).startswith("http"))  # should we be enforcing 443 > 80?
-def _download_artifact(name, version, filename, url) -> Path:
-    artifact_path = (sys.modules["use"].home / "packages" / filename).absolute()
-    if not artifact_path.exists():
-        data = requests.get(url).content
-        artifact_path.write_bytes(data)
-    return artifact_path
+@beartype
+@ensure(lambda url: str(url).startswith("http"))
+def _download_artifact(artifact_path: Path, url: URL) -> bool:
+    data = requests.get(url).content
+    artifact_path.write_bytes(data)
+    return True
 
 
 def _is_pure_python_package(artifact_path, meta):
@@ -582,11 +592,8 @@ def _is_pure_python_package(artifact_path, meta):
 
 
 def _find_module_in_venv(package_name, version, relp):
-    ___use = getattr(sys, "modules").get("use")
     ret = None, None
-    site_dirs = list(
-        (getattr(___use, "home") / "venv" / package_name / str(version)).rglob("**/site-packages")
-    )
+    site_dirs = list((home / "venv" / package_name / str(version)).rglob("**/site-packages"))
     if not site_dirs:
         return ret
 
@@ -617,15 +624,16 @@ def _find_module_in_venv(package_name, version, relp):
     return ret
 
 
-def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=None, force_install=False):
-    if out_info is None:
-        out_info = {}
-    info = out_info
-    package_name, rest = _parse_name(name)
-
-    if isinstance(url, str):
-        url = URL(url)
-    filename = artifact_path.name if artifact_path else None
+@beartype
+def _find_or_install(
+    *,
+    package_name: str,
+    version: Version = None,
+    artifact_path: Path = None,
+    url: URL = None,
+    force_install=False,
+):
+    out_info = {}
     if url:
         filename = url.asdict()["path"]["segments"][-1]
     else:
@@ -644,7 +652,6 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
             v = list(proj.releases.keys())[0]
             rel_vals = proj.releases.get(v, [None])
             rel = rel_vals[0]
-        info.update(rel.dict())
         out_info.update(rel.dict())
 
         url = URL(rel.url)
@@ -652,24 +659,18 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
         artifact_path = use.home / "packages" / filename
 
     out_info["artifact_path"] = artifact_path
-    # todo: set info
-    as_dict = info
-    url = URL(as_dict["url"])
+    url = URL(out_info["url"])
     filename = url.path.segments[-1]
-    info["filename"] = filename
-    # info.update(_parse_filename(filename))
-    info = {**info, "version": Version(version)}
     if not artifact_path.exists():
-        artifact_path = _ensure_path(_download_artifact(name, version, filename, url))
+        # TODO this will need to be handled - assume the worst!
+        _download_artifact(artifact_path, url)
 
-    out_info.update(info)
     install_item = artifact_path
     meta = archive_meta(artifact_path)
     import_parts = re.split("[\\\\/]", meta["import_relpath"])
     if "__init__.py" in import_parts:
         import_parts.remove("__init__.py")
     import_name = ".".join(import_parts)
-    name = f"{package_name}.{import_name}"
     relp = meta["import_relpath"]
     out_info["module_path"] = relp
     out_info["import_relpath"] = relp
@@ -733,15 +734,12 @@ def _find_or_install(name, version=None, artifact_path=None, url=None, out_info=
     assert module_paths
     out_info.update(
         {
-            **info,
             "artifact_path": artifact_path,
             "installation_path": installation_path,
             "module_path": module_path,
             "import_relpath": ".".join(relp.split("/")[:-1]),
-            "info": info,
         }
     )
-
     return _delete_none(out_info)
 
 

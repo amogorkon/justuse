@@ -9,6 +9,7 @@ import hashlib
 import importlib.util
 import inspect
 import os
+import shutil
 import sqlite3
 import sys
 import threading
@@ -226,6 +227,13 @@ class Use(ModuleType):
                     traceback.format_exc()
                 )  # we really don't need to bug the user about this (either pypi is down or internet is broken)
 
+    def clean_slate(self):
+        shutil.rmtree(home / "venv", ignore_errors=True)
+        shutil.rmtree(home / "packages", ignore_errors=True)
+        (home / "venv").mkdir(mode=0o755, exist_ok=True)
+        (home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
+        self.recreate_registry()
+
     def _sqlite_row_factory(self, cursor, row):
         return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
 
@@ -286,8 +294,9 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         self.registry.close()
         self.registry.connection.close()
         self.registry = None
-        number_of_backups = len(list((home / "registry.db").glob("*.bak")))
-        (home / "registry.db").rename(home / f"registry.db.{number_of_backups + 1}.bak")
+        number_of_backups = len(list(home.glob("registry.db*")))
+        print(number_of_backups)
+        (home / "registry.db").rename(home / f"registry.db.{number_of_backups}.bak")
         (home / "registry.db").touch(mode=0o644)
         self.registry = self._set_up_registry()
         self.cleanup()
