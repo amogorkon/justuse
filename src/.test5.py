@@ -1,3 +1,3 @@
-import use
+l = []
 
-mod = use("discord")
+l.get(0)

@@ -295,7 +295,6 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         self.registry.connection.close()
         self.registry = None
         number_of_backups = len(list(home.glob("registry.db*")))
-        print(number_of_backups)
         (home / "registry.db").rename(home / f"registry.db.{number_of_backups}.bak")
         (home / "registry.db").touch(mode=0o644)
         self.registry = self._set_up_registry()

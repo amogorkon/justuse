@@ -304,16 +304,16 @@ def _pebkac_no_hash(
     no_browser: bool,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
-    if version is None or version not in _get_package_data(package_name).releases:
-        version = next(iter(reversed(_get_package_data(package_name).releases)))
+    if version is None or version not in _get_package_data_from_pypi(package_name).releases:
+        version = next(iter(reversed(_get_package_data_from_pypi(package_name).releases)))
     if hashes := {
         PkgHash(
             "foobar", hexdigest_as_JACK(entry.digests.get(hash_algo.name)), entry.digests.get(hash_algo.name)
         )
-        for entry in _get_package_data(package_name).releases[version]
+        for entry in _get_package_data_from_pypi(package_name).releases[version]
     }:
 
-        proj = _get_package_data(package_name)
+        proj = _get_package_data_from_pypi(package_name)
         ordered = _filtered_and_ordered_data(proj, version=None)
         recommended_hash = {hexdigest_as_JACK(ordered[0].digests.get(hash_algo.name))}
         return RuntimeWarning(
@@ -341,21 +341,18 @@ def _pebkac_no_version_no_hash(
     **kwargs,
 ) -> Exception:
     # let's try to make an educated guess and give a useful suggestion
-    proj = _get_package_data(package_name)
+    proj = _get_package_data_from_pypi(package_name)
     ordered = _filtered_and_ordered_data(proj, version=None)
     # we tried our best, but we didn't find anything that could work'
     if not ordered:
         return RuntimeWarning(Message.pebkac_unsupported(package_name))
     # we found something that could work, but it may not fit to the user's requirements
-    version = ordered[0].version
-    hash = ordered[0].digests.get(hash_algo.name)
-    recommended_hashes = {hexdigest_as_JACK(hash)}
     return RuntimeWarning(
         Message.no_version_or_hash_provided(
             name=name,
-            hashes=recommended_hashes,
+            hashes={hexdigest_as_JACK(ordered[0].digests.get(hash_algo.name))},
             package_name=package_name,
-            version=version,
+            version=ordered[0].version,
             no_browser=no_browser,
         )
     )
@@ -364,15 +361,13 @@ def _pebkac_no_version_no_hash(
 @beartype
 def _import_public_no_install(
     *,
-    package_name: str = None,
-    module_name: str = None,
-    name: str,
+    module_name: str,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     # builtin?
     builtin = False
     try:
-        metadata.PathDistribution.from_name(name)
+        metadata.PathDistribution.from_name(module_name)
     except metadata.PackageNotFoundError:  # indeed builtin!
         builtin = True
     # TODO ehhh.. builtin needs to be handled differently?
@@ -432,7 +427,7 @@ def _auto_install(
     name: str,
     func: Callable[..., Union[Exception, ModuleType]] = None,
     version: Version,
-    hash_algo,
+    hash_algo: Hash,
     package_name: str,
     module_name: str,
     **kwargs,
@@ -441,6 +436,8 @@ def _auto_install(
         result = func()
         if isinstance(result, (Exception, ModuleType)):
             return result
+        else:
+            raise AssertionError(f"{func!r} returned {result!r}")
 
     query = execute_wrapped(
         """
@@ -478,18 +475,11 @@ def _auto_install(
         query = _find_or_install(package_name=package_name, version=version, force_install=True)
         artifact_path = _ensure_path(query["artifact_path"])
         module_path = _ensure_path(query["module_path"])
-    assert "installation_path" in query  # why redundant assertions?
-    assert query["installation_path"]
+    assert "installation_path" in query and query["installation_path"]
     installation_path = _ensure_path(query["installation_path"])
     try:
         module_path = _ensure_path(query["module_path"])
         os.chdir(installation_path)
-        import_name = (
-            str(module_path.relative_to(installation_path))
-            .replace("\\", "/")
-            .replace("/__init__.py", "")
-            .replace("-", "_")
-        )
         return (
             mod := _load_venv_entry(
                 package_name=package_name,
@@ -562,15 +552,6 @@ def _process(*argv, env={}):
     )
 
 
-def _get__env(venv_root: Path) -> dict[str, str]:
-    pathvar = os.environ.get("PATH")
-    python_exe = Path(sys.executable)
-    if not venv_root.exists():
-        venv_root.mkdir(parents=True)
-    exe_dir = python_exe.parent.absolute()
-    return {}
-
-
 @beartype
 @ensure(lambda url: str(url).startswith("http"))
 def _download_artifact(artifact_path: Path, url: URL) -> bool:
@@ -579,19 +560,19 @@ def _download_artifact(artifact_path: Path, url: URL) -> bool:
     return True
 
 
-def _is_pure_python_package(artifact_path, meta):
-    not_pure_python = any(
-        any(n.endswith(s) for s in importlib.machinery.EXTENSION_SUFFIXES) for n in meta["names"]
-    )
-
+@beartype
+def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
+    for n in meta["names"]:
+        for s in importlib.machinery.EXTENSION_SUFFIXES:
+            if n.endswith(s):
+                return False
     if ".tar" in str(artifact_path):
-        return False
-    if not_pure_python:
         return False
     return True
 
 
-def _find_module_in_venv(package_name, version, relp):
+@beartype
+def _find_module_in_venv(package_name: str, version: Version, relp: Path):
     ret = None, None
     site_dirs = list((home / "venv" / package_name / str(version)).rglob("**/site-packages"))
     if not site_dirs:
@@ -599,9 +580,8 @@ def _find_module_in_venv(package_name, version, relp):
 
     dist = None
     mod_relative_to_site = None
-    osp = None
     for site_dir in site_dirs:
-        osp = list(sys.path)
+        original_syspath = sys.path
         sys.path.clear()
         sys.path.insert(0, str(site_dir))
         try:
@@ -617,7 +597,7 @@ def _find_module_in_venv(package_name, version, relp):
             continue
         finally:
             sys.path.remove(str(site_dir))
-            sys.path += osp
+            sys.path += original_syspath
     if mod_relative_to_site:
         module_path = site_dir / mod_relative_to_site.as_posix()
         return (ret := site_dir, module_path)
@@ -629,43 +609,29 @@ def _find_or_install(
     *,
     package_name: str,
     version: Version = None,
-    artifact_path: Path = None,
-    url: URL = None,
     force_install=False,
-):
+) -> dict[str, str]:  # we should make this a proper pedantic class
     out_info = {}
-    if url:
-        filename = url.asdict()["path"]["segments"][-1]
+
+    proj = _get_package_data_from_pypi(package_name)
+    if ordered := _filtered_and_ordered_data(proj, version=version):
+        release = ordered[0]
     else:
-        filename = artifact_path.name if artifact_path else None
-    if filename and not artifact_path:
-        artifact_path = use.home / "packages" / filename
+        v = list(proj.releases.keys())[0]
+        rel_vals = proj.releases.get(v, [None])
+        release = rel_vals[0]
+    out_info.update(release.dict())
 
-    if not url or not artifact_path or (artifact_path and not artifact_path.exists()):
-        proj = _get_package_data(package_name)
-        ordered = _filtered_and_ordered_data(proj, version=version)
-        rel = None
-        for r in ordered:
-            rel = r
-            break
-        if not rel:
-            v = list(proj.releases.keys())[0]
-            rel_vals = proj.releases.get(v, [None])
-            rel = rel_vals[0]
-        out_info.update(rel.dict())
-
-        url = URL(rel.url)
-        filename = url.asdict()["path"]["segments"][-1]
-        artifact_path = use.home / "packages" / filename
+    url = URL(release.url)
+    filename = url.asdict()["path"]["segments"][-1]
+    artifact_path = use.home / "packages" / filename
 
     out_info["artifact_path"] = artifact_path
-    url = URL(out_info["url"])
-    filename = url.path.segments[-1]
+
     if not artifact_path.exists():
         # TODO this will need to be handled - assume the worst!
         _download_artifact(artifact_path, url)
 
-    install_item = artifact_path
     meta = archive_meta(artifact_path)
     import_parts = re.split("[\\\\/]", meta["import_relpath"])
     if "__init__.py" in import_parts:
@@ -721,7 +687,7 @@ def _find_or_install(
             "--no-warn-script-location",
             "--force-reinstall",
             "--no-warn-conflicts",
-            install_item,
+            artifact_path,
         )
     site_dir, module_path = _find_module_in_venv(package_name, version, relp)
     module_paths = []
@@ -743,7 +709,8 @@ def _find_or_install(
     return _delete_none(out_info)
 
 
-def _load_venv_entry(*, package_name, module_name, installation_path, module_path) -> ModuleType:
+@beartype
+def _load_venv_entry(*, module_name: str, installation_path: Path, module_path: Path) -> ModuleType:
     cwd = Path.cwd()
     orig_exc = None
     old_sys_path = list(sys.path)
@@ -754,9 +721,8 @@ def _load_venv_entry(*, package_name, module_name, installation_path, module_pat
             for variant in (
                 cwd,
                 installation_path,
-                Path(str(str(installation_path).replace("lib64/", "lib/"))),
-                Path(str(str(installation_path).replace("lib/", "lib64/"))),
-                installation_path,
+                Path(str(installation_path).replace("lib64/", "lib/")),
+                Path(str(installation_path).replace("lib/", "lib64/")),
             ):
                 if not variant.exists():
                     continue
@@ -764,7 +730,7 @@ def _load_venv_entry(*, package_name, module_name, installation_path, module_pat
                 try:
                     log.info("Changimg directory: from %s to %s", origcwd, variant)
                     os.chdir(variant)
-                    return importlib.import_module(module_name.replace("/", "."))
+                    return importlib.import_module(module_name)
                 except ImportError as ierr0:
                     orig_exc = orig_exc or ierr0
                     continue
@@ -784,7 +750,7 @@ def _load_venv_entry(*, package_name, module_name, installation_path, module_pat
 
 
 @cache(maxsize=512)
-def _get_package_data(package_name: str) -> PyPI_Project:
+def _get_package_data_from_pypi(package_name: str) -> PyPI_Project:
     json_url = f"https://pypi.org/pypi/{package_name}/json"
     response = requests.get(json_url)
     if response.status_code == 404:
@@ -794,6 +760,7 @@ def _get_package_data(package_name: str) -> PyPI_Project:
     return PyPI_Project(**response.json())
 
 
+@beartype
 def _filter_by_platform(
     project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version
 ) -> PyPI_Project:
@@ -828,17 +795,15 @@ def _filter_by_platform(
     return PyPI_Project(**{**project.dict(), **{"releases": filtered}})
 
 
+@beartype
 @pipes
 def _filtered_and_ordered_data(data: PyPI_Project, version: Optional[Version] = None) -> list[PyPI_Release]:
     sys_version = Version(major=sys.version_info[0], minor=sys.version_info[1])
     if version:
-        version = Version(str(version))
         filtered = (
             data
             >> _filter_by_version(version)
-            >> _filter_by_platform(
-                tags=get_supported(), sys_version=sys_version
-            )  # let's not filter by platform for now
+            >> _filter_by_platform(tags=get_supported(), sys_version=sys_version)
         )
     else:
         filtered = data
@@ -871,6 +836,7 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
     return not specifier or sys_version in specifiers
 
 
+@beartype
 @pipes
 def _is_platform_compatible(
     info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
