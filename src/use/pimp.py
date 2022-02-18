@@ -581,7 +581,7 @@ def _find_module_in_venv(package_name: str, version: Version, relp: Path):
     dist = None
     mod_relative_to_site = None
     for site_dir in site_dirs:
-        original_syspath = sys.path
+        original_syspath = list(sys.path)  # sic - need a copy!
         sys.path.clear()
         sys.path.insert(0, str(site_dir))
         try:
