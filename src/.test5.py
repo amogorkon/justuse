@@ -1,3 +1,6 @@
-l = []
+import use
 
-l.get(0)
+use("pytest",
+            hashes="asdf",
+            modes=use.auto_install,
+        )

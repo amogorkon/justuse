@@ -272,8 +272,7 @@ def test_is_version_satisfied(reuse):
 
 
 def test_find_windows_artifact(reuse):
-    data = reuse._get_package_data("protobuf")
-    assert reuse.Version("3.17.3") in reuse._get_package_data("protobuf").releases
+    assert reuse.Version("3.17.3") in reuse._get_package_data_from_pypi("protobuf").releases
 
 
 def test_classic_import_same_version(reuse):

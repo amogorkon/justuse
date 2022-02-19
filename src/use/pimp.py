@@ -141,12 +141,14 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 pass
         if not get_supported:
             try:
-                from pip._internal.utils.compatibility_tags import get_supported
+                from pip._internal.utils.compatibility_tags import \
+                    get_supported
             except ImportError:
                 pass
         if not get_supported:
             try:
-                from pip._internal.resolution.resolvelib.factory import get_supported
+                from pip._internal.resolution.resolvelib.factory import \
+                    get_supported
             except ImportError:
                 pass
 
@@ -281,7 +283,7 @@ def _pebkac_no_version(
     hash_algo=None,
     package_name: str = None,
     module_name: str = None,
-    Message: UserMessage,
+    Message: type,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
 
@@ -302,7 +304,7 @@ def _pebkac_no_hash(
     hash_algo: Hash,
     package_name: str = None,
     no_browser: bool,
-    Message: UserMessage,
+    Message: type,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     if version is None or version not in _get_package_data_from_pypi(package_name).releases:
@@ -339,7 +341,7 @@ def _pebkac_no_version_no_hash(
     hash_algo: Hash,
     package_name: str,
     no_browser: bool,
-    Message: UserMessage,
+    Message: type,
     **kwargs,
 ) -> Exception:
     # let's try to make an educated guess and give a useful suggestion

@@ -759,13 +759,13 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         default: Any,
         hash_algo: Hash,
         modes: int = 0,
-        Message: UserMessage = UserMessage,
+        Message: type = UserMessage,
     ):
-        auto_install = Modes.auto_install & modes
-        no_public_installation = Modes.no_public_installation & modes
-        fastfail = Modes.fastfail & modes
-        fatal_exceptions = Modes.fatal_exceptions & modes
-        no_browser = Modes.no_browser & modes
+        auto_install = bool(Modes.auto_install & modes)
+        no_public_installation = bool(Modes.no_public_installation & modes)
+        fastfail = bool(Modes.fastfail & modes)
+        fatal_exceptions = bool(Modes.fatal_exceptions & modes)
+        no_browser = bool(Modes.no_browser & modes)
 
         if module_name:
             module_name = module_name.replace("/", ".").replace("-", "_")
