@@ -8,7 +8,7 @@ from logging import getLogger
 log = getLogger(__name__)
 
 from use import pimp
-from use.messages import Message
+from use.messages import UserMessage as Message
 
 # the buffet of the past (<3.10)
 

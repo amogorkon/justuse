@@ -43,7 +43,7 @@ from use import (
 )
 from use.aspectizing import aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
-from use.messages import Message
+from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
 from use.pimp import _build_mod, _ensure_path, _fail_or_default, _parse_name
 from use.pypi_model import Version
 from use.tools import methdispatch
@@ -217,7 +217,7 @@ class Use(ModuleType):
                 this_version = __version__
                 if Version(this_version) < target_version:
                     warn(
-                        Message.use_version_warning(target_version),
+                        UserMessage.use_version_warning(target_version),
                         VersionWarning,
                     )
             except (KeyError, requests.exceptions.ConnectionError):
@@ -245,7 +245,7 @@ class Use(ModuleType):
             try:
                 registry = sqlite3.connect(home / "registry.db").cursor()
             except Exception as e:
-                raise RuntimeError(Message.couldnt_connect_to_db(e)) from e
+                raise RuntimeError(UserMessage.couldnt_connect_to_db(e)) from e
         registry.row_factory = self._sqlite_row_factory
         registry.execute("PRAGMA foreign_keys=ON")
         registry.execute("PRAGMA auto_vacuum = FULL")
@@ -394,7 +394,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
-        raise NotImplementedError(Message.cant_use(thing))
+        raise NotImplementedError(UserMessage.cant_use(thing))
 
     @require(lambda hash_algo: hash_algo in Hash)
     @require(lambda as_import: as_import.isidentifier())
@@ -416,7 +416,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         response = requests.get(str(url))
         if response.status_code != 200:
-            raise ImportError(Message.web_error(url, response))
+            raise ImportError(UserMessage.web_error(url, response))
         this_hash = hash_algo.value(response.content).hexdigest()
 
         if hash_value and not reckless:
@@ -426,7 +426,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     default,
                 )
         else:
-            warn(Message.no_validation(url, hash_algo, this_hash), NoValidationWarning)
+            warn(UserMessage.no_validation(url, hash_algo, this_hash), NoValidationWarning)
 
         name = url.path.segments[-1]
         try:
@@ -580,7 +580,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     for key, value in mod.__dict__.items()
                     if key not in initial_globals.keys() and not key.startswith("__")
                 ):
-                    warn(Message.not_reloadable(name), NotReloadableWarning)
+                    warn(UserMessage.not_reloadable(name), NotReloadableWarning)
             else:  # NOT reloading
                 with open(path, "rb") as rfile:
                     code = rfile.read()
@@ -654,6 +654,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hashes=hashes,
             default=default,
             modes=modes,
+            Message=KwargMessage,
         )
 
     @__call__.register(tuple)
@@ -698,6 +699,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hashes=hashes,
             default=default,
             modes=modes,
+            Message=TupleMessage,
         )
 
     @__call__.register(str)
@@ -742,6 +744,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hashes=hashes,
             default=default,
             modes=modes,
+            Message=StrMessage,
         )
 
     @require(lambda hash_algo: hash_algo != None)
@@ -755,8 +758,8 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         hashes: set,
         default: Any,
         hash_algo: Hash,
-        user_msg=Message,
         modes: int = 0,
+        Message: UserMessage = UserMessage,
     ):
         auto_install = Modes.auto_install & modes
         no_public_installation = Modes.no_public_installation & modes
@@ -797,13 +800,13 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "version": version,
             "user_provided_hashes": hashes,
             "hash_algo": hash_algo,
-            "user_msg": user_msg,
             "spec": spec,
             "fastfail": fastfail,
             "no_public_installation": no_public_installation,
             "fatal_exceptions": fatal_exceptions,
             "sys_version": Version(".".join(map(str, sys.version_info[:3]))),
             "no_browser": no_browser,
+            "Message": Message,
         }
 
         result = buffet_table(case, kwargs)

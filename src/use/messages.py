@@ -44,7 +44,7 @@ def _web_pebkac_no_hash(*, name, package_name, version, hashes, recommended_hash
     use("{name}", version="{version!s}", hashes={recommended_hash!r}, modes=use.auto_install)"""
 
 
-class Message(Enum):
+class UserMessage(Enum):
     not_reloadable = (
         lambda name: f"Beware {name} also contains non-function objects, it may not be safe to reload!"
     )
@@ -114,17 +114,17 @@ You can test if your version of venv is working by running:
     )
 
 
-class StrMessage(Message):
+class StrMessage(UserMessage):
     cant_import = (
         lambda package_name: f"No pkg installed named {package_name} and auto-installation not requested. Aborting."
     )
 
 
-class TupleMessage(Message):
+class TupleMessage(UserMessage):
     pass
 
 
-class KwargsMessage(Message):
+class KwargMessage(UserMessage):
     pass
 
 

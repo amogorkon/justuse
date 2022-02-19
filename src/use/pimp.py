@@ -43,7 +43,7 @@ from sklearn.naive_bayes import BernoulliNB
 import use
 from use import Hash, Modes, PkgHash, VersionWarning, config, home
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-from use.messages import Message, _web_pebkac_no_version_no_hash
+from use.messages import UserMessage, _web_pebkac_no_version_no_hash
 from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none
 from use.tools import pipes
 
@@ -84,7 +84,7 @@ def _ensure_version(
         return result
     result_version = _get_version(mod=result)
     if result_version != version:
-        warn(Message.version_warning(name, version, result_version), category=VersionWarning)
+        warn(UserMessage.version_warning(name, version, result_version), category=VersionWarning)
     return result
 
 
@@ -281,7 +281,7 @@ def _pebkac_no_version(
     hash_algo=None,
     package_name: str = None,
     module_name: str = None,
-    message_formatter: MissingHashFormatter = Message.pebkac_missing_hash,
+    Message: UserMessage,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
 
@@ -302,6 +302,7 @@ def _pebkac_no_hash(
     hash_algo: Hash,
     package_name: str = None,
     no_browser: bool,
+    Message: UserMessage,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
     if version is None or version not in _get_package_data_from_pypi(package_name).releases:
@@ -338,6 +339,7 @@ def _pebkac_no_version_no_hash(
     hash_algo: Hash,
     package_name: str,
     no_browser: bool,
+    Message: UserMessage,
     **kwargs,
 ) -> Exception:
     # let's try to make an educated guess and give a useful suggestion
@@ -754,9 +756,9 @@ def _get_package_data_from_pypi(package_name: str) -> PyPI_Project:
     json_url = f"https://pypi.org/pypi/{package_name}/json"
     response = requests.get(json_url)
     if response.status_code == 404:
-        raise ImportError(Message.pebkac_unsupported(package_name))
+        raise ImportError(UserMessage.pebkac_unsupported(package_name))
     elif response.status_code != 200:
-        raise RuntimeWarning(Message.web_error(json_url, response))
+        raise RuntimeWarning(UserMessage.web_error(json_url, response))
     return PyPI_Project(**response.json())
 
 
