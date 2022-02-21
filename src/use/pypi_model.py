@@ -1,25 +1,25 @@
 """
 Pydantic model for the PyPI JSON API.
 """
-from __future__ import annotations
-
 import re
+from logging import getLogger
 from pathlib import Path
 from typing import Optional, Union
 
 import packaging
 from packaging.version import Version as PkgVersion
 from pydantic import BaseModel
-from logging import getLogger
 
 log = getLogger(__name__)
 
 # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
 # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
 
+
 class BaseModel(BaseModel):
     def __repr__(self):
         return self.__class__.__name__
+
 
 class Version(PkgVersion):
     def __new__(cls, *args, **kwargs):
@@ -117,15 +117,14 @@ class PyPI_Release(BaseModel):
             ext = self.filename[self.filename.index(".tar") + 1 :]
         else:
             ext = pp.name[len(pp.stem) + 1 :]
-        rest = pp.name[:-len(ext) - 1]
+        rest = pp.name[: -len(ext) - 1]
 
         not_dash = lambda name: f"(?P<{name}>[^-]+)"
         not_dash_with_int = lambda name: f"(?P<{name}>[0-9][^-]*)"
-        match = re.match(
+        if match := re.match(
             f"{not_dash('distribution')}-{not_dash('version')}-?{not_dash_with_int('build_tag')}?-?{not_dash('python_tag')}?-?{not_dash('abi_tag')}?-?{not_dash('platform_tag')}?",
             rest,
-        )
-        if match:
+        ):
             return JustUse_Info(**_delete_none(match.groupdict()), ext=ext)
         return JustUse_Info()
 
@@ -194,46 +193,44 @@ class PyPI_Project(BaseModel):
     info: PyPI_Info = None
 
     def __init__(self, *, releases, urls, info, **kwargs):
-      try:
-        for version in list(releases.keys()):
-            if not isinstance(version, str):
-                continue
-            try:
-                Version(version)
-            except packaging.version.InvalidVersion:
-                del releases[version]
+        try:
+            for version in list(releases.keys()):
+                if not isinstance(version, str):
+                    continue
+                try:
+                    Version(version)
+                except packaging.version.InvalidVersion:
+                    del releases[version]
 
-        def get_info(rel_info, ver_str):
-           data = {
+            def get_info(rel_info, ver_str):
+                data = {
                     **rel_info,
                     **_parse_filename(rel_info["filename"]),
                     "version": Version(str(ver_str)),
                 }
-           if info.get("requires_python"): data["requires_python"] = info.get("requites_python")
-           if info.get("requires_dist"): data["requires_dist"] = info.get("requires_dist")
-           return data
-        
-        super(PyPI_Project, self).__init__(
-          releases={
-            str(ver_str): [
-                get_info(rel_info, ver_str)
-                for rel_info in release_infos
-            ]
-            for ver_str, release_infos in releases.items()
-          },
-          urls=[
-            get_info(rel_info, ver_str) 
-            for ver_str, rel_infos in releases.items()
-            for rel_info in rel_infos
-          ],
-          info=info,
-          **kwargs
-        )
-      finally:
-        releases = None
-        info = None
-        urls = None
-        
+                if info.get("requires_python"):
+                    data["requires_python"] = info.get("requites_python")
+                if info.get("requires_dist"):
+                    data["requires_dist"] = info.get("requires_dist")
+                return data
+
+            super(PyPI_Project, self).__init__(
+                releases={
+                    str(ver_str): [get_info(rel_info, ver_str) for rel_info in release_infos]
+                    for ver_str, release_infos in releases.items()
+                },
+                urls=[
+                    get_info(rel_info, ver_str)
+                    for ver_str, rel_infos in releases.items()
+                    for rel_info in rel_infos
+                ],
+                info=info,
+                **kwargs,
+            )
+        finally:
+            releases = None
+            info = None
+            urls = None
 
 
 def _parse_filename(filename) -> dict:
@@ -254,7 +251,7 @@ def _parse_filename(filename) -> dict:
     else:
         ext = pp.name[len(pp.stem) + 1 :]
         packagetype = "bdist"
-    rest = pp.name[:-len(ext) - 1]
+    rest = pp.name[: -len(ext) - 1]
 
     p = rest.split("-")
     np = len(p)
@@ -270,16 +267,15 @@ def _parse_filename(filename) -> dict:
         return {}
 
     return {
-            "distribution": distribution,
-            "version": version,
-            "build_tag": build_tag,
-            "python_tag": python_tag,
-            "abi_tag": abi_tag,
-            "platform_tag": platform_tag,
-            "ext": ext,
-            "filename": filename,
-            "packagetype": packagetype,
-            "yanked_reason": "",
-            "bugtrack_url": "",
-
+        "distribution": distribution,
+        "version": version,
+        "build_tag": build_tag,
+        "python_tag": python_tag,
+        "abi_tag": abi_tag,
+        "platform_tag": platform_tag,
+        "ext": ext,
+        "filename": filename,
+        "packagetype": packagetype,
+        "yanked_reason": "",
+        "bugtrack_url": "",
     }

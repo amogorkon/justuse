@@ -10,8 +10,8 @@ from typing import Any, Callable, DefaultDict, Deque
 from warnings import catch_warnings, filterwarnings, warn
 
 from beartype import beartype
-from beartype.roar import BeartypeCallHintPepParamException, BeartypeDecorHintPep585DeprecationWarning
-from icontract import ensure, invariant, require
+from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
+from icontract import require
 
 log = getLogger(__name__)
 
@@ -198,20 +198,6 @@ def get_module_info(mod: ModuleType):
     return module_name, loader, spec
 
 
-def get_package(mod):
-    module_name, loader, spec = get_module_info(mod)
-    module_parts = module_name.split(".")
-    try:
-        is_package = loader.is_package(module_name)
-    except ImportError:
-        is_package = False
-    if is_package:
-        package_name = module_name
-    else:
-        package_name = getattr(mod, "__package__", None) or ".".join(module_parts[:-1])
-    return is_package, package_name
-
-
 def isbeartypeable(thing):
     with catch_warnings():
         filterwarnings(action="ignore", category=BeartypeDecorHintPep585DeprecationWarning)
@@ -259,16 +245,3 @@ def woody_logger(func: callable) -> callable:
         return res
 
     return wrapper
-
-
-def deaspect(thing, name):
-    obj = getattr(thing, name)
-    unwrapped = _aspectized_functions[id(obj)].pop()
-    _applied_decorators[id(obj)].pop()
-    setattr(thing, name, unwrapped)
-
-    _aspectized_functions[id(unwrapped)].extend(_aspectized_functions[id(obj)])
-    _applied_decorators[id(unwrapped)].extend(_applied_decorators[id(obj)])
-
-    del _aspectized_functions[id(obj)]
-    del _applied_decorators[id(obj)]

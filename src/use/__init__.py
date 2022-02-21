@@ -135,10 +135,6 @@ class UnexpectedHash(ImportError, JustuseIssue):
     pass
 
 
-class AutoInstallationError(ImportError, JustuseIssue):
-    pass
-
-
 # Coerce all PEP 585 deprecation warnings into fatal exceptions.
 with catch_warnings():
     from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
@@ -148,7 +144,6 @@ with catch_warnings():
     from use.hash_alphabet import *
 
     ModInUse = namedtuple("ModInUse", "name mod path spec frame")
-    NoneType = type(None)
 
     class Hash(Enum):
         sha256 = hashlib.sha256

@@ -348,7 +348,7 @@ def test_clear_registry(reuse):
     try:
         fd, file = tempfile.mkstemp(".db", "test_registry")
         with closing(open(fd, "rb")):
-            reuse.registry = reuse._set_up_registry(Path(file))
+            reuse.registry = reuse._set_up_registry(path=Path(file))
             reuse.cleanup()
     finally:
         reuse.registry = reuse._set_up_registry()

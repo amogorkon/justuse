@@ -92,7 +92,6 @@ class ConsoleFormatter(Formatter):
         Initialize the formatter
         """
         self.datefmt = "%Y-%m-%d"
-        self.timefmt = "%H:%M:%S"
         style = "$"
         fmt = _STYLES[style][1]
         super(ConsoleFormatter, self).__init__(fmt=fmt, datefmt=self.datefmt, style=style, validate=True)

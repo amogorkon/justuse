@@ -5,7 +5,6 @@ Fun fact: f-strings are firmly rooted in the AST.
 """
 
 import webbrowser
-from base64 import b64encode
 from enum import Enum
 from pathlib import Path
 from shutil import copy
@@ -75,12 +74,6 @@ use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
     ambiguous_name_warning = (
         lambda package_name: f"Attempting to load the pkg '{package_name}', if you rather want to use the local module: use(use._ensure_path('{package_name}.py'))"
     )
-    no_version_provided = (
-        lambda: "No version was provided, even though auto_install was specified! Trying to load classically installed pkg instead."
-    )
-    classically_imported = (
-        lambda name, this_version: f'Classically imported \'{name}\'. To pin this version: use("{name}", version="{this_version}")'
-    )
     pebkac_missing_hash = _web_pebkac_no_hash
     pebkac_unsupported = (
         lambda package_name: f"We could not find any version or release for {package_name} that could satisfy our requirements!"
@@ -93,22 +86,7 @@ use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
     cant_import_no_version = (
         lambda package_name: f"Failed to auto-install '{package_name}' because no version was specified."
     )
-    venv_unavailable = (
-        lambda python_exe, python_version, python_platform: f"""
-Your system does not have a usable 'venv' pkg for this version of Python:
-   Path =     {python_exe}
-   Version =  {python_version}
-   Platform = {python_platform}
 
-Please run:
-   sudo apt update
-   sudo apt install python3-venv
-to install the necessary packages.
-
-You can test if your version of venv is working by running:
-  {python_exe} -m venv testenv && ls -lA testenv/bin/python
-"""
-    )
     no_distribution_found = (
         lambda package_name, version: f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
     )

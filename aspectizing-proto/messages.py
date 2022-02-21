@@ -83,9 +83,6 @@ use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
     pebkac_unsupported = (
         lambda package_name: f"We could not find any version or release for {package_name} that could satisfy our requirements!"
     )
-    pip_json_mess = (
-        lambda package_name, target_version: f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI."
-    )
     no_version_or_hash_provided = _web_no_version_or_hash_provided
     cant_import = lambda name: f"No pkg installed named {name} and auto-installation not requested. Aborting."
     cant_import_no_version = (

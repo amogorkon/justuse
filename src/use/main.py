@@ -15,17 +15,17 @@ import sys
 import threading
 import time
 import traceback
-from atexit import register
+import atexit
 from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Optional, Type, Union
+from typing import Any, Optional, Union
 from warnings import warn
 
 import requests
 import toml
 from furl import furl as URL
-from icontract import ensure, invariant, require
+from icontract import require
 
 from use import (
     AmbiguityWarning,
@@ -58,11 +58,13 @@ _reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
 _using = {}
 
 # sometimes all you need is a sledge hammer..
-@register
 def _release_locks():
     for _ in range(2):
         [lock.unlock() for lock in threading._shutdown_locks]
         [reloader.stop() for reloader in _reloaders.values()]
+
+
+atexit.register(_release_locks)
 
 
 class ProxyModule(ModuleType):
@@ -192,8 +194,6 @@ class Use(ModuleType):
         # might run into issues during testing otherwise
         self.registry = self._set_up_registry()
         "Registry sqlite DB to store all relevant package metadata."
-        self._user_registry = toml.load(home / "user_registry.toml")
-        "User can override package directories via user_registry.toml"
 
         # for the user to copy&paste
         with open(home / "config_defaults.toml", "w") as rfile:
@@ -234,19 +234,19 @@ class Use(ModuleType):
         (home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
         self.recreate_registry()
 
-    def _sqlite_row_factory(self, cursor, row):
-        return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
-
-    def _set_up_registry(self, path: Optional[Path] = None):
-        registry = None
-        if path or test_version and "DB_TEST" not in os.environ:
-            registry = sqlite3.connect(path or ":memory:").cursor()
-        else:
-            try:
-                registry = sqlite3.connect(home / "registry.db").cursor()
-            except Exception as e:
-                raise RuntimeError(UserMessage.couldnt_connect_to_db(e)) from e
-        registry.row_factory = self._sqlite_row_factory
+    def _set_up_registry(self, *, registry=None, path: Optional[Path] = None):
+        # recreating reuses the registry connection and file
+        if registry is None:
+            if path or test_version and "DB_TEST" not in os.environ:
+                registry = sqlite3.connect(path or ":memory:").cursor()
+            else:
+                try:
+                    registry = sqlite3.connect(home / "registry.db").cursor()
+                except Exception as e:
+                    raise RuntimeError(UserMessage.couldnt_connect_to_db(e)) from e
+        registry.row_factory = lambda cursor, row: {
+            col[0]: row[idx] for idx, col in enumerate(cursor.description)
+        }
         registry.execute("PRAGMA foreign_keys=ON")
         registry.execute("PRAGMA auto_vacuum = FULL")
         registry.executescript(
@@ -275,7 +275,7 @@ CREATE TABLE IF NOT EXISTS "distributions" (
 
 CREATE TABLE IF NOT EXISTS "hashes" (
     "algo"  TEXT NOT NULL,
-    "value" TEXT NOT NULL,
+    "value" INTEGER NOT NULL,
     "artifact_id"   INTEGER NOT NULL,
     PRIMARY KEY("algo","value"),
     FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id") ON DELETE CASCADE
@@ -291,14 +291,18 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         return registry
 
     def recreate_registry(self):
-        self.registry.close()
-        self.registry.connection.close()
-        self.registry = None
         number_of_backups = len(list(home.glob("registry.db*")))
-        (home / "registry.db").rename(home / f"registry.db.{number_of_backups}.bak")
-        (home / "registry.db").touch(mode=0o644)
-        self.registry = self._set_up_registry()
+        shutil.copyfile(home / "registry.db", home / f"registry.db.{number_of_backups}.bak")
+        self._clear_registry()
+        self._set_up_registry(registry=self.registry)
         self.cleanup()
+
+    def _clear_registry(self):
+        for table in self.registry.execute("SELECT name FROM sqlite_schema WHERE type='table';").fetchall():
+            if table["name"] == "sqlite_sequence":
+                continue
+            self.registry.execute(f"DROP TABLE {table['name']};")
+            self.registry.connection.commit()
 
     def install(self):
         # yeah, really.. __builtins__ sometimes appears as a dict and other times as a module, don't ask me why
@@ -358,7 +362,7 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         *,
         version: Version,
         artifact_path: Optional[Path],
-        hash_value=Optional[str],
+        hash_value=Optional[int],
         installation_path=Path,
         module_path: Optional[Path],
         name: str,
@@ -774,7 +778,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             hashes = set(hashes.split())
         if not hashes:
             hashes = set()
-        hashes: set = {num_as_hexdigest(JACK_as_num(H)) if is_JACK(H) else H for H in hashes}
+        hashes: set[int] = {JACK_as_num(H) if is_JACK(H) else int(H, 16) for H in hashes}
 
         version: Version = Version(version) if version else None
 
