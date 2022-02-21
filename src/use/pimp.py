@@ -411,7 +411,7 @@ def _parse_name(name: str) -> tuple[str, str]:
 
 @beartype
 def _check_for_installation(*, package_name=str, version) -> Optional[dict]:
-    query = execute_wrapped(
+    return execute_wrapped(
         """
         SELECT
             artifacts.id, import_relpath,
@@ -426,7 +426,6 @@ def _check_for_installation(*, package_name=str, version) -> Optional[dict]:
             str(version),
         ),
     ).fetchone()
-    return query
 
 
 @beartype

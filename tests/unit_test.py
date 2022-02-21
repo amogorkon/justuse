@@ -140,7 +140,7 @@ def test_PEBKAC_hash_no_version(reuse):
     with raises(RuntimeWarning):
         reuse(
             "pytest",
-            hashes="asdf",
+            hashes="addf",
             modes=reuse.auto_install,
         )
 
@@ -152,13 +152,13 @@ def test_PEBKAC_nonexisting_pkg(reuse):
             "4-^df",
             modes=reuse.auto_install,
             version="0.0.1",
-            hashes="asdf",
+            hashes="addf",
         )
 
 
 def test_PEBKAC_impossible_version(reuse):
     # impossible version
-    with raises(TypeError):  # version must be either str or tuple
+    with raises(ValueError):  # version must be either str or tuple
         reuse(
             "pytest",
             modes=reuse.auto_install,
