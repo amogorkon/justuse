@@ -25,7 +25,7 @@ from itertools import chain
 from logging import getLogger
 from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
-from subprocess import run
+from subprocess import CalledProcessError, run
 from types import ModuleType
 from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, runtime_checkable
 from warnings import catch_warnings, filterwarnings, warn
@@ -240,9 +240,8 @@ def archive_meta(artifact_path):
     return meta
 
 
+@beartype
 def _clean_sys_modules(package_name: str) -> None:
-    if not package_name:
-        return
     for k in dict(
         [
             (k, v)
@@ -263,10 +262,6 @@ def _pebkac_no_version(
     *,
     name: str,
     func: Callable[..., Union[Exception, ModuleType]] = None,
-    version: Optional[Version] = None,
-    hash_algo=None,
-    package_name: str = None,
-    module_name: str = None,
     Message: type,
     **kwargs,
 ) -> Union[ModuleType, Exception]:
@@ -275,6 +270,7 @@ def _pebkac_no_version(
         result = func()
         if isinstance(result, (Exception, ModuleType)):
             return result
+        assert False, f"{func}() returned {result!r}"
 
     return RuntimeWarning(Message.cant_import_no_version(name))
 
@@ -440,10 +436,7 @@ def _auto_install(
     user_provided_hashes: set[int],
     **kwargs,
 ) -> Union[ModuleType, BaseException]:
-    """Install, if necessary, the package and return the module.
-
-    First function in the chain. Check if the package is installed in the DB.
-    """
+    """Install, if necessary, the package and return the module."""
     if func:
         result = func()
         if isinstance(result, (Exception, ModuleType)):
@@ -500,47 +493,33 @@ def _process(*argv, env={}):
     _realenv = {
         k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)
     }
-    o = run(
-        **(
-            setup := dict(
-                executable=argv[0],
-                args=[*map(str, argv)],
-                bufsize=1024,
-                input="",
-                capture_output=False,
-                timeout=45000,
-                check=True,
-                close_fds=True,
-                env=_realenv,
-                encoding="ISO-8859-1",
-                errors="ISO-8859-1",
-                text=True,
-                shell=False,
+    output = None
+    try:
+        output = run(
+            **(
+                setup := dict(
+                    executable=argv[0],
+                    args=[*map(str, argv)],
+                    bufsize=1024,
+                    input="",
+                    capture_output=False,
+                    timeout=45000,
+                    check=True,
+                    close_fds=True,
+                    env=_realenv,
+                    encoding="ISO-8859-1",
+                    errors="ISO-8859-1",
+                    text=True,
+                    shell=False,
+                )
             )
         )
-    )
-    if o.returncode == 0:
-        return o
-    raise RuntimeError(  # cov: exclude
-        "\x0a".join(
-            (
-                "\x1b[1;41;37m",
-                f"Problem running--command exited with non-zero: {o.returncode}",
-                f"{shlex.join(map(str, setup['args']))}",
-                "---[  Errors  ]---",
-                f"{o.stderr or o.stdout}",
-                "\x1b[0;1;37m",
-                "Arguments to subprocess.run(**setup):",
-                f"{pformat(setup, indent=2, width=70, compact=False)}",
-                "---[  STDOUT  ]---",
-                f"{o.stdout}",
-                "---[  STDERR  ]---",
-                f"{o.stderr}\x1b[0m",
-            )
+    except CalledProcessError as err:
+        log.error(
+            err,
         )
-        if o.returncode != 0
-        else (f"{o.stdout}\n\n{o.stderr}")
-    )
+        msg = err  # sic
+    return output or msg
 
 
 @beartype

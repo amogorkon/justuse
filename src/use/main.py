@@ -15,7 +15,6 @@ import sys
 import threading
 import time
 import traceback
-import atexit
 from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
 from types import ModuleType
@@ -280,11 +279,6 @@ CREATE TABLE IF NOT EXISTS "hashes" (
     PRIMARY KEY("algo","value"),
     FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id") ON DELETE CASCADE
 );
-
-CREATE TABLE IF NOT EXISTS "depends_on" (
-    "origin_path"   TEXT,
-    "target_path"   TEXT
-, "time_of_use" INTEGER)
         """
         )
         registry.connection.commit()
@@ -815,6 +809,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         result = buffet_table(case, kwargs)
         assert result
+        assert isinstance(result, (Exception, ModuleType))
 
         if isinstance(result, Exception):
             return _fail_or_default(result, default)
@@ -823,4 +818,3 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=result, spec=spec, frame=frame)
             return ProxyModule(result)
-        raise RuntimeError(f"{result=!r} is neither a module nor an Exception")

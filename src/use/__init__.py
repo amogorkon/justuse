@@ -30,7 +30,7 @@ import tempfile
 from collections import namedtuple
 from datetime import datetime
 from enum import Enum, IntEnum
-from logging import DEBUG, INFO, NOTSET, basicConfig, getLogger, root
+from logging import DEBUG, basicConfig, getLogger
 from pathlib import Path
 from typing import NamedTuple
 from warnings import catch_warnings, filterwarnings, simplefilter
@@ -68,7 +68,6 @@ from toml import loads as toml
 
 config.update(toml((home / "config_defaults.toml").read_text()))
 config.update(toml((home / "config.toml").read_text()))
-import use.logutil
 
 
 def fraction_of_day(now: datetime = None) -> float:
@@ -87,7 +86,7 @@ def fraction_of_day(now: datetime = None) -> float:
 
 
 basicConfig(
-    filename=home / "logs/usage.log",
+    filename=home / "logs" / "usage.log",
     filemode="a",
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
     datefmt=f"%Y%m%d {fraction_of_day()}",
@@ -105,6 +104,11 @@ __version__ = "0.6.6"
 __version__ = os.getenv("USE_VERSION", __version__)
 __name__ = "use"
 __package__ = "use"
+
+log = getLogger(__name__)
+log.info("initializing justuse...")
+
+import use.logutil
 
 
 class JustuseIssue:
