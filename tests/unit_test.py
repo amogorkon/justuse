@@ -328,7 +328,7 @@ def test_reloading(reuse):
 def test_suggestion_works(reuse):
     with patch("webbrowser.open"):
         try:
-            mod = reuse("example-pypi-package/examplepy", modes=reuse.auto_install)
+            mod = reuse("package-example", modes=reuse.auto_install)
             assert False, f"Actually returned mod: {mod}"
         except (RuntimeWarning, RuntimeError) as rw:
             last_line = rw.args[0].strip().splitlines()[-1]

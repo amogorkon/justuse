@@ -27,7 +27,8 @@ from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, runtime_checkable
+from typing import (Any, Iterable, Optional, Protocol, TypeVar, Union,
+                    runtime_checkable)
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -43,7 +44,8 @@ import use
 from use import Hash, Modes, PkgHash, VersionWarning, config, home
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import UserMessage, _web_pebkac_no_version_no_hash
-from use.pypi_model import PyPI_Project, PyPI_Release, RegistryEntry, Version, _delete_none
+from use.pypi_model import (PyPI_Project, PyPI_Release, RegistryEntry, Version,
+                            _delete_none)
 from use.tools import pipes
 
 log = getLogger(__name__)
@@ -135,12 +137,14 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 pass
         if not get_supported:
             try:
-                from pip._internal.utils.compatibility_tags import get_supported
+                from pip._internal.utils.compatibility_tags import \
+                    get_supported
             except ImportError:
                 pass
         if not get_supported:
             try:
-                from pip._internal.resolution.resolvelib.factory import get_supported
+                from pip._internal.resolution.resolvelib.factory import \
+                    get_supported
             except ImportError:
                 pass
 
@@ -484,7 +488,13 @@ def _auto_install(
         _download_artifact(artifact_path=artifact_path, url=url, hash_value=H, hash_algo=hash_algo)
         _clean_sys_modules(module_name)
         try:
-            entry = _install(package_name=package_name, version=version, force_install=True)
+            entry = _install(
+                package_name=package_name,
+                module_name=module_name,
+                artifact_path=artifact_path,
+                version=version,
+                force_install=True,
+            )
             mod = _load_venv_entry(
                 module_name=module_name,
                 module_path=entry.module_path,
@@ -545,10 +555,11 @@ def _process(*argv, env={}):
 @beartype
 @ensure(lambda url: str(url).startswith("http"))
 def _download_artifact(*, artifact_path: Path, url: URL, hash_algo: Hash, hash_value: int):
+    # this should work since we just got the url from pypi itself - if this fails, we have bigger problems
     data = requests.get(url).content
     artifact_path.write_bytes(data)
     if int(hash_algo.value(artifact_path.read_bytes()).hexdigest(), 16) != hash_value:
-        # let's try once again, cosmic rays and all, assuming good faith
+        # let's try once again, cosmic rays and all, believing in pure dumb luck
         data = requests.get(url).content
         artifact_path.write_bytes(data)
     if int(hash_algo.value(artifact_path.read_bytes()).hexdigest(), 16) != hash_value:
@@ -590,13 +601,6 @@ def _find_module_in_venv(
 
     module_path = site_dir / mod_relative_to_site.as_posix()
     return site_dir, module_path
-
-
-@beartype
-def _get_url_from_proj(
-    *, project: PyPI_Project, version: str, hash_algo: str, hash_value: int
-) -> Optional[URL]:
-    pass
 
 
 @beartype

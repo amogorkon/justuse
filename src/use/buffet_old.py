@@ -35,8 +35,6 @@ def buffet_table(case, kwargs):
             func=lambda: pimp._ensure_version(pimp._import_public_no_install(**kwargs), **kwargs), **kwargs
         ),
     }[case]
-    log.info("case_func = '%s' %s", case_func.__qualname__, case_func)
-    log.info("kwargs = %s", repr(kwargs))
     result = case_func()
     log.info("result = %s", repr(result))
     return result
