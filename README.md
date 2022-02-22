@@ -39,7 +39,7 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [ ] all justuse-code is compiled to a single, standalone .py file - just drop it into your own code without installation
 - [ ] provide a visual representation of the internal dependency graph
 - [ ] module-level variable guards aka "module-properties"
-- [ ] isolation of packages via subprocess/subinterpreter for clean un-/reloading
+- [ ] isolation of software components with arbitrary sub-interpreters (python 2.7, ironpython..) inspired by jupyter messaging
 - [ ] slot-based plugin architecture (to ensure reproducable testability of plugin-combinations)
 - [ ] optional on-site compilation of fully annotated python code via cython
 - [ ] document everything!
