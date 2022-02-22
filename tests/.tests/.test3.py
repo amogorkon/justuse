@@ -1,8 +1,6 @@
-L = [1,2,3,4]
+import requests
 
-L2 = list(L)
-
-L.clear()
-L.insert(0, 23)
-L.remove(23)
-L += L2
+package_name = "example-pypi-package"
+version = "0.0.5"
+json_url = f"https://pypi.org/pypi/{package_name}/{version}/json"
+response = requests.get(json_url)

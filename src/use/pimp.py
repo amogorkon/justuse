@@ -43,7 +43,7 @@ import use
 from use import Hash, Modes, PkgHash, VersionWarning, config, home
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import UserMessage, _web_pebkac_no_version_no_hash
-from use.pypi_model import PyPI_Project, PyPI_Release, Version, _delete_none
+from use.pypi_model import PyPI_Project, PyPI_Release, RegistryEntry, Version, _delete_none
 from use.tools import pipes
 
 log = getLogger(__name__)
@@ -287,16 +287,16 @@ def _pebkac_no_hash(
     Message: type,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
-    if version is None or version not in _get_package_data_from_pypi(package_name).releases:
-        version = next(iter(reversed(_get_package_data_from_pypi(package_name).releases)))
+    if version is None or version not in _get_data_from_pypi(package_name=package_name).releases:
+        version = next(iter(reversed(_get_data_from_pypi(package_name=package_name).releases)))
     if hashes := {
         PkgHash(
             "foobar", hexdigest_as_JACK(entry.digests.get(hash_algo.name)), entry.digests.get(hash_algo.name)
         )
-        for entry in _get_package_data_from_pypi(package_name).releases[version]
+        for entry in _get_data_from_pypi(package_name=package_name).releases[version]
     }:
 
-        proj = _get_package_data_from_pypi(package_name)
+        proj = _get_data_from_pypi(package_name=package_name)
         ordered = _filtered_and_ordered_data(proj, version=None)
         recommended_hash = {hexdigest_as_JACK(ordered[0].digests.get(hash_algo.name))}
         return RuntimeWarning(
@@ -325,7 +325,7 @@ def _pebkac_no_version_no_hash(
     **kwargs,
 ) -> Exception:
     # let's try to make an educated guess and give a useful suggestion
-    proj = _get_package_data_from_pypi(package_name)
+    proj = _get_data_from_pypi(package_name=package_name)
     ordered = _filtered_and_ordered_data(proj, version=None)
     # we tried our best, but we didn't find anything that could work'
     if not ordered:
@@ -406,12 +406,12 @@ def _parse_name(name: str) -> tuple[str, str]:
 
 
 @beartype
-def _check_for_installation(*, package_name=str, version) -> Optional[dict]:
-    return execute_wrapped(
+def _check_db_for_installation(*, package_name=str, version) -> Optional[RegistryEntry]:
+    query = execute_wrapped(
         """
         SELECT
-            artifacts.id, import_relpath,
-            artifact_path, installation_path, module_path
+            import_relpath,
+            artifact_path, installation_path, module_path, pure_python_package
         FROM distributions
         JOIN artifacts ON artifacts.id = distributions.id
         WHERE name=? AND version=?
@@ -422,12 +422,12 @@ def _check_for_installation(*, package_name=str, version) -> Optional[dict]:
             str(version),
         ),
     ).fetchone()
+    return RegistryEntry(**query) if query else None
 
 
 @beartype
 def _auto_install(
     *,
-    name: str,
     package_name: str,
     module_name: str,
     func: Callable[..., Union[Exception, ModuleType]] = None,
@@ -436,7 +436,7 @@ def _auto_install(
     user_provided_hashes: set[int],
     **kwargs,
 ) -> Union[ModuleType, BaseException]:
-    """Install, if necessary, the package and return the module."""
+    """Install, if necessary, the package and import the module in any possible way."""
     if func:
         result = func()
         if isinstance(result, (Exception, ModuleType)):
@@ -444,49 +444,69 @@ def _auto_install(
         else:
             raise AssertionError(f"{func!r} returned {result!r}")
 
-    query = _check_for_installation(package_name=package_name, version=version)
+    if entry := _check_db_for_installation(package_name=package_name, version=version):
+        # is there a point in checking the hashes at this point? probably not.
+        if entry.pure_python_package:
+            assert entry.artifact_path.exists()
+            # let's not try to catch this - since this apparently already work *once* - no fallback
+            return zipimport.zipimporter(entry.artifact_path).load_module(module_name)
+        # else: we have an installed package, let's try to import it
+        original_cwd = Path.cwd()
+        assert entry.installation_path.exists()
+        os.chdir(entry.installation_path)
+        # with an installed package there may be weird issues we can't be sure about so let's be safe
+        try:
+            return _load_venv_entry(
+                module_name=entry.module_name,
+                module_path=entry.module_path,
+                installation_path=entry.installation_path,
+            )
+        except BaseException as err:
+            msg = err
+        finally:
+            os.chdir(original_cwd)
+        return ImportError(msg)
 
-    if not query or not _ensure_path(query["artifact_path"]).exists():
-        query = _find_or_install(package_name=package_name, version=version)
+    # else: we have to download the package and install it
+    project = _get_data_from_pypi(package_name=package_name, version=version)
+    # we *did* ask the user to give us hashes of artifacts that *should* work, so let's check for those.
+    # We can't be sure which one of those hashes will work on this platform, so let's try all of them.
 
-    artifact_path = _ensure_path(query["artifact_path"])
-    module_path = _ensure_path(query["module_path"])
-    # trying to import directly from zip
-    _clean_sys_modules(module_name)
-    try:
-        importer = zipimport.zipimporter(artifact_path)
-        return importer.load_module(query["import_name"])
-    except BaseException as zerr:
-        pass
-    orig_cwd = Path.cwd()
-    if "installation_path" not in query or not _ensure_path(query["installation_path"]).exists():
-        if query:
-            sys.modules["use"].del_entry(name, version)
-        query = _find_or_install(package_name=package_name, version=version, force_install=True)
-        artifact_path = _ensure_path(query["artifact_path"])
-        module_path = _ensure_path(query["module_path"])
-    assert "installation_path" in query and query["installation_path"]
-    installation_path = _ensure_path(query["installation_path"])
-    try:
-        module_path = _ensure_path(query["module_path"])
-        os.chdir(installation_path)
-        return _load_venv_entry(
-            module_name=module_name,
-            module_path=module_path,
-            installation_path=installation_path,
-        )
+    for H in user_provided_hashes:
+        for purl in project.urls:
+            # H is an int, digest-hashes are hexdigests, so we need to convert them
+            if H == int(purl.digests[hash_algo.name], 16):
+                url = URL(purl.url)
+                break
+        # got an url for an artifact with a hash given by the user, let's install it
+        filename = url.asdict()["path"]["segments"][-1]
+        artifact_path = use.home / "packages" / filename
+        _download_artifact(artifact_path=artifact_path, url=url, hash_value=H, hash_algo=hash_algo)
+        _clean_sys_modules(module_name)
+        try:
+            entry = _install(package_name=package_name, version=version, force_install=True)
+            mod = _load_venv_entry(
+                module_name=module_name,
+                module_path=entry.module_path,
+                installation_path=entry.installation_path,
+            )
+        except BaseException as err:
+            log.error(err)
+            continue
 
-    finally:
-        os.chdir(orig_cwd)
         sys.modules["use"]._save_module_info(
             name=package_name,
-            import_relpath=str(_ensure_path(module_path).relative_to(installation_path)),
+            import_relpath=entry.module_path.relative_to(entry.installation_path),
             version=version,
-            artifact_path=artifact_path,
-            hash_value=hash_algo.value(artifact_path.read_bytes()).hexdigest(),
-            module_path=module_path,
-            installation_path=installation_path,
+            artifact_path=entry.artifact_path,
+            hash_value=int(hash_algo.value(entry.artifact_path.read_bytes()).hexdigest(), 16),
+            module_path=entry.module_path,
+            installation_path=entry.installation_path,
         )
+        return mod
+    return ImportError(
+        f"No Hash of {package_name!r} {version!r} specified a distribution that works on this platform."
+    )
 
 
 def _process(*argv, env={}):
@@ -524,10 +544,17 @@ def _process(*argv, env={}):
 
 @beartype
 @ensure(lambda url: str(url).startswith("http"))
-def _download_artifact(artifact_path: Path, url: URL) -> bool:
+def _download_artifact(*, artifact_path: Path, url: URL, hash_algo: Hash, hash_value: int):
     data = requests.get(url).content
     artifact_path.write_bytes(data)
-    return True
+    if int(hash_algo.value(artifact_path.read_bytes()).hexdigest(), 16) != hash_value:
+        # let's try once again, cosmic rays and all, assuming good faith
+        data = requests.get(url).content
+        artifact_path.write_bytes(data)
+    if int(hash_algo.value(artifact_path.read_bytes()).hexdigest(), 16) != hash_value:
+        # this means either PyPI is hacked or there is a man-in-the-middle
+        raise ImportError("Hashes don't match. Aborting. Something very fishy is going on.")
+    return
 
 
 @beartype
@@ -566,50 +593,40 @@ def _find_module_in_venv(
 
 
 @beartype
-def _find_or_install(
+def _get_url_from_proj(
+    *, project: PyPI_Project, version: str, hash_algo: str, hash_value: int
+) -> Optional[URL]:
+    pass
+
+
+@beartype
+def _install(
     *,
     package_name: str,
+    module_name: str,
     version: Version = None,
     force_install=False,
-) -> dict[str, str]:  # we should make this a proper pydantic class
-    """Prepare the installation."""
-    out_info = {}
-
-    proj = _get_package_data_from_pypi(package_name)
-    if ordered := _filtered_and_ordered_data(proj, version=version):
-        release = ordered[0]
-    else:
-        v = list(proj.releases.keys())[0]
-        rel_vals = proj.releases.get(v, [None])
-        release = rel_vals[0]
-    out_info.update(release.dict())
-
-    url = URL(release.url)
-    filename = url.asdict()["path"]["segments"][-1]
-    artifact_path = use.home / "packages" / filename
-
-    out_info["artifact_path"] = artifact_path
-
-    if not artifact_path.exists():
-        # TODO this will need to be handled - assume the worst!
-        _download_artifact(artifact_path, url)
-
+    artifact_path: Path,
+) -> RegistryEntry:
+    """Take care of the installation."""
     meta = archive_meta(artifact_path)
-    out_info.update(**meta)
     import_parts = re.split("[\\\\/]", meta["import_relpath"])
     if "__init__.py" in import_parts:
         import_parts.remove("__init__.py")
     import_name = ".".join(import_parts)
+    assert import_name == module_name
     relp = meta["import_relpath"]
-    out_info["module_path"] = relp
-    out_info["import_relpath"] = relp
-    out_info["import_name"] = import_name
     if (
         not force_install
         and _is_pure_python_package(artifact_path, meta)
         and str(artifact_path).endswith(".whl")
     ):
-        return out_info
+        return RegistryEntry(
+            installation_path=installation_path,
+            module_path=module_path,
+            import_relpath=".".join(relp.split("/")[:-1]),
+            artifact_path=artifact_path,
+        )
 
     venv_root = home / "venv" / package_name / str(version)
     site_pkgs_dir = list(venv_root.rglob("site-packages"))
@@ -617,7 +634,7 @@ def _find_or_install(
         force_install = True
         module_paths = []
     else:
-        out_info["installation_path"] = site_pkgs_dir[0]
+        installation_path = site_pkgs_dir[0]
         module_paths = venv_root.rglob(f"**/{relp}")
 
     python_exe = Path(sys.executable)
@@ -654,15 +671,13 @@ def _find_or_install(
     installation_path, module_path = _find_module_in_venv(
         package_name=package_name, version=version, relp=relp
     )
-    out_info.update(
-        {
-            "artifact_path": artifact_path,
-            "installation_path": installation_path,
-            "module_path": module_path,
-            "import_relpath": ".".join(relp.split("/")[:-1]),
-        }
+
+    return RegistryEntry(
+        installation_path=installation_path,
+        module_path=module_path,
+        import_relpath=".".join(relp.split("/")[:-1]),
+        artifact_path=artifact_path,
     )
-    return _delete_none(out_info)
 
 
 @beartype
@@ -701,8 +716,11 @@ def _load_venv_entry(*, module_name: str, installation_path: Path, module_path: 
 
 
 @cache(maxsize=512)
-def _get_package_data_from_pypi(package_name: str) -> PyPI_Project:
-    json_url = f"https://pypi.org/pypi/{package_name}/json"
+def _get_data_from_pypi(*, package_name: str, version: str = None) -> PyPI_Project:
+    if version:
+        json_url = f"https://pypi.org/pypi/{package_name}/{version}/json"
+    else:
+        json_url = f"https://pypi.org/pypi/{package_name}/json"
     response = requests.get(json_url)
     if response.status_code == 404:
         raise ImportError(UserMessage.pebkac_unsupported(package_name))

@@ -71,6 +71,17 @@ def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
     return a_dict
 
 
+class RegistryEntry(BaseModel):
+    class Config:
+        validate_assignment = True
+
+    import_relpath: Path
+    artifact_path: Path
+    installation_path: Path
+    module_path: Path
+    pure_python_package: bool
+
+
 class JustUse_Info(BaseModel):
     distribution: Optional[str]
     version: Optional[str]
@@ -191,6 +202,9 @@ class PyPI_Project(BaseModel):
     urls: list[PyPI_URL] = None
     last_serial: int = None
     info: PyPI_Info = None
+
+    class Config:
+        extra = "ignore"
 
     def __init__(self, *, releases, urls, info, **kwargs):
         try:
