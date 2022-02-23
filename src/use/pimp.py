@@ -27,7 +27,8 @@ from shutil import rmtree
 from sqlite3 import Cursor
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, runtime_checkable
+from typing import (Any, Iterable, Optional, Protocol, TypeVar, Union,
+                    runtime_checkable)
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -39,10 +40,12 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import Hash, InstallationError, Modes, PkgHash, VersionWarning, config, home
+from use import (Hash, InstallationError, Modes, PkgHash, VersionWarning,
+                 config, home)
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import UserMessage, _web_pebkac_no_version_no_hash
-from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version, _delete_none
+from use.pydantics import (PyPI_Project, PyPI_Release, RegistryEntry, Version,
+                           _delete_none)
 from use.tools import pipes
 
 log = getLogger(__name__)
@@ -124,12 +127,14 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 pass
         if not get_supported:
             try:
-                from pip._internal.utils.compatibility_tags import get_supported
+                from pip._internal.utils.compatibility_tags import \
+                    get_supported
             except ImportError:
                 pass
         if not get_supported:
             try:
-                from pip._internal.resolution.resolvelib.factory import get_supported
+                from pip._internal.resolution.resolvelib.factory import \
+                    get_supported
             except ImportError:
                 pass
 
@@ -926,6 +931,6 @@ def _build_mod(
 
 def _fail_or_default(exception: BaseException, default: Any):
     if default is not Modes.fastfail:
-        return default  # TODO: write test for default
+        return default
     else:
         raise exception
