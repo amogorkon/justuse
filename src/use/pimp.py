@@ -26,7 +26,8 @@ from shutil import rmtree
 from sqlite3 import Cursor
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, runtime_checkable
+from typing import (Any, Iterable, Optional, Protocol, TypeVar, Union,
+                    runtime_checkable)
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -38,11 +39,11 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-import use
 from use import Hash, Modes, PkgHash, VersionWarning, config, home
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import UserMessage, _web_pebkac_no_version_no_hash
-from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version, _delete_none
+from use.pydantics import (PyPI_Project, PyPI_Release, RegistryEntry, Version,
+                           _delete_none)
 from use.tools import pipes
 
 log = getLogger(__name__)
@@ -124,12 +125,14 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 pass
         if not get_supported:
             try:
-                from pip._internal.utils.compatibility_tags import get_supported
+                from pip._internal.utils.compatibility_tags import \
+                    get_supported
             except ImportError:
                 pass
         if not get_supported:
             try:
-                from pip._internal.resolution.resolvelib.factory import get_supported
+                from pip._internal.resolution.resolvelib.factory import \
+                    get_supported
             except ImportError:
                 pass
 
@@ -446,7 +449,7 @@ def _auto_install(
         # with an installed package there may be weird issues we can't be sure about so let's be safe
         try:
             return _load_venv_entry(
-                module_name=entry.module_name,
+                module_name=module_name,
                 installation_path=entry.installation_path,
             )
         except BaseException as err:
@@ -468,7 +471,7 @@ def _auto_install(
                 break
         # got an url for an artifact with a hash given by the user, let's install it
         filename = url.asdict()["path"]["segments"][-1]
-        artifact_path = use.home / "packages" / filename
+        artifact_path = home / "packages" / filename
         _download_artifact(artifact_path=artifact_path, url=url, hash_value=H, hash_algo=hash_algo)
         _clean_sys_modules(module_name)
         try:
