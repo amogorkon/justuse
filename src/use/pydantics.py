@@ -75,10 +75,10 @@ class RegistryEntry(BaseModel):
     class Config:
         validate_assignment = True
 
-    import_relpath: Path
+    # import_relpath: Path
     artifact_path: Path
     installation_path: Path
-    module_path: Path
+    # module_path: Path
     pure_python_package: bool
 
 

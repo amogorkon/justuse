@@ -8,23 +8,22 @@ import linecache
 import os
 import platform
 import re
-import shlex
-import sqlite3
 import sys
 import tarfile
+import time
 import zipfile
 import zipimport
-from collections import namedtuple
 from collections.abc import Callable
 from functools import lru_cache as cache
 from functools import reduce
 from importlib import metadata
 from importlib.machinery import ModuleSpec, SourceFileLoader
-from importlib.metadata import PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, PackagePath
 from itertools import chain
 from logging import getLogger
 from pathlib import Path, PureWindowsPath, WindowsPath
-from pprint import pformat
+from shutil import rmtree
+from sqlite3 import Cursor
 from subprocess import CalledProcessError, run
 from types import ModuleType
 from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, runtime_checkable
@@ -97,16 +96,6 @@ def _ensure_path(value: Union[bytes, str, furl.Path, Path]) -> Path:
         ) << reduce(Path.__truediv__)
     return value
 # fmt: on
-
-
-def execute_wrapped(sql: str, params: tuple):
-    ___use = getattr(sys, "modules").get("use")
-    try:
-        return getattr(___use, "registry").execute(sql, params)
-    except sqlite3.OperationalError as _oe:
-        pass
-    getattr(___use, "recreate_registry")()
-    return getattr(___use, "registry").execute(sql, params)
 
 
 @cache
@@ -406,12 +395,11 @@ def _parse_name(name: str) -> tuple[str, str]:
 
 
 @beartype
-def _check_db_for_installation(*, package_name=str, version) -> Optional[RegistryEntry]:
-    query = execute_wrapped(
+def _check_db_for_installation(*, registry=Cursor, package_name=str, version) -> Optional[RegistryEntry]:
+    query = registry.execute(
         """
         SELECT
-            import_relpath,
-            artifact_path, installation_path, module_path, pure_python_package
+            artifact_path, installation_path, pure_python_package
         FROM distributions
         JOIN artifacts ON artifacts.id = distributions.id
         WHERE name=? AND version=?
@@ -434,6 +422,7 @@ def _auto_install(
     version: Version,
     hash_algo: Hash,
     user_provided_hashes: set[int],
+    registry: Cursor,
     **kwargs,
 ) -> Union[ModuleType, BaseException]:
     """Install, if necessary, the package and import the module in any possible way."""
@@ -444,7 +433,7 @@ def _auto_install(
         else:
             raise AssertionError(f"{func!r} returned {result!r}")
 
-    if entry := _check_db_for_installation(package_name=package_name, version=version):
+    if entry := _check_db_for_installation(registry=registry, package_name=package_name, version=version):
         # is there a point in checking the hashes at this point? probably not.
         if entry.pure_python_package:
             assert entry.artifact_path.exists()
@@ -458,7 +447,6 @@ def _auto_install(
         try:
             return _load_venv_entry(
                 module_name=entry.module_name,
-                module_path=entry.module_path,
                 installation_path=entry.installation_path,
             )
         except BaseException as err:
@@ -486,33 +474,70 @@ def _auto_install(
         try:
             entry = _install(
                 package_name=package_name,
-                module_name=module_name,
                 artifact_path=artifact_path,
                 version=version,
                 force_install=True,
             )
             mod = _load_venv_entry(
                 module_name=module_name,
-                module_path=entry.module_path,
                 installation_path=entry.installation_path,
             )
         except BaseException as err:
             log.error(err)
+            artifact_path.unlink()
+            rmtree(entry.installation_path)
+            assert not artifact_path.exists()
+            assert not entry.installation_path.exists()
             continue
 
-        sys.modules["use"]._save_module_info(
-            name=package_name,
-            import_relpath=entry.module_path.relative_to(entry.installation_path),
+        _save_package_info(
+            package_name=package_name,
             version=version,
             artifact_path=entry.artifact_path,
             hash_value=int(hash_algo.value(entry.artifact_path.read_bytes()).hexdigest(), 16),
-            module_path=entry.module_path,
+            hash_algo=hash_algo,
             installation_path=entry.installation_path,
+            registry=registry,
         )
         return mod
     return ImportError(
-        f"No Hash of {package_name!r} {version!r} specified a distribution that works on this platform."
+        f"No Hash of {package_name!r} {version!s} specified a distribution that works on this platform."
     )
+
+
+@beartype
+def _save_package_info(
+    *,
+    registry=Cursor,
+    version: Version,
+    artifact_path: Path,
+    hash_value=int,
+    hash_algo: Hash,
+    installation_path=Path,
+    package_name: str,
+):
+    """Update the registry to contain the pkg's metadata."""
+    if not registry.execute(
+        f"SELECT * FROM distributions WHERE name='{package_name}' AND version='{version}'"
+    ).fetchone():
+        registry.execute(
+            f"""
+INSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
+VALUES ('{package_name}', '{version}', '{installation_path}', {time.time()}, {installation_path is None})
+"""
+        )
+        registry.execute(
+            f"""
+INSERT OR IGNORE INTO artifacts (distribution_id, artifact_path)
+VALUES ({registry.lastrowid}, '{artifact_path}')
+"""
+        )
+        registry.execute(
+            f"""
+INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
+VALUES ({registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
+        )
+    registry.connection.commit()
 
 
 def _process(*argv, env={}):
@@ -576,34 +601,34 @@ def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
 
 
 @beartype
-def _find_module_in_venv(
-    *, package_name: str, version: Version, relp: str
-) -> tuple[Optional[str], Optional[str]]:
-    mod_relative_to_site = None
-    try:
-        dist = importlib.metadata.Distribution.from_name(package_name)
-        for site_dir in (home / "venv" / package_name / str(version)).rglob("**/site-packages"):
-            for pp in dist.files:
-                relp = "/".join(relp.split("/")[1:])
-                if len(relp.split("/")) == 0:
-                    break
-                if pp.as_posix() == relp:
-                    mod_relative_to_site = pp[0]
-                    break
-    except PackageNotFoundError:
-        return None, None
-    if mod_relative_to_site is None:
-        return None, None
+def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path:
+    site_dirs: list[Path] = list((home / "venv" / package_name / str(version)).rglob("**/site-packages"))
+    assert site_dirs, f"{package_name} {version} installed but no site dirs?!"
+    original_sys_path = list(sys.path)
 
-    module_path = site_dir / mod_relative_to_site.as_posix()
-    return site_dir, module_path
+    dist = None
+    for site_dir in site_dirs:
+        try:
+            sys.path = [str(site_dir)]
+            # sic! importlib uses sys.path for lookup
+            dist = importlib.metadata.Distribution.from_name(package_name)
+        except PackageNotFoundError:
+            continue
+        finally:
+            sys.path = original_sys_path
+        for path in dist.files:
+            if path.as_posix() == relp:
+                break
+    assert site_dir
+    assert path
+
+    return site_dir
 
 
 @beartype
 def _install(
     *,
     package_name: str,
-    module_name: str,
     version: Version = None,
     force_install=False,
     artifact_path: Path,
@@ -613,21 +638,7 @@ def _install(
     import_parts = re.split("[\\\\/]", meta["import_relpath"])
     if "__init__.py" in import_parts:
         import_parts.remove("__init__.py")
-    import_name = ".".join(import_parts)
-    assert import_name == module_name
-    relp = meta["import_relpath"]
-    if (
-        not force_install
-        and _is_pure_python_package(artifact_path, meta)
-        and str(artifact_path).endswith(".whl")
-    ):
-        return RegistryEntry(
-            installation_path=installation_path,
-            module_path=module_path,
-            import_relpath=".".join(relp.split("/")[:-1]),
-            artifact_path=artifact_path,
-        )
-
+    relp: str = meta["import_relpath"]
     venv_root = home / "venv" / package_name / str(version)
     site_pkgs_dir = list(venv_root.rglob("site-packages"))
     if not any(site_pkgs_dir):
@@ -668,51 +679,32 @@ def _install(
             "--no-warn-conflicts",
             artifact_path,
         )
-    installation_path, module_path = _find_module_in_venv(
-        package_name=package_name, version=version, relp=relp
-    )
+    installation_path = _find_module_in_venv(package_name=package_name, version=version, relp=relp)
 
     return RegistryEntry(
         installation_path=installation_path,
-        module_path=module_path,
-        import_relpath=".".join(relp.split("/")[:-1]),
         artifact_path=artifact_path,
+        pure_python_package=False,
     )
 
 
 @beartype
-def _load_venv_entry(*, module_name: str, installation_path: Path, module_path: Path) -> ModuleType:
-    cwd = Path.cwd()
-    orig_exc = None
-    old_sys_path = list(sys.path)
+def _load_venv_entry(*, module_name: str, installation_path: Path) -> ModuleType:
+    origcwd = Path.cwd()
+    original_sys_path = list(sys.path)
+    # TODO we need to keep track of package-specific sys-paths
     if sys.path[0] != "":
         sys.path.insert(0, "")
     try:
-        for variant in (
-            cwd,
-            installation_path,
-            Path(str(installation_path).replace("lib64/", "lib/")),
-            Path(str(installation_path).replace("lib/", "lib64/")),
-        ):
-            if not variant.exists():
-                continue
-            origcwd = Path.cwd()
-            try:
-                os.chdir(variant)
-                return importlib.import_module(module_name)
-            except ImportError as ierr0:
-                orig_exc = orig_exc or ierr0
-                continue
-            finally:
-                os.chdir(origcwd)
-    except RuntimeError as ierr:
-        try:
-            return importlib.import_module(module_name)
-        except BaseException as ierr2:
-            raise ierr from orig_exc
+        os.chdir(installation_path)
+        # importlib and sys.path.. bleh
+        return importlib.import_module(module_name)
+    except ImportError as err:
+        orig_exc = err
     finally:
-        os.chdir(cwd)
-        sys.path = old_sys_path
+        os.chdir(origcwd)
+        sys.path = original_sys_path
+    raise orig_exc
 
 
 @cache(maxsize=512)

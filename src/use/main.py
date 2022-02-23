@@ -26,20 +26,9 @@ import toml
 from furl import furl as URL
 from icontract import require
 
-from use import (
-    AmbiguityWarning,
-    Hash,
-    Modes,
-    ModInUse,
-    NotReloadableWarning,
-    NoValidationWarning,
-    UnexpectedHash,
-    VersionWarning,
-    __version__,
-    buffet_table,
-    config,
-    home,
-)
+from use import (AmbiguityWarning, Hash, Modes, ModInUse, NotReloadableWarning,
+                 NoValidationWarning, UnexpectedHash, VersionWarning,
+                 __version__, buffet_table, config, home)
 from use.aspectizing import aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
@@ -349,41 +338,6 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         ).fetchall():
             if not (_ensure_path(artifact_path).exists() and _ensure_path(installation_path).exists()):
                 self.del_entry(name, version)
-        self.registry.connection.commit()
-
-    def _save_module_info(
-        self,
-        *,
-        version: Version,
-        artifact_path: Optional[Path],
-        hash_value=Optional[int],
-        installation_path=Path,
-        module_path: Optional[Path],
-        name: str,
-        import_relpath: str,
-        hash_algo=Hash.sha256,
-    ):
-        """Update the registry to contain the pkg's metadata."""
-        if not self.registry.execute(
-            f"SELECT * FROM distributions WHERE name='{name}' AND version='{version}'"
-        ).fetchone():
-            self.registry.execute(
-                f"""
-INSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
-VALUES ('{name}', '{version}', '{installation_path}', {time.time()}, {installation_path is None})
-"""
-            )
-            self.registry.execute(
-                f"""
-INSERT OR IGNORE INTO artifacts (distribution_id, import_relpath, artifact_path, module_path)
-VALUES ({self.registry.lastrowid}, '{import_relpath}', '{artifact_path}', '{module_path}')
-"""
-            )
-            self.registry.execute(
-                f"""
-INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
-VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
-            )
         self.registry.connection.commit()
 
     def _set_mod(self, *, name, mod, frame, path=None, spec=None):
@@ -805,6 +759,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "sys_version": Version(".".join(map(str, sys.version_info[:3]))),
             "no_browser": no_browser,
             "Message": Message,
+            "registry": self.registry,
         }
 
         result = buffet_table(case, kwargs)
