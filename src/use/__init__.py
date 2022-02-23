@@ -139,6 +139,10 @@ class UnexpectedHash(ImportError, JustuseIssue):
     pass
 
 
+class InstallationError(ImportError, JustuseIssue):
+    pass
+
+
 # Coerce all PEP 585 deprecation warnings into fatal exceptions.
 with catch_warnings():
     from beartype.roar import BeartypeDecorHintPep585DeprecationWarning

@@ -11,6 +11,7 @@ import re
 import sys
 import tarfile
 import time
+import traceback
 import zipfile
 import zipimport
 from collections.abc import Callable
@@ -26,8 +27,7 @@ from shutil import rmtree
 from sqlite3 import Cursor
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import (Any, Iterable, Optional, Protocol, TypeVar, Union,
-                    runtime_checkable)
+from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, runtime_checkable
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -39,11 +39,10 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import Hash, Modes, PkgHash, VersionWarning, config, home
+from use import Hash, InstallationError, Modes, PkgHash, VersionWarning, config, home
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import UserMessage, _web_pebkac_no_version_no_hash
-from use.pydantics import (PyPI_Project, PyPI_Release, RegistryEntry, Version,
-                           _delete_none)
+from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version, _delete_none
 from use.tools import pipes
 
 log = getLogger(__name__)
@@ -125,14 +124,12 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 pass
         if not get_supported:
             try:
-                from pip._internal.utils.compatibility_tags import \
-                    get_supported
+                from pip._internal.utils.compatibility_tags import get_supported
             except ImportError:
                 pass
         if not get_supported:
             try:
-                from pip._internal.resolution.resolvelib.factory import \
-                    get_supported
+                from pip._internal.resolution.resolvelib.factory import get_supported
             except ImportError:
                 pass
 
@@ -569,9 +566,8 @@ def _process(*argv, env={}):
             )
         )
     except CalledProcessError as err:
-        log.error(
-            err,
-        )
+        log.error(err)
+        traceback.print_exc(file=sys.stderr)
         msg = err  # sic
     return output or msg
 
@@ -655,33 +651,38 @@ def _install(
 
     if not module_paths or force_install:
         # If we get here, the venv/pip setup is required.
-        output = _process(
-            python_exe,
-            "-m",
-            "pip",
-            "--disable-pip-version-check",
-            "--no-color",
-            "--verbose",
-            "--verbose",
-            "install",
-            "--pre",
-            "--root",
-            PureWindowsPath(venv_root).drive
-            if isinstance(venv_root, (WindowsPath, PureWindowsPath))
-            else "/",
-            "--prefix",
-            str(venv_root),
-            "--progress-bar",
-            "ascii",
-            "--prefer-binary",
-            "--exists-action",
-            "i",
-            "--ignore-installed",
-            "--no-warn-script-location",
-            "--force-reinstall",
-            "--no-warn-conflicts",
-            artifact_path,
-        )
+        try:
+            _process(
+                python_exe,
+                "-m",
+                "pip",
+                "--disable-pip-version-check",
+                "--no-color",
+                "--verbose",
+                "--verbose",
+                "install",
+                "--pre",
+                "--root",
+                PureWindowsPath(venv_root).drive
+                if isinstance(venv_root, (WindowsPath, PureWindowsPath))
+                else "/",
+                "--prefix",
+                str(venv_root),
+                "--progress-bar",
+                "ascii",
+                "--prefer-binary",
+                "--exists-action",
+                "i",
+                "--ignore-installed",
+                "--no-warn-script-location",
+                "--force-reinstall",
+                "--no-warn-conflicts",
+                artifact_path,
+            )
+        except BaseException as err:
+            traceback.print_exc(file=sys.stderr)
+            log.error(err)
+            return InstallationError(err)
     installation_path = _find_module_in_venv(package_name=package_name, version=version, relp=relp)
 
     return RegistryEntry(
@@ -702,12 +703,13 @@ def _load_venv_entry(*, module_name: str, installation_path: Path) -> ModuleType
         os.chdir(installation_path)
         # importlib and sys.path.. bleh
         return importlib.import_module(module_name)
-    except ImportError as err:
-        orig_exc = err
+    except BaseException as err:
+        log.error(err)
+        traceback.print_exc(file=sys.stderr)
     finally:
         os.chdir(origcwd)
         sys.path = original_sys_path
-    raise orig_exc
+    raise ImportError
 
 
 @cache(maxsize=512)

@@ -143,7 +143,7 @@ class ModuleReloader:
                     )
                     self.proxy.__implementation = mod
                 except KeyError:
-                    print(traceback.format_exc())
+                    traceback.print_exc()
             last_filehash = current_filehash
             await asyncio.sleep(1)
 
@@ -164,7 +164,7 @@ class ModuleReloader:
                         )
                         self.proxy._ProxyModule__implementation = mod
                     except KeyError:
-                        print(traceback.format_exc())
+                        traceback.print_exc()
                 last_filehash = current_filehash
             time.sleep(1)
 
