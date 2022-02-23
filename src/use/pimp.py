@@ -27,8 +27,7 @@ from pathlib import Path, PureWindowsPath, WindowsPath
 from pprint import pformat
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import (Any, Iterable, Optional, Protocol, TypeVar, Union,
-                    runtime_checkable)
+from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, runtime_checkable
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -44,8 +43,7 @@ import use
 from use import Hash, Modes, PkgHash, VersionWarning, config, home
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import UserMessage, _web_pebkac_no_version_no_hash
-from use.pypi_model import (PyPI_Project, PyPI_Release, RegistryEntry, Version,
-                            _delete_none)
+from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version, _delete_none
 from use.tools import pipes
 
 log = getLogger(__name__)
@@ -137,14 +135,12 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 pass
         if not get_supported:
             try:
-                from pip._internal.utils.compatibility_tags import \
-                    get_supported
+                from pip._internal.utils.compatibility_tags import get_supported
             except ImportError:
                 pass
         if not get_supported:
             try:
-                from pip._internal.resolution.resolvelib.factory import \
-                    get_supported
+                from pip._internal.resolution.resolvelib.factory import get_supported
             except ImportError:
                 pass
 
@@ -452,7 +448,7 @@ def _auto_install(
         # is there a point in checking the hashes at this point? probably not.
         if entry.pure_python_package:
             assert entry.artifact_path.exists()
-            # let's not try to catch this - since this apparently already work *once* - no fallback
+            # let's not try to catch this - since this apparently already worked *at least once* - no fallback
             return zipimport.zipimporter(entry.artifact_path).load_module(module_name)
         # else: we have an installed package, let's try to import it
         original_cwd = Path.cwd()

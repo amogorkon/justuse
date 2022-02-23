@@ -20,7 +20,7 @@ from hypothesis import strategies as st
 from pytest import mark, skip
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
 from use.pimp import _parse_name
-from use.pypi_model import JustUse_Info, PyPI_Project, PyPI_Release, Version
+from use.pydantics import JustUse_Info, PyPI_Project, PyPI_Release, Version
 
 from tests.unit_test import ScopedCwd, reuse
 

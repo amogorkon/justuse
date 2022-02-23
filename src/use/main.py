@@ -44,7 +44,7 @@ from use.aspectizing import aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
 from use.pimp import _build_mod, _ensure_path, _fail_or_default, _parse_name
-from use.pypi_model import Version
+from use.pydantics import Version
 from use.tools import methdispatch
 
 log = getLogger(__name__)

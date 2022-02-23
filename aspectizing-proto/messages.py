@@ -9,7 +9,7 @@ from enum import Enum
 
 import use
 from use import __version__, config
-from use.pypi_model import Version
+from use.pydantics import Version
 
 
 def _web_no_version_or_hash_provided(*, name, package_name, version, hashes):

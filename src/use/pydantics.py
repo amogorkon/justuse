@@ -147,21 +147,11 @@ class PyPI_Downloads(BaseModel):
 
 
 class PyPI_Info(BaseModel):
-    author: Optional[str]
-    author_email: Optional[str]
-    bugtrack_url: Optional[str]
-    classifiers: Optional[list[str]]
-    description: Optional[str]
+    class Config:
+        extras = "ignore"
+
     description_content_type: Optional[str]
-    docs_url: Optional[str]
     download_url: Optional[str]
-    downloads: Optional[PyPI_Downloads]
-    home_page: Optional[str]
-    keywords: Optional[str]
-    license: Optional[str]
-    maintainer: Optional[str]
-    maintainer_email: Optional[str]
-    name: str
     package_name: Optional[str]
     package_url: str
     platform: Optional[str]

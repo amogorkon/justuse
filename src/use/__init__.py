@@ -172,7 +172,7 @@ from use.messages import *
 ### NEEDED FOR TESTS!! ###
 from use.pimp import *
 from use.pimp import _get_data_from_pypi, _get_version, _is_version_satisfied, _parse_name, get_supported
-from use.pypi_model import *
+from use.pydantics import *
 from use.tools import *
 
 for member in Modes:

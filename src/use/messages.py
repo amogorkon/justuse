@@ -13,7 +13,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 import use
 from use import __version__, config, home
-from use.pypi_model import Version
+from use.pydantics import Version
 
 copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", home / "stylesheet.css")
 
