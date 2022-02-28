@@ -27,7 +27,8 @@ from shutil import rmtree
 from sqlite3 import Cursor
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, runtime_checkable
+from typing import (Any, Iterable, Optional, Protocol, TypeVar, Union,
+                    runtime_checkable)
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -39,10 +40,12 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import Hash, InstallationError, Modes, PkgHash, UnexpectedHash, VersionWarning, config, home
+from use import (Hash, InstallationError, Modes, PkgHash, UnexpectedHash,
+                 VersionWarning, config, home)
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import UserMessage, _web_pebkac_no_version_no_hash
-from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version, _delete_none
+from use.pydantics import (PyPI_Project, PyPI_Release, RegistryEntry, Version,
+                           _delete_none)
 from use.tools import pipes
 
 log = getLogger(__name__)
@@ -124,12 +127,14 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 pass
         if not get_supported:
             try:
-                from pip._internal.utils.compatibility_tags import get_supported
+                from pip._internal.utils.compatibility_tags import \
+                    get_supported
             except ImportError:
                 pass
         if not get_supported:
             try:
-                from pip._internal.resolution.resolvelib.factory import get_supported
+                from pip._internal.resolution.resolvelib.factory import \
+                    get_supported
             except ImportError:
                 pass
 
@@ -450,6 +455,7 @@ def _auto_install(
                 installation_path=entry.installation_path,
             )
         except BaseException as err:
+            traceback.print_exc(file=sys.stderr)
             msg = err
         finally:
             os.chdir(original_cwd)
@@ -580,6 +586,12 @@ def _process(*argv, env={}):
 @beartype
 @ensure(lambda url: str(url).startswith("http"))
 def _download_artifact(*, artifact_path: Path, url: URL, hash_algo: Hash, hash_value: int):
+    # let's check if we downloaded it already, just in case
+    if (
+        artifact_path.exists()
+        and int(hash_algo.value(artifact_path.read_bytes()).hexdigest(), 16) == hash_value
+    ):
+        return
     # this should work since we just got the url from pypi itself - if this fails, we have bigger problems
     data = requests.get(url).content
     artifact_path.write_bytes(data)
@@ -606,8 +618,8 @@ def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
 
 @beartype
 def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path:
-    site_dirs: list[Path] = list((home / "venv" / package_name / str(version)).rglob("**/site-packages"))
-    assert site_dirs, f"{package_name} {version} installed but no site dirs?!"
+    site_dirs: list[Path] = list((home / "venv" / package_name / str(version)).iterdir())
+    assert site_dirs, f"{package_name} {version} installed but no subfolders?!"
     original_sys_path = list(sys.path)
 
     dist = None
@@ -623,9 +635,6 @@ def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path
         for path in dist.files:
             if path.as_posix() == relp:
                 break
-    assert site_dir
-    assert path
-
     return site_dir
 
 

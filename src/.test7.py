@@ -1,4 +1,9 @@
 import use
 
-mod = use("package-example", version="0.1", hashes={"Y復㝿浯䨩䩯鷛㬉鼵爔滥哫鷕逮愁墕萮緩"}, modes=use.auto_install)
-print(mod.some_var)
+mod = use(
+    "pygame",
+    version="2.1.0",
+    hashes={"232e51104db0e573221660d172af8e6fc2c0fda183c5dbf2aa52170f29aa9ec9"},
+    modes=use.auto_install,
+)
+print(mod.__version__)
