@@ -1,3 +1,4 @@
+import io
 import os
 import re
 import subprocess
@@ -5,7 +6,7 @@ import sys
 import tempfile
 import warnings
 from collections.abc import Callable
-from contextlib import AbstractContextManager, closing
+from contextlib import AbstractContextManager, closing, redirect_stdout
 from datetime import datetime
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, distribution
@@ -32,7 +33,8 @@ __package__ = "tests"
 import logging
 
 from use import use
-from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
+from use.hash_alphabet import (JACK_as_num, hexdigest_as_JACK, is_JACK,
+                               num_as_hexdigest)
 from use.pimp import _parse_name
 from use.pydantics import JustUse_Info, PyPI_Project, PyPI_Release, Version
 
@@ -326,20 +328,23 @@ def test_reloading(reuse):
 
 
 def test_suggestion_works(reuse):
-    with patch("webbrowser.open"):
+    name = "package-example"
+    with patch("webbrowser.open"), io.StringIO() as buf, redirect_stdout(buf):
         try:
-            mod = reuse("package-example", modes=reuse.auto_install)
+            mod = reuse(name, modes=reuse.auto_install)
             assert False, f"Actually returned mod: {mod}"
-        except (RuntimeWarning, RuntimeError) as rw:
+        except RuntimeWarning as rw:
             last_line = rw.args[0].strip().splitlines()[-1]
             log.info("Using last line as suggested artifact: %s", repr(last_line))
+            version = buf.getvalue().splitlines()[-1].strip()
         try:
-            mod = eval(last_line)
+            mod = reuse(name, version=version, modes=reuse.auto_install)
             assert False, f"Actually returned mod: {mod}"
-        except (RuntimeWarning, RuntimeError) as rw:
+        except RuntimeWarning as rw:
             last_line = rw.args[0].strip().splitlines()[-1]
             log.info("Using last line as suggested artifact: %s", repr(last_line))
-        mod = eval(last_line)
+            recommended_hash = buf.getvalue().splitlines()[-1].strip()
+        mod = reuse(name, version=version, hashes={recommended_hash}, modes=reuse.auto_install)
         assert mod
 
 

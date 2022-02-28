@@ -1,6 +1,7 @@
-import requests
+import io
+from contextlib import redirect_stdout
 
-package_name = "example-pypi-package"
-version = "0.0.5"
-json_url = f"https://pypi.org/pypi/{package_name}/{version}/json"
-response = requests.get(json_url)
+with io.StringIO() as buf, redirect_stdout(buf):
+    print("adsf")
+    x = buf.getvalue()
+

@@ -25,6 +25,7 @@ env = Environment(
 def _web_pebkac_no_version_no_hash(*, name, package_name, version, hashes, no_browser: bool):
     if not no_browser:
         webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
+    print(version)
     return f"""Please specify version and hash for auto-installation of {package_name!r}.
 {"" if no_browser else "A webbrowser should open to the Snyk Advisor to check whether the package is vulnerable or malicious."}
 If you want to auto-install the latest version, try the following line to select all viable hashes:
@@ -37,6 +38,7 @@ def _web_pebkac_no_hash(*, name, package_name, version, hashes, recommended_hash
             template = env.get_template("hash-presentation.html")
             file.write(template.render(**locals()))
         webbrowser.open(f"file://{home}/web_exception.html")
+    print(recommended_hash)
     return f"""Failed to auto-install {package_name!r} because hashes aren't specified.
         {"" if no_browser else "A webbrowser should open with a list of available hashes for different platforms for you to pick."}"
         If you want to use the package only on this platform, this should work:
