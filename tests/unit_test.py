@@ -410,35 +410,6 @@ def test_387_usepath_filename(reuse):
     assert mod
 
 
-@mark.parametrize(
-    "name, version, hashes",
-    (
-        (
-            "pytest",
-            "6.2.5",
-            {"7310f8d27bc79ced999e760ca304d69f6ba6c6649c0b60fb0e04a4a77cacc134"},
-        ),
-    ),
-)
-def test_86_numpy_case1011(reuse, name, version, hashes):
-    """Can't use("numpy", version="1.20.0", modes=use.auto_install)
-
-    on windows, py39:
-    use("numpy", version="1.20.0", auto_install=True)
-    """
-    if not installed_or_skip(reuse, name, version):
-        return
-    mod = use(
-        name,
-        version=reuse.Version(version),
-        hashes=hashes,
-        modes=use.auto_install,
-    )
-    assert (reuse.Version(modver) if (modver := reuse._get_version(mod=mod)) else version) == reuse.Version(
-        version
-    )
-
-
 def test_hash_alphabet():
     H = sha256("hello world".encode("utf-8")).hexdigest()
     assert H == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(H)))
