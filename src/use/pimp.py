@@ -19,9 +19,10 @@ from functools import lru_cache as cache
 from functools import reduce
 from importlib import metadata
 from importlib.machinery import ModuleSpec, SourceFileLoader
-from importlib.metadata import PackageNotFoundError, PackagePath
+from importlib.metadata import Distribution, PackageNotFoundError, PackagePath
 from itertools import chain
 from logging import getLogger
+from os.path import abspath, split
 from pathlib import Path, PureWindowsPath, WindowsPath
 from shutil import rmtree
 from sqlite3 import Cursor
@@ -604,30 +605,35 @@ def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
 
 @beartype
 def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path:
-    base = Path(home) / "venv" / package_name / str(version)
-    site_dirs = [*base.glob("**/site-packages"), base/"Lib"]
-    
-    assert site_dirs, f"{package_name} {version} installed but no subfolders?!"
-    original_sys_path = list(sys.path)
-    
-    dist = None
+    env_dir = (
+        Path("~").expanduser()
+        / ".justuse-python"
+        / "venv"
+        / package_name
+        / str(version)
+    )
+    executable = sys._base_executable
+    dirname, exename = split(abspath(executable))
+    site_dirs = [
+        env_dir/f"Lib{suffix}"/"site-packages"
+        if sys.platform == "win32"
+        else env_dir/f"lib{suffix}"/(
+            "python%d.%d" % sys.version_info[:2]
+        )/"site-packages"
+        for suffix in ("", "64")
+    ]
+    old_sys_path = sys.path
     pnfe = None
-    for site_dir in site_dirs:
-        try:
-            sys.path = [str(site_dir), *original_sys_path]
-            # sic! importlib uses sys.path for lookup
-            dist = importlib.metadata.Distribution.from_name(package_name)
-            dist.locate_file(dist.files[0]).relative_to(base)
-        except PackageNotFoundError as e:
-            pnfe = e
-        except ValueError:
-            pass
-        finally:
-            sys.path = original_sys_path
-        for path in dist.files:
-            if path.as_posix() == relp:
-                return site_dir
-    raise pnfe
+    try:
+        # Need strings for sys.path to work
+        sys.path = [*map(str, site_dirs), *sys.path]
+        # sic! importlib uses sys.path for lookup
+        dist = Distribution.from_name(package_name)
+        path = [p for p in dist.files if p.as_posix() == relp][0]
+        file = dist.locate_file(path)
+        return Path(*file.parts[0:-len(path.parts)])
+    finally:
+        sys.path = original_sys_path
 
 
 @beartype
