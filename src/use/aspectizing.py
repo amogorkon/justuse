@@ -110,11 +110,6 @@ def aspect(
             except AttributeError:
                 pass
         if recursive:
-            log.debug(
-                f"{lvl}recursing on {str(obj)[:20]} [{type(obj)}] "
-                f"{lvl}with ({check}, {pattern} {decorator.__qualname__}"
-            )
-
             aspect(
                 obj,
                 check,
@@ -131,7 +126,6 @@ def aspect(
                 hits=hits,
                 last=False,
             )
-            log.debug("finished recursion on %s", obj)
 
     # this the last thing in the original call, after all the recursion
     if last and dry_run:
@@ -162,7 +156,6 @@ def _apply_decorator(*, thing, obj, decorator, name, module_name):
     # cleanup
     del _applied_decorators[previous_object_id]
     del _aspectized_functions[previous_object_id]
-    log.info(f"Applied {decorator.__qualname__} to {module_name}::{name} [{obj.__class__.__qualname__}]")
     return wrapped
 
 

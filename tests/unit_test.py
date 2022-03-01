@@ -15,6 +15,7 @@ from pathlib import Path
 from subprocess import STDOUT, check_output
 from textwrap import dedent
 from threading import _shutdown_locks
+from types import ModuleType
 from unittest.mock import patch
 from warnings import catch_warnings, filterwarnings
 
@@ -593,3 +594,29 @@ def test_51_sqlalchemy_failure_default_to_none(reuse):
         default=None,
     )
     assert mod is None
+
+
+@mark.parametrize(
+    "package_name, module_name, version, hashes",
+    (
+        (
+            "numpy",
+            "numpy",
+            "1.21.0",
+            {
+                "e80fe25cba41c124d04c662f33f6364909b985f2eb5998aaa5ae4b9587242cce",  # compile from source (not windows)
+                "cf680682ad0a3bef56dae200dbcbac2d57294a73e5b0f9864955e7dd7c2c2491",
+                "2ba579dde0563f47021dcd652253103d6fd66165b18011dce1a0609215b2791e",  # cp39 win amd64
+                "cc367c86eb87e5b7c9592935620f22d13b090c609f1b27e49600cd033b529f54",
+            },
+        ),
+    ),
+)
+def test_specific_packages(reuse, package_name, module_name, version, hashes):
+    """This covers #448 and all other issues that relate to specific packages and versions.
+
+    Consider this a regression test against specific reported bugs,
+    a minimal sample from the mass test.
+    """
+    mod = reuse((package_name, module_name), version=version, hashes=hashes, modes=reuse.auto_install)
+    assert isinstance(mod, ModuleType)

@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import traceback
+from datetime import datetime
 from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
 from types import ModuleType
@@ -26,9 +27,21 @@ import toml
 from furl import furl as URL
 from icontract import require
 
-from use import (AmbiguityWarning, Hash, Modes, ModInUse, NotReloadableWarning,
-                 NoValidationWarning, UnexpectedHash, VersionWarning,
-                 __version__, buffet_table, config, home)
+from use import (
+    AmbiguityWarning,
+    Hash,
+    Modes,
+    ModInUse,
+    NotReloadableWarning,
+    NoValidationWarning,
+    UnexpectedHash,
+    VersionWarning,
+    __version__,
+    buffet_table,
+    config,
+    home,
+    sessionID,
+)
 from use.aspectizing import aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
@@ -50,6 +63,7 @@ def _release_locks():
     for _ in range(2):
         [lock.unlock() for lock in threading._shutdown_locks]
         [reloader.stop() for reloader in _reloaders.values()]
+    log.info(f"### SESSION END {datetime.now().strftime('%Y/%m/%d %H:%M:%S')} {sessionID} ###")
 
 
 atexit.register(_release_locks)

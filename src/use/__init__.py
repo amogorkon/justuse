@@ -33,9 +33,12 @@ from enum import Enum, IntEnum
 from logging import DEBUG, basicConfig, getLogger
 from pathlib import Path
 from typing import NamedTuple
+from uuid import uuid4
 from warnings import catch_warnings, filterwarnings, simplefilter
 
 from beartype import beartype
+
+sessionID = uuid4()
 
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
 
@@ -106,7 +109,7 @@ __name__ = "use"
 __package__ = "use"
 
 log = getLogger(__name__)
-log.info("initializing justuse...")
+log.info(f"### SESSION START {datetime.now().strftime('%Y/%m/%d %H:%M:%S')} {sessionID} ###")
 
 import use.logutil
 

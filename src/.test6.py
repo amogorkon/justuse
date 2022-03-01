@@ -1,23 +1,21 @@
 import io
 from contextlib import redirect_stdout
 
-import use as reuse
+import use
 
-name = "package-example"
-with io.StringIO() as buf, redirect_stdout(buf):
-    try:
-        mod = reuse(name, modes=reuse.auto_install)
-        assert False, f"Actually returned mod: {mod}"
-    except RuntimeWarning:
-        version = buf.getvalue().splitlines()[-1].strip()
-    try:
-        mod = reuse(name, version=version, modes=reuse.auto_install)
-        assert False, f"Actually returned mod: {mod}"
-    except RuntimeWarning:
-        recommended_hash = buf.getvalue().splitlines()[-1].strip()
-    mod = reuse(name, version=version, hashes=eval(recommended_hash), modes=reuse.auto_install)
-    assert mod
+name = "numpy"
+version = "1.21.0"
+hashes = {
+    "e80fe25cba41c124d04c662f33f6364909b985f2eb5998aaa5ae4b9587242cce",
+    "cf680682ad0a3bef56dae200dbcbac2d57294a73e5b0f9864955e7dd7c2c2491",
+    "2ba579dde0563f47021dcd652253103d6fd66165b18011dce1a0609215b2791e",  # win64
+    "cc367c86eb87e5b7c9592935620f22d13b090c609f1b27e49600cd033b529f54",
+}
 
-
-# mod = use("package-example", version="0.1", hashes={"Y復㝿浯䨩䩯鷛㬉鼵爔滥哫鷕逮愁墕萮緩"}, modes=use.auto_install)
-print(mod.some_var)
+mod = use(
+    name,
+    version=version,
+    hashes=hashes,
+    modes=use.auto_install,
+)
+print(mod.__version__)

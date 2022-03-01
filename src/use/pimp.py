@@ -39,7 +39,17 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import Hash, InstallationError, Modes, PkgHash, UnexpectedHash, VersionWarning, config, home
+from use import (
+    Hash,
+    InstallationError,
+    Modes,
+    PkgHash,
+    UnexpectedHash,
+    VersionWarning,
+    config,
+    home,
+    sessionID,
+)
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import UserMessage, _web_pebkac_no_version_no_hash
 from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version, _delete_none
@@ -433,6 +443,7 @@ def _auto_install(
         else:
             raise AssertionError(f"{func!r} returned {result!r}")
 
+    entry = None
     if entry := _check_db_for_installation(registry=registry, package_name=package_name, version=version):
         # is there a point in checking the hashes at this point? probably not.
         if entry.pure_python_package:
@@ -462,6 +473,7 @@ def _auto_install(
     # We can't be sure which one of those hashes will work on this platform, so let's try all of them.
 
     for H in user_provided_hashes:
+        log.info(f"Attempting auto-installation of {num_as_hexdigest(H)}...")
         url = next(
             (URL(purl.url) for purl in project.urls if H == int(purl.digests[hash_algo.name], 16)),
             None,
@@ -478,22 +490,28 @@ def _auto_install(
         _download_artifact(artifact_path=artifact_path, url=url, hash_value=H, hash_algo=hash_algo)
         _clean_sys_modules(module_name)
         try:
+            log.info("Attempting to install..")
             entry = _install(
                 package_name=package_name,
                 artifact_path=artifact_path,
                 version=version,
                 force_install=True,
             )
+            log.info("Attempting to import...")
             mod = _load_venv_entry(
                 module_name=module_name,
                 installation_path=entry.installation_path,
             )
+            log.info("Successfully imported.")
         except BaseException as err:
+            msg = err  # sic
             log.error(err)
+            traceback.print_exc(file=sys.stderr)
             artifact_path.unlink()
-            rmtree(entry.installation_path)
             assert not artifact_path.exists()
-            assert not entry.installation_path.exists()
+            if entry:
+                rmtree(entry.installation_path)
+                assert not entry.installation_path.exists()
             continue
 
         _save_package_info(
@@ -507,11 +525,9 @@ def _auto_install(
         )
         return mod
     log.critical(
-        f"Could not install {package_name!r} {version!r}. Hashes that were attempted: {user_provided_hashes} ({[num_as_hexdigest(H) for H in user_provided_hashes]})"
+        f"Could not install {package_name!r} {version!r}. Hashes that were attempted: {[num_as_hexdigest(H) for H in user_provided_hashes]}"
     )
-    return ImportError(
-        f"No Hash of {package_name!r} {version!s} specified a distribution that works on this platform."
-    )
+    return ImportError(msg)
 
 
 @beartype
@@ -549,38 +565,6 @@ VALUES ({registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
     registry.connection.commit()
 
 
-def _process(*argv, env={}):
-    _realenv = {
-        k: v for k, v in chain(os.environ.items(), env.items()) if isinstance(k, str) and isinstance(v, str)
-    }
-    output = None
-    try:
-        output = run(
-            **(
-                setup := dict(
-                    executable=argv[0],
-                    args=[*map(str, argv)],
-                    bufsize=1024,
-                    input="",
-                    capture_output=False,
-                    timeout=45000,
-                    check=True,
-                    close_fds=True,
-                    env=_realenv,
-                    encoding="ISO-8859-1",
-                    errors="ISO-8859-1",
-                    text=True,
-                    shell=False,
-                )
-            )
-        )
-    except CalledProcessError as err:
-        log.error(err)
-        traceback.print_exc(file=sys.stderr)
-        msg = err  # sic
-    return output or msg
-
-
 @beartype
 @ensure(lambda url: str(url).startswith("http"))
 def _download_artifact(*, artifact_path: Path, url: URL, hash_algo: Hash, hash_value: int):
@@ -589,17 +573,21 @@ def _download_artifact(*, artifact_path: Path, url: URL, hash_algo: Hash, hash_v
         artifact_path.exists()
         and int(hash_algo.value(artifact_path.read_bytes()).hexdigest(), 16) == hash_value
     ):
+        log.info("Artifact already downloaded. Hashes matching.")
         return
     # this should work since we just got the url from pypi itself - if this fails, we have bigger problems
+    log.info("Downloading artifact from PyPI...")
     data = requests.get(url).content
     artifact_path.write_bytes(data)
     if int(hash_algo.value(artifact_path.read_bytes()).hexdigest(), 16) != hash_value:
         # let's try once again, cosmic rays and all, believing in pure dumb luck
+        log.info("Artifact downloaded but hashes don't match. Trying again...")
         data = requests.get(url).content
         artifact_path.write_bytes(data)
     if int(hash_algo.value(artifact_path.read_bytes()).hexdigest(), 16) != hash_value:
         # this means either PyPI is hacked or there is a man-in-the-middle
         raise ImportError("Hashes don't match. Aborting. Something very fishy is going on.")
+    log.info("Download successful.")
     return
 
 
@@ -663,38 +651,63 @@ def _install(
 
     if not module_paths or force_install:
         # If we get here, the venv/pip setup is required.
+        # we catch errors one level higher, so we don't have to deal with them here
+        env = {}
+        _realenv = {
+            k: v
+            for k, v in chain(os.environ.items(), env.items())
+            if isinstance(k, str) and isinstance(v, str)
+        }
+
+        argv = [
+            python_exe,
+            "-m",
+            "pip",
+            "--disable-pip-version-check",
+            "--no-color",
+            "--verbose",
+            "--verbose",
+            "install",
+            "--pre",
+            "--root",
+            PureWindowsPath(venv_root).drive
+            if isinstance(venv_root, (WindowsPath, PureWindowsPath))
+            else "/",
+            "--prefix",
+            str(venv_root),
+            "--progress-bar",
+            "ascii",
+            "--prefer-binary",
+            "--exists-action",
+            "i",
+            "--ignore-installed",
+            "--no-warn-script-location",
+            "--force-reinstall",
+            "--no-warn-conflicts",
+            artifact_path,
+        ]
         try:
-            _process(
-                python_exe,
-                "-m",
-                "pip",
-                "--disable-pip-version-check",
-                "--no-color",
-                "--verbose",
-                "--verbose",
-                "install",
-                "--pre",
-                "--root",
-                PureWindowsPath(venv_root).drive
-                if isinstance(venv_root, (WindowsPath, PureWindowsPath))
-                else "/",
-                "--prefix",
-                str(venv_root),
-                "--progress-bar",
-                "ascii",
-                "--prefer-binary",
-                "--exists-action",
-                "i",
-                "--ignore-installed",
-                "--no-warn-script-location",
-                "--force-reinstall",
-                "--no-warn-conflicts",
-                artifact_path,
+            setup = dict(
+                executable=python_exe,
+                args=[*map(str, argv)],
+                bufsize=1024,
+                input="",
+                capture_output=False,
+                timeout=45000,
+                check=True,
+                close_fds=True,
+                env=_realenv,
+                encoding="ISO-8859-1",
+                errors="ISO-8859-1",
+                text=True,
+                shell=False,
             )
-        except BaseException as err:
-            traceback.print_exc(file=sys.stderr)
-            log.error(err)
-            return InstallationError(err)
+        except CalledProcessError as err:
+            log.error("::".join(err.cmd, err.output, err.stdout, err.stderr))
+            raise InstallationError(err) from err
+        output = run(**setup)
+        log.info(output)
+
     installation_path = _find_module_in_venv(package_name=package_name, version=version, relp=relp)
 
     return RegistryEntry(
@@ -716,12 +729,13 @@ def _load_venv_entry(*, module_name: str, installation_path: Path) -> ModuleType
         # importlib and sys.path.. bleh
         return importlib.import_module(module_name)
     except BaseException as err:
-        log.error(err)
+        msg = err
+        log.error(msg)
         traceback.print_exc(file=sys.stderr)
     finally:
         os.chdir(origcwd)
         sys.path = original_sys_path
-    raise ImportError
+    raise ImportError(msg)
 
 
 @cache(maxsize=512)
