@@ -33,8 +33,7 @@ __package__ = "tests"
 import logging
 
 from use import use
-from use.hash_alphabet import (JACK_as_num, hexdigest_as_JACK, is_JACK,
-                               num_as_hexdigest)
+from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
 from use.pimp import _parse_name
 from use.pydantics import JustUse_Info, PyPI_Project, PyPI_Release, Version
 
@@ -333,18 +332,14 @@ def test_suggestion_works(reuse):
         try:
             mod = reuse(name, modes=reuse.auto_install)
             assert False, f"Actually returned mod: {mod}"
-        except RuntimeWarning as rw:
-            last_line = rw.args[0].strip().splitlines()[-1]
-            log.info("Using last line as suggested artifact: %s", repr(last_line))
+        except RuntimeWarning:
             version = buf.getvalue().splitlines()[-1].strip()
         try:
             mod = reuse(name, version=version, modes=reuse.auto_install)
             assert False, f"Actually returned mod: {mod}"
-        except RuntimeWarning as rw:
-            last_line = rw.args[0].strip().splitlines()[-1]
-            log.info("Using last line as suggested artifact: %s", repr(last_line))
+        except RuntimeWarning:
             recommended_hash = buf.getvalue().splitlines()[-1].strip()
-        mod = reuse(name, version=version, hashes={recommended_hash}, modes=reuse.auto_install)
+        mod = reuse(name, version=version, hashes=eval(recommended_hash), modes=reuse.auto_install)
         assert mod
 
 
