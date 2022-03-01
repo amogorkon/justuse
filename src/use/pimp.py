@@ -605,7 +605,7 @@ def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
 @beartype
 def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path:
     base = Path(home) / "venv" / package_name / str(version)
-    site_dirs = base.glob("**/site-packages")
+    site_dirs = [*base.glob("**/site-packages"), base/"Lib"]
     
     assert site_dirs, f"{package_name} {version} installed but no subfolders?!"
     original_sys_path = list(sys.path)
@@ -617,8 +617,11 @@ def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path
             sys.path = [str(site_dir), *original_sys_path]
             # sic! importlib uses sys.path for lookup
             dist = importlib.metadata.Distribution.from_name(package_name)
-        except PackageNotFoundError as pnfe:
-            continue
+            dist.locate_file(dist.files[0]).relative_to(base)
+        except PackageNotFoundError as e:
+            pnfe = e
+        except ValueError:
+            pass
         finally:
             sys.path = original_sys_path
         for path in dist.files:
