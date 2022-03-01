@@ -536,9 +536,9 @@ def _save_package_info(
     registry=Cursor,
     version: Version,
     artifact_path: Path,
+    installation_path:Path,
     hash_value=int,
     hash_algo: Hash,
-    installation_path=Path,
     package_name: str,
 ):
     """Update the registry to contain the pkg's metadata."""
@@ -604,24 +604,27 @@ def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
 
 @beartype
 def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path:
-    site_dirs: list[Path] = list((home / "venv" / package_name / str(version)).iterdir())
+    base = Path(home) / "venv" / package_name / str(version)
+    site_dirs = base.glob("**/site-packages")
+    
     assert site_dirs, f"{package_name} {version} installed but no subfolders?!"
     original_sys_path = list(sys.path)
-
+    
     dist = None
+    pnfe = None
     for site_dir in site_dirs:
         try:
-            sys.path = [str(site_dir)]
+            sys.path = [str(site_dir), *original_sys_path]
             # sic! importlib uses sys.path for lookup
             dist = importlib.metadata.Distribution.from_name(package_name)
-        except PackageNotFoundError:
+        except PackageNotFoundError as pnfe:
             continue
         finally:
             sys.path = original_sys_path
         for path in dist.files:
             if path.as_posix() == relp:
-                break
-    return site_dir
+                return site_dir
+    raise pnfe
 
 
 @beartype
