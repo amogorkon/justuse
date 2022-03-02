@@ -622,7 +622,7 @@ def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path
         )/"site-packages"
         for suffix in ("", "64")
     ]
-    old_sys_path = sys.path
+    original_sys_path = sys.path
     pnfe = None
     try:
         # Need strings for sys.path to work
