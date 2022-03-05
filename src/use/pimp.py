@@ -40,19 +40,9 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import (
-    Hash,
-    InstallationError,
-    Modes,
-    PkgHash,
-    UnexpectedHash,
-    VersionWarning,
-    config,
-    home,
-    sessionID,
-)
+from use import Hash, InstallationError, Modes, UnexpectedHash, VersionWarning, config, home, sessionID
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-from use.messages import UserMessage, _web_pebkac_no_version_no_hash
+from use.messages import UserMessage, _web_pebkac_no_hash, _web_pebkac_no_version_no_hash
 from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version, _delete_none
 from use.tools import pipes
 
@@ -154,15 +144,11 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
 
 
 @beartype
-def _filter_by_version(project_: "PyPI_Project", version: Version) -> "PyPI_Project":
-    v = Version(version)
-    rels = project_.releases.get(v, project_.releases.get(version, []))
-    if not rels:
-        return project_
-
-    project_.releases = {v: rels}
-    project_.urls = rels
-    return project_
+def _filter_by_version(project: PyPI_Project, version: Version) -> PyPI_Project:
+    rels = project.releases.get(version, project.releases.get(version, []))
+    project.releases = {version: rels}
+    project.urls = rels
+    return project
 
 
 class ZipFunctions:
@@ -280,37 +266,41 @@ def _pebkac_no_version(
 def _pebkac_no_hash(
     *,
     name: str,
-    version: Version = None,
-    hash_algo: Hash,
-    package_name: str = None,
+    version: Version,
+    package_name: str,
     no_browser: bool,
     Message: type,
+    hash_algo: Hash,
     **kwargs,
 ) -> Union[Exception, ModuleType]:
-    if version is None or version not in _get_data_from_pypi(package_name=package_name).releases:
-        version = next(iter(reversed(_get_data_from_pypi(package_name=package_name).releases)))
-    if hashes := {
-        PkgHash(
-            "foobar", hexdigest_as_JACK(entry.digests.get(hash_algo.name)), entry.digests.get(hash_algo.name)
-        )
-        for entry in _get_data_from_pypi(package_name=package_name).releases[version]
-    }:
+    project = _get_data_from_pypi(package_name=package_name, version=version)
+    if version not in project.releases:
+        last_version = next(iter(reversed(project.releases)))
+        return RuntimeWarning(Message.no_distribution_found(package_name, version, last_version))
 
-        proj = _get_data_from_pypi(package_name=package_name)
-        ordered = _filtered_and_ordered_data(proj, version=None)
-        recommended_hash = {hexdigest_as_JACK(ordered[0].digests.get(hash_algo.name))}
-        return RuntimeWarning(
-            Message.pebkac_missing_hash(
-                name=name,
-                package_name=package_name,
-                version=version,
-                hashes=hashes,
-                recommended_hash=recommended_hash,
-                no_browser=no_browser,
-            )
+    project = _filter_by_version(project, version)
+    ordered = _filtered_and_ordered_data(project)
+
+    if not no_browser:
+        _web_pebkac_no_hash(name=name, package_name=package_name, version=version, project=project)
+
+    if not ordered:
+        return RuntimeWarning(Message.no_recommendation(package_name, version))
+
+    recommended_hash = hexdigest_as_JACK(ordered[0].digests.get(hash_algo.name))
+
+    # for test_suggestion_works, don't remove
+    print(recommended_hash)
+
+    return RuntimeWarning(
+        Message.pebkac_missing_hash(
+            name=name,
+            package_name=package_name,
+            version=version,
+            recommended_hash=recommended_hash,
+            no_browser=no_browser,
         )
-    else:
-        return RuntimeWarning(Message.no_distribution_found(package_name, version))
+    )
 
 
 @beartype
@@ -326,17 +316,22 @@ def _pebkac_no_version_no_hash(
 ) -> Exception:
     # let's try to make an educated guess and give a useful suggestion
     proj = _get_data_from_pypi(package_name=package_name)
-    ordered = _filtered_and_ordered_data(proj, version=None)
-    # we tried our best, but we didn't find anything that could work'
+    ordered = _filtered_and_ordered_data(proj)
+    # we tried our best, but we didn't find anything that could work
     if not ordered:
         return RuntimeWarning(Message.pebkac_unsupported(package_name))
+
+    recommended_version = ordered[0].version
+    # for test_suggestion_works, don't remove (unless you want to work out the details)
+    print(recommended_version)
+
     # we found something that could work, but it may not fit to the user's requirements
     return RuntimeWarning(
         Message.no_version_or_hash_provided(
             name=name,
             hashes={hexdigest_as_JACK(ordered[0].digests.get(hash_algo.name))},
             package_name=package_name,
-            version=ordered[0].version,
+            version=recommended_version,
             no_browser=no_browser,
         )
     )
@@ -474,7 +469,7 @@ def _auto_install(
     # We can't be sure which one of those hashes will work on this platform, so let's try all of them.
 
     for H in user_provided_hashes:
-        log.info(f"Attempting auto-installation of {num_as_hexdigest(H)}...")
+        log.info(f"Attempting auto-installation of <{num_as_hexdigest(H)}>...")
         url = next(
             (URL(purl.url) for purl in project.urls if H == int(purl.digests[hash_algo.name], 16)),
             None,
@@ -537,7 +532,7 @@ def _save_package_info(
     registry=Cursor,
     version: Version,
     artifact_path: Path,
-    installation_path:Path,
+    installation_path: Path,
     hash_value=int,
     hash_algo: Hash,
     package_name: str,
@@ -605,21 +600,12 @@ def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
 
 @beartype
 def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path:
-    env_dir = (
-        Path("~").expanduser()
-        / ".justuse-python"
-        / "venv"
-        / package_name
-        / str(version)
-    )
-    executable = sys._base_executable
-    dirname, exename = split(abspath(executable))
+    env_dir = Path("~").expanduser() / ".justuse-python" / "venv" / package_name / str(version)
+    assert (home / ".justuse-python" / "venv" / package_name / str(version)) == env_dir
     site_dirs = [
-        env_dir/f"Lib{suffix}"/"site-packages"
+        env_dir / f"Lib{suffix}" / "site-packages"
         if sys.platform == "win32"
-        else env_dir/f"lib{suffix}"/(
-            "python%d.%d" % sys.version_info[:2]
-        )/"site-packages"
+        else env_dir / f"lib{suffix}" / ("python%d.%d" % sys.version_info[:2]) / "site-packages"
         for suffix in ("", "64")
     ]
     original_sys_path = sys.path
@@ -631,9 +617,10 @@ def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path
         dist = Distribution.from_name(package_name)
         path = [p for p in dist.files if p.as_posix() == relp][0]
         file = dist.locate_file(path)
-        return Path(*file.parts[0:-len(path.parts)])
+        return Path(*file.parts[: -len(path.parts)])
     finally:
         sys.path = original_sys_path
+    raise ImportError("No module in site_dirs")
 
 
 @beartype
@@ -801,17 +788,9 @@ def _filter_by_platform(
 
 @beartype
 @pipes
-def _filtered_and_ordered_data(data: PyPI_Project, version: Optional[Version] = None) -> list[PyPI_Release]:
+def _filtered_and_ordered_data(data: PyPI_Project) -> list[PyPI_Release]:
     sys_version = Version(major=sys.version_info[0], minor=sys.version_info[1])
-    if version:
-        filtered = (
-            data
-            >> _filter_by_version(version)
-            >> _filter_by_platform(tags=get_supported(), sys_version=sys_version)
-        )
-    else:
-        filtered = data
-        filtered = _filter_by_platform(data, tags=get_supported(), sys_version=sys_version)
+    filtered = _filter_by_platform(data, tags=get_supported(), sys_version=sys_version)
 
     flat = reduce(list.__add__, filtered.releases.values(), [])
     return sorted(
@@ -967,3 +946,21 @@ def _fail_or_default(exception: BaseException, default: Any):
         return default
     else:
         raise exception
+
+
+### active web dev ###
+proj = None
+from shutil import copy
+
+
+def qwer():
+    copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", home / "stylesheet.css")
+    package_name = "pytest"
+    name = "pytest"
+    version = Version("2.1.0")
+    global proj
+    if proj is None:
+        proj = _get_data_from_pypi(package_name=package_name, version=version)
+        proj = _filter_by_version(proj, version)
+
+    _web_pebkac_no_hash(package_name=package_name, version=version, name=name, project=proj)

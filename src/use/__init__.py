@@ -158,8 +158,7 @@ with catch_warnings():
 
     class Hash(Enum):
         sha256 = hashlib.sha256
-
-    PkgHash = namedtuple("PkgHash", "platform jack sha256")
+        blake = hashlib.blake2s
 
     class Modes(IntEnum):
         auto_install = 2 ** 0

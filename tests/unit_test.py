@@ -340,7 +340,7 @@ def test_suggestion_works(reuse):
             assert False, f"Actually returned mod: {mod}"
         except RuntimeWarning:
             recommended_hash = buf.getvalue().splitlines()[-1].strip()
-        mod = reuse(name, version=version, hashes=eval(recommended_hash), modes=reuse.auto_install)
+        mod = reuse(name, version=version, hashes={recommended_hash}, modes=reuse.auto_install)
         assert mod
 
 

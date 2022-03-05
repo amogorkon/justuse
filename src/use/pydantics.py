@@ -91,27 +91,23 @@ class JustUse_Info(BaseModel):
 
 
 class PyPI_Release(BaseModel):
+    abi_tag: Optional[str]
+    build_tag: Optional[str]
+    distribution: Optional[str]
     digests: dict[str, str]
-    url: str
-    packagetype: str
-    distribution: str
+    ext: Optional[str]
+    filename: str
     requires_python: Optional[str]
+    packagetype: str
+    platform_tag: Optional[str]
     python_version: Optional[str]
     python_tag: Optional[str]
-    platform_tag: str
-    filename: str
-    abi_tag: str
-    yanked: bool
+    url: str
     version: Version
-    distribution: Optional[str]
-    build_tag: Optional[str]
-    python_tag: Optional[str]
-    abi_tag: Optional[str]
-    platform_tag: Optional[str]
-    ext: Optional[str]
+    yanked: bool
 
     class Config:
-        arbitrary_types_allowed = True
+        validate_assignment = True
 
     @property
     def is_sdist(self):
@@ -186,7 +182,7 @@ class PyPI_URL(BaseModel):
 
 
 class PyPI_Project(BaseModel):
-    releases: dict[Version, list[PyPI_Release]] = None
+    releases: dict[Version, list[PyPI_Release]] = {}
     urls: list[PyPI_URL] = None
     last_serial: int = None
     info: PyPI_Info = None

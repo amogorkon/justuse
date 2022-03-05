@@ -1,7 +1,8 @@
-import io
-from contextlib import redirect_stdout
+import requests
+from pprint import pprint
 
-with io.StringIO() as buf, redirect_stdout(buf):
-    print("adsf")
-    x = buf.getvalue()
+d = requests.get("https://pypi.org/pypi/pygame/2.1.2/json")
 
+
+for release in d.json()["2.1.2"]:
+    pprint(release)

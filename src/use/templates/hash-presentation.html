@@ -71,6 +71,7 @@
         <!-- Switch types of hashes -->
         <script type="text/python" id="script5">
         from browser import document, html
+        from browser import document as doc
 
         switch = document["button-jack"]
         table = document["table-jack"]
@@ -79,6 +80,38 @@
             box.style.display = "none"
 
         document['button-jack'].bind('click', change)
+
+        def update_select(ev):
+            # selects / deselects options in the SELECT box
+            # ev.target is the checkbox we just clicked
+            rank = choices.index(ev.target.value)
+            sel.options[rank].selected = ev.target.checked
+
+        def show_selected(ev):
+            alert([option.value for option in sel if option.selected])
+
+        def update_checkboxes(ev):
+            # updates checkboxes when the selection has changed
+            selected = [option.value for option in sel if option.selected]
+            for elt in doc.get(selector='input[type="checkbox"]'):
+                elt.checked = elt.value in selected
+
+        choices = ["one","two","three","four","five"]
+        sel = html.SELECT(size=5, multiple=True)
+        for item in choices:
+            sel <= html.OPTION(item)
+        sel.bind("change", update_checkboxes)
+
+        for item in choices:
+            chbox = html.INPUT(Type="checkbox", value=item)
+            chbox.bind("click", update_select)
+            doc["panel"] <= item + chbox
+
+        doc["panel"] <= sel
+
+        b_show = html.BUTTON("show selected")
+        b_show.bind("click", show_selected)
+        doc["panel"] <= b_show
     </script>
 </body>
 

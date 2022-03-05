@@ -9,11 +9,12 @@ from enum import Enum
 from pathlib import Path
 from shutil import copy
 
+from beartype import beartype
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 import use
 from use import __version__, config, home
-from use.pydantics import Version
+from use.pydantics import PyPI_Project, Version
 
 copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", home / "stylesheet.css")
 
@@ -25,24 +26,23 @@ env = Environment(
 def _web_pebkac_no_version_no_hash(*, name, package_name, version, hashes, no_browser: bool):
     if not no_browser:
         webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
-    print(version)
     return f"""Please specify version and hash for auto-installation of {package_name!r}.
 {"" if no_browser else "A webbrowser should open to the Snyk Advisor to check whether the package is vulnerable or malicious."}
 If you want to auto-install the latest version, try the following line to select all viable hashes:
 use("{name}", version="{version!s}", modes=use.auto_install)"""
 
 
-def _web_pebkac_no_hash(*, name, package_name, version, hashes, recommended_hash, no_browser: bool):
-    if not no_browser:
-        with open(home / "web_exception.html", "w", encoding="utf-8") as file:
-            template = env.get_template("hash-presentation.html")
-            file.write(template.render(**locals()))
-        webbrowser.open(f"file://{home}/web_exception.html")
-    print(recommended_hash)
-    return f"""Failed to auto-install {package_name!r} because hashes aren't specified.
-        {"" if no_browser else "A webbrowser should open with a list of available hashes for different platforms for you to pick."}"
-        If you want to use the package only on this platform, this should work:
-    use("{name}", version="{version!s}", hashes={recommended_hash!r}, modes=use.auto_install)"""
+@beartype
+def _web_pebkac_no_hash(
+    *,
+    name: str,
+    package_name: str,
+    version: Version,
+    project: PyPI_Project,
+):
+    with open(home / "web_exception.html", "w", encoding="utf-8") as file:
+        file.write(env.get_template("hash-presentation.html").render(**locals()))
+    webbrowser.open(f"file://{home}/web_exception.html")
 
 
 class UserMessage(Enum):
@@ -76,7 +76,12 @@ use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
     ambiguous_name_warning = (
         lambda package_name: f"Attempting to load the pkg '{package_name}', if you rather want to use the local module: use(use._ensure_path('{package_name}.py'))"
     )
-    pebkac_missing_hash = _web_pebkac_no_hash
+    pebkac_missing_hash = (
+        lambda *, name, package_name, version, recommended_hash, no_browser: f"""Failed to auto-install {package_name!r} because hashes aren't specified.
+        {"" if no_browser else "A webbrowser should open with a list of available hashes for different platforms for you to pick."}"
+        If you want to use the package only on this platform, this should work:
+    use("{name}", version="{version!s}", hashes={recommended_hash!r}, modes=use.auto_install)"""
+    )
     pebkac_unsupported = (
         lambda package_name: f"We could not find any version or release for {package_name} that could satisfy our requirements!"
     )
@@ -90,7 +95,11 @@ use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
     )
 
     no_distribution_found = (
-        lambda package_name, version: f"Failed to find any distribution for {package_name} with version {version} that can be run this platform!"
+        lambda package_name, version, last_version: f"Failed to find any distribution for {package_name} version {version} that can be run on this platform. (For your information, the most recent version of {package_name} is {last_version})"
+    )
+
+    no_recommendation = (
+        lambda package_name, version: f"We could not find any release for {package_name} {version} that appears to be compatible with this platform. Check your browser for a list of hashes and select manually."
     )
 
 
