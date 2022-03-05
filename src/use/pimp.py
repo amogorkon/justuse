@@ -955,8 +955,8 @@ from shutil import copy
 
 def qwer():
     copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", home / "stylesheet.css")
-    package_name = "pytest"
-    name = "pytest"
+    package_name = "pygame"
+    name = "pygame/foo"
     version = Version("2.1.0")
     global proj
     if proj is None:

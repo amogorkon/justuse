@@ -5,6 +5,7 @@ Fun fact: f-strings are firmly rooted in the AST.
 """
 
 import webbrowser
+from collections import namedtuple
 from enum import Enum
 from pathlib import Path
 from shutil import copy
@@ -14,6 +15,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 import use
 from use import __version__, config, home
+from use.hash_alphabet import hexdigest_as_JACK
 from use.pydantics import PyPI_Project, Version
 
 copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", home / "stylesheet.css")
@@ -40,8 +42,28 @@ def _web_pebkac_no_hash(
     version: Version,
     project: PyPI_Project,
 ):
+    entry = namedtuple("Entry", "python platform hash_name hash_value jack")
+    table = []
+    for rel in project.releases[version]:
+        table.extend(
+            entry(
+                rel.python_tag,
+                rel.platform_tag,
+                hash_name,
+                hash_value,
+                hexdigest_as_JACK(hash_value),
+            )
+            for hash_name, hash_value in rel.digests.items()
+        )
+
     with open(home / "web_exception.html", "w", encoding="utf-8") as file:
-        file.write(env.get_template("hash-presentation.html").render(**locals()))
+        args = {
+            "name": name,
+            "package_name": package_name,
+            "version": version,
+            "table": table,
+        }
+        file.write(env.get_template("hash-presentation.html").render(**args))
     webbrowser.open(f"file://{home}/web_exception.html")
 
 

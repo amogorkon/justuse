@@ -20,99 +20,28 @@
     <h1>Auto-installation of {{package_name}} version {{version}}</h1>
     <p>
         Please specify the hash corresponding to the platform you want to run your code on.
-        Different types of hash can't be mixed together but should be interchangeable, choose the type you prefer.
-
-    <div>
-        <input type="radio" id="button-jack" name="hash type" value="jack" checked>
-        <label for="button-jack">JACK</label>
-    </div>
-
-    <div>
-        <input type="radio" id="button-sha256" name="hash type" value="sha256">
-        <label for="button-sha256">SHA 256</label>
-    </div>
-
-    <table id="table-jack">
-        <tr>
-            <th> target? </th>
-            <th> Platform </th>
-            <th> Hash </th>
-        </tr>
-        {% for hash in hashes %}
-        <tr>
-            <td><input type='checkbox' id="check-jack" /> </td>
-            <td> {{ hash.platform }} </td>
-            <td> {{ hash.jack }} </td>
-        </tr>
-        {% endfor %}
-    </table>
-
-    <table id="table-sha256" style="display: none;">
-        <tr>
-            </th>
-            <th> Platform </th>
-            <th> Hash </th>
-        </tr>
-        {% for hash in hashes %}
-        <tr>
-            <td><input type='checkbox' /> </td>
-            <td> {{ hash.platform }} </td>
-            <td> {{ hash.sha256 }} </td>
-        </tr>
-        {% endfor %}
-    </table>
-
-    <p> Copy&paste the line below into your code to auto-install {{ name }} version {{ version }} on any of the selected
-        platforms:
+        Values from different hash algorithms can't be mixed together, but regular hexdigests and JACK representations
+        are interchangeable. After you selected everything you want, copy & paste the line below into your code.
     <p>
-        <textarea id="result" rows="2"
-            cols="120">use('{{name}}', version='{{version}}', hashes={ ... }, modes=use.auto_install)</textarea>
+        <textarea id="result" rows="1.5" style="resize: none;" readonly
+            cols="120">use('{{name}}', version='{{version}}', hash_algo=use.Hash.sha256, hashes={ ... }, modes=use.auto_install)</textarea>
 
-        <!-- Switch types of hashes -->
-        <script type="text/python" id="script5">
-        from browser import document, html
-        from browser import document as doc
+    <section>
+        <div tabindex="0">
+            <button>Tab 1</button>
+            <p>Tab Content #1</p>
+        </div>
+        <div tabindex="0">
+            <button>Tab 2</button>
+            <p>Content for Tab #2</p>
+        </div>
+        <div tabindex="0">
+            <button>Tab 3</button>
+            <p>#3 Tab Content</p>
+        </div>
+    </section>
 
-        switch = document["button-jack"]
-        table = document["table-jack"]
 
-        def change(e):
-            box.style.display = "none"
-
-        document['button-jack'].bind('click', change)
-
-        def update_select(ev):
-            # selects / deselects options in the SELECT box
-            # ev.target is the checkbox we just clicked
-            rank = choices.index(ev.target.value)
-            sel.options[rank].selected = ev.target.checked
-
-        def show_selected(ev):
-            alert([option.value for option in sel if option.selected])
-
-        def update_checkboxes(ev):
-            # updates checkboxes when the selection has changed
-            selected = [option.value for option in sel if option.selected]
-            for elt in doc.get(selector='input[type="checkbox"]'):
-                elt.checked = elt.value in selected
-
-        choices = ["one","two","three","four","five"]
-        sel = html.SELECT(size=5, multiple=True)
-        for item in choices:
-            sel <= html.OPTION(item)
-        sel.bind("change", update_checkboxes)
-
-        for item in choices:
-            chbox = html.INPUT(Type="checkbox", value=item)
-            chbox.bind("click", update_select)
-            doc["panel"] <= item + chbox
-
-        doc["panel"] <= sel
-
-        b_show = html.BUTTON("show selected")
-        b_show.bind("click", show_selected)
-        doc["panel"] <= b_show
-    </script>
 </body>
 
 </html>
