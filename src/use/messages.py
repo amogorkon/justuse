@@ -5,7 +5,7 @@ Fun fact: f-strings are firmly rooted in the AST.
 """
 
 import webbrowser
-from collections import namedtuple
+from collections import defaultdict, namedtuple
 from enum import Enum
 from pathlib import Path
 from shutil import copy
@@ -43,18 +43,20 @@ def _web_pebkac_no_hash(
     project: PyPI_Project,
 ):
     entry = namedtuple("Entry", "python platform hash_name hash_value jack")
-    table = []
+    table = defaultdict(lambda: [])
     for rel in project.releases[version]:
-        table.extend(
-            entry(
-                rel.python_tag,
-                rel.platform_tag,
-                hash_name,
-                hash_value,
-                hexdigest_as_JACK(hash_value),
+        for hash_name, hash_value in rel.digests.items():
+            if hash_name not in (x.name for x in use.Hash):
+                continue
+            table[hash_name].append(
+                entry(
+                    rel.python_tag,
+                    rel.platform_tag,
+                    hash_name,
+                    hash_value,
+                    hexdigest_as_JACK(hash_value),
+                )
             )
-            for hash_name, hash_value in rel.digests.items()
-        )
 
     with open(home / "web_exception.html", "w", encoding="utf-8") as file:
         args = {

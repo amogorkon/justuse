@@ -17,12 +17,12 @@ random_vars = [randint(0, 100) for _ in range(10000000)]
 
 def timeit(func):
     res = []
-    for _ in range(10):
+    for _ in range(100):
         before = time()
         func()
         res.append(time() - before)
     for f in (min, mean, median, stdev):
-        print(f(res))
+        print(f.__name__, f(res))
     return res
 
 def linear(m:float=0, b:float=0) -> callable:
@@ -180,6 +180,23 @@ def test_gaussmf():
     return [gaussmf(x, 0, 10) for x in random_vars]
 
 
-for x in (test_gaussmf, test_gauss_numba):
-    print(x.__name__)
-    timeit(x)
+test_funcs = [
+    lambda: list({}),
+    lambda: list({1:2}),
+    lambda: list({(1,2,3): 4}),
+    lambda: list((3,3,4)),
+    lambda: list(()),
+    lambda: list({0,1,2,3, ...}),
+    lambda: list({3,9,9}),
+    lambda: list(set()),
+    lambda: list([]),
+    lambda: list([1,2,1,1,])
+    ]
+
+import inspect
+
+for f in test_funcs:
+    print("####################")
+    print(inspect.getsource(f))
+    timeit(f)
+    

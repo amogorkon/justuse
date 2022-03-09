@@ -6,42 +6,142 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="stylesheet.css">
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/brython/3.8.8/brython.js"
-        integrity="sha256-rA89wPrTJJQFWJaZveKW8jpdmC3t5F9rRkPyBjz8G04=" crossorigin="anonymous"></script>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/brython/3.8.8/brython_stdlib.js"
-        integrity="sha256-Gnrw9tIjrsXcZSCh/wos5Jrpn0bNVNFJuNJI9d71TDs=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.10/brython.min.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.10/brython_stdlib.js">
+    </script>
 
 
     <title>Justuse</title>
 </head>
 
 <body onload="brython()">
-    <h1>Auto-installation of {{package_name}} version {{version}}</h1>
-    <p>
+    <header>
+        <h1>Auto-installation of {{package_name}} version {{version}}</h1>
         Please specify the hash corresponding to the platform you want to run your code on.
-        Values from different hash algorithms can't be mixed together, but regular hexdigests and JACK representations
+        Values from different hash algorithms can't be mixed together, but regular hexdigests and JACK
+        representations
         are interchangeable. After you selected everything you want, copy & paste the line below into your code.
+    </header>
+
     <p>
-        <textarea id="result" rows="1.5" style="resize: none;" readonly
-            cols="120">use('{{name}}', version='{{version}}', hash_algo=use.Hash.sha256, hashes={ ... }, modes=use.auto_install)</textarea>
+        <textarea id="result" rows="5" style="resize: none;" readonly cols="120">use('{{name}}', version='{{version}}', , modes=use.auto_install, hash_algo=use.Hash.sha256, hashes={ 
+                ... 
+            })</textarea>
+    </p>
+    <button id="clipboard_button">Copy to Clipboard</button>
 
+    <p>
+        <button id="jack_button">Hash as JACK</button>
+    </p>
+    {% for hash_name in table.keys()%}
     <section>
-        <div tabindex="0">
-            <button>Tab 1</button>
-            <p>Tab Content #1</p>
+        <div>
+            <button>{{hash_name}}</button>
         </div>
-        <div tabindex="0">
-            <button>Tab 2</button>
-            <p>Content for Tab #2</p>
-        </div>
-        <div tabindex="0">
-            <button>Tab 3</button>
-            <p>#3 Tab Content</p>
-        </div>
+        <table id="{{hash_name}}">
+            <tr>
+                <th> Python</th>
+                <th> Platform </th>
+                <th id="hash_header"> Hash </th>
+            </tr>
+            {% for entry in table[hash_name] %}
+            <tr>
+                <td> {{ entry.python }} </td>
+                <td> {{ entry.platform }} </td>
+                <td id="hash_value_{{loop.index}}"> {{ entry.hash_value}} </td>
+            </tr>
+            {% endfor %}
+        </table>
     </section>
-
+    {% endfor %}
 
 </body>
 
 </html>
+
+
+<!-- <table id="table-sha256" style="display: none;">
+    <tr>
+        </th>
+        <th> Platform </th>
+        <th> Hash </th>
+    </tr>
+    {% for hash in hashes %}
+    <tr>
+        <td><input type='checkbox' /> </td>
+        <td> {{ hash.platform }} </td>
+        <td> {{ hash.sha256 }} </td>
+    </tr>
+    {% endfor %}
+</table>
+
+<p> Copy&paste the line below into your code to auto-install {{ name }} version {{ version }} on any of the selected
+    platforms:
+<p>
+    <textarea id="result" rows="2"
+        cols="120">use('{{name}}', version='{{version}}', hashes={ ... }, modes=use.auto_install)</textarea>
+
+    Switch types of hashes -->
+<!-- <script type="text/python" id="script5">
+        from browser import document as doc, html
+
+        switch = document["button-jack"]
+        table = document["table-jack"]
+
+        def change(e):
+            box.style.display = "none"
+
+        document['button-jack'].bind('click', change)
+
+        def update_select(ev):
+            # selects / deselects options in the SELECT box
+            # ev.target is the checkbox we just clicked
+            rank = choices.index(ev.target.value)
+            sel.options[rank].selected = ev.target.checked
+
+        def show_selected(ev):
+            alert([option.value for option in sel if option.selected])
+
+        def update_checkboxes(ev):
+            # updates checkboxes when the selection has changed
+            selected = [option.value for option in sel if option.selected]
+            for elt in doc.get(selector='input[type="checkbox"]'):
+                elt.checked = elt.value in selected
+
+        choices = ["one","two","three","four","five"]
+        sel = html.SELECT(size=5, multiple=True)
+        for item in choices:
+            sel <= html.OPTION(item)
+        sel.bind("change", update_checkboxes)
+
+        for item in choices:
+            chbox = html.INPUT(Type="checkbox", value=item)
+            chbox.bind("click", update_select)
+            doc["panel"] <= item + chbox
+
+        doc["panel"] <= sel
+
+        b_show = html.BUTTON("show selected")
+        b_show.bind("click", show_selected)
+        doc["panel"] <= b_show
+    </script>
+    </body>
+
+    </html>
+
+https://github.com/brython-dev/brython/blob/master/www/tests/editor.py
+
+def share_code(ev):
+src = editor.getValue()
+if len(src) > 2048:
+d = dialog.InfoDialog("Copy url",
+f"code length is {len(src)}, must be < 2048", style={"zIndex": 10}, ok=True) else: href=window.location.href.rsplit("?",
+    1)[0] query=document.query query["code"]=src url=f"{href}{query}" url=url.replace("(", "%28" ).replace(")", "%29" )
+    d=dialog.Dialog("Copy url") area=html.TEXTAREA(rows=0, cols=0) d.panel <=area area.value=url # copy to clipboard
+    area.focus() area.select() document.execCommand("copy") d.remove() d=dialog.Dialog("Copy url") d.panel
+    <=html.DIV("url copied in the clipboard<br>Send it to share the code")
+    buttons = html.DIV()
+    ok = html.BUTTON("Ok")
+    buttons <= html.DIV(ok, style={"text-align": "center" }) d.panel <=html.BR() + buttons @bind(ok, "click" ) def
+        click(evt): d.remove() -->

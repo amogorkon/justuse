@@ -1,8 +1,3 @@
-import use
+from itertools import permutations
 
-mod = use(
-    "numpy",
-    version="1.21.0",
-    modes=use.auto_install,
-)
-print(mod.__version__)
+print(len([x for x in permutations("123456789") if int(''.join(x)) % 2 == 0]))
