@@ -21,18 +21,19 @@
         Please specify the hash corresponding to the platform you want to run your code on.
         Values from different hash algorithms can't be mixed together, but regular hexdigests and JACK
         representations
-        are interchangeable. After you selected everything you want, copy & paste the line below into your code.
+        are interchangeable. After you selected everything you want, copy & paste the snippet below into your code.
     </header>
 
+    <p>
+        <button class="button" , id="clipboard_button">Copy to Clipboard</button>
+    </p>
     <p>
         <textarea id="result" rows="5" style="resize: none;" readonly cols="120">use('{{name}}', version='{{version}}', , modes=use.auto_install, hash_algo=use.Hash.sha256, hashes={ 
                 ... 
             })</textarea>
     </p>
-    <button id="clipboard_button">Copy to Clipboard</button>
-
     <p>
-        <button id="jack_button">Hash as JACK</button>
+        <button class="button" , id="jack_button">Hash as JACK</button>
     </p>
     {% for hash_name in table.keys()%}
     <section>
@@ -56,36 +57,18 @@
     </section>
     {% endfor %}
 
+    <script type="text/python" id="script">
+    from browser import console, document, window, alert, bind, html
+
+    document["clipboard_button"].bind("click", lambda event: window.navigator.clipboard.writeText(document["result"].text))
+    
+    </script>
+
 </body>
 
 </html>
 
-
-<!-- <table id="table-sha256" style="display: none;">
-    <tr>
-        </th>
-        <th> Platform </th>
-        <th> Hash </th>
-    </tr>
-    {% for hash in hashes %}
-    <tr>
-        <td><input type='checkbox' /> </td>
-        <td> {{ hash.platform }} </td>
-        <td> {{ hash.sha256 }} </td>
-    </tr>
-    {% endfor %}
-</table>
-
-<p> Copy&paste the line below into your code to auto-install {{ name }} version {{ version }} on any of the selected
-    platforms:
-<p>
-    <textarea id="result" rows="2"
-        cols="120">use('{{name}}', version='{{version}}', hashes={ ... }, modes=use.auto_install)</textarea>
-
-    Switch types of hashes -->
-<!-- <script type="text/python" id="script5">
-        from browser import document as doc, html
-
+<!-- 
         switch = document["button-jack"]
         table = document["table-jack"]
 
@@ -126,22 +109,4 @@
         b_show.bind("click", show_selected)
         doc["panel"] <= b_show
     </script>
-    </body>
-
-    </html>
-
-https://github.com/brython-dev/brython/blob/master/www/tests/editor.py
-
-def share_code(ev):
-src = editor.getValue()
-if len(src) > 2048:
-d = dialog.InfoDialog("Copy url",
-f"code length is {len(src)}, must be < 2048", style={"zIndex": 10}, ok=True) else: href=window.location.href.rsplit("?",
-    1)[0] query=document.query query["code"]=src url=f"{href}{query}" url=url.replace("(", "%28" ).replace(")", "%29" )
-    d=dialog.Dialog("Copy url") area=html.TEXTAREA(rows=0, cols=0) d.panel <=area area.value=url # copy to clipboard
-    area.focus() area.select() document.execCommand("copy") d.remove() d=dialog.Dialog("Copy url") d.panel
-    <=html.DIV("url copied in the clipboard<br>Send it to share the code")
-    buttons = html.DIV()
-    ok = html.BUTTON("Ok")
-    buttons <= html.DIV(ok, style={"text-align": "center" }) d.panel <=html.BR() + buttons @bind(ok, "click" ) def
-        click(evt): d.remove() -->
+    https://github.com/brython-dev/brython/blob/master/www/tests/editor.py -->

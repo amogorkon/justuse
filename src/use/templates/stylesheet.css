@@ -54,25 +54,6 @@ padding: 10px;
 border-radius: 12px 12px 0 0;
 }
 
-div:focus button, button:focus {
-background-color: #8DA1BF;
-outline: none;
-}
-
-button:focus + p, div:focus P {
-display: block;
-position: absolute;
-background-color: #8DA1BF;
-height: 120px;
-width: 100%;
-left: 0;
-z-index: 2;
-outline: none;
-top: 0px;
-text-align: center;
-padding-top: 48px;
-}
-
 p {
 /* display: none; */
 font-size: 1em;
@@ -97,30 +78,34 @@ display: block;
 font-size: 1em;
 }
 
-#jack_button {
+.button {
     cursor: pointer;
     width: 199px;
     display: inline-block;
-    background-color: #117d86;
-    color: white;
     text-align: center;
     transition: .25s ease;
-    border: none;
-    padding: 10px;
+    border-style: outset;
     border-radius: 12px 12px 12px 12px;
+    padding: 10px;
+    color: white;
+    box-shadow: 0 5px #666;
+}
+
+#clipboard_button {
+    background-color: #5c0847;
+}
+
+#clipboard_button:active {
+    box-shadow: none;
+    transform: translateY(4px);
+}
+
+#jack_button {
+    background-color: #117d86;
     }
 
-#jack_button:focus + p, div:focus P {
-        display: block;
-        position: absolute;
-        background-color: #8DA1BF;
-        height: 120px;
-        width: 100%;
-        left: 0;
-        z-index: 2;
-        outline: none;
-        top: 0px;
-        text-align: center;
-        padding-top: 48px;
-        }
+#jack_button:active {
+    box-shadow: none;
+    transform: translateY(4px);
+    }
 
