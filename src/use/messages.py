@@ -66,6 +66,7 @@ def _web_pebkac_no_hash(
             "table": table,
         }
         file.write(env.get_template("hash-presentation.html").render(**args))
+
     webbrowser.open(f"file://{home}/web_exception.html")
 
 
