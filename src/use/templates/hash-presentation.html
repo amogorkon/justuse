@@ -65,71 +65,30 @@
     {% endfor %}
 
     <script type="text/python" id="script">
-    from browser import console, document, window, alert, bind, html
+from browser import console, document, window, alert, bind, html
 
-    document["clipboard_button"].bind("click", lambda event: window.navigator.clipboard.writeText(document["result"].text))
+document["clipboard_button"].bind("click", lambda event: window.navigator.clipboard.writeText(document["result"].text))
 
-    @bind(document["jack_button"], "click")
-    def jack_button_clicked(event):
-        if event.target.checked:
-            document["jack_button_label"].text = "Hash as JACK"
-            document["hash_header"].style.display = "none"
-            document["jack_header"].style.display = "table-cell"
-            for i, row in enumerate(document.select("tr")):
-                if i == 0:
-                    continue
-                document["hash_value_" + str(i)].style.display = "none"
-                document["jack_value_" + str(i)].style.display = "table-cell"
-        else:
-            document["jack_button_label"].text = "Hash as hexdigest"
-            document["hash_header"].style.display = "table-cell"
-            document["jack_header"].style.display = "none"
-            for i, row in enumerate(document.select("tr")):
-                if i == 0: continue
-                document["hash_value_" + str(i)].style.display = "table-cell"
-                document["jack_value_" + str(i)].style.display = "none"
-    </script>
+@bind(document["jack_button"], "click")
+def jack_button_clicked(event):
+    if event.target.checked:
+        document["jack_button_label"].text = "Hash as JACK"
+        document["hash_header"].style.display = "none"
+        document["jack_header"].style.display = "table-cell"
+        for i, row in enumerate(document.select("tr")):
+            if i == 0: continue
+            document["hash_value_" + str(i)].style.display = "none"
+            document["jack_value_" + str(i)].style.display = "table-cell"
+    else:
+        document["jack_button_label"].text = "Hash as hexdigest"
+        document["hash_header"].style.display = "table-cell"
+        document["jack_header"].style.display = "none"
+        for i, row in enumerate(document.select("tr")):
+            if i == 0: continue
+            document["hash_value_" + str(i)].style.display = "table-cell"
+            document["jack_value_" + str(i)].style.display = "none"
+</script>
 
 </body>
 
 </html>
-
-<!-- 
-        def change(e):
-            box.style.display = "none"
-
-        document['button-jack'].bind('click', change)
-
-        def update_select(ev):
-            # selects / deselects options in the SELECT box
-            # ev.target is the checkbox we just clicked
-            rank = choices.index(ev.target.value)
-            sel.options[rank].selected = ev.target.checked
-
-        def show_selected(ev):
-            alert([option.value for option in sel if option.selected])
-
-        def update_checkboxes(ev):
-            # updates checkboxes when the selection has changed
-            selected = [option.value for option in sel if option.selected]
-            for elt in doc.get(selector='input[type="checkbox"]'):
-                elt.checked = elt.value in selected
-
-        choices = ["one","two","three","four","five"]
-        sel = html.SELECT(size=5, multiple=True)
-        for item in choices:
-            sel <= html.OPTION(item)
-        sel.bind("change", update_checkboxes)
-
-        for item in choices:
-            chbox = html.INPUT(Type="checkbox", value=item)
-            chbox.bind("click", update_select)
-            doc["panel"] <= item + chbox
-
-        doc["panel"] <= sel
-
-        b_show = html.BUTTON("show selected")
-        b_show.bind("click", show_selected)
-        doc["panel"] <= b_show
-    </script>
-    https://github.com/brython-dev/brython/blob/master/www/tests/editor.py -->
