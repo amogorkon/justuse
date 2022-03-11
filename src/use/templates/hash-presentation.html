@@ -28,12 +28,17 @@
         <button class="button" , id="clipboard_button">Copy to Clipboard</button>
     </p>
     <p>
-        <textarea id="result" rows="5" style="resize: none;" readonly cols="120">use('{{name}}', version='{{version}}', , modes=use.auto_install, hash_algo=use.Hash.sha256, hashes={ 
+        <textarea id="result" rows="5" style="resize: none;" readonly cols="120">use('{{name}}', version='{{version}}', modes=use.auto_install, hash_algo=use.Hash.sha256, hashes={ 
                 ... 
             })</textarea>
     </p>
     <p>
-        <button class="button" , id="jack_button">Hash as JACK</button>
+        <label>
+            <input type="checkbox" id="jack_button">
+            <span class="button" for="jack_button" id="jack_button_label">Hash as hexdigest</span>
+        </label>
+
+
     </p>
     {% for hash_name in table.keys()%}
     <section>
@@ -45,12 +50,14 @@
                 <th> Python</th>
                 <th> Platform </th>
                 <th id="hash_header"> Hash </th>
+                <th id="jack_header" style="display:none;"> JACK </th>
             </tr>
             {% for entry in table[hash_name] %}
             <tr>
                 <td> {{ entry.python }} </td>
                 <td> {{ entry.platform }} </td>
                 <td id="hash_value_{{loop.index}}"> {{ entry.hash_value}} </td>
+                <td id="jack_value_{{loop.index}}" style="display:none;"> {{ entry.jack_value}} </td>
             </tr>
             {% endfor %}
         </table>
@@ -61,7 +68,26 @@
     from browser import console, document, window, alert, bind, html
 
     document["clipboard_button"].bind("click", lambda event: window.navigator.clipboard.writeText(document["result"].text))
-    
+
+    @bind(document["jack_button"], "click")
+    def jack_button_clicked(event):
+        if event.target.checked:
+            document["jack_button_label"].text = "Hash as JACK"
+            document["hash_header"].style.display = "none"
+            document["jack_header"].style.display = "table-cell"
+            for i, row in enumerate(document.select("tr")):
+                if i == 0:
+                    continue
+                document["hash_value_" + str(i)].style.display = "none"
+                document["jack_value_" + str(i)].style.display = "table-cell"
+        else:
+            document["jack_button_label"].text = "Hash as hexdigest"
+            document["hash_header"].style.display = "table-cell"
+            document["jack_header"].style.display = "none"
+            for i, row in enumerate(document.select("tr")):
+                if i == 0: continue
+                document["hash_value_" + str(i)].style.display = "table-cell"
+                document["jack_value_" + str(i)].style.display = "none"
     </script>
 
 </body>
@@ -69,9 +95,6 @@
 </html>
 
 <!-- 
-        switch = document["button-jack"]
-        table = document["table-jack"]
-
         def change(e):
             box.style.display = "none"
 

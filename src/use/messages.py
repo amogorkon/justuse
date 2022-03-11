@@ -42,7 +42,7 @@ def _web_pebkac_no_hash(
     version: Version,
     project: PyPI_Project,
 ):
-    entry = namedtuple("Entry", "python platform hash_name hash_value jack")
+    entry = namedtuple("Entry", "python platform hash_name hash_value jack_value")
     table = defaultdict(lambda: [])
     for rel in project.releases[version]:
         for hash_name, hash_value in rel.digests.items():
@@ -67,6 +67,9 @@ def _web_pebkac_no_hash(
         }
         file.write(env.get_template("hash-presentation.html").render(**args))
 
+    # from base64 import b64encode
+    # def data_uri_from_html(html_string):
+    #    return f'data:text/html;base64,{b64encode(html_string.encode()).decode()}'
     webbrowser.open(f"file://{home}/web_exception.html")
 
 

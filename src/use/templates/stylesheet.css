@@ -170,10 +170,19 @@ font-size: 1em;
 }
 
 #jack_button {
-    background-color: #117d86;
+    appearance: none;
+}
+
+#jack_button_label {
+    background: #117d86;
     }
 
-#jack_button:active {
-    box-shadow: none;
+#jack_button_label:active {
     transform: translateY(4px);
     }
+
+:checked + span {
+    font-weight: bold;
+    box-shadow: none;
+    background: #010102;
+}
