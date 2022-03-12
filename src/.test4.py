@@ -1,6 +1,9 @@
-print("start")
-import use
+hashes = {("a", "aa", "aaa"), ("b", "bb", "bbb")}
+name = "pygame"
+version = "1.2.3"
 
-x = input()
-mod = use("pygame", version="2.1.3.dev4", modes=use.auto_install)
-print("fin")
+
+
+hash_str = "{\n    " + "\n    ".join(f'{H} # {python}-{platform}' for python, platform, H in hashes) + " \n}"
+s =  f"use('{document["name"]}', version='{version}', modes=use.auto_install, hash_algo=use.Hash.sha256, hashes={hash_str})"
+print(s)
