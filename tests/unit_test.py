@@ -33,7 +33,7 @@ is_win = sys.platform.startswith("win")
 __package__ = "tests"
 import logging
 
-from use import use
+from use import auto_install, fatal_exceptions, no_cleanup, use
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
 from use.pimp import _parse_name
 from use.pydantics import JustUse_Info, PyPI_Project, PyPI_Release, Version
@@ -590,7 +590,7 @@ def test_51_sqlalchemy_failure_default_to_none(reuse):
         # SQLAlchemy-0.7.1.tar.gz (2.3 MB) - only a single artifact
         # Uploaded Jun 5, 2011 source
         # but it's bugged on import - it's looking for time.clock(), which isn't a thing (anymore)
-        modes=use.auto_install,
+        modes=auto_install,
         default=None,
     )
     assert mod is None
@@ -618,5 +618,18 @@ def test_specific_packages(reuse, package_name, module_name, version, hashes):
     Consider this a regression test against specific reported bugs,
     a minimal sample from the mass test.
     """
-    mod = reuse((package_name, module_name), version=version, hashes=hashes, modes=reuse.auto_install)
+    mod = reuse((package_name, module_name), version=version, hashes=hashes, modes=auto_install | no_cleanup)
     assert isinstance(mod, ModuleType)
+
+
+def test_451_ignore_spaces_in_hashes(reuse):
+    # single hash
+    mod = use("package-example", version="0.1", hashes="Y復㝿浯䨩䩯鷛㬉鼵爔滥哫鷕逮 愁墕萮緩", modes=auto_install | no_cleanup)
+    assert mod
+    del mod
+    # hash list
+    mod = use(
+        "package-example", version="0.1", hashes={"Y復㝿浯䨩䩯鷛㬉鼵爔滥哫鷕逮 愁墕萮緩"}, modes=auto_install | no_cleanup
+    )
+    assert mod
+    del mod

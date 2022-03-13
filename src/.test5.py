@@ -1,7 +1,3 @@
 import use
-from use.pydantics import PyPI_Project
-import requests
 
-d = requests.get("https://pypi.org/pypi/pygame/2.1.2/json")
-
-proj = PyPI_Project(**d.json())
+use("package-example", version="0.1", hashes={"Y復㝿浯䨩䩯鷛㬉鼵爔滥哫鷕逮 愁墕萮緩"}, modes=use.auto_install)

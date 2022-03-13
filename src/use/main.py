@@ -732,6 +732,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         fastfail = bool(Modes.fastfail & modes)
         fatal_exceptions = bool(Modes.fatal_exceptions & modes)
         no_browser = bool(Modes.no_browser & modes)
+        cleanup = not bool(Modes.no_cleanup & modes)
 
         if module_name:
             module_name = module_name.replace("/", ".").replace("-", "_")
@@ -739,7 +740,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         # a single hash is a string
         if isinstance(hashes, str):
             # spaces are hard to see in JACK, so we ignore them
-            hashes = "".join(hashes.split())
+            hashes = ["".join(hashes.split())]
         if not hashes:
             hashes = set()
         hashes: set[int] = {
@@ -778,6 +779,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             "no_browser": no_browser,
             "Message": Message,
             "registry": self.registry,
+            "cleanup": cleanup,
         }
 
         result = buffet_table(case, kwargs)

@@ -164,10 +164,11 @@ with catch_warnings():
         auto_install = 2 ** 0
         fatal_exceptions = 2 ** 1
         reloading = 2 ** 2
-        no_public_installation = 2 ** 4
-        fastfail = 2 ** 5
-        recklessness = 2 ** 6
-        no_browser = 2 ** 7
+        no_public_installation = 2 ** 3
+        fastfail = 2 ** 4
+        recklessness = 2 ** 5
+        no_browser = 2 ** 6
+        no_cleanup = 2 ** 7
 
 
 from use.aspectizing import *

@@ -429,6 +429,7 @@ def _auto_install(
     hash_algo: Hash,
     user_provided_hashes: set[int],
     registry: Cursor,
+    cleanup: bool,
     **kwargs,
 ) -> Union[ModuleType, BaseException]:
     """Install, if necessary, the package and import the module in any possible way."""
@@ -505,7 +506,7 @@ def _auto_install(
             traceback.print_exc(file=sys.stderr)
             artifact_path.unlink()
             assert not artifact_path.exists()
-            if entry:
+            if entry and cleanup:
                 rmtree(entry.installation_path)
                 assert not entry.installation_path.exists()
             continue
@@ -600,8 +601,7 @@ def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
 
 @beartype
 def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path:
-    env_dir = Path("~").expanduser() / ".justuse-python" / "venv" / package_name / str(version)
-    assert (home / ".justuse-python" / "venv" / package_name / str(version)) == env_dir
+    env_dir = home / "venv" / package_name / str(version)
     site_dirs = [
         env_dir / f"Lib{suffix}" / "site-packages"
         if sys.platform == "win32"
@@ -609,7 +609,6 @@ def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path
         for suffix in ("", "64")
     ]
     original_sys_path = sys.path
-    pnfe = None
     try:
         # Need strings for sys.path to work
         sys.path = [*map(str, site_dirs), *sys.path]
@@ -705,7 +704,7 @@ def _install(
             log.error("::".join(err.cmd, err.output, err.stdout, err.stderr))
             raise InstallationError(err) from err
         output = run(**setup)
-        log.info(output)
+        log.info("Installation successful.")
 
     installation_path = _find_module_in_venv(package_name=package_name, version=version, relp=relp)
 
