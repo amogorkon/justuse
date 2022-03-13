@@ -612,7 +612,7 @@ def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path
     log.debug("site_dirs=%s", site_dirs)
     for p in env_dir.glob("**/*"):
         log.debug("  - %s", p.relative_to(env_dir).as_posix())
-
+    
     original_sys_path = sys.path
     try:
         # Need strings for sys.path to work
@@ -623,16 +623,19 @@ def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path
         dist = Distribution.from_name(package_name)
         log.info("dist=%s", dist)
         log.debug("dist.files=%s", dist.files)
-        path_set = [p for p in dist.files if p.as_posix() == relp]
+        path_set = dist.files
         log.debug("path_set=%s", path_set)
         for path in path_set:
             log.debug("path=%s", path)
             file = dist.locate_file(path)
             log.debug("file=%s", file)
+            if not file.exists():
+                continue
             real_file = Path(*file.parts[: -len(path.parts)])
             log.debug("real_file=%s", real_file)
             if real_file.exists():
                 return real_file
+                
     finally:
         sys.path = original_sys_path
     raise ImportError("No module in site_dirs")
