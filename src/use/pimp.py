@@ -602,21 +602,37 @@ def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
 @beartype
 def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path:
     env_dir = home / "venv" / package_name / str(version)
+    log.debug("env_dir=%s", env_dir)
     site_dirs = [
         env_dir / f"Lib{suffix}" / "site-packages"
         if sys.platform == "win32"
         else env_dir / f"lib{suffix}" / ("python%d.%d" % sys.version_info[:2]) / "site-packages"
-        for suffix in ("", "64")
+        for suffix in ("64", "")
     ]
+    log.debug("site_dirs=%s", site_dirs)
+    for p in env_dir.glob("**/*"):
+        log.debug("  - %s", p.relative_to(env_dir).as_posix())
+
     original_sys_path = sys.path
     try:
         # Need strings for sys.path to work
         sys.path = [*map(str, site_dirs), *sys.path]
+        sys.path_importer_cache.clear()
+        importlib.invalidate_caches()
         # sic! importlib uses sys.path for lookup
         dist = Distribution.from_name(package_name)
-        path = [p for p in dist.files if p.as_posix() == relp][0]
-        file = dist.locate_file(path)
-        return Path(*file.parts[: -len(path.parts)])
+        log.info("dist=%s", dist)
+        log.debug("dist.files=%s", dist.files)
+        path_set = [p for p in dist.files if p.as_posix() == relp]
+        log.debug("path_set=%s", path_set)
+        for path in path_set:
+            log.debug("path=%s", path)
+            file = dist.locate_file(path)
+            log.debug("file=%s", file)
+            real_file = Path(*file.parts[: -len(path.parts)])
+            log.debug("real_file=%s", real_file)
+            if real_file.exists():
+                return real_file
     finally:
         sys.path = original_sys_path
     raise ImportError("No module in site_dirs")
