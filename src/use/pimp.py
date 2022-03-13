@@ -964,10 +964,3 @@ def qwer():
         proj = _filter_by_version(proj, version)
 
     _web_pebkac_no_hash(package_name=package_name, version=version, name=name, project=proj)
-
-
-x: int = 4
-"adsf asdf"
-
-
-x

@@ -736,11 +736,15 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         if module_name:
             module_name = module_name.replace("/", ".").replace("-", "_")
 
+        # a single hash is a string
         if isinstance(hashes, str):
-            hashes = set(hashes.split())
+            # spaces are hard to see in JACK, so we ignore them
+            hashes = "".join(hashes.split())
         if not hashes:
             hashes = set()
-        hashes: set[int] = {JACK_as_num(H) if is_JACK(H) else int(H, 16) for H in hashes}
+        hashes: set[int] = {
+            JACK_as_num(H) if is_JACK(H) else int(H, 16) for H in ("".join(H.split()) for H in hashes)
+        }
 
         version: Version = Version(version) if version else None
 

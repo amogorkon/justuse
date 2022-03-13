@@ -112,7 +112,7 @@ def refresh_result():
         else:
             hashes.add((document[f"python_{row.id}"].text, document[f"platform_{row.id}"].text, document[f"hash_value_{row.id}"].text))
 
-    hash_str = "{\n    " + "\n    ".join(f'{H},  # {python}-{platform}' for python, platform, H in hashes) + " \n}"
+    hash_str = "{\n    " + "\n    ".join(f"'{H}',  # {python}-{platform}" for python, platform, H in hashes) + " \n}"
     document["result"].text =  f"use('{document['name'].text}', version='{document['version'].text}', modes=use.auto_install, hash_algo=use.Hash.sha256, hashes={hash_str})"
 
 for x in document.select(".row_not_selected"): x.bind("click", table_clicked_select)
