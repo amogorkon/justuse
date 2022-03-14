@@ -221,10 +221,10 @@ class Use(ModuleType):
                 )  # we really don't need to bug the user about this (either pypi is down or internet is broken)
 
     def clean_slate(self):
-        shutil.rmtree(home / "venv", ignore_errors=True)
-        shutil.rmtree(home / "packages", ignore_errors=True)
-        (home / "venv").mkdir(mode=0o755, exist_ok=True)
-        (home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
+        shutil.rmtree(config.venv, ignore_errors=True)
+        shutil.rmtree(config.packages, ignore_errors=True)
+        config.venv.mkdir(mode=0o755, exist_ok=True)
+        config.packages.mkdir(mode=0o755, parents=True, exist_ok=True)
         self.recreate_registry()
 
     def _set_up_registry(self, *, registry=None, path: Optional[Path] = None):
