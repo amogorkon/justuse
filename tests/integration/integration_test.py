@@ -38,7 +38,7 @@ from tests.unit_test import reuse, ScopedCwd
 import logging
 
 log = logging.getLogger(".".join((__package__, __name__)))
-log.setLevel(logging.DEBUG if use.config["debugging"] else logging.NOTSET)
+log.setLevel(logging.DEBUG if use.config.debugging else logging.NOTSET)
 
 
 params = [
@@ -70,6 +70,7 @@ def test_sample(reuse, name, version):
         return
     assert False, "Should raise ImportError: missing hashes."
 
+
 @pytest.mark.parametrize("name, version", (("numpy", "1.19.3"),))
 def test_86_numpy(reuse, name, version):
     use = reuse  # for the eval() later
@@ -89,10 +90,10 @@ def test_redownload_module(reuse):
 
     assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
     try:
-        reuse.config["fault_inject"] = inject_fault
+        reuse.fault_inject = inject_fault
         assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
     finally:
-        del reuse.config["fault_inject"]
+        del reuse.fault_inject
     assert test_86_numpy(reuse, "example-pypi-package/examplepy", "0.1.0")
 
 
@@ -122,9 +123,10 @@ def test_aspectize_function_by_name(reuse):
     if "tests.simple_funcs" in sys.modules:
         del sys.modules["tests.simple_funcs"]
     with ScopedCwd(srcdir):
-        mod = (
-            reuse(reuse.Path("./tests/simple_funcs.py"), package_name="tests")
-            @ (reuse.isfunction, "two", double_function)
+        mod = reuse(reuse.Path("./tests/simple_funcs.py"), package_name="tests") @ (
+            reuse.isfunction,
+            "two",
+            double_function,
         )
         assert mod.two() == 4
         assert mod.three() == 3
@@ -137,9 +139,10 @@ def test_aspectize_all_functions(reuse):
     if "tests.simple_funcs" in sys.modules:
         del sys.modules["tests.simple_funcs"]
     with ScopedCwd(srcdir):
-        mod = (
-            reuse(reuse.Path("./tests/simple_funcs.py"), package_name="tests")
-            @ (reuse.isfunction, "", double_function)
+        mod = reuse(reuse.Path("./tests/simple_funcs.py"), package_name="tests") @ (
+            reuse.isfunction,
+            "",
+            double_function,
         )
         assert mod.two() == 4
         assert mod.three() == 6
@@ -175,12 +178,9 @@ def test_simple_url(reuse):
 def test_autoinstall_numpy_dual_version(reuse):
     ver1, ver2 = "1.19.3", "1.19.5"
     for ver in (ver1, ver2):
-        for k,v in list(sys.modules.items()):
+        for k, v in list(sys.modules.items()):
             if k == "numpy" or k.startswith("numpy."):
-                loader = (
-                    getattr(v, "__loader__", None)
-                    or v.__spec__.loader
-                )
+                loader = getattr(v, "__loader__", None) or v.__spec__.loader
                 if isinstance(loader, SourceFileLoader):
                     del sys.modules[k]
         try:
@@ -189,29 +189,20 @@ def test_autoinstall_numpy_dual_version(reuse):
             assert mod.__version__ == ver
         except RuntimeError:
             pass
-    
+
 
 def test_autoinstall_protobuf(reuse):
     ver = "3.19.1"
-    mod = suggested_artifact(
-        reuse, "protobuf/google.protobuf", version=ver
-    )
+    mod = suggested_artifact(reuse, "protobuf/google.protobuf", version=ver)
     assert mod.__version__ == ver
     assert mod.__name__ == "google.protobuf"
-    assert (
-        tuple(Path(mod.__file__).parts[-3:])
-        == ("google", "protobuf", "__init__.py")
-    )
+    assert tuple(Path(mod.__file__).parts[-3:]) == ("google", "protobuf", "__init__.py")
 
 
 def suggested_artifact(reuse, *args, **kwargs):
     reuse.pimp._clean_sys_modules(args[0].split("/")[-1].split(".")[0])
     try:
-        mod = reuse(
-            *args, 
-            modes=reuse.auto_install | reuse.Modes.fastfail,
-            **kwargs
-        )
+        mod = reuse(*args, modes=reuse.auto_install | reuse.Modes.fastfail, **kwargs)
         return mod
     except RuntimeWarning as rw:
         last_line = str(rw).strip().splitlines()[-1].strip()

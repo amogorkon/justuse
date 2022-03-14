@@ -40,10 +40,10 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import Hash, InstallationError, Modes, UnexpectedHash, VersionWarning, config, home, sessionID
+from use import Hash, InstallationError, Modes, UnexpectedHash, VersionWarning, config, sessionID
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 from use.messages import UserMessage, _web_pebkac_no_hash, _web_pebkac_no_version_no_hash
-from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version, _delete_none
+from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version
 from use.tools import pipes
 
 log = getLogger(__name__)
@@ -483,7 +483,7 @@ def _auto_install(
 
         # got an url for an artifact with a hash given by the user, let's install it
         filename = url.asdict()["path"]["segments"][-1]
-        artifact_path = home / "packages" / filename
+        artifact_path = config.packages / filename
         _download_artifact(artifact_path=artifact_path, url=url, hash_value=H, hash_algo=hash_algo)
         _clean_sys_modules(module_name)
         try:
@@ -601,7 +601,7 @@ def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
 
 @beartype
 def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path:
-    env_dir = home / "venv" / package_name / str(version)
+    env_dir = config.venv / package_name / str(version)
     log.debug("env_dir=%s", env_dir)
     site_dirs = [
         env_dir / f"Lib{suffix}" / "site-packages"
@@ -612,7 +612,7 @@ def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path
     log.debug("site_dirs=%s", site_dirs)
     for p in env_dir.glob("**/*"):
         log.debug("  - %s", p.relative_to(env_dir).as_posix())
-    
+
     original_sys_path = sys.path
     try:
         # Need strings for sys.path to work
@@ -635,7 +635,7 @@ def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path
             log.debug("real_file=%s", real_file)
             if real_file.exists():
                 return real_file
-                
+
     finally:
         sys.path = original_sys_path
     raise ImportError("No module in site_dirs")
@@ -655,7 +655,7 @@ def _install(
     if "__init__.py" in import_parts:
         import_parts.remove("__init__.py")
     relp: str = meta["import_relpath"]
-    venv_root = home / "venv" / package_name / str(version)
+    venv_root = config.venv / package_name / str(version)
     site_pkgs_dir = list(venv_root.rglob("site-packages"))
     if not any(site_pkgs_dir):
         force_install = True
@@ -972,7 +972,7 @@ from shutil import copy
 
 
 def qwer():
-    copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", home / "stylesheet.css")
+    copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", config.home / "stylesheet.css")
     package_name = "pygame"
     name = "pygame/foo"
     version = Version("2.1.0")

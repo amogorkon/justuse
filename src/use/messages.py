@@ -161,6 +161,6 @@ def _web_aspectizing_overview(*, decorator, check, pattern, visited, hits):
 
     with open(use.home / "aspectizing_overview.html", "w") as f:
         f.write(msg)
-    if not config["testing"]:
+    if not config.testing:
         webbrowser.open(use.home / "aspectizing_overview.html")
     return msg

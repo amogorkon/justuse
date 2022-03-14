@@ -197,19 +197,10 @@ class Use(ModuleType):
         self.registry = self._set_up_registry()
         "Registry sqlite DB to store all relevant package metadata."
 
-        # for the user to copy&paste
-        with open(home / "config_defaults.toml", "w") as rfile:
-            toml.dump(config, rfile)
-
-        with open(home / "config.toml") as rfile:
-            config.update(toml.load(rfile))
-
-        config.update(test_config)
-
-        if config["debugging"]:
+        if config.debugging:
             root.setLevel(DEBUG)
 
-        if config["version_warning"]:
+        if config.version_warning:
             try:
                 response = requests.get("https://pypi.org/pypi/justuse/json")
                 "Checking if there's a new version of justuse."

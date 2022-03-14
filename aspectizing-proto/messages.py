@@ -13,7 +13,7 @@ from use.pydantics import Version
 
 
 def _web_no_version_or_hash_provided(*, name, package_name, version, hashes):
-    if not config["testing"]:
+    if not config.testing:
         webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
     return f"""Please specify version and hash for auto-installation of {package_name!r}.
 A webbrowser will open to the Snyk Advisor to check whether the package is vulnerable.
@@ -22,12 +22,12 @@ use("{name}", version="{version!s}", hashes={hashes!r}, modes=use.auto_install)"
 
 
 def _web_pebkac_missing_hash(name, package_name, version, hashes):
-    if not config["testing"]:
+    if not config.testing:
         with open(use.home / "web_exception.html", "w") as f:
             f.write(
                 f"""<html><body>
     <h1>{package_name!r}</h1>
-    {config}
+    {dict(config)}
     <p>
     Please specify the hash for auto-installation.
     </p>
@@ -139,6 +139,6 @@ def _web_aspectizing_overview(*, decorator, check, pattern, visited, hits):
 
     with open(use.home / "aspectizing_overview.html", "w") as f:
         f.write(msg)
-    if not config["testing"]:
+    if not config.testing:
         webbrowser.open(use.home / "aspectizing_overview.html")
     return msg

@@ -1,6 +1,7 @@
 """
 Pydantic model for the PyPI JSON API.
 """
+import os
 import re
 from logging import getLogger
 from pathlib import Path
@@ -12,6 +13,7 @@ from pydantic import BaseModel
 
 log = getLogger(__name__)
 
+
 # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
 # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
 
@@ -19,6 +21,26 @@ log = getLogger(__name__)
 class BaseModel(BaseModel):
     def __repr__(self):
         return self.__class__.__name__
+
+
+class Configuration(BaseModel):
+    version_warning: bool = True
+    disable_jack: bool = bool(int(os.getenv("DISABLE_JACK", "0")))
+    debugging: bool = bool(int(os.getenv("DEBUG", "0")))
+    use_db: bool = bool(int(os.getenv("USE_DB", "1")))
+    testing: bool = bool(int(os.getenv("TESTING", "0")))
+    home: Path = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
+    venv: Path = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute() / "venv"
+    packages: Path = (
+        Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute() / "packages"
+    )
+    logs: Path = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute() / "logs"
+    registry: Path = (
+        Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute() / "registry.db"
+    )
+
+    class Config:
+        validate_assignment = True
 
 
 class Version(PkgVersion):

@@ -41,7 +41,7 @@ from use.pydantics import JustUse_Info, PyPI_Project, PyPI_Release, Version
 log = logging.getLogger(".".join((__package__, __name__)))
 log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)
 
-use.config["testing"] = True
+use.config.testing = True
 
 # this is actually a test!
 from tests.simple_funcs import three
@@ -64,7 +64,7 @@ def reuse():
 
 
 def test_access_to_home(reuse):
-    test = reuse.Path.home() / ".justuse-python/packages/test"
+    test = reuse.config.packages / "test"
     test.touch(mode=0o644, exist_ok=True)
     with open(test, "w") as file:
         file.write("test")

@@ -1,7 +1,6 @@
 """
 This is where the story begins. Welcome to JustUse!
 Only imports and project-global constants are defined here. 
-    
 """
 
 
@@ -36,11 +35,14 @@ from typing import NamedTuple
 from uuid import uuid4
 from warnings import catch_warnings, filterwarnings, simplefilter
 
+import toml
 from beartype import beartype
+
+from use.pydantics import Configuration
 
 sessionID = uuid4()
 
-home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
+home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python")))
 
 try:
     home.mkdir(mode=0o755, parents=True, exist_ok=True)
@@ -48,29 +50,19 @@ except PermissionError:
     # this should fix the permission issues on android #80
     home = tempfile.mkdtemp(prefix="justuse_")
 
-(home / "logs").mkdir(mode=0o755, parents=True, exist_ok=True)
-(home / "packages").mkdir(mode=0o755, parents=True, exist_ok=True)
+(home / "config.toml").touch(mode=0o755, exist_ok=True)
+config_dict = toml.load(home / "config.toml")
+
+config = Configuration(**config_dict)
+
+config.logs.mkdir(mode=0o755, parents=True, exist_ok=True)
+config.packages.mkdir(mode=0o755, parents=True, exist_ok=True)
+
 for file in (
-    "config.toml",
-    "config_defaults.toml",
-    "logs/usage.log",
-    "registry.db",
-    "user_registry.toml",
+    config.logs / "usage.log",
+    config.registry,
 ):
-    (home / file).touch(mode=0o755, exist_ok=True)
-
-
-config = {
-    "version_warning": True,
-    "disable_jack": bool(int(os.getenv("DISABLE_JACK", "0"))),
-    "debugging": bool(int(os.getenv("DEBUG", "0"))),
-    "use_db": bool(int(os.getenv("USE_DB", "1"))),
-    "testing": bool(int(os.getenv("TESTING", "0"))),
-}
-from toml import loads as toml
-
-config.update(toml((home / "config_defaults.toml").read_text()))
-config.update(toml((home / "config.toml").read_text()))
+    file.touch(mode=0o755, exist_ok=True)
 
 
 def fraction_of_day(now: datetime = None) -> float:
@@ -89,7 +81,7 @@ def fraction_of_day(now: datetime = None) -> float:
 
 
 basicConfig(
-    filename=home / "logs" / "usage.log",
+    filename=config.logs / "usage.log",
     filemode="a",
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
     datefmt=f"%Y%m%d {fraction_of_day()}",

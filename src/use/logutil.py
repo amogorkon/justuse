@@ -287,7 +287,7 @@ class ConsoleHandler(StreamHandler):
         return "<%s>" % (self.__class__.__name__)
 
 
-if use.config["debugging"]:
+if use.config.debugging:
     logging.root.setLevel(logging.DEBUG)
 handler = ConsoleHandler()
 logging.root.handlers.append(handler)
