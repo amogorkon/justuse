@@ -111,19 +111,6 @@ th {
 
 tr {border: 1px  white; }
 
-button {
-cursor: pointer;
-width: 199px;
-display: inline-block;
-background-color: #5E6B7F;
-color: white;
-text-align: center;
-transition: .25s ease;
-border: none;
-padding: 10px;
-border-radius: 12px 12px 0 0;
-}
-
 p {
 font-size: 1em;
 }
@@ -147,46 +134,3 @@ display: block;
 font-size: 1em;
 }
 
-.button {
-    cursor: pointer;
-    width: 199px;
-    display: inline-block;
-    text-align: center;
-    transition: .25s ease;
-    border-style: outset;
-    border-radius: 12px 12px 12px 12px;
-    padding: 10px;
-    color: white;
-    box-shadow: 0 5px #666;
-}
-
-#clipboard_button {
-    background-color: #5c0847;
-}
-
-#clipboard_button:active {
-    box-shadow: none;
-    transform: translateY(4px);
-}
-
-#jack_button {
-    appearance: none;
-}
-
-#jack_button_label {
-    background: #117d86;
-    }
-
-#jack_button_label:active {
-    transform: translateY(4px);
-    }
-
-:checked + span {
-    font-weight: bold;
-    box-shadow: none;
-    background: #010102;
-}
-
-.row_selected {
-    background: #ff79ff;
-}

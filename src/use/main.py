@@ -107,7 +107,7 @@ class ProxyModule(ModuleType):
             pattern,
             decorator,
             aspectize_dunders=False,
-            excluded_names={},
+            excluded_names=set(),
             excluded_types={
                 ProxyModule,
             },

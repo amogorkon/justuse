@@ -26,9 +26,15 @@ env = Environment(
 
 
 def _web_aspectized(decorators, functions):
+    deco = namedtuple("DECORATOR", "name func")
+    redecorated = []
+    for ID, funcs in decorators.items():
+        name = functions[ID][-1].__name__
+        redecorated.append(deco(name, funcs))
+
     with open(home / "aspectization.html", "w", encoding="utf-8") as file:
         args = {
-            "decorators": decorators,
+            "decorators": redecorated,
             "functions": functions,
         }
         file.write(env.get_template("aspectization.html").render(**args))

@@ -1,3 +1,3 @@
-from itertools import permutations
+import use
 
-print(len([x for x in permutations("123456789") if int(''.join(x)) % 2 == 0]))
+use("pyinputplus", modes=use.auto_install)

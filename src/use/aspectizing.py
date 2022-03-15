@@ -18,16 +18,18 @@ log = getLogger(__name__)
 from use import AmbiguityWarning
 from use.messages import _web_aspectized, _web_aspectizing_overview
 
-_applied_decorators: dict[str, Deque[Callable]] = DefaultDict(Deque)
+_applied_decorators: dict[int, Deque[Callable]] = DefaultDict(Deque)
 "{qualname: [callable]} - to see which decorators are applied, in which order"
-_aspectized_functions: dict[str, Deque[Callable]] = DefaultDict(Deque)
+_aspectized_functions: dict[int, Deque[Callable]] = DefaultDict(Deque)
 "{qualname: [callable]} - the actually decorated functions to undo aspectizing"
 
 
-def show_aspectization():
+def show_aspects():
+    """Open a browser to properly display all the things that have been aspectized thus far."""
     _web_aspectized(_applied_decorators, _aspectized_functions)
 
 
+@beartype
 def aspect(
     thing,
     check,

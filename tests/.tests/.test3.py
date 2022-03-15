@@ -56,9 +56,6 @@ with open(p) as file:
     
 DATA = [(d["name"], d["name"], str(max(Version(v) for v in d["versions"]))) for d in data]
 
-p = (Path(__file__).parent.absolute() / "../integration/pypi.json").resolve()
-
-
-p = (Path(__file__).parent.absolute() / "../mass_test_initdata.json")
+p = (Path(__file__).parent.absolute() / "../beast_data.json").resolve()
 with open(p, "w") as file:
-    json.dump(DATA, file)
+    json.dump(DATA, file, indent=4, sort_keys=True)

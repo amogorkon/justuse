@@ -100,7 +100,7 @@ begin = time()
 @mark.parametrize("package_name, module_name, version", data)
 def test_mass(reuse, package_name, module_name, version):
     """
-    Taken from the original beast test suite, and modified boiled down to the bare minimum.
+    Taken from the original beast test suite, and boiled down to the bare minimum.
     """
     with patch("webbrowser.open"), io.StringIO() as buf, redirect_stdout(buf):
         try:
@@ -110,7 +110,7 @@ def test_mass(reuse, package_name, module_name, version):
             recommended_hash = buf.getvalue().splitlines()[-1].strip()
         mod = reuse(
             package_name=package_name,
-            module_name=module_name,
+            module_name="",
             version=version,
             hashes=recommended_hash,
             modes=reuse.auto_install | reuse.no_cleanup,

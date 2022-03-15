@@ -42,7 +42,12 @@ from packaging.specifiers import SpecifierSet
 
 from use import Hash, InstallationError, Modes, UnexpectedHash, VersionWarning, config, sessionID
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-from use.messages import UserMessage, _web_pebkac_no_hash, _web_pebkac_no_version_no_hash
+from use.messages import (
+    UserMessage,
+    _web_pebkac_no_hash,
+    _web_pebkac_no_version_no_hash,
+    _web_pebkac_no_hash,
+)
 from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version
 from use.tools import pipes
 
@@ -319,6 +324,7 @@ def _pebkac_no_version_no_hash(
     ordered = _filtered_and_ordered_data(proj)
     # we tried our best, but we didn't find anything that could work
     if not ordered:
+        _web_pebkac_no_hash
         return RuntimeWarning(Message.pebkac_unsupported(package_name))
 
     recommended_version = ordered[0].version
@@ -492,6 +498,7 @@ def _auto_install(
                 version=version,
                 force_install=True,
             )
+            # packages like tensorflow-gpu only need to be installed but nothing imported, so module name is empty
             log.info("Attempting to import...")
             mod = _load_venv_entry(
                 module_name=module_name,
@@ -732,6 +739,9 @@ def _install(
 
 @beartype
 def _load_venv_entry(*, module_name: str, installation_path: Path) -> ModuleType:
+    if not module_name:
+        log.info("Module name is empty, returning empty Module.")
+        return ModuleType("")
     origcwd = Path.cwd()
     original_sys_path = list(sys.path)
     # TODO we need to keep track of package-specific sys-paths

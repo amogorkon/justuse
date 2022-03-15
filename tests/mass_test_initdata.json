@@ -6,7 +6,7 @@
     ],
     [
         "tensorflow-gpu",
-        "",
+        "tensorflow-gpu",
         "2.6.0"
     ],
     [
@@ -36,7 +36,7 @@
     ],
     [
         "scikit-learn",
-        "sklearn",
+        "scikit-learn",
         "1.0"
     ],
     [
