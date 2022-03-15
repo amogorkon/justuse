@@ -16,12 +16,16 @@ from icontract import require
 log = getLogger(__name__)
 
 from use import AmbiguityWarning
-from use.messages import _web_aspectizing_overview
+from use.messages import _web_aspectized, _web_aspectizing_overview
 
 _applied_decorators: dict[str, Deque[Callable]] = DefaultDict(Deque)
 "{qualname: [callable]} - to see which decorators are applied, in which order"
 _aspectized_functions: dict[str, Deque[Callable]] = DefaultDict(Deque)
 "{qualname: [callable]} - the actually decorated functions to undo aspectizing"
+
+
+def show_aspectization():
+    _web_aspectized(_applied_decorators, _aspectized_functions)
 
 
 def aspect(

@@ -8,28 +8,21 @@ Test-Driven Development is done in the following order:
 
 import os
 import sys
-from collections.abc import Callable
-from contextlib import AbstractContextManager, closing
-from hashlib import sha256
-from pathlib import Path
-from warnings import catch_warnings, filterwarnings, simplefilter
 
-from hypothesis import assume, example, given
 from hypothesis import strategies as st
-from pytest import fixture, mark, skip
+from pytest import fixture, mark, raises, skip
 
-orig_cwd = Path().absolute()
-os.chdir((Path(__file__).parent.absolute() / "../src").resolve())
+is_win = sys.platform.startswith("win")
 
-import use
-from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
-from use.pimp import _parse_name
-from use.pydantics import JustUse_Info, PyPI_Project, PyPI_Release, Version
+__package__ = "tests"
+import logging
 
-os.chdir(orig_cwd)
+from use import auto_install, fatal_exceptions, no_cleanup, use
 
-not_local = "GITHUB_REF" in os.environ
-is_win = sys.platform.lower().startswith("win")
+log = logging.getLogger(".".join((__package__, __name__)))
+log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)
+
+use.config.testing = True
 
 
 @fixture()

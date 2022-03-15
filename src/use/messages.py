@@ -25,6 +25,16 @@ env = Environment(
 )
 
 
+def _web_aspectized(decorators, functions):
+    with open(home / "aspectization.html", "w", encoding="utf-8") as file:
+        args = {
+            "decorators": decorators,
+            "functions": functions,
+        }
+        file.write(env.get_template("aspectization.html").render(**args))
+    webbrowser.open(f"file://{home}/aspectization.html")
+
+
 def _web_pebkac_no_version_no_hash(*, name, package_name, version, hashes, no_browser: bool):
     if not no_browser:
         webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")

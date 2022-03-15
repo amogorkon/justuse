@@ -206,11 +206,9 @@ class Use(ModuleType):
                 "Checking if there's a new version of justuse."
                 data = response.json()
                 max_version = max(Version(version) for version in data["releases"].keys())
-                target_version = max_version
-                this_version = __version__
-                if Version(this_version) < target_version:
+                if Version(__version__) < max_version:
                     warn(
-                        UserMessage.use_version_warning(target_version),
+                        UserMessage.use_version_warning(max_version),
                         VersionWarning,
                     )
             except (KeyError, requests.exceptions.ConnectionError):

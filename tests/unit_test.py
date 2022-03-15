@@ -590,7 +590,7 @@ def test_51_sqlalchemy_failure_default_to_none(reuse):
         # SQLAlchemy-0.7.1.tar.gz (2.3 MB) - only a single artifact
         # Uploaded Jun 5, 2011 source
         # but it's bugged on import - it's looking for time.clock(), which isn't a thing (anymore)
-        modes=auto_install,
+        modes=auto_install | no_cleanup,
         default=None,
     )
     assert mod is None
@@ -604,10 +604,15 @@ def test_51_sqlalchemy_failure_default_to_none(reuse):
             "numpy",
             "1.21.0",
             {
-                "e80fe25cba41c124d04c662f33f6364909b985f2eb5998aaa5ae4b9587242cce",  # compile from source (not windows)
-                "cf680682ad0a3bef56dae200dbcbac2d57294a73e5b0f9864955e7dd7c2c2491",
-                "2ba579dde0563f47021dcd652253103d6fd66165b18011dce1a0609215b2791e",  # cp39 win amd64
-                "cc367c86eb87e5b7c9592935620f22d13b090c609f1b27e49600cd033b529f54",
+                "W䉌贷牞锣笐螈鋟䝸䗭霰雟蝪亻逩䕚拖壙",  # cp39-macosx_10_9_universal2
+                "Y骢巜娽鷴㡶蟋穮斀存勭梔葷叐纁鷀Ɖ掷",  # cp39-manylinux_2_12_x86_64.manylinux2010_x86_64
+                "g瓜簸坶㱨㐮挙党磈濎穤轣駛勅㻒垅漤䫪",  # cp39-manylinux_2_17_aarch64.manylinux2014_aarch64
+                "g堎讎鑕錨洇淮啇耛聴䵥䪓愞㬾赕揢䘬㖤",  # cp39-macosx_11_0_arm64
+                "K嚲近瓴玳倞礱歄屯穏㷥籗皚㴙坱䮇稾鵠",  # cp39-win_amd64
+                "L児桍䰶獑枅笀䄝稵喀挐鼊覌湒公栢鹹Ǹ",  # cp39-macosx_10_9_x86_64
+                "h玴煆唺㭩啢蚹圽难㱢胷即剬䨨鷆聥䇀牳",  # cp39-win32
+                "R䘕㔼鎐苺䍍繶偩胄皒筟嵭砂垮鈄㴩艻灛",  # cp39-manylinux_2_12_i686.manylinux2010_i686
+                "L鹠㴑㸥暝䪚浶唝疂迬奋弣舻㕉嶽㴉椿䀕",  # pp37-manylinux_2_12_x86_64.manylinux2010_x86_64
             },
         ),
     ),

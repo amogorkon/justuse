@@ -440,7 +440,6 @@ def _auto_install(
         else:
             raise AssertionError(f"{func!r} returned {result!r}")
 
-    entry = None
     if entry := _check_db_for_installation(registry=registry, package_name=package_name, version=version):
         # is there a point in checking the hashes at this point? probably not.
         if entry.pure_python_package:
@@ -485,7 +484,6 @@ def _auto_install(
         filename = url.asdict()["path"]["segments"][-1]
         artifact_path = config.packages / filename
         _download_artifact(artifact_path=artifact_path, url=url, hash_value=H, hash_algo=hash_algo)
-        _clean_sys_modules(module_name)
         try:
             log.info("Attempting to install..")
             entry = _install(
@@ -504,8 +502,6 @@ def _auto_install(
             msg = err  # sic
             log.error(err)
             traceback.print_exc(file=sys.stderr)
-            artifact_path.unlink()
-            assert not artifact_path.exists()
             if entry and cleanup:
                 rmtree(entry.installation_path)
                 assert not entry.installation_path.exists()
