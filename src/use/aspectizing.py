@@ -128,7 +128,7 @@ def apply_aspect(
         ):
             continue
 
-        qualname = getattr(obj, "__qualname__", None)
+        qualname = getattr(obj, "__qualname__", "")
 
         try:
             if dry_run:

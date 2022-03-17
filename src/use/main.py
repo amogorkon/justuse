@@ -15,12 +15,12 @@ import sys
 import threading
 import time
 import traceback
+from collections.abc import Callable
 from datetime import datetime
 from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Optional, Union
-from collections.abc import Callable
 from warnings import warn
 
 import requests
@@ -102,6 +102,15 @@ class ProxyModule(ModuleType):
         thing = self.__implementation
         if not other:
             raise NotImplementedError
+
+        # in order to be able to do `use @ numpy`
+        if isinstance(self.__implementation, Use):
+            thing = other
+
+            def some_decorator(x):
+                return x
+
+            other = some_decorator
 
         assert isinstance(other, Callable)
 
