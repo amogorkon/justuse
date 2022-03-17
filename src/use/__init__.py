@@ -153,17 +153,18 @@ with catch_warnings():
         blake = hashlib.blake2s
 
     class Modes(IntEnum):
-        auto_install = 2 ** 0
-        fatal_exceptions = 2 ** 1
-        reloading = 2 ** 2
-        no_public_installation = 2 ** 3
-        fastfail = 2 ** 4
-        recklessness = 2 ** 5
-        no_browser = 2 ** 6
-        no_cleanup = 2 ** 7
+        auto_install = 2**0
+        fatal_exceptions = 2**1
+        reloading = 2**2
+        no_public_installation = 2**3
+        fastfail = 2**4
+        recklessness = 2**5
+        no_browser = 2**6
+        no_cleanup = 2**7
 
 
 from use.aspectizing import *
+from use.aspectizing import apply_aspect
 from use.buffet_old import buffet_table
 from use.main import *
 from use.messages import *
@@ -182,7 +183,11 @@ use = Use()
 use.__dict__.update(dict(globals()))
 use = ProxyModule(use)
 
-use @ (isbeartypeable, "", beartype)
+with catch_warnings():
+    from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
+
+    filterwarnings("ignore", category=BeartypeDecorHintPep585DeprecationWarning, module="beartype")
+    apply_aspect(use, beartype, check=isbeartypeable, pattern="")
 
 if not test_version:
     sys.modules["use"] = use

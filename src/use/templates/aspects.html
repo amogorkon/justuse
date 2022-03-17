@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="aspects.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.10/brython.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.10/brython_stdlib.js"></script>
+    <title>Justuse</title>
+</head>
+
+<body onload="brython()">
+    <header>
+        <h1>Applied Aspects</h1>
+    </header>
+    <p> Here is a list of objects we have decorated, in order of application.</p>
+
+    <section>
+        <table id="decorators">
+            <tr>
+                <th> name</th>
+                <th> decorators </th>
+            </tr>
+            {% for entry in decorators %}
+            <tr id="deco_row_{{loop.index}}">
+                <td> {{ entry.name }} </td>
+                <td> {{ entry.func}} </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </section>
+    <!-- 
+    <section>
+
+        <table id="functions">
+            <tr>
+                <th> name</th>
+                <th> decorators </th>
+            </tr>
+            {% for entry in functions %}
+            <tr id="deco_row_{{loop.index}}">
+                <td> {{ entry.name }} </td>
+                <td> {{ entry.func}} </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </section> -->
+
+</body>
+
+</html>

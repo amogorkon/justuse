@@ -25,6 +25,7 @@ class BaseModel(BaseModel):
 
 class Configuration(BaseModel):
     version_warning: bool = True
+    no_browser: bool = False
     disable_jack: bool = bool(int(os.getenv("DISABLE_JACK", "0")))
     debugging: bool = bool(int(os.getenv("DEBUG", "0")))
     use_db: bool = bool(int(os.getenv("USE_DB", "1")))

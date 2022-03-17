@@ -1,4 +1,4 @@
-from time import perf_counter_ns as time
+from time import perf_counter_ns
 from statistics import mean, stdev, median
 from enum import Enum, IntEnum
 
@@ -13,17 +13,7 @@ from fuzzylogic.functions import gauss
 from random import randint
 from math import exp, sqrt
 
-random_vars = [randint(0, 100) for _ in range(10000000)]
-
-def timeit(func):
-    res = []
-    for _ in range(100):
-        before = time()
-        func()
-        res.append(time() - before)
-    for f in (min, mean, median, stdev):
-        print(f.__name__, f(res))
-    return res
+# random_vars = [randint(0, 100) for _ in range(10000000)]
 
 def linear(m:float=0, b:float=0) -> callable:
     """A textbook linear function with y-axis section and gradient.
@@ -179,7 +169,7 @@ def test_gauss():
 def test_gaussmf():
     return [gaussmf(x, 0, 10) for x in random_vars]
 
-
+from time import sleep
 test_funcs = [
     lambda: list({}),
     lambda: list({1:2}),
@@ -190,8 +180,20 @@ test_funcs = [
     lambda: list({3,9,9}),
     lambda: list(set()),
     lambda: list([]),
-    lambda: list([1,2,1,1,])
+    lambda: list([1,2,1,1,]),
+    lambda: sleep(0.5)
     ]
+
+def timeit(func):
+    res = []
+    for _ in range(100):
+        before = perf_counter_ns()
+        func()
+        res.append(perf_counter_ns() - before)
+    for f in (min, mean, median, stdev):
+        print(f.__name__, f"{f(res)} ns ({round(f(res)/10**9,5)} s)")
+    return res
+
 
 import inspect
 

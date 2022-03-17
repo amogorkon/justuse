@@ -28,7 +28,8 @@ from shutil import rmtree
 from sqlite3 import Cursor
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, runtime_checkable
+from typing import (Any, Iterable, Optional, Protocol, TypeVar, Union,
+                    runtime_checkable)
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -40,14 +41,11 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import Hash, InstallationError, Modes, UnexpectedHash, VersionWarning, config, sessionID
+from use import (Hash, InstallationError, Modes, UnexpectedHash,
+                 VersionWarning, config, sessionID)
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-from use.messages import (
-    UserMessage,
-    _web_pebkac_no_hash,
-    _web_pebkac_no_version_no_hash,
-    _web_pebkac_no_hash,
-)
+from use.messages import (UserMessage, _web_pebkac_no_hash,
+                          _web_pebkac_no_version_no_hash)
 from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version
 from use.tools import pipes
 
@@ -130,12 +128,14 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 pass
         if not get_supported:
             try:
-                from pip._internal.utils.compatibility_tags import get_supported
+                from pip._internal.utils.compatibility_tags import \
+                    get_supported
             except ImportError:
                 pass
         if not get_supported:
             try:
-                from pip._internal.resolution.resolvelib.factory import get_supported
+                from pip._internal.resolution.resolvelib.factory import \
+                    get_supported
             except ImportError:
                 pass
 
@@ -284,7 +284,12 @@ def _pebkac_no_hash(
         return RuntimeWarning(Message.no_distribution_found(package_name, version, last_version))
 
     project = _filter_by_version(project, version)
-    ordered = _filtered_and_ordered_data(project)
+    filtered = _filter_by_platform(
+        project,
+        tags=get_supported(),
+        sys_version=Version(major=sys.version_info[0], minor=sys.version_info[1]),
+    )
+    ordered = _sorted_data(filtered)
 
     if not no_browser:
         _web_pebkac_no_hash(name=name, package_name=package_name, version=version, project=project)
@@ -321,11 +326,28 @@ def _pebkac_no_version_no_hash(
 ) -> Exception:
     # let's try to make an educated guess and give a useful suggestion
     proj = _get_data_from_pypi(package_name=package_name)
-    ordered = _filtered_and_ordered_data(proj)
+
+    filtered = _filter_by_platform(
+        proj, tags=get_supported(), sys_version=Version(major=sys.version_info[0], minor=sys.version_info[1])
+    )
+    ordered = _sorted_data(filtered)
     # we tried our best, but we didn't find anything that could work
+
+    # let's try to find *anything*
     if not ordered:
-        _web_pebkac_no_hash
-        return RuntimeWarning(Message.pebkac_unsupported(package_name))
+        ordered = _sorted_data(proj)
+        if not ordered:
+            # we tried our best..
+            return RuntimeWarning(Message.pebkac_unsupported(package_name))
+
+        if not no_browser:
+            version = ordered[-1].version
+            _web_pebkac_no_hash(name=name, package_name=package_name, version=version, project=proj)
+            return RuntimeWarning(
+                Message.pebkac_no_version_no_hash(
+                    name=name, package_name=package_name, version=version, no_browser=no_browser
+                )
+            )
 
     recommended_version = ordered[0].version
     # for test_suggestion_works, don't remove (unless you want to work out the details)
@@ -333,9 +355,8 @@ def _pebkac_no_version_no_hash(
 
     # we found something that could work, but it may not fit to the user's requirements
     return RuntimeWarning(
-        Message.no_version_or_hash_provided(
+        Message.pebkac_no_version_no_hash(
             name=name,
-            hashes={hexdigest_as_JACK(ordered[0].digests.get(hash_algo.name))},
             package_name=package_name,
             version=recommended_version,
             no_browser=no_browser,
@@ -359,12 +380,13 @@ def _import_public_no_install(
 
     mod = sys.modules.get(module_name)
     imported = bool(mod)
+
     if not mod:
         mod = importlib.import_module(module_name)
 
-    # ? does this solve the caching issue?
-    if not imported:
-        del sys.modules[module_name]
+    # # ? does this solve the caching issue?
+    # if not imported:
+    #     del sys.modules[module_name]
     return mod
 
 
@@ -812,11 +834,8 @@ def _filter_by_platform(
 
 @beartype
 @pipes
-def _filtered_and_ordered_data(data: PyPI_Project) -> list[PyPI_Release]:
-    sys_version = Version(major=sys.version_info[0], minor=sys.version_info[1])
-    filtered = _filter_by_platform(data, tags=get_supported(), sys_version=sys_version)
-
-    flat = reduce(list.__add__, filtered.releases.values(), [])
+def _sorted_data(data: PyPI_Project) -> list[PyPI_Release]:
+    flat = reduce(list.__add__, data.releases.values(), [])
     return sorted(
         flat,
         key=(
@@ -921,7 +940,7 @@ def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> 
         return Version(version)
     version = getattr(mod, "version", version)
     if callable(version):
-        version = version.__call__()
+        version = version()
     if isinstance(version, str):
         return Version(version)
     return Version(version)

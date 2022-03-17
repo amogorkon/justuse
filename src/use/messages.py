@@ -6,6 +6,7 @@ Fun fact: f-strings are firmly rooted in the AST.
 
 import webbrowser
 from collections import defaultdict, namedtuple
+from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
 from shutil import copy
@@ -18,30 +19,48 @@ from use import __version__, config, home
 from use.hash_alphabet import hexdigest_as_JACK
 from use.pydantics import PyPI_Project, Version
 
-copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", home / "stylesheet.css")
-
 env = Environment(
     loader=FileSystemLoader(Path(__file__).parent / "templates"), autoescape=select_autoescape()
 )
 
 
-def _web_aspectized(decorators, functions):
+def _web_aspectized(decorators, functions, not_hit):
+    print(decorators)
+    copy(Path(__file__).absolute().parent / r"templates/aspects.css", home / "aspects.css")
     deco = namedtuple("DECORATOR", "name func")
     redecorated = []
     for ID, funcs in decorators.items():
         name = functions[ID][-1].__name__
         redecorated.append(deco(name, funcs))
 
-    with open(home / "aspectization.html", "w", encoding="utf-8") as file:
+    with open(home / "aspects.html", "w", encoding="utf-8") as file:
         args = {
             "decorators": redecorated,
             "functions": functions,
+            "not_hit": not_hit,
         }
-        file.write(env.get_template("aspectization.html").render(**args))
-    webbrowser.open(f"file://{home}/aspectization.html")
+        file.write(env.get_template("aspects.html").render(**args))
+    webbrowser.open(f"file://{home}/aspects.html")
 
 
-def _web_pebkac_no_version_no_hash(*, name, package_name, version, hashes, no_browser: bool):
+@beartype
+def _web_aspectized_dry_run(
+    *, decorator: Callable, hits: list, check: Callable, pattern: str, module_name: str
+):
+    copy(Path(__file__).absolute().parent / r"templates/aspects.css", home / "aspects.css")
+    with open(home / "aspects_dry_run.html", "w", encoding="utf-8") as file:
+        args = {
+            "decorator": decorator,
+            "hits": hits,
+            "check": check,
+            "pattern": pattern,
+            "module_name": module_name,
+        }
+        file.write(env.get_template("aspects_dry_run.html").render(**args))
+    webbrowser.open(f"file://{home}/aspects_dry_run.html")
+
+
+def _web_pebkac_no_version_no_hash(*, name, package_name, version, no_browser: bool):
     if not no_browser:
         webbrowser.open(f"https://snyk.io/advisor/python/{package_name}")
     return f"""Please specify version and hash for auto-installation of {package_name!r}.
@@ -58,6 +77,7 @@ def _web_pebkac_no_hash(
     version: Version,
     project: PyPI_Project,
 ):
+    copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", home / "stylesheet.css")
     entry = namedtuple("Entry", "python platform hash_name hash_value jack_value")
     table = defaultdict(lambda: [])
     for rel in project.releases[version]:
@@ -132,7 +152,7 @@ use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
     pip_json_mess = (
         lambda package_name, target_version: f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI."
     )
-    no_version_or_hash_provided = _web_pebkac_no_version_no_hash
+    pebkac_no_version_no_hash = _web_pebkac_no_version_no_hash
     cant_import = lambda name: f"No pkg installed named {name} and auto-installation not requested. Aborting."
     cant_import_no_version = (
         lambda package_name: f"Failed to auto-install '{package_name}' because no version was specified."

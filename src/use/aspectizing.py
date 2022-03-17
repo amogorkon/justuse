@@ -1,13 +1,18 @@
 import builtins
+import inspect
 import re
 import sys
+from collections import namedtuple
+from collections.abc import Callable
+from enum import Enum
 from functools import wraps
 from importlib.util import spec_from_loader
-from inspect import getmembers, isclass
 from logging import getLogger
+from pathlib import Path
+from time import perf_counter_ns
 from types import ModuleType
-from typing import Any, Callable, DefaultDict, Deque
-from warnings import catch_warnings, filterwarnings, warn
+from typing import Any, DefaultDict, Deque, Optional
+from warnings import catch_warnings, filterwarnings
 
 from beartype import beartype
 from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
@@ -15,8 +20,8 @@ from icontract import require
 
 log = getLogger(__name__)
 
-from use import AmbiguityWarning
-from use.messages import _web_aspectized, _web_aspectizing_overview
+from use import config
+from use.messages import _web_aspectized, _web_aspectized_dry_run
 
 _applied_decorators: dict[int, Deque[Callable]] = DefaultDict(Deque)
 "{qualname: [callable]} - to see which decorators are applied, in which order"
@@ -29,24 +34,36 @@ def show_aspects():
     _web_aspectized(_applied_decorators, _aspectized_functions)
 
 
+def is_callable(thing):
+    try:
+        object.__getattribute__(thing, "__call__")
+        return True
+    except AttributeError:
+        return False
+
+
+HIT = namedtuple("Hit", "qualname name type success")
+
+
 @beartype
-def aspect(
-    thing,
-    check,
-    pattern,
-    decorator,
+def apply_aspect(
+    thing: Any,
+    decorator: Callable,
     /,
     *,
-    regex=None,
-    aspectize_dunders=False,
-    recursive=True,
-    level=0,
-    dry_run=False,
-    visited: set[int] = None,
-    excluded_names: set[str] = None,
-    excluded_types: set[type] = None,
-    hits: list[str] = None,
-    last=True,  # and first
+    check: Callable = is_callable,
+    pattern: str = "",
+    module_name: Optional[str] = None,
+    regex: Optional[re.Pattern] = None,
+    aspectize_dunders: bool = False,
+    recursive: bool = True,
+    level: int = 0,
+    dry_run: bool = False,
+    visited: Optional[set[int]] = None,
+    excluded_names: Optional[set[str]] = None,
+    excluded_types: Optional[set[type]] = None,
+    hits: Optional[list[HIT]] = None,
+    last: bool = True,  # and first
 ) -> Any:
     name = str(thing)
     """Apply the aspect as a side-effect, no copy is created."""
@@ -54,6 +71,20 @@ def aspect(
         visited = set()
     if id(thing) in visited:
         return
+
+    # initial call
+    if module_name is None:
+        try:
+            module_name = inspect.getmodule(thing).__name__
+        except AttributeError:
+            module_name = "<unknown>"
+    else:  # recursive call - let's stick within the module boundary
+        try:
+            thing_module_name = inspect.getmodule(thing).__name__
+        except AttributeError:
+            thing_module_name = "<unknown>"
+        if thing_module_name != module_name:
+            return
 
     if hits is None:
         hits = []
@@ -66,8 +97,6 @@ def aspect(
     # We compile once so in subsequent recursive calls, we have it already.
     if not regex:
         regex = re.compile(pattern, re.DOTALL)
-
-    lvl = "".join([" "] * level)
 
     # object.__dir__ is the *only* reliable way to get all attributes
     # of an object that nobody can override,
@@ -83,9 +112,6 @@ def aspect(
         if obj is None:
             continue
 
-        # We can't really filter by name if it doesn't have a qualname
-        name = getattr(obj, "__qualname__", None) or name
-
         if id(obj) in visited:
             continue
 
@@ -93,34 +119,44 @@ def aspect(
         visited.add(id(obj))
 
         # check main::ProxyModule.__matmul__ for defaults
-        if name in excluded_names or type(obj) in excluded_types or not check(obj) or not regex.match(name):
+        # We can't really filter by name if it doesn't have a qualname
+        if (
+            getattr(obj, "__qualname__", getattr(obj, "__name__", None)) in excluded_names
+            or type(obj) in excluded_types
+            or not check(obj)
+            or not regex.match(name)
+        ):
             continue
 
-        module_name, loader, spec = get_module_info(lookup_module(obj))
+        qualname = getattr(obj, "__qualname__", None)
 
-        if dry_run:
-            hits.append(f"{obj.__module__}::{getattr(obj, '__qualname__', name)}")
-        else:
-            try:
+        try:
+            if dry_run:
+                decorator(obj)
+                wrapped = id(obj)
+                hits.append(HIT(qualname, name, type(obj), True))
+            else:
                 wrapped = _apply_decorator(
                     thing=thing,
                     obj=obj,
                     decorator=decorator,
                     name=name,
-                    module_name=module_name,
                 )
-                # Mustn't forget to track!
-                visited.add(id(wrapped))
+            # Mustn't forget to track!
+            visited.add(id(wrapped))
 
-            # AttributeError: readonly attribute
-            except AttributeError:
-                pass
+        # AttributeError: readonly attribute
+        except AttributeError:
+            hits.append(HIT(qualname, name, False))
+        visited.add(id(wrapped))
+
         if recursive:
-            aspect(
+            apply_aspect(
                 obj,
-                check,
-                pattern,
                 decorator,
+                check=check,
+                pattern=pattern,
+                module_name=module_name,
                 regex=regex,
                 aspectize_dunders=aspectize_dunders,
                 excluded_names=excluded_names,
@@ -135,20 +171,28 @@ def aspect(
 
     # this the last thing in the original call, after all the recursion
     if last and dry_run:
-        print("check your browser!")
-        _web_aspectizing_overview(
-            decorator=decorator,
-            pattern=pattern,
-            check=check,
-            visited=visited,
-            hits=hits,
-        )
+        if not config.no_browser:
+            print("Please check your browser to select options and filters for aspects.")
+            _web_aspectized_dry_run(
+                decorator=decorator,
+                pattern=pattern,
+                check=check,
+                hits=hits,
+                module_name=module_name,
+            )
+        else:
+            print("Tried to do a dry run and display the results, but no_browser is set in config.")
     return thing
 
 
-def _apply_decorator(*, thing, obj, decorator, name, module_name):
+@beartype
+def _apply_decorator(*, thing, obj, decorator, name):
     previous_object_id = id(obj)
-    wrapped = decorator(obj)
+    try:
+        wrapped = decorator(obj)
+    except:
+        log.info(f"Failed to decorate {thing.__name__} with {decorator.__name__}")
+        return thing
     new_object_id = id(wrapped)
 
     _applied_decorators[new_object_id].extend(_applied_decorators[previous_object_id])
@@ -165,38 +209,6 @@ def _apply_decorator(*, thing, obj, decorator, name, module_name):
     return wrapped
 
 
-@require(lambda obj: obj is not None)
-def lookup_module(obj) -> ModuleType:
-    object_mod = None
-    if isinstance(obj, ModuleType):
-        object_mod = builtins
-    elif hasattr(obj, "__module__"):
-        if isinstance(obj.__module__, str):
-            object_mod = sys.modules[obj.__module__]
-        elif isinstance(obj.__module__, ModuleType):
-            object_mod = obj.__module__
-        else:
-            return None
-    elif hasattr(obj, "__init__") and hasattr(obj.__init__, "__module__"):
-        object_mod = sys.modules[obj.__init__.__module__]
-    elif not isinstance(obj, type):
-        object_mod = builtins
-    if not object_mod:
-        raise NotImplementedError(
-            "Don't know how to find module for '%s.%s' objects" % (obj.__module__, obj.__qualname__)
-        )
-    return object_mod
-
-
-def get_module_info(mod: ModuleType):
-    if mod is None:
-        return None, None, None
-    module_name = getattr(mod, "__name__", None) or mod.__spec__.name
-    loader = getattr(mod, "__loader__", None) or mod.__spec__.loader
-    spec = getattr(mod, "__spec__", None) or spec_from_loader(module_name, loader)
-    return module_name, loader, spec
-
-
 def isbeartypeable(thing):
     with catch_warnings():
         filterwarnings(action="ignore", category=BeartypeDecorHintPep585DeprecationWarning)
@@ -211,14 +223,6 @@ def isbeartypeable(thing):
             return False
 
 
-def any_callable(thing):
-    try:
-        object.__getattribute__(thing, "__call__")
-        return True
-    except AttributeError:
-        return False
-
-
 def woody_logger(func: callable) -> callable:
     """
     Decorator to log/track/debug calls and results.
@@ -231,16 +235,43 @@ def woody_logger(func: callable) -> callable:
 
     @wraps(func)
     def wrapper(*args, **kwargs):
-        log.debug(f"{func.__name__}({args}, {kwargs})")
         print(f"{args} {kwargs} -> {func.__module__}::{func.__qualname__}")
+        before = perf_counter_ns()
         res = func(*args, **kwargs)
-        print(type(res), res)
-        print(f"{func.__module__}::")
-        print(f"{func.__qualname__} -> ")
-        try:
-            print(f"{res}")
-        except AttributeError:
-            pass
+        after = perf_counter_ns()
+        log.debug(
+            f"{func.__module__}::{getattr(func, '__qualname__', func.__name__)}({args}, {kwargs}) -> {res} {type(res)}"
+        )
+        print(
+            f"{getattr(func, '__qualname__', func.__name__)} -- in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {res} {type(res)}"
+        )
+        return res
+
+    return wrapper
+
+
+def tinny_profiler(func: callable) -> callable:
+    """
+    Decorator to log/track/debug calls and results.
+
+    Args:
+        func (function): The function to decorate.
+    Returns:
+        function: The decorated callable.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        print(f"{args} {kwargs} -> {func.__module__}::{func.__qualname__}")
+        before = perf_counter_ns()
+        res = func(*args, **kwargs)
+        after = perf_counter_ns()
+        log.debug(
+            f"{func.__module__}::{getattr(func, '__qualname__', func.__name__)}({args}, {kwargs}) -> {res} {type(res)}"
+        )
+        print(
+            f"{getattr(func, '__qualname__', func.__name__)} -- in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {res} {type(res)}"
+        )
         return res
 
     return wrapper

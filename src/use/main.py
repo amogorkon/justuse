@@ -20,6 +20,7 @@ from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Optional, Union
+from collections.abc import Callable
 from warnings import warn
 
 import requests
@@ -42,7 +43,7 @@ from use import (
     home,
     sessionID,
 )
-from use.aspectizing import aspect
+from use.aspectizing import apply_aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
 from use.pimp import _build_mod, _ensure_path, _fail_or_default, _parse_name
@@ -97,21 +98,22 @@ class ProxyModule(ModuleType):
         with self.__condition:
             setattr(self.__implementation, name, value)
 
-    def __matmul__(self, other: tuple):
+    def __matmul__(self, other: Callable):
         thing = self.__implementation
-        check, pattern, decorator = other
-        # inside return aspect we should have our own qualname which contains name, path and version
-        return aspect(
-            thing,
-            check,
-            pattern,
-            decorator,
-            aspectize_dunders=False,
-            excluded_names=set(),
-            excluded_types={
+        if not other:
+            raise NotImplementedError
+
+        assert isinstance(other, Callable)
+
+        kwargs = {
+            "aspectize_dunders": True,
+            "excluded_types": {
                 ProxyModule,
             },
-        )
+            "dry_run": True,
+        }
+
+        return apply_aspect(thing, other, **kwargs)
 
     def __call__(self, *args, **kwargs):
         with self.__condition:
@@ -191,7 +193,6 @@ class ModuleReloader:
 
 class Use(ModuleType):
     def __init__(self):
-        # TODO for some reason removing self._using isn't as straight forward..
         self._using = _using
         # might run into issues during testing otherwise
         self.registry = self._set_up_registry()
@@ -402,7 +403,6 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             sys.modules[as_import] = mod
         return ProxyModule(mod)
 
-    @require(lambda as_import: as_import.isidentifier())
     @__call__.register(Path)
     def _use_path(
         self,
@@ -428,8 +428,9 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         Returns:
             Optional[ModuleType]: The module if it was imported, otherwise whatever was specified as default.
         """
-        log.info(f"use-path: {path}: {Path.cwd()=} {package_name=}")
         initial_globals = initial_globals or {}
+        if as_import:
+            assert as_import.isidentifier()
 
         reloading = bool(Use.reloading & modes)
 
@@ -440,7 +441,6 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             return _fail_or_default(ImportError(f"Can't import directory {path}"), default)
 
         original_cwd = source_dir = Path.cwd()
-        log.info(f"{original_cwd=} {source_dir=}")
         try:
             # calling from another use()d module
             # let's see where we started
@@ -451,7 +451,9 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             # we're in jupyter, we use the CWD as set in the notebook
             if not jupyter and hasattr(main_mod, "__file__"):
                 source_dir = (
-                    _ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename).resolve().parent
+                    _ensure_path(inspect.currentframe().f_back.f_back.f_back.f_code.co_filename)
+                    .resolve()
+                    .parent
                 )
             if source_dir is None:
                 if main_mod.__loader__ and hasattr(main_mod.__loader__, "path"):
@@ -486,9 +488,6 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             name = name_as_path.replace("/", ".")
             name_parts = name.split(".")
             package_name = package_name or ".".join(name_parts[:-1])
-
-            log.info(f"{package_name=}, {name=}")
-            # os.chdir(path.parent)
             module_name = path.stem  # sic!
             if reloading:
                 try:
@@ -574,7 +573,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         *,
         package_name: str = None,
         module_name: str = None,
-        version: str = None,
+        version: Optional[Union[Version, str]] = None,
         hash_algo=Hash.sha256,
         hashes: Optional[Union[str, list[str]]] = None,
         default=Modes.fastfail,
@@ -604,7 +603,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             name=f"{package_name}/{module_name}",
             package_name=package_name,
             module_name=module_name,
-            version=version,
+            version=Version(version) if version else None,
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
@@ -618,7 +617,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         pkg_tuple,
         /,
         *,
-        version: str = None,
+        version: Optional[Union[Version, str]] = None,
         hash_algo=Hash.sha256,
         hashes: Optional[Union[str, list[str]]] = None,
         default=Modes.fastfail,
@@ -649,7 +648,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             name=f"{package_name}/{module_name}",
             package_name=package_name,
             module_name=module_name,
-            version=version,
+            version=Version(version) if version else None,
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
@@ -663,7 +662,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         name: str,
         /,
         *,
-        version: str = None,
+        version: Optional[Union[Version, str]] = None,
         hash_algo=Hash.sha256,
         hashes: Optional[Union[str, list[str]]] = None,
         default=Modes.fastfail,
@@ -694,7 +693,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             name=name,
             package_name=package_name,
             module_name=module_name,
-            version=version,
+            version=Version(version) if version else None,
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
@@ -709,8 +708,8 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         name,
         package_name: str,
         module_name: str,
-        version: Version,
-        hashes: set,
+        version: Optional[Version],
+        hashes: Optional[Union[str, set]],
         default: Any,
         hash_algo: Hash,
         modes: int = 0,
@@ -735,8 +734,6 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         hashes: set[int] = {
             JACK_as_num(H) if is_JACK(H) else int(H, 16) for H in ("".join(H.split()) for H in hashes)
         }
-
-        version: Version = Version(version) if version else None
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.

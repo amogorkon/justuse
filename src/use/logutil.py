@@ -5,7 +5,8 @@ import sys
 import time
 import traceback
 from logging import Formatter, PercentStyle, StreamHandler, StrFormatStyle, StringTemplateStyle
-from typing import Callable, NamedTuple, Deque
+from typing import NamedTuple, Deque
+from collections.abc import Callable
 
 import use
 
