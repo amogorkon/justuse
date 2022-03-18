@@ -23,15 +23,18 @@ log = getLogger(__name__)
 from use import config
 from use.messages import _web_aspectized, _web_aspectized_dry_run
 
-_applied_decorators: dict[int, Deque[Callable]] = DefaultDict(Deque)
+# TODO: use an extra WeakKeyDict as watchdog for object deletions and trigger cleanup in these here
+_applied_decorators: DefaultDict[tuple[object, str], Deque[Callable]] = DefaultDict(Deque)
 "{qualname: [callable]} - to see which decorators are applied, in which order"
-_aspectized_functions: dict[int, Deque[Callable]] = DefaultDict(Deque)
+_aspectized_functions: DefaultDict[tuple[object, str], Deque[Callable]] = DefaultDict(Deque)
 "{qualname: [callable]} - the actually decorated functions to undo aspectizing"
 
 
 def show_aspects():
     """Open a browser to properly display all the things that have been aspectized thus far."""
-    _web_aspectized(_applied_decorators, _aspectized_functions)
+    print("decorators:", _applied_decorators)
+    print("functions:", _aspectized_functions)
+    # _web_aspectized(_applied_decorators, _aspectized_functions)
 
 
 def is_callable(thing):
@@ -42,7 +45,7 @@ def is_callable(thing):
         return False
 
 
-HIT = namedtuple("Hit", "qualname name type success")
+HIT = namedtuple("Hit", "qualname name type success exception")
 
 
 @beartype
@@ -64,13 +67,22 @@ def apply_aspect(
     excluded_types: Optional[set[type]] = None,
     hits: Optional[list[HIT]] = None,
     last: bool = True,  # and first
+    qualname_lst: Optional[list] = None,
 ) -> Any:
-    name = str(thing)
     """Apply the aspect as a side-effect, no copy is created."""
+    name = getattr(thing, "__name__", str(thing))
+    if not qualname_lst:
+        qualname_lst = []
+
+    # to prevent recursion into the depths of hell and beyond
     if visited is None:
-        visited = set()
+        visited = {id(obj) for obj in vars(object).values()}
+        visited.add(id(type))
+
     if id(thing) in visited:
         return
+
+    qualname_lst.append(name)
 
     # initial call
     if module_name is None:
@@ -98,59 +110,16 @@ def apply_aspect(
     if not regex:
         regex = re.compile(pattern, re.DOTALL)
 
-    # object.__dir__ is the *only* reliable way to get all attributes
-    # of an object that nobody can override,
-    # dir() and inspect.getmembers both build on __dir__, but are not
-    # reliable.
-    for name in object.__dir__(thing):
-        # object.__getattribute__ is asymmetric to object.__dir__,
-        # skipping looking up things on the parent type
+    for name in dir(thing):
+        qualname = "" if len(qualname_lst) < 3 else "..." + ".".join(qualname_lst[-3:]) + "." + name
         obj = getattr(thing, name, None)
-        # object.__dir__ returns *EVERYTHING*, including stuff that is only
-        # there on demand but not really used, so we ignore those.
+        qualname = getattr(obj, "__qualname__", qualname)
 
         if obj is None:
             continue
-
-        if id(obj) in visited:
-            continue
-
         # Time to get serious!
-        visited.add(id(obj))
 
-        # check main::ProxyModule.__matmul__ for defaults
-        # We can't really filter by name if it doesn't have a qualname
-        if (
-            getattr(obj, "__qualname__", getattr(obj, "__name__", None)) in excluded_names
-            or type(obj) in excluded_types
-            or not check(obj)
-            or not regex.match(name)
-        ):
-            continue
-
-        qualname = getattr(obj, "__qualname__", "")
-
-        try:
-            if dry_run:
-                decorator(obj)
-                wrapped = id(obj)
-                hits.append(HIT(qualname, name, type(obj), True))
-            else:
-                wrapped = _apply_decorator(
-                    thing=thing,
-                    obj=obj,
-                    decorator=decorator,
-                    name=name,
-                )
-            # Mustn't forget to track!
-            visited.add(id(wrapped))
-
-        # AttributeError: readonly attribute
-        except AttributeError:
-            hits.append(HIT(qualname, name, False))
-        visited.add(id(wrapped))
-
-        if recursive:
+        if recursive and type(obj) == type:
             apply_aspect(
                 obj,
                 decorator,
@@ -167,7 +136,34 @@ def apply_aspect(
                 dry_run=dry_run,
                 hits=hits,
                 last=False,
+                qualname_lst=qualname_lst,
             )
+
+        if id(obj) in visited:
+            continue
+
+        # We can't really filter by name if it doesn't have a qualname
+        if (
+            qualname in excluded_names
+            or type(obj) in excluded_types
+            or not check(obj)
+            or not regex.match(name)
+        ):
+            continue
+
+        msg = ""
+        success = True
+
+        try:
+            wrapped = _wrap(thing=thing, obj=obj, decorator=decorator, name=name)
+            if dry_run:
+                _unwrap(thing=thing, name=name)
+        except BaseException as exc:
+            wrapped = obj
+            success = False
+            msg = str(exc)
+        hits.append(HIT(qualname, name, type(wrapped), success, msg))
+        visited.add(id(wrapped))
 
     # this the last thing in the original call, after all the recursion
     if last and dry_run:
@@ -186,27 +182,32 @@ def apply_aspect(
 
 
 @beartype
-def _apply_decorator(*, thing, obj, decorator, name):
-    previous_object_id = id(obj)
-    try:
-        wrapped = decorator(obj)
-    except:
-        log.info(f"Failed to decorate {thing.__name__} with {decorator.__name__}")
-        return thing
-    new_object_id = id(wrapped)
+def _wrap(*, thing: Any, obj: Any, decorator: Callable, name: str):
+    wrapped = decorator(obj)
+    _applied_decorators[(thing, name)].append(decorator)
+    _aspectized_functions[(thing, name)].append(obj)
 
-    _applied_decorators[new_object_id].extend(_applied_decorators[previous_object_id])
-    _applied_decorators[new_object_id].append(decorator)
-
-    _aspectized_functions[new_object_id].extend(_aspectized_functions[previous_object_id])
-    _aspectized_functions[new_object_id].append(obj)
-
-    setattr(thing, name, decorator(obj))
-
-    # cleanup
-    del _applied_decorators[previous_object_id]
-    del _aspectized_functions[previous_object_id]
+    # This will fail with TypeError on built-in/extension types.
+    # We handle exceptions outside, let's not betray ourselves.
+    setattr(thing, name, wrapped)
     return wrapped
+
+
+@beartype
+def _unwrap(*, thing: Any, name: str):
+    try:
+        original = _aspectized_functions[(thing, name)].pop()
+    except IndexError:
+        del _aspectized_functions[(thing, name)]
+        original = getattr(thing, name)
+
+    try:
+        _applied_decorators[(thing, name)].pop()
+    except IndexError:
+        del _applied_decorators[(thing, name)]
+    setattr(thing, name, original)
+
+    return original
 
 
 def isbeartypeable(thing):
@@ -235,7 +236,7 @@ def woody_logger(func: callable) -> callable:
 
     @wraps(func)
     def wrapper(*args, **kwargs):
-        print(f"{args} {kwargs} -> {func.__module__}::{func.__qualname__}")
+        print(f"{args} {kwargs} -> {getattr(func, '__qualname__', func.__name__)}")
         before = perf_counter_ns()
         res = func(*args, **kwargs)
         after = perf_counter_ns()

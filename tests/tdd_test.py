@@ -21,6 +21,7 @@ __package__ = "tests"
 import logging
 
 from use import auto_install, fatal_exceptions, no_cleanup, use
+from use.aspectizing import _unwrap, _wrap
 
 log = logging.getLogger(".".join((__package__, __name__)))
 log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)

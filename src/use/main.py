@@ -103,7 +103,7 @@ class ProxyModule(ModuleType):
         if not other:
             raise NotImplementedError
 
-        # in order to be able to do `use @ numpy`
+        # a little hack in order to be able to do `use @ numpy`...
         if isinstance(self.__implementation, Use):
             thing = other
 
@@ -127,6 +127,10 @@ class ProxyModule(ModuleType):
     def __call__(self, *args, **kwargs):
         with self.__condition:
             return self.__implementation(*args, **kwargs)
+
+    # to allow `numpy @ use` for a quick check
+    def __rmatmul__(self, *args, **kwargs):
+        return ProxyModule.__matmul__(self, *args, **kwargs)
 
 
 class ModuleReloader:

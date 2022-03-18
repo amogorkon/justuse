@@ -37,6 +37,7 @@ from warnings import catch_warnings, filterwarnings, simplefilter
 
 import toml
 from beartype import beartype
+from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
 
 from use.pydantics import Configuration
 
@@ -184,10 +185,8 @@ use.__dict__.update(dict(globals()))
 use = ProxyModule(use)
 
 with catch_warnings():
-    from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
-
     filterwarnings("ignore", category=BeartypeDecorHintPep585DeprecationWarning, module="beartype")
-    apply_aspect(use, beartype, check=isbeartypeable, pattern="")
+    # apply_aspect(use, beartype, check=isbeartypeable, pattern="")
 
 if not test_version:
     sys.modules["use"] = use

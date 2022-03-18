@@ -1,14 +1,18 @@
-def test1(a: int) -> int:
-    return a / 2
+import sys
+
+def f(x):
+    return x**2
 
 
-def _test2(a: int) -> int:
-    return a / 2
 
 
-class Test:
-    def __init__(self, a: int) -> None:
-        self.a = a
 
-    def test3(self) -> int:
-        return self.a / 2
+def test():
+    def decorator(func):
+        def wrapper(x):
+            return func(x + 1)
+        return wrapper
+    setattr(sys.modules[__name__], "f", decorator(f))
+
+test()
+print(f(3))

@@ -28,14 +28,16 @@
                 <th> qualname </th>
                 <th> name</th>
                 <th> type </th>
-                <!-- <th> success </th> -->
+                <th> success </th>
+                <th></th> failure reason </th>
             </tr>
             {% for entry in hits %}
             <tr id="deco_row_{{loop.index}}">
                 <td>{{entry.qualname}}</td>
                 <td> {{ entry.name }} </td>
                 <td> {{ entry.type.__name__ }} </td>
-                <!-- <td> {{ entry.success }} </td> -->
+                <td> {{ entry.success }} </td>
+                <td> {{entry.exception}} </td>
             </tr>
             {% endfor %}
         </table>

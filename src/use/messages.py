@@ -24,8 +24,10 @@ env = Environment(
 )
 
 
-def _web_aspectized(decorators, functions, not_hit):
+def _web_aspectized(decorators, functions):
     print(decorators)
+    print()
+    print(functions)
     copy(Path(__file__).absolute().parent / r"templates/aspects.css", home / "aspects.css")
     deco = namedtuple("DECORATOR", "name func")
     redecorated = []
@@ -37,7 +39,6 @@ def _web_aspectized(decorators, functions, not_hit):
         args = {
             "decorators": redecorated,
             "functions": functions,
-            "not_hit": not_hit,
         }
         file.write(env.get_template("aspects.html").render(**args))
     webbrowser.open(f"file://{home}/aspects.html")

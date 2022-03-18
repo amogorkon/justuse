@@ -34,6 +34,7 @@ __package__ = "tests"
 import logging
 
 from use import auto_install, fatal_exceptions, no_cleanup, use
+from use.aspectizing import _unwrap, _wrap
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
 from use.pimp import _parse_name
 from use.pydantics import JustUse_Info, PyPI_Project, PyPI_Release, Version
@@ -639,3 +640,20 @@ def test_451_ignore_spaces_in_hashes(reuse):
     )
     assert mod
     del mod
+
+
+def f(x):
+    return x**2
+
+
+def test_decorate(reuse):
+    def decorator(func):
+        def wrapper(x):
+            return func(x + 1)
+
+        return wrapper
+
+    _wrap(thing=sys.modules[__name__], obj=f, decorator=decorator, name="f")
+    assert f(3) == 16
+    _unwrap(thing=sys.modules[__name__], name="f")
+    assert f(3) == 9
