@@ -45,7 +45,7 @@ def is_callable(thing):
         return False
 
 
-HIT = namedtuple("Hit", "qualname name type success exception")
+HIT = namedtuple("Hit", "qualname name type success exception dunder")
 
 
 @beartype
@@ -60,7 +60,6 @@ def apply_aspect(
     regex: Optional[re.Pattern] = None,
     aspectize_dunders: bool = False,
     recursive: bool = True,
-    level: int = 0,
     dry_run: bool = False,
     visited: Optional[set[int]] = None,
     excluded_names: Optional[set[str]] = None,
@@ -132,7 +131,6 @@ def apply_aspect(
                 excluded_types=excluded_types,
                 recursive=True,
                 visited=visited,
-                level=level + 1,
                 dry_run=dry_run,
                 hits=hits,
                 last=False,
@@ -142,7 +140,6 @@ def apply_aspect(
         if id(obj) in visited:
             continue
 
-        # We can't really filter by name if it doesn't have a qualname
         if (
             qualname in excluded_names
             or type(obj) in excluded_types
@@ -162,10 +159,12 @@ def apply_aspect(
             wrapped = obj
             success = False
             msg = str(exc)
-        hits.append(HIT(qualname, name, type(wrapped), success, msg))
+        hits.append(
+            HIT(qualname, name, type(wrapped), success, msg, name.startswith("__") and name.endswith("__"))
+        )
         visited.add(id(wrapped))
 
-    # this the last thing in the original call, after all the recursion
+    # this is the last thing in the original call, after all the recursion
     if last and dry_run:
         if not config.no_browser:
             print("Please check your browser to select options and filters for aspects.")
@@ -210,21 +209,7 @@ def _unwrap(*, thing: Any, name: str):
     return original
 
 
-def isbeartypeable(thing):
-    with catch_warnings():
-        filterwarnings(action="ignore", category=BeartypeDecorHintPep585DeprecationWarning)
-        if type(thing).__name__.startswith("builtin_method"):
-            return False
-        if thing in (type, object):
-            return False
-        try:
-            beartype(thing)
-            return True
-        except:
-            return False
-
-
-def woody_logger(func: callable) -> callable:
+def woody_logger(func: Callable) -> Callable:
     """
     Decorator to log/track/debug calls and results.
 
@@ -233,18 +218,22 @@ def woody_logger(func: callable) -> callable:
     Returns:
         function: The decorated callable.
     """
+    qualname = getattr(func, "__qualname__", None) or getattr(func, "__name__", None) or str(func)
+    module = getattr(func, "__module__", None) or getattr(func.__class__, "__module__", None)
+    if module:
+        module += "."
 
     @wraps(func)
     def wrapper(*args, **kwargs):
-        print(f"{args} {kwargs} -> {getattr(func, '__qualname__', func.__name__)}")
+        print(f"{args} {kwargs} -> {module}{qualname}")
         before = perf_counter_ns()
         res = func(*args, **kwargs)
         after = perf_counter_ns()
-        log.debug(
-            f"{func.__module__}::{getattr(func, '__qualname__', func.__name__)}({args}, {kwargs}) -> {res} {type(res)}"
-        )
+        # log.debug(
+        #     f"{func.__module__}::{getattr(func, '__qualname__', func.__name__)}({args}, {kwargs}) -> {res} {type(res)}"
+        # )
         print(
-            f"{getattr(func, '__qualname__', func.__name__)} -- in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {res} {type(res)}"
+            f"-> {module}{qualname} (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {res} {type(res)}"
         )
         return res
 

@@ -1,14 +1,16 @@
-import sys
-
-import numpy
-
 import use
-from use.aspectizing import _unwrap, _wrap
 
-numpy @ use
 mod = use(use.Path(".test4.py"))
 
 
-use.apply_aspect(mod, use.woody_logger)
-use.show_aspects()
-print()
+def decorator(func):
+    def wrapper(x):
+        return func(x + 1)
+
+    return wrapper
+
+
+use.apply_aspect(mod, decorator)
+use.apply_aspect(mod, decorator)
+
+print(mod.test(3))

@@ -1,8 +1,6 @@
-import use
 
-np = use("numpy")
+hits = {1,2,3}
 
-for k, v in np.__dict__.items():
-    if k.startswith("__"):
-        print(k, str(v)[:20], type(v))
-        
+
+print([x for x in hits])
+    

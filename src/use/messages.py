@@ -54,7 +54,6 @@ def _web_aspectized_dry_run(
             "decorator": decorator,
             "hits": hits,
             "check": check,
-            "pattern": pattern,
             "module_name": module_name,
         }
         file.write(env.get_template("aspects_dry_run.html").render(**args))

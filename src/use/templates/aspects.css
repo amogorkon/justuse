@@ -93,18 +93,7 @@ z-index: 0;
 color: white;
 }
 
-table {
-color: black;
-position: absolute;
-left: 0;
-top: 38px;
-width: 100%;
-font-size: 1em;
-text-align: left;
-background-color: #93beff;
-padding: 40px 0;
-border-collapse: collapse;
-}
+
 
 th {
     border-bottom:1px solid black;}
@@ -134,3 +123,48 @@ display: block;
 font-size: 1em;
 }
 
+.filter_field > button {
+  vertical-align: middle;
+}
+.filter_field > textarea {
+vertical-align: middle;
+}
+
+table {
+  left: 0;
+  top: 38px;
+  width: 100%;
+  font-size: 1em;
+  text-align: left;
+  background: rgb(1, 18, 114);
+  padding: 40px 0;
+  border-collapse: collapse;
+  color: white;
+  font-weight: lighter;
+  }
+
+.selected {
+  padding: 5px;
+  border-bottom: gray solid 2px;
+  border-top: white solid 2px;
+  background: #b5bfcf;
+  box-shadow: inset 1px 1px 3px #000;
+  color: rgb(51, 39, 39);
+  font-weight: bold;
+
+}
+.failure {
+  background: red;
+  }
+
+  .visible {
+    visibility: visible;
+    opacity: 1;
+    transition: opacity 2s linear;
+  }
+
+  .hidden {
+    visibility: hidden;
+    opacity: 0;
+    transition: visibility 0s 2s, opacity 2s linear;
+  }
