@@ -606,15 +606,25 @@ def test_51_sqlalchemy_failure_default_to_none(reuse):
             "numpy",
             "1.21.0",
             {
-                "W䉌贷牞锣笐螈鋟䝸䗭霰雟蝪亻逩䕚拖壙",  # cp39-macosx_10_9_universal2
-                "Y骢巜娽鷴㡶蟋穮斀存勭梔葷叐纁鷀Ɖ掷",  # cp39-manylinux_2_12_x86_64.manylinux2010_x86_64
-                "g瓜簸坶㱨㐮挙党磈濎穤轣駛勅㻒垅漤䫪",  # cp39-manylinux_2_17_aarch64.manylinux2014_aarch64
-                "g堎讎鑕錨洇淮啇耛聴䵥䪓愞㬾赕揢䘬㖤",  # cp39-macosx_11_0_arm64
-                "K嚲近瓴玳倞礱歄屯穏㷥籗皚㴙坱䮇稾鵠",  # cp39-win_amd64
-                "L児桍䰶獑枅笀䄝稵喀挐鼊覌湒公栢鹹Ǹ",  # cp39-macosx_10_9_x86_64
-                "h玴煆唺㭩啢蚹圽难㱢胷即剬䨨鷆聥䇀牳",  # cp39-win32
-                "R䘕㔼鎐苺䍍繶偩胄皒筟嵭砂垮鈄㴩艻灛",  # cp39-manylinux_2_12_i686.manylinux2010_i686
-                "L鹠㴑㸥暝䪚浶唝疂迬奋弣舻㕉嶽㴉椿䀕",  # pp37-manylinux_2_12_x86_64.manylinux2010_x86_64
+                "K孈諺搓稞㭯函攢訦冁舏在偦鸕覘延䅣微",  # cp39-macosx_10_14_x86_64
+                "W余跒䌹㔟倠咥膆酐䄩物绁䣹萦䱒䀒嵲㫀",  # cp310-manylinux_2_17_x86_64.manylinux2014_x86_64
+                "U燊仓虑觖䢾䪍㼞䙼⑾鮹爠䂸泫驊鏓慥脲",  # cp310-macosx_10_14_x86_64
+                "P䂹瀑蚜萃暧㡩栅訉慯忲磵殣怊伟躂岜㠽",  # cp39-manylinux_2_17_aarch64.manylinux2014_aarch64
+                "S驈烽堶堢苩觌宣陖阆㦯葅霙䇣锽鸋㻔摌",  # cp310-macosx_11_0_arm64
+                "鉳䥩猉罺䢢䚘㞐朤体颛軀辗﨏䍜圑蒷塶",  # cp310-win_amd64
+                "N䥐昺飂薏嵋㻝阫鎴蝧愩蚓臞敼鯩冓蝸銒",  # cp310-manylinux_2_17_aarch64.manylinux2014_aarch64
+                "M㐸丮䫈䩷ɽ燃䄻混蛳稝鉇役泃宵艞顃㼵",  # cp38-manylinux_2_17_x86_64.manylinux2014_x86_64
+                "l䭌㻧䈘樉䎜胵賡秖磗伳玌鄵㝷乺ʜ䩗㞄",  # cp39-win32
+                "jǛ湄閈䌣鮴䥎堃㛓笸埩眣庚捡鈕㞻鍇錭",  # cp38-win32
+                "O珌㡾㷗鴥拁嵹㒞㔹鐝Ȼ扡庇甄臞摉鮝厐",  # cp38-manylinux_2_17_aarch64.manylinux2014_aarch64
+                "蕧胸瓲工䛹侒囜第䞢棖頟䗯锩㠋㞭谶㥚",  # cp38-win_amd64
+                "P钉殯㓜魴壬谚蝇弄鈻馇蕔祏绿佡謊濔弡",  # cp39-win_amd64
+                "k蜆蓭鑶禬茌犿违維郈盇肀根棿嶠纭恦㗼",  # cp310-win32
+                "Z序套䁳暙鐁鎨樫姡鳵曧頲㲿槤誐笷楆㖑",  # pp38-manylinux_2_17_x86_64.manylinux2014_x86_64
+                "J䘻鏤熆钣吚檭䟆颃稆㥌绊錽乸棈獒轧䐥",  # cp38-macosx_10_14_x86_64
+                "k胨唃嫟鶛睉銤噶㝅婡䲍逪萻㲛撁佘籧趏",  # cp38-macosx_11_0_arm64
+                "k頃跊ó銋訋簴冴蛞铘诪韚秂坿櫹围㾶歆",  # cp39-macosx_11_0_arm64
+                "VƂ㫰雲巠䝲偯鷔餙䬸歏匧漃祌轘夽㑐㵿",  # cp39-manylinux_2_17_x86_64.manylinux2014_x86_64
             },
         ),
     ),
