@@ -21,7 +21,7 @@ from icontract import require
 log = getLogger(__name__)
 
 from use import config
-from use.messages import _web_aspectized, _web_aspectized_dry_run
+from use.messages import _web_aspectized, _web_aspectized_dry_run, _web_tinny_profiler
 
 # TODO: use an extra WeakKeyDict as watchdog for object deletions and trigger cleanup in these here
 _applied_decorators: DefaultDict[tuple[object, str], Deque[Callable]] = DefaultDict(Deque)
@@ -240,6 +240,9 @@ def woody_logger(func: Callable) -> Callable:
     return wrapper
 
 
+_timings: dict[int, Deque[int]] = DefaultDict(lambda: Deque(maxlen=10000))
+
+
 def tinny_profiler(func: callable) -> callable:
     """
     Decorator to log/track/debug calls and results.
@@ -252,16 +255,14 @@ def tinny_profiler(func: callable) -> callable:
 
     @wraps(func)
     def wrapper(*args, **kwargs):
-        print(f"{args} {kwargs} -> {func.__module__}::{func.__qualname__}")
         before = perf_counter_ns()
         res = func(*args, **kwargs)
         after = perf_counter_ns()
-        log.debug(
-            f"{func.__module__}::{getattr(func, '__qualname__', func.__name__)}({args}, {kwargs}) -> {res} {type(res)}"
-        )
-        print(
-            f"{getattr(func, '__qualname__', func.__name__)} -- in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {res} {type(res)}"
-        )
+        _timings[func].append(after - before)
         return res
 
     return wrapper
+
+
+def show_profiling():
+    _web_tinny_profiler(_timings)

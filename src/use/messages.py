@@ -18,22 +18,50 @@ import use
 from use import __version__, config, home
 from use.hash_alphabet import hexdigest_as_JACK
 from use.pydantics import PyPI_Project, Version
+from statistics import geometric_mean, median, stdev
 
 env = Environment(
     loader=FileSystemLoader(Path(__file__).parent / "templates"), autoescape=select_autoescape()
 )
 
 
+def std(times):
+    return stdev(times) if len(times) > 1 else 0
+
+
+def _web_tinny_profiler(timings):
+    copy(Path(__file__).absolute().parent / r"templates/profiling.css", home / "profiling.css")
+    DAT = namedtuple("DECORATOR", "qualname name min geom_mean median stdev len total")
+    timings_ = [
+        DAT(
+            getattr(
+                func, "__qualname__", getattr(func, "__module__", "") + getattr(func, "__name__", str(func))
+            ),
+            func.__name__,
+            min(times),
+            geometric_mean(times),
+            median(times),
+            std(times),
+            len(times),
+            sum(times),
+        )
+        for func, times in timings.items()
+    ]
+    with open(home / "profiling.html", "w", encoding="utf-8") as file:
+        args = {
+            "timings": timings_,
+        }
+        file.write(env.get_template("profiling.html").render(**args))
+    webbrowser.open(f"file://{home}/profiling.html")
+
+
 def _web_aspectized(decorators, functions):
-    print(decorators)
-    print()
-    print(functions)
     copy(Path(__file__).absolute().parent / r"templates/aspects.css", home / "aspects.css")
-    deco = namedtuple("DECORATOR", "name func")
+    DAT = namedtuple("DECORATOR", "name func")
     redecorated = []
     for ID, funcs in decorators.items():
         name = functions[ID][-1].__name__
-        redecorated.append(deco(name, funcs))
+        redecorated.append(DAT(name, funcs))
 
     with open(home / "aspects.html", "w", encoding="utf-8") as file:
         args = {

@@ -84,12 +84,12 @@ import re
 
 document["clipboard_button"].bind("click", lambda event: window.navigator.clipboard.writeText(document["result"].text))
 
-args = {"pattern": r"", "aspectize_dunders": False}
+args = {"pattern": document["pattern"].value, "aspectize_dunders": False}
 
 {% raw %}
-result_str = f"""use.apply_aspect({{ {document["module_name"].text}, {document["decorator"].text}, 
-{pformat(args)}
-}})"""
+result_str = f"""use.apply_aspect({document["module_name"].text}, {document["decorator"].text}, 
+**{pformat(args)}
+)"""
 {% endraw %}
 document["result"].text = result_str
 
@@ -128,7 +128,6 @@ def apply_filter(event):
     show_warning(f"""Working.. (applying filter to {len(document.querySelectorAll('[id^="row_"]'))} objects)""")
     
 def do_filter(*args):
-    print("do filter")
     aspectize_dunders = document["aspectize_dunders"].checked
     pattern = re.compile(document["pattern"].value, re.DOTALL)
 
@@ -150,6 +149,15 @@ def do_filter(*args):
             classes -= {"selected"}
         x.class_name = ' '.join(c for c in classes)
         document["apply_filter_warning"].class_name = "hidden"
+
+    args = {"pattern": document["pattern"].value, "aspectize_dunders": aspectize_dunders}
+
+    {% raw %}
+    result_str = f"""use.apply_aspect({document["module_name"].text}, {document["decorator"].text}, 
+    **{pformat(args)}
+    )"""
+    {% endraw %}
+    document["result"].text = result_str
     </script>
 </body>
 
