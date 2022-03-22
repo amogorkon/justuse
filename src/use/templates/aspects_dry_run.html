@@ -88,8 +88,7 @@ args = {"pattern": document["pattern"].value, "aspectize_dunders": False}
 
 {% raw %}
 result_str = f"""use.apply_aspect({document["module_name"].text}, {document["decorator"].text}, 
-**{pformat(args)}
-)"""
+**{pformat(args)})"""
 {% endraw %}
 document["result"].text = result_str
 
@@ -154,8 +153,7 @@ def do_filter(*args):
 
     {% raw %}
     result_str = f"""use.apply_aspect({document["module_name"].text}, {document["decorator"].text}, 
-    **{pformat(args)}
-    )"""
+    **{pformat(args)})"""
     {% endraw %}
     document["result"].text = result_str
     </script>
