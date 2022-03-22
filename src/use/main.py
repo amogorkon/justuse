@@ -49,6 +49,7 @@ from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
 from use.pimp import _build_mod, _ensure_path, _fail_or_default, _parse_name
 from use.pydantics import Version
 from use.tools import methdispatch
+from use.aspectizing import _applied_decorators
 
 log = getLogger(__name__)
 
@@ -463,11 +464,30 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             jupyter = "ipykernel" in sys.modules
             # we're in jupyter, we use the CWD as set in the notebook
             if not jupyter and hasattr(main_mod, "__file__"):
-                source_dir = (
-                    _ensure_path(inspect.currentframe().f_back.f_back.f_back.f_code.co_filename)
-                    .resolve()
-                    .parent
-                )
+                # problem: user wants to use.Path("some_file_in_the_same_dir")
+                # so we have to figure out where the file of the calling function is.
+                # but the *calling* function could also be a decorator, living completely elsewhere
+                # so we have to figure out whether we're being called by a decorator first.
+                # We use use.__call__ as landmark, because that's the official entry point
+                # and we can count on it being called. From there we need to check whether it was aspectized.
+                # If it was, we need to skip those decorators before finally get to the user code and
+                # we can actually see from where we've been called.
+                frame = inspect.currentframe()
+                while True:
+                    if frame.f_code == Use.__call__.__code__:
+                        break
+                    else:
+                        frame = frame.f_back
+                # a few more steps..
+                for x in _applied_decorators:
+                    frame = frame.f_back
+                try:
+                    # frame is in __call__ (or the last decorator we control), we need to step one more frame back
+                    source_dir = Path(frame.f_back.f_code.co_filename).resolve().parent
+                # we are being called from a shell like thonny, so we have to assume cwd
+                except OSError:
+                    source_dir = Path.cwd()
+
             if source_dir is None:
                 if main_mod.__loader__ and hasattr(main_mod.__loader__, "path"):
                     source_dir = _ensure_path(main_mod.__loader__.path).parent

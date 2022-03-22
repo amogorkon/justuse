@@ -28,8 +28,7 @@ from shutil import rmtree
 from sqlite3 import Cursor
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import (Any, Iterable, Optional, Protocol, TypeVar, Union,
-                    runtime_checkable)
+from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, runtime_checkable
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -41,11 +40,9 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import (Hash, InstallationError, Modes, UnexpectedHash,
-                 VersionWarning, config, sessionID)
+from use import Hash, InstallationError, Modes, UnexpectedHash, VersionWarning, config, sessionID
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-from use.messages import (UserMessage, _web_pebkac_no_hash,
-                          _web_pebkac_no_version_no_hash)
+from use.messages import UserMessage, _web_pebkac_no_hash, _web_pebkac_no_version_no_hash
 from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version
 from use.tools import pipes
 
@@ -128,14 +125,12 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 pass
         if not get_supported:
             try:
-                from pip._internal.utils.compatibility_tags import \
-                    get_supported
+                from pip._internal.utils.compatibility_tags import get_supported
             except ImportError:
                 pass
         if not get_supported:
             try:
-                from pip._internal.resolution.resolvelib.factory import \
-                    get_supported
+                from pip._internal.resolution.resolvelib.factory import get_supported
             except ImportError:
                 pass
 
