@@ -780,7 +780,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         elif not auto_install:
             spec = importlib.util.find_spec(module_name.replace("-", "_"))
 
-        case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
+        case = bool(version), bool(hashes), bool(spec), auto_install
         log.info("case = %s", case)
         # welcome to the buffet table, where everything is a lie
         kwargs = {

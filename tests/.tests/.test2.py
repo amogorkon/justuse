@@ -172,17 +172,17 @@ def test_gaussmf():
 from time import sleep
 test_funcs = [
     lambda: list({}),
-    lambda: list({1:2}),
-    lambda: list({(1,2,3): 4}),
-    lambda: list((3,3,4)),
-    lambda: list(()),
-    lambda: list({0,1,2,3, ...}),
-    lambda: list({3,9,9}),
+    lambda: list({1: 2}),
+    lambda: list({(1, 2, 3): 4}),
+    lambda: [3, 3, 4],
+    lambda: [],
+    lambda: list({0, 1, 2, 3, ...}),
+    lambda: list({3, 9, 9}),
     lambda: list(set()),
-    lambda: list([]),
-    lambda: list([1,2,1,1,]),
-    lambda: sleep(0.5)
-    ]
+    lambda: [],
+    lambda: [1, 2, 1, 1],
+    lambda: sleep(0.5),
+]
 
 def timeit(func):
     res = []
