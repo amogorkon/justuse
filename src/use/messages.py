@@ -10,6 +10,7 @@ from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
 from shutil import copy
+from statistics import geometric_mean, median, stdev
 
 from beartype import beartype
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -17,8 +18,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 import use
 from use import __version__, config, home
 from use.hash_alphabet import hexdigest_as_JACK
-from use.pydantics import PyPI_Project, Version
-from statistics import geometric_mean, median, stdev
+from use.pydantics import PyPI_Release, Version
 
 env = Environment(
     loader=FileSystemLoader(Path(__file__).parent / "templates"), autoescape=select_autoescape()
@@ -103,12 +103,12 @@ def _web_pebkac_no_hash(
     name: str,
     package_name: str,
     version: Version,
-    project: PyPI_Project,
+    releases: list[PyPI_Release],
 ):
     copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", home / "stylesheet.css")
     entry = namedtuple("Entry", "python platform hash_name hash_value jack_value")
     table = defaultdict(lambda: [])
-    for rel in project.releases[version]:
+    for rel in (rel for rel in releases if rel.version == version):
         for hash_name, hash_value in rel.digests.items():
             if hash_name not in (x.name for x in use.Hash):
                 continue

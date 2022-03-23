@@ -181,7 +181,7 @@ def apply_aspect(
 
 
 @beartype
-def _wrap(*, thing: Any, obj: Any, decorator: Callable, name: str):
+def _wrap(*, thing: Any, obj: Any, decorator: Callable, name: str) -> Any:
     wrapped = decorator(obj)
     _applied_decorators[(thing, name)].append(decorator)
     _aspectized_functions[(thing, name)].append(obj)

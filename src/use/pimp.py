@@ -2,7 +2,9 @@
 Delegating package installation to pip, packaging and friends.
 """
 
+
 import codecs
+import contextlib
 import importlib.util
 import linecache
 import os
@@ -114,26 +116,17 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
     get_supported = None
     with catch_warnings():
         filterwarnings(action="ignore", category=DeprecationWarning)
-        try:
+        with contextlib.suppress(ImportError):
             from pip._internal.resolution.legacy.resolver import get_supported
-        except ImportError:
-            pass
         if not get_supported:
-            try:
+            with contextlib.suppress(ImportError):
                 from pip._internal.models.target_python import get_supported
-            except ImportError:
-                pass
         if not get_supported:
-            try:
+            with contextlib.suppress(ImportError):
                 from pip._internal.utils.compatibility_tags import get_supported
-            except ImportError:
-                pass
         if not get_supported:
-            try:
+            with contextlib.suppress(ImportError):
                 from pip._internal.resolution.resolvelib.factory import get_supported
-            except ImportError:
-                pass
-
     get_supported = get_supported or (lambda: [])
 
     items: list[PlatformTag] = [PlatformTag(platform=tag.platform) for tag in get_supported()]
@@ -144,11 +137,8 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
 
 
 @beartype
-def _filter_by_version(project: PyPI_Project, version: Version) -> PyPI_Project:
-    rels = project.releases.get(version, project.releases.get(version, []))
-    project.releases = {version: rels}
-    project.urls = rels
-    return project
+def _filter_by_version(releases: list[PyPI_Release], *, version: Version) -> list[PyPI_Release]:
+    return list(filter(lambda r: r.version == version, releases))
 
 
 class ZipFunctions:
@@ -272,22 +262,23 @@ def _pebkac_no_hash(
     Message: type,
     hash_algo: Hash,
     **kwargs,
-) -> Union[Exception, ModuleType]:
+) -> RuntimeWarning:
     project = _get_data_from_pypi(package_name=package_name, version=version)
-    if version not in project.releases:
+    releases = _get_releases(project)
+
+    if version not in (r.version for r in releases):
         last_version = next(iter(reversed(project.releases)))
         return RuntimeWarning(Message.no_distribution_found(package_name, version, last_version))
 
-    project = _filter_by_version(project, version)
+    project = _filter_by_version(releases, version=version)
     filtered = _filter_by_platform(
-        project,
+        releases,
         tags=get_supported(),
-        sys_version=Version(major=sys.version_info[0], minor=sys.version_info[1]),
     )
-    ordered = _sorted_data(filtered)
+    ordered = _sort_releases(filtered)
 
     if not no_browser:
-        _web_pebkac_no_hash(name=name, package_name=package_name, version=version, project=project)
+        _web_pebkac_no_hash(name=name, package_name=package_name, version=version, releases=ordered)
 
     if not ordered:
         return RuntimeWarning(Message.no_recommendation(package_name, version))
@@ -313,7 +304,6 @@ def _pebkac_no_hash(
 def _pebkac_no_version_no_hash(
     *,
     name: str,
-    hash_algo: Hash,
     package_name: str,
     no_browser: bool,
     Message: type,
@@ -321,16 +311,14 @@ def _pebkac_no_version_no_hash(
 ) -> Exception:
     # let's try to make an educated guess and give a useful suggestion
     proj = _get_data_from_pypi(package_name=package_name)
+    releases = _get_releases(proj)
 
-    filtered = _filter_by_platform(
-        proj, tags=get_supported(), sys_version=Version(major=sys.version_info[0], minor=sys.version_info[1])
-    )
-    ordered = _sorted_data(filtered)
+    ordered = releases >> _filter_by_platform(tags=get_supported()) >> _sort_releases
     # we tried our best, but we didn't find anything that could work
 
     # let's try to find *anything*
     if not ordered:
-        ordered = _sorted_data(proj)
+        ordered = _sort_releases(releases)
         if not ordered:
             # we tried our best..
             return RuntimeWarning(Message.pebkac_unsupported(package_name))
@@ -793,46 +781,27 @@ def _get_data_from_pypi(*, package_name: str, version: str = None) -> PyPI_Proje
 
 
 @beartype
-def _filter_by_platform(
-    project: PyPI_Project, tags: frozenset[PlatformTag], sys_version: Version
-) -> PyPI_Project:
-    filtered = {
-        ver: [
-            rel.dict()
-            for rel in releases
-            if _is_compatible(
-                rel,
-                sys_version=sys_version,
-                platform_tags=tags,
-                include_sdist=False,
-            )
-        ]
-        for ver, releases in project.releases.items()
-    }
+def _filter_by_platform(releases: list[PyPI_Release], *, tags: frozenset[PlatformTag]) -> list[PyPI_Release]:
+    filtered = [
+        release for release in releases if _is_compatible(release, platform_tags=tags, include_sdist=False)
+    ]
     if not filtered:
-        filtered = {
-            ver: [
-                rel.dict()
-                for rel in releases
-                if _is_compatible(
-                    rel,
-                    sys_version=sys_version,
-                    platform_tags=tags,
-                    include_sdist=True,
-                )
-            ]
-            for ver, releases in project.releases.items()
-        }
+        return [
+            release for release in releases if _is_compatible(release, platform_tags=tags, include_sdist=True)
+        ]
+    return filtered
 
-    return PyPI_Project(**{**project.dict(), **{"releases": filtered}})
+
+@beartype
+def _get_releases(project: PyPI_Project) -> list[PyPI_Release]:
+    return reduce(list.__add__, project.releases.values(), [])
 
 
 @beartype
 @pipes
-def _sorted_data(data: PyPI_Project) -> list[PyPI_Release]:
-    flat = reduce(list.__add__, data.releases.values(), [])
+def _sort_releases(releases: list[PyPI_Release]) -> list[PyPI_Release]:
     return sorted(
-        flat,
+        releases,
         key=(
             lambda r: (
                 1 - int(r.filename.endswith(".tar.gz")),
@@ -905,11 +874,8 @@ def _is_platform_compatible(
     )
 
 
-def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist=None) -> bool:
-    """Return true if the artifact described by 'info'
-    is compatible with the current or specified system."""
-    specifier = info.requires_python
-
+@beartype
+def _is_compatible(info: PyPI_Release, platform_tags, include_sdist=False) -> bool:
     return (
         _is_platform_compatible(info, platform_tags, include_sdist)
         and not info.yanked
@@ -917,6 +883,7 @@ def _is_compatible(info: PyPI_Release, sys_version, platform_tags, include_sdist
     )
 
 
+@beartype
 def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> Optional[Version]:
     version: Optional[Union[Callable[...], Version, Version, str]] = None
     for lookup_name in (name, package_name):
@@ -986,19 +953,19 @@ def _fail_or_default(exception: BaseException, default: Any):
         raise exception
 
 
-### active web dev ###
-proj = None
-from shutil import copy
+# ### active web dev ###
+# proj = None
+# from shutil import copy
 
 
-def qwer():
-    copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", config.home / "stylesheet.css")
-    package_name = "pygame"
-    name = "pygame/foo"
-    version = Version("2.1.0")
-    global proj
-    if proj is None:
-        proj = _get_data_from_pypi(package_name=package_name, version=version)
-        proj = _filter_by_version(proj, version)
+# def _qwer():
+#     copy(Path(__file__).absolute().parent / r"templates/stylesheet.css", config.home / "stylesheet.css")
+#     package_name = "pygame"
+#     name = "pygame/foo"
+#     version = Version("2.1.0")
+#     global proj
+#     if proj is None:
+#         proj = _get_data_from_pypi(package_name=package_name, version=version)
+#         proj = _filter_by_version(proj, version)
 
-    _web_pebkac_no_hash(package_name=package_name, version=version, name=name, project=proj)
+#     _web_pebkac_no_hash(package_name=package_name, version=version, name=name, project=proj)

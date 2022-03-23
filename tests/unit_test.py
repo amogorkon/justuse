@@ -667,3 +667,36 @@ def test_decorate(reuse):
     assert f(3) == 16
     _unwrap(thing=sys.modules[__name__], name="f")
     assert f(3) == 9
+
+
+def test_454_bad_metadata(reuse):
+    name = "pyinputplus"
+    with patch("webbrowser.open"), io.StringIO() as buf, redirect_stdout(buf):
+        try:
+            reuse(name, modes=reuse.auto_install)
+        except RuntimeWarning:
+            version = buf.getvalue().splitlines()[-1].strip()
+        try:
+            reuse(name, version=version, modes=reuse.auto_install)
+        except RuntimeWarning:
+            recommended_hash = buf.getvalue().splitlines()[-1].strip()
+        mod = reuse(
+            name, version=version, hashes={recommended_hash}, modes=reuse.auto_install | reuse.no_cleanup
+        )
+        assert mod
+
+
+def test_454_no_tags(reuse):
+    """No version and no platform tags given - a surprisingly common issue."""
+
+    version = "3.1.2"
+    name = "pyspark"
+    with patch("webbrowser.open"), io.StringIO() as buf, redirect_stdout(buf):
+        try:
+            reuse(name, version=version, modes=reuse.auto_install)
+        except RuntimeWarning:
+            recommended_hash = buf.getvalue().splitlines()[-1].strip()
+        mod = reuse(
+            name, version=version, hashes={recommended_hash}, modes=reuse.auto_install | reuse.no_cleanup
+        )
+        assert mod
