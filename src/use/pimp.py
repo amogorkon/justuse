@@ -3,6 +3,7 @@ Delegating package installation to pip, packaging and friends.
 """
 
 
+
 import codecs
 import contextlib
 import importlib.util
@@ -22,7 +23,7 @@ from functools import reduce
 from importlib import metadata
 from importlib.machinery import ModuleSpec, SourceFileLoader
 from importlib.metadata import Distribution, PackageNotFoundError, PackagePath
-from itertools import chain
+from itertools import chain, product
 from logging import getLogger
 from os.path import abspath, split
 from pathlib import Path, PureWindowsPath, WindowsPath
@@ -30,7 +31,8 @@ from shutil import rmtree
 from sqlite3 import Cursor
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, runtime_checkable
+from typing import (Any, Iterable, Optional, Protocol, TypeVar, Union,
+                    runtime_checkable)
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -42,9 +44,11 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import Hash, InstallationError, Modes, UnexpectedHash, VersionWarning, config, sessionID
+from use import (Hash, InstallationError, Modes, UnexpectedHash,
+                 VersionWarning, config, sessionID)
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-from use.messages import UserMessage, _web_pebkac_no_hash, _web_pebkac_no_version_no_hash
+from use.messages import (UserMessage, _web_pebkac_no_hash,
+                          _web_pebkac_no_version_no_hash)
 from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version
 from use.tools import pipes
 
@@ -123,10 +127,12 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 from pip._internal.models.target_python import get_supported
         if not get_supported:
             with contextlib.suppress(ImportError):
-                from pip._internal.utils.compatibility_tags import get_supported
+                from pip._internal.utils.compatibility_tags import \
+                    get_supported
         if not get_supported:
             with contextlib.suppress(ImportError):
-                from pip._internal.resolution.resolvelib.factory import get_supported
+                from pip._internal.resolution.resolvelib.factory import \
+                    get_supported
     get_supported = get_supported or (lambda: [])
 
     items: list[PlatformTag] = [PlatformTag(platform=tag.platform) for tag in get_supported()]
@@ -598,10 +604,9 @@ def _download_artifact(*, artifact_path: Path, url: URL, hash_algo: Hash, hash_v
 
 @beartype
 def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
-    for n in meta["names"]:
-        for s in importlib.machinery.EXTENSION_SUFFIXES:
-            if n.endswith(s):
-                return False
+    for n, s in product(meta["names"], importlib.machinery.EXTENSION_SUFFIXES):
+        if n.endswith(s):
+            return False
     if ".tar" in str(artifact_path):
         return False
     return True
@@ -845,15 +850,14 @@ def _is_platform_compatible(
             return False
 
     our_python_tag = tags.interpreter_name() + tags.interpreter_version()
-    supported_tags = set(
-        [
-            our_python_tag,
-            "py3",
-            "cp3",
-            f"cp{tags.interpreter_version()}",
-            f"py{tags.interpreter_version()}",
-        ]
-    )
+    supported_tags = {
+        our_python_tag,
+        "py3",
+        "cp3",
+        f"cp{tags.interpreter_version()}",
+        f"py{tags.interpreter_version()}",
+    }
+
 
     if info.platform_tag:
         given_platform_tags = info.platform_tag.split(".") << map(PlatformTag) >> frozenset

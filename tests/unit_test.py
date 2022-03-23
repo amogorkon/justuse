@@ -35,7 +35,8 @@ import logging
 
 from use import auto_install, fatal_exceptions, no_cleanup, use
 from use.aspectizing import _unwrap, _wrap
-from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
+from use.hash_alphabet import (JACK_as_num, hexdigest_as_JACK, is_JACK,
+                               num_as_hexdigest)
 from use.pimp import _parse_name
 from use.pydantics import JustUse_Info, PyPI_Project, PyPI_Release, Version
 
@@ -431,11 +432,11 @@ class ScopedCwd(AbstractContextManager):
 
 
 def test_read_wheel_metadata(reuse):
-    bytes = requests.get(
+    content = requests.get(
         "https://files.pythonhosted.org/packages/45/80/cdf0df938fe63457f636d859499f4aab3d0411a90fd9472ad720a0b7eab6/justuse-0.5.0.tar.gz"
     ).content
     file = Path(tempfile.mkstemp(".tar.gz", "justuse-0.5.0")[1])
-    file.write_bytes(bytes)
+    file.write_bytes(content)
     whl_path = file
     if whl_path.exists():
         assert whl_path.exists()
