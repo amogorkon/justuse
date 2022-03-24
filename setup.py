@@ -83,7 +83,7 @@ with open("README.md") as f:
 
 setup(
     packages=find_packages(where="src"),
-    package_dir={"": "src"},
+    package_dir={"": "src", "templates": "src/templates"},
     package_name="use",
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
