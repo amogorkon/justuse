@@ -1,3 +1,5 @@
+__package__ = "tests"
+
 def two():
     return 2
 

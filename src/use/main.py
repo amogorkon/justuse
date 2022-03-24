@@ -9,23 +9,24 @@ import hashlib
 import importlib.util
 import inspect
 import os
+import shutil
 import sqlite3
 import sys
-import tempfile
 import threading
 import time
 import traceback
-from atexit import register
+from collections.abc import Callable
+from datetime import datetime
 from logging import DEBUG, INFO, NOTSET, getLogger, root
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, Optional, Type, Union
+from typing import Any, Optional, Union
 from warnings import warn
 
 import requests
 import toml
 from furl import furl as URL
-from icontract import ensure, invariant, require
+from icontract import require
 
 from use import (
     AmbiguityWarning,
@@ -40,13 +41,15 @@ from use import (
     buffet_table,
     config,
     home,
-    isfunction,
+    sessionID,
 )
+from use.aspectizing import apply_aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
-from use.messages import Message
-from use.pimp import _apply_aspect, _build_mod, _ensure_path, _fail_or_default, _parse_name
-from use.pypi_model import PyPI_Project, PyPI_Release, Version
+from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
+from use.pimp import _build_mod, _ensure_path, _fail_or_default, _parse_name
+from use.pydantics import Version
 from use.tools import methdispatch
+from use.aspectizing import _applied_decorators
 
 log = getLogger(__name__)
 
@@ -58,11 +61,14 @@ _reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
 _using = {}
 
 # sometimes all you need is a sledge hammer..
-@register
 def _release_locks():
     for _ in range(2):
         [lock.unlock() for lock in threading._shutdown_locks]
         [reloader.stop() for reloader in _reloaders.values()]
+    log.info(f"### SESSION END {datetime.now().strftime('%Y/%m/%d %H:%M:%S')} {sessionID} ###")
+
+
+atexit.register(_release_locks)
 
 
 class ProxyModule(ModuleType):
@@ -93,22 +99,48 @@ class ProxyModule(ModuleType):
         with self.__condition:
             setattr(self.__implementation, name, value)
 
-    def __matmul__(self, other: tuple):
+    def __matmul__(self, other: Callable):
         thing = self.__implementation
-        check, pattern, decorator = other
-        return _apply_aspect(thing, check, pattern, decorator, aspectize_dunders=False)
+        if not other:
+            raise NotImplementedError
+
+        # a little hack in order to be able to do `use @ numpy`...
+        if isinstance(self.__implementation, Use):
+            thing = other
+
+            def some_decorator(x):
+                return x
+
+            other = some_decorator
+
+        assert isinstance(other, Callable)
+
+        kwargs = {
+            "aspectize_dunders": True,
+            "excluded_types": {
+                ProxyModule,
+            },
+            "dry_run": True,
+        }
+
+        return apply_aspect(thing, other, **kwargs)
 
     def __call__(self, *args, **kwargs):
         with self.__condition:
             return self.__implementation(*args, **kwargs)
 
+    # to allow `numpy @ use` for a quick check
+    def __rmatmul__(self, *args, **kwargs):
+        return ProxyModule.__matmul__(self, *args, **kwargs)
+
 
 class ModuleReloader:
-    def __init__(self, *, proxy, name, path, initial_globals):
+    def __init__(self, *, proxy, name, path, package_name, initial_globals):
         self.proxy = proxy
         "ProxyModula that we refer to."
         self.name = name
         self.path = path
+        self.package_name = package_name
         self.initial_globals = initial_globals
         self._condition = threading.RLock()
         self._stopped = True
@@ -134,14 +166,14 @@ class ModuleReloader:
             if current_filehash != last_filehash:
                 try:
                     mod = _build_mod(
-                        name=self.name,
+                        module_name=self.name,
                         code=code,
                         initial_globals=self.initial_globals,
                         module_path=self.path.resolve(),
                     )
                     self.proxy.__implementation = mod
                 except KeyError:
-                    print(traceback.format_exc())
+                    traceback.print_exc()
             last_filehash = current_filehash
             await asyncio.sleep(1)
 
@@ -155,14 +187,14 @@ class ModuleReloader:
                 if current_filehash != last_filehash:
                     try:
                         mod = _build_mod(
-                            name=self.name,
+                            module_name=self.name,
                             code=code,
                             initial_globals=self.initial_globals,
                             module_path=self.path,
                         )
                         self.proxy._ProxyModule__implementation = mod
                     except KeyError:
-                        print(traceback.format_exc())
+                        traceback.print_exc()
                 last_filehash = current_filehash
             time.sleep(1)
 
@@ -174,45 +206,24 @@ class ModuleReloader:
 
 
 class Use(ModuleType):
-    # MODES to reduce signature complexity
-    # enum.Flag wasn't viable, but this alternative is actually pretty cool
-    auto_install = Modes.auto_install
-    fatal_exceptions = Modes.fatal_exceptions
-    reloading = Modes.reloading
-    no_public_installation = Modes.no_public_installation
-
     def __init__(self):
-        # TODO for some reason removing self._using isn't as straight forward..
         self._using = _using
         # might run into issues during testing otherwise
         self.registry = self._set_up_registry()
         "Registry sqlite DB to store all relevant package metadata."
-        self._user_registry = toml.load(home / "user_registry.toml")
-        "User can override package directories via user_registry.toml"
 
-        # for the user to copy&paste
-        with open(home / "config_defaults.toml", "w") as rfile:
-            toml.dump(config, rfile)
-
-        with open(home / "config.toml") as rfile:
-            config.update(toml.load(rfile))
-
-        config.update(test_config)
-
-        if config["debugging"]:
+        if config.debugging:
             root.setLevel(DEBUG)
 
-        if config["version_warning"]:
+        if config.version_warning:
             try:
                 response = requests.get("https://pypi.org/pypi/justuse/json")
                 "Checking if there's a new version of justuse."
                 data = response.json()
                 max_version = max(Version(version) for version in data["releases"].keys())
-                target_version = max_version
-                this_version = __version__
-                if Version(this_version) < target_version:
+                if Version(__version__) < max_version:
                     warn(
-                        Message.use_version_warning(target_version),
+                        UserMessage.use_version_warning(max_version),
                         VersionWarning,
                     )
             except (KeyError, requests.exceptions.ConnectionError):
@@ -222,71 +233,77 @@ class Use(ModuleType):
                     traceback.format_exc()
                 )  # we really don't need to bug the user about this (either pypi is down or internet is broken)
 
-    def _sqlite_row_factory(self, cursor, row):
-        return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+    def clean_slate(self):
+        shutil.rmtree(config.venv, ignore_errors=True)
+        shutil.rmtree(config.packages, ignore_errors=True)
+        config.venv.mkdir(mode=0o755, exist_ok=True)
+        config.packages.mkdir(mode=0o755, parents=True, exist_ok=True)
+        self.recreate_registry()
 
-    def _set_up_registry(self, path: Optional[Path] = None):
-        registry = None
-        if path or test_version and "DB_TEST" not in os.environ:
-            registry = sqlite3.connect(path or ":memory:").cursor()
-        else:
-            try:
-                registry = sqlite3.connect(home / "registry.db").cursor()
-            except Exception as e:
-                raise RuntimeError(Message.couldnt_connect_to_db(e))
-        registry.row_factory = self._sqlite_row_factory
+    def _set_up_registry(self, *, registry=None, path: Optional[Path] = None):
+        # recreating reuses the registry connection and file
+        if registry is None:
+            if path or test_version and "DB_TEST" not in os.environ:
+                registry = sqlite3.connect(path or ":memory:").cursor()
+            else:
+                try:
+                    registry = sqlite3.connect(home / "registry.db").cursor()
+                except Exception as e:
+                    raise RuntimeError(UserMessage.couldnt_connect_to_db(e)) from e
+        registry.row_factory = lambda cursor, row: {
+            col[0]: row[idx] for idx, col in enumerate(cursor.description)
+        }
         registry.execute("PRAGMA foreign_keys=ON")
         registry.execute("PRAGMA auto_vacuum = FULL")
         registry.executescript(
             """
 CREATE TABLE IF NOT EXISTS "artifacts" (
-	"id"	INTEGER,
-	"distribution_id"	INTEGER,
-	"import_relpath" TEXT,
-	"artifact_path"	TEXT,
+    "id"    INTEGER,
+    "distribution_id"   INTEGER,
+    "import_relpath" TEXT,
+    "artifact_path" TEXT,
   "module_path" TEXT,
-	PRIMARY KEY("id" AUTOINCREMENT),
-	FOREIGN KEY("distribution_id") REFERENCES "distributions"("id") ON DELETE CASCADE
+    PRIMARY KEY("id" AUTOINCREMENT),
+    FOREIGN KEY("distribution_id") REFERENCES "distributions"("id") ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS "distributions" (
-	"id"	INTEGER,
-	"name"	TEXT NOT NULL,
-	"version"	TEXT NOT NULL,
-	"installation_path"	TEXT,
-	"date_of_installation"	INTEGER,
-	"number_of_uses"	INTEGER,
-	"date_of_last_use"	INTEGER,
-	"pure_python_package"	INTEGER NOT NULL DEFAULT 1,
-	PRIMARY KEY("id" AUTOINCREMENT)
+    "id"    INTEGER,
+    "name"  TEXT NOT NULL,
+    "version"   TEXT NOT NULL,
+    "installation_path" TEXT,
+    "date_of_installation"  INTEGER,
+    "number_of_uses"    INTEGER,
+    "date_of_last_use"  INTEGER,
+    "pure_python_package"   INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY("id" AUTOINCREMENT)
 );
 
 CREATE TABLE IF NOT EXISTS "hashes" (
-	"algo"	TEXT NOT NULL,
-	"value"	TEXT NOT NULL,
-	"artifact_id"	INTEGER NOT NULL,
-	PRIMARY KEY("algo","value"),
-	FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id") ON DELETE CASCADE
+    "algo"  TEXT NOT NULL,
+    "value" INTEGER NOT NULL,
+    "artifact_id"   INTEGER NOT NULL,
+    PRIMARY KEY("algo","value"),
+    FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id") ON DELETE CASCADE
 );
-
-CREATE TABLE IF NOT EXISTS "depends_on" (
-	"origin_path"	TEXT,
-	"target_path"	TEXT
-, "time_of_use"	INTEGER)
         """
         )
         registry.connection.commit()
         return registry
 
     def recreate_registry(self):
-        self.registry.close()
-        self.registry.connection.close()
-        self.registry = None
-        number_of_backups = len(list((home / "registry.db").glob("*.bak")))
-        (home / "registry.db").rename(home / f"registry.db.{number_of_backups + 1}.bak")
-        (home / "registry.db").touch(mode=0o644)
-        self.registry = self._set_up_registry()
+        number_of_backups = len(list(home.glob("registry.db*")))
+        shutil.copyfile(home / "registry.db", home / f"registry.db.{number_of_backups}.bak")
+        self._clear_registry()
+        self._set_up_registry(registry=self.registry)
         self.cleanup()
+
+    def _clear_registry(self):
+        for table in self.registry.execute("SELECT name FROM sqlite_schema WHERE type='table';").fetchall():
+            if table["name"] == "sqlite_sequence":
+                continue
+            self.registry.execute(f"DROP TABLE {table['name']};")
+            self.registry.connection.commit()
 
     def install(self):
         # yeah, really.. __builtins__ sometimes appears as a dict and other times as a module, don't ask me why
@@ -315,9 +332,9 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
         )
         self.registry.execute(
             "DELETE FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?)",
-            (name, version),
+            (name, str(version)),
         )
-        self.registry.execute("DELETE FROM distributions WHERE name=? AND version=?", (name, version))
+        self.registry.execute("DELETE FROM distributions WHERE name=? AND version=?", (name, str(version)))
         self.registry.connection.commit()
 
     def cleanup(self):
@@ -341,48 +358,13 @@ CREATE TABLE IF NOT EXISTS "depends_on" (
                 self.del_entry(name, version)
         self.registry.connection.commit()
 
-    def _save_module_info(
-        self,
-        *,
-        version: Version,
-        artifact_path: Optional[Path],
-        hash_value=Optional[str],
-        installation_path=Path,
-        module_path: Optional[Path],
-        name: str,
-        import_relpath: str,
-        hash_algo=Hash.sha256,
-    ):
-        """Update the registry to contain the pkg's metadata."""
-        if not self.registry.execute(
-            f"SELECT * FROM distributions WHERE name='{name}' AND version='{version}'"
-        ).fetchone():
-            self.registry.execute(
-                f"""
-INSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
-VALUES ('{name}', '{version}', '{installation_path}', {time.time()}, {installation_path is None})
-"""
-            )
-            self.registry.execute(
-                f"""
-INSERT OR IGNORE INTO artifacts (distribution_id, import_relpath, artifact_path, module_path)
-VALUES ({self.registry.lastrowid}, '{import_relpath}', '{artifact_path}', '{module_path}')
-"""
-            )
-            self.registry.execute(
-                f"""
-INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
-VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
-            )
-        self.registry.connection.commit()
-
     def _set_mod(self, *, name, mod, frame, path=None, spec=None):
         """Helper to get the order right."""
         self._using[name] = ModInUse(name, mod, path, spec, frame)
 
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
-        raise NotImplementedError(Message.cant_use(thing))
+        raise NotImplementedError(UserMessage.cant_use(thing))
 
     @require(lambda hash_algo: hash_algo in Hash)
     @require(lambda as_import: as_import.isidentifier())
@@ -400,32 +382,33 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         modes=0,
     ) -> ProxyModule:
         log.debug(f"use-url: {url}")
-        exc = None
+        reckless = Modes.recklessness & modes
 
         response = requests.get(str(url))
         if response.status_code != 200:
-            raise ImportError(Message.web_error(url, response))
+            raise ImportError(UserMessage.web_error(url, response))
         this_hash = hash_algo.value(response.content).hexdigest()
-        if hash_value:
+
+        if hash_value and not reckless:
             if this_hash != hash_value:
                 return _fail_or_default(
                     UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!"),
                     default,
                 )
         else:
-            warn(Message.no_validation(url, hash_algo, this_hash), NoValidationWarning)
+            warn(UserMessage.no_validation(url, hash_algo, this_hash), NoValidationWarning)
 
         name = url.path.segments[-1]
         try:
             mod = _build_mod(
-                name=name,
+                module_name=name,
                 code=response.content,
                 module_path=_ensure_path(url.path),
                 initial_globals=initial_globals,
             )
         except KeyError:
             raise
-        if exc:
+        if exc := None:
             return _fail_or_default(ImportError(exc), default)
 
         frame = inspect.getframeinfo(inspect.currentframe())
@@ -434,13 +417,13 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             sys.modules[as_import] = mod
         return ProxyModule(mod)
 
-    @require(lambda as_import: as_import.isidentifier())
     @__call__.register(Path)
     def _use_path(
         self,
         path,
         /,
         *,
+        package_name=None,
         initial_globals=None,
         as_import: str = None,
         default=Modes.fastfail,
@@ -459,8 +442,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         Returns:
             Optional[ModuleType]: The module if it was imported, otherwise whatever was specified as default.
         """
-        log.debug(f"use-path: {path}")
         initial_globals = initial_globals or {}
+        if as_import:
+            assert as_import.isidentifier()
 
         reloading = bool(Use.reloading & modes)
 
@@ -472,24 +456,38 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
 
         original_cwd = source_dir = Path.cwd()
         try:
-            if not path.is_absolute():
-                source_dir = Path.cwd()
-
             # calling from another use()d module
             # let's see where we started
             main_mod = __import__("__main__")
-            if source_dir and source_dir.exists():
-                os.chdir(source_dir.parent)
-                source_dir = source_dir.parent
-            else:
-                # there are a number of ways to call use() from a non-use() starting point
-                # let's first check if we are running in jupyter
-                jupyter = "ipykernel" in sys.modules
-                # we're in jupyter, we use the CWD as set in the notebook
-                if not jupyter and hasattr(main_mod, "__file__"):
-                    source_dir = (
-                        _ensure_path(inspect.currentframe().f_back.f_back.f_code.co_filename).resolve().parent
-                    )
+            # there are a number of ways to call use() from a non-use() starting point
+            # let's first check if we are running in jupyter
+            jupyter = "ipykernel" in sys.modules
+            # we're in jupyter, we use the CWD as set in the notebook
+            if not jupyter and hasattr(main_mod, "__file__"):
+                # problem: user wants to use.Path("some_file_in_the_same_dir")
+                # so we have to figure out where the file of the calling function is.
+                # but the *calling* function could also be a decorator, living completely elsewhere
+                # so we have to figure out whether we're being called by a decorator first.
+                # We use use.__call__ as landmark, because that's the official entry point
+                # and we can count on it being called. From there we need to check whether it was aspectized.
+                # If it was, we need to skip those decorators before finally get to the user code and
+                # we can actually see from where we've been called.
+                frame = inspect.currentframe()
+                while True:
+                    if frame.f_code == Use.__call__.__code__:
+                        break
+                    else:
+                        frame = frame.f_back
+                # a few more steps..
+                for x in _applied_decorators:
+                    frame = frame.f_back
+                try:
+                    # frame is in __call__ (or the last decorator we control), we need to step one more frame back
+                    source_dir = Path(frame.f_back.f_code.co_filename).resolve().parent
+                # we are being called from a shell like thonny, so we have to assume cwd
+                except OSError:
+                    source_dir = Path.cwd()
+
             if source_dir is None:
                 if main_mod.__loader__ and hasattr(main_mod.__loader__, "path"):
                     source_dir = _ensure_path(main_mod.__loader__.path).parent
@@ -505,21 +503,36 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     NotImplementedError("Can't determine a relative path from a virtual file."),
                     default,
                 )
-            path = source_dir.joinpath(path).resolve()
+            if not path.exists():
+                path = source_dir.joinpath(path).resolve()
             if not path.exists():
                 return _fail_or_default(ImportError(f"Sure '{path}' exists?"), default)
-            os.chdir(path.parent)
-            name = path.stem
+            if not path.is_absolute():
+                path = path.resolve()
+            try:
+                name = path.relative_to(source_dir)
+            except ValueError:
+                source_dir = path.parent
+                os.chdir(source_dir)
+                name = path.relative_to(source_dir)
+            ext = name.as_posix().rpartition(".")[-1]
+            name_as_path_with_ext = name.as_posix()
+            name_as_path = name_as_path_with_ext[: -len(ext) - (1 if ext else 0)]
+            name = name_as_path.replace("/", ".")
+            name_parts = name.split(".")
+            package_name = package_name or ".".join(name_parts[:-1])
+            module_name = path.stem  # sic!
             if reloading:
                 try:
                     with open(path, "rb") as rfile:
                         code = rfile.read()
                     # initial instance, if this doesn't work, just throw the towel
                     mod = _build_mod(
-                        name=name,
+                        module_name=module_name,
                         code=code,
                         initial_globals=initial_globals,
                         module_path=path.resolve(),
+                        package_name=package_name,
                     )
                 except KeyError:
                     exc = traceback.format_exc()
@@ -531,6 +544,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     name=name,
                     path=path,
                     initial_globals=initial_globals,
+                    package_name=package_name,
                 )
                 _reloaders[mod] = reloader
 
@@ -549,23 +563,24 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
                     reloader.start_threaded()
 
                 if not all(
-                    isfunction(value)
+                    inspect.isfunction(value)
                     for key, value in mod.__dict__.items()
                     if key not in initial_globals.keys() and not key.startswith("__")
                 ):
-                    warn(Message.not_reloadable(name), NotReloadableWarning)
+                    warn(UserMessage.not_reloadable(name), NotReloadableWarning)
             else:  # NOT reloading
                 with open(path, "rb") as rfile:
                     code = rfile.read()
                 # the path needs to be set before attempting to load the new module - recursion confusing ftw!
                 frame = inspect.getframeinfo(inspect.currentframe())
-                self._set_mod(name=name, mod=mod, frame=frame)
+                self._set_mod(name=module_name, mod=mod, frame=frame)
                 try:
                     mod = _build_mod(
-                        name=name,
+                        module_name=module_name,
                         code=code,
                         initial_globals=initial_globals,
                         module_path=path,
+                        package_name=package_name,
                     )
                 except KeyError:
                     del self._using[name]
@@ -591,7 +606,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         *,
         package_name: str = None,
         module_name: str = None,
-        version: str = None,
+        version: Optional[Union[Version, str]] = None,
         hash_algo=Hash.sha256,
         hashes: Optional[Union[str, list[str]]] = None,
         default=Modes.fastfail,
@@ -614,18 +629,19 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             RuntimeWarning: May be raised if the auto-installation of the pkg fails for some reason.
 
         Returns:
-            Optional[ModuleType]: Module if successful, default as specified otherwise.
+            ProxyModule|Any: Module if successful, default as specified otherwise.
         """
         log.debug(f"use-kwargs: {package_name} {module_name} {version} {hashes}")
         return self._use_package(
             name=f"{package_name}/{module_name}",
             package_name=package_name,
             module_name=module_name,
-            version=version,
+            version=Version(version) if version else None,
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
             modes=modes,
+            Message=KwargMessage,
         )
 
     @__call__.register(tuple)
@@ -634,7 +650,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         pkg_tuple,
         /,
         *,
-        version: str = None,
+        version: Optional[Union[Version, str]] = None,
         hash_algo=Hash.sha256,
         hashes: Optional[Union[str, list[str]]] = None,
         default=Modes.fastfail,
@@ -657,7 +673,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             RuntimeWarning: May be raised if the auto-installation of the pkg fails for some reason.
 
         Returns:
-            Optional[ModuleType]: Module if successful, default as specified otherwise.
+            ProxyModule|Any: Module if successful, default as specified otherwise.
         """
         log.debug(f"use-tuple: {pkg_tuple} {version} {hashes}")
         package_name, module_name = pkg_tuple
@@ -665,11 +681,12 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             name=f"{package_name}/{module_name}",
             package_name=package_name,
             module_name=module_name,
-            version=version,
+            version=Version(version) if version else None,
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
             modes=modes,
+            Message=TupleMessage,
         )
 
     @__call__.register(str)
@@ -678,7 +695,7 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         name: str,
         /,
         *,
-        version: str = None,
+        version: Optional[Union[Version, str]] = None,
         hash_algo=Hash.sha256,
         hashes: Optional[Union[str, list[str]]] = None,
         default=Modes.fastfail,
@@ -709,39 +726,47 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             name=name,
             package_name=package_name,
             module_name=module_name,
-            version=version,
+            version=Version(version) if version else None,
             hash_algo=hash_algo,
             hashes=hashes,
             default=default,
             modes=modes,
+            Message=StrMessage,
         )
 
+    @require(lambda hash_algo: hash_algo != None)
     def _use_package(
         self,
         *,
         name,
-        package_name,
-        module_name,
-        version,
-        hashes,
-        modes,
-        default,
-        hash_algo,
-        user_msg=Message,
+        package_name: str,
+        module_name: str,
+        version: Optional[Version],
+        hashes: Optional[Union[str, set]],
+        default: Any,
+        hash_algo: Hash,
+        modes: int = 0,
+        Message: type = UserMessage,
     ):
+        auto_install = bool(Modes.auto_install & modes)
+        no_public_installation = bool(Modes.no_public_installation & modes)
+        fastfail = bool(Modes.fastfail & modes)
+        fatal_exceptions = bool(Modes.fatal_exceptions & modes)
+        no_browser = bool(Modes.no_browser & modes)
+        cleanup = not bool(Modes.no_cleanup & modes)
+
         if module_name:
             module_name = module_name.replace("/", ".").replace("-", "_")
-        assert hash_algo != None, "Hash algorithm must be specified"
 
+        # a single hash is a string
         if isinstance(hashes, str):
-            hashes = set(hashes.split())
+            # spaces are hard to see in JACK, so we ignore them
+            hashes = ["".join(hashes.split())]
         if not hashes:
             hashes = set()
-        hashes: set = {num_as_hexdigest(JACK_as_num(H)) if is_JACK(H) else H for H in hashes}
-        # we use boolean flags to reduce the complexity of the call signature
-        auto_install: bool = Modes.auto_install & modes
-
-        version: Version = Version(version) if version else None
+        hashes: set[int] = {
+            JACK_as_num(H) if is_JACK(H) else int(H, 16) for H in ("".join(H.split()) for H in hashes)
+        }
 
         # The "try and guess" behaviour is due to how classical imports work,
         # which is inherently ambiguous, but can't really be avoided for packages.
@@ -753,9 +778,9 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
         if name in self._using:
             spec = self._using[name].spec
         elif not auto_install:
-            spec = importlib.util.find_spec(package_name)
+            spec = importlib.util.find_spec(module_name.replace("-", "_"))
 
-        case = (bool(version), bool(hashes), bool(spec), bool(auto_install))
+        case = bool(version), bool(hashes), bool(spec), auto_install
         log.info("case = %s", case)
         # welcome to the buffet table, where everything is a lie
         kwargs = {
@@ -763,17 +788,22 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             "package_name": package_name,
             "module_name": module_name,
             "version": version,
-            "hashes": hashes,
+            "user_provided_hashes": hashes,
             "hash_algo": hash_algo,
-            "user_msg": user_msg,
             "spec": spec,
-            "fastfail": Modes.fastfail & modes,
-            "no_public_installation": Modes.no_public_installation & modes,
-            "fatal_exceptions": Modes.fatal_exceptions & modes,
-            "sys_version": Version(".".join(map(str, sys.version_info[0:3]))),
+            "fastfail": fastfail,
+            "no_public_installation": no_public_installation,
+            "fatal_exceptions": fatal_exceptions,
+            "sys_version": Version(".".join(map(str, sys.version_info[:3]))),
+            "no_browser": no_browser,
+            "Message": Message,
+            "registry": self.registry,
+            "cleanup": cleanup,
         }
+
         result = buffet_table(case, kwargs)
         assert result
+        assert isinstance(result, (Exception, ModuleType))
 
         if isinstance(result, Exception):
             return _fail_or_default(result, default)
@@ -782,4 +812,3 @@ VALUES ({self.registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
             frame = inspect.getframeinfo(inspect.currentframe())
             self._set_mod(name=name, mod=result, spec=spec, frame=frame)
             return ProxyModule(result)
-        raise RuntimeError(f"{result=!r} is neither a module nor an Exception")

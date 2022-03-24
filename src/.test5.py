@@ -1,7 +1,9 @@
-from hashlib import sha256
-from use.hash_alphabet import hexdigest_as_JACK, JACK_as_num, num_as_hexdigest
+import use
+from beartype import beartype
 
-s = b'\x9a\xe6\xa8'
-h = sha256(s).hexdigest()
-
-h == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(h)))
+mod = use("requests")
+use.apply_aspect(mod, beartype)
+use.apply_aspect(mod, use.tinny_profiler)
+for _ in range(1000):
+    mod.get("https://pypi.org/project/beartype/")
+use.show_profiling()

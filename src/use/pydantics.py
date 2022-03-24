@@ -1,25 +1,48 @@
 """
 Pydantic model for the PyPI JSON API.
 """
-from __future__ import annotations
-
+import os
 import re
+from logging import getLogger
 from pathlib import Path
 from typing import Optional, Union
 
 import packaging
 from packaging.version import Version as PkgVersion
 from pydantic import BaseModel
-from logging import getLogger
 
 log = getLogger(__name__)
+
 
 # Well, apparently they refuse to make Version iterable, so we'll have to do it ourselves.
 # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
 
+
 class BaseModel(BaseModel):
     def __repr__(self):
         return self.__class__.__name__
+
+
+class Configuration(BaseModel):
+    version_warning: bool = True
+    no_browser: bool = False
+    disable_jack: bool = bool(int(os.getenv("DISABLE_JACK", "0")))
+    debugging: bool = bool(int(os.getenv("DEBUG", "0")))
+    use_db: bool = bool(int(os.getenv("USE_DB", "1")))
+    testing: bool = bool(int(os.getenv("TESTING", "0")))
+    home: Path = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute()
+    venv: Path = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute() / "venv"
+    packages: Path = (
+        Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute() / "packages"
+    )
+    logs: Path = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute() / "logs"
+    registry: Path = (
+        Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute() / "registry.db"
+    )
+
+    class Config:
+        validate_assignment = True
+
 
 class Version(PkgVersion):
     def __new__(cls, *args, **kwargs):
@@ -71,6 +94,15 @@ def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
     return a_dict
 
 
+class RegistryEntry(BaseModel):
+    class Config:
+        validate_assignment = True
+
+    artifact_path: Path
+    installation_path: Path
+    pure_python_package: bool
+
+
 class JustUse_Info(BaseModel):
     distribution: Optional[str]
     version: Optional[str]
@@ -82,27 +114,23 @@ class JustUse_Info(BaseModel):
 
 
 class PyPI_Release(BaseModel):
+    abi_tag: Optional[str]
+    build_tag: Optional[str]
+    distribution: Optional[str]
     digests: dict[str, str]
-    url: str
-    packagetype: str
-    distribution: str
+    ext: Optional[str]
+    filename: str
     requires_python: Optional[str]
+    packagetype: str
+    platform_tag: Optional[str]
     python_version: Optional[str]
     python_tag: Optional[str]
-    platform_tag: str
-    filename: str
-    abi_tag: str
-    yanked: bool
+    url: str
     version: Version
-    distribution: Optional[str]
-    build_tag: Optional[str]
-    python_tag: Optional[str]
-    abi_tag: Optional[str]
-    platform_tag: Optional[str]
-    ext: Optional[str]
+    yanked: bool
 
     class Config:
-        arbitrary_types_allowed = True
+        validate_assignment = True
 
     @property
     def is_sdist(self):
@@ -117,15 +145,14 @@ class PyPI_Release(BaseModel):
             ext = self.filename[self.filename.index(".tar") + 1 :]
         else:
             ext = pp.name[len(pp.stem) + 1 :]
-        rest = pp.name[0 : -len(ext) - 1]
+        rest = pp.name[: -len(ext) - 1]
 
         not_dash = lambda name: f"(?P<{name}>[^-]+)"
         not_dash_with_int = lambda name: f"(?P<{name}>[0-9][^-]*)"
-        match = re.match(
+        if match := re.match(
             f"{not_dash('distribution')}-{not_dash('version')}-?{not_dash_with_int('build_tag')}?-?{not_dash('python_tag')}?-?{not_dash('abi_tag')}?-?{not_dash('platform_tag')}?",
             rest,
-        )
-        if match:
+        ):
             return JustUse_Info(**_delete_none(match.groupdict()), ext=ext)
         return JustUse_Info()
 
@@ -137,21 +164,11 @@ class PyPI_Downloads(BaseModel):
 
 
 class PyPI_Info(BaseModel):
-    author: Optional[str]
-    author_email: Optional[str]
-    bugtrack_url: Optional[str]
-    classifiers: Optional[list[str]]
-    description: Optional[str]
+    class Config:
+        extra = "ignore"
+
     description_content_type: Optional[str]
-    docs_url: Optional[str]
     download_url: Optional[str]
-    downloads: Optional[PyPI_Downloads]
-    home_page: Optional[str]
-    keywords: Optional[str]
-    license: Optional[str]
-    maintainer: Optional[str]
-    maintainer_email: Optional[str]
-    name: str
     package_name: Optional[str]
     package_url: str
     platform: Optional[str]
@@ -188,52 +205,53 @@ class PyPI_URL(BaseModel):
 
 
 class PyPI_Project(BaseModel):
-    releases: dict[Version, list[PyPI_Release]] = None
+    releases: dict[Version, list[PyPI_Release]] = {}
     urls: list[PyPI_URL] = None
     last_serial: int = None
     info: PyPI_Info = None
 
-    def __init__(self, *, releases, urls, info, **kwargs):
-      try:
-        for version in list(releases.keys()):
-            if not isinstance(version, str):
-                continue
-            try:
-                Version(version)
-            except packaging.version.InvalidVersion:
-                del releases[version]
+    class Config:
+        extra = "ignore"
 
-        def get_info(rel_info, ver_str):
-           data = {
+    def __init__(self, *, releases, urls, info, **kwargs):
+        try:
+            for version in list(releases.keys()):
+                if not isinstance(version, str):
+                    continue
+                try:
+                    Version(version)
+                except packaging.version.InvalidVersion:
+                    del releases[version]
+
+            def get_info(rel_info, ver_str):
+                data = {
                     **rel_info,
                     **_parse_filename(rel_info["filename"]),
                     "version": Version(str(ver_str)),
                 }
-           if info.get("requires_python"): data["requires_python"] = info.get("requites_python")
-           if info.get("requires_dist"): data["requires_dist"] = info.get("requires_dist")
-           return data
-        
-        super(PyPI_Project, self).__init__(
-          releases={
-            str(ver_str): [
-                get_info(rel_info, ver_str)
-                for rel_info in release_infos
-            ]
-            for ver_str, release_infos in releases.items()
-          },
-          urls=[
-            get_info(rel_info, ver_str) 
-            for ver_str, rel_infos in releases.items()
-            for rel_info in rel_infos
-          ],
-          info=info,
-          **kwargs
-        )
-      finally:
-        releases = None
-        info = None
-        urls = None
-        
+                if info.get("requires_python"):
+                    data["requires_python"] = info.get("requites_python")
+                if info.get("requires_dist"):
+                    data["requires_dist"] = info.get("requires_dist")
+                return data
+
+            super(PyPI_Project, self).__init__(
+                releases={
+                    str(ver_str): [get_info(rel_info, ver_str) for rel_info in release_infos]
+                    for ver_str, release_infos in releases.items()
+                },
+                urls=[
+                    get_info(rel_info, ver_str)
+                    for ver_str, rel_infos in releases.items()
+                    for rel_info in rel_infos
+                ],
+                info=info,
+                **kwargs,
+            )
+        finally:
+            releases = None
+            info = None
+            urls = None
 
 
 def _parse_filename(filename) -> dict:
@@ -254,32 +272,31 @@ def _parse_filename(filename) -> dict:
     else:
         ext = pp.name[len(pp.stem) + 1 :]
         packagetype = "bdist"
-    rest = pp.name[0 : -len(ext) - 1]
+    rest = pp.name[: -len(ext) - 1]
 
     p = rest.split("-")
     np = len(p)
-    if np == 5:
+    if np == 2:
+        distribution, version = p
+    elif np == 3:
+        distribution, version, python_tag = p
+    elif np == 5:
         distribution, version, python_tag, abi_tag, platform_tag = p
     elif np == 6:
         distribution, version, build_tag, python_tag, abi_tag, platform_tag = p
-    elif np == 3:  # ['SQLAlchemy', '0.1.1', 'py2.4']
-        distribution, version, python_tag = p
-    elif np == 2:
-        distribution, version = p
     else:
         return {}
-    
+
     return {
-            "distribution": distribution,
-            "version": version,
-            "build_tag": build_tag,
-            "python_tag": python_tag,
-            "abi_tag": abi_tag,
-            "platform_tag": platform_tag,
-            "ext": ext,
-            "filename": filename,
-            "packagetype": packagetype,
-            "yanked_reason": "",
-            "bugtrack_url": "",
-            
+        "distribution": distribution,
+        "version": version,
+        "build_tag": build_tag,
+        "python_tag": python_tag,
+        "abi_tag": abi_tag,
+        "platform_tag": platform_tag,
+        "ext": ext,
+        "filename": filename,
+        "packagetype": packagetype,
+        "yanked_reason": "",
+        "bugtrack_url": "",
     }

@@ -3,7 +3,7 @@ import sys
 import traceback
 
 import requests
-from use.pypi_model import PyPI_Project
+from use.pydantics import PyPI_Project
 
 with open("pypi.json", "r") as f:
     packages = json.load(f)

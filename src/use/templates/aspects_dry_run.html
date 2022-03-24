@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="aspects.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.10/brython.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.10/brython_stdlib.js"></script>
+    <title>Justuse</title>
+</head>
+
+<body onload="brython()">
+    <header>
+        <div id="decorator" style="display:none">{{decorator.__name__}}</div>
+        <div id="module_name" style="display:none">{{module_name}}</div>
+        <h1>Dry Run for applying {{decorator.__name__}} to &lt;{{module_name}}&gt;
+        </h1>
+    </header>
+    <p> Here are all the objects we could decorate inside module/package &lt;{{module_name}}&gt;.</p>
+    <p>
+        <button class="button" , id="clipboard_button">Copy to Clipboard</button>
+    </p>
+    <p>
+        <textarea id="result" rows="5" style="resize: none;" readonly cols="120"></textarea>
+    </p>
+
+    <p>Options for filtering</p>
+
+    <p>
+
+        <label>
+            <input type="checkbox" id="aspectize_dunders">
+            <span class="button" for="aspectize_dunders" id="aspectize_dunders_button">aspectize dunders</span>
+        </label>
+    <p class="filter_field">
+        <textarea id="pattern" rows="2" style="resize: none;" cols="80"></textarea>
+        <em><a href="https://regex101.com/">check this out if you need help building the pattern</a></em>
+    </p>
+
+    <p style="display: inline-block; vertical-align: middle;">
+        <button class=" button" , id="apply_filter_button">Apply Filters</button>
+        <em>
+            <div id="apply_filter_warning" class="hidden">warning</div>
+        </em>
+    </p>
+
+    <p> <label>
+            <input type="checkbox" id="hide_failures" checked>
+            <span class="button" for="hide_failures" id="show_failures_button">Hide non-decoratable objects</span>
+        </label>
+    </p>
+
+    <table id="decorators">
+        <tr>
+            <th> qualname </th>
+            <th> name</th>
+            <th> type </th>
+            <th id="applicable_header" style="display:none;"> applicable </th>
+            <th id="reason_header" style="display:none;"> reason </th>
+        </tr>
+        {% for entry in hits %}
+        <tr id="row_{{loop.index}}" {% if not entry.success %} style="display:none;" {% endif %}
+            class="{% if entry.success %}success{% else %}failure{% endif %} {% if entry.dunder %}selected{% endif %}">
+            <td> {{ entry.qualname }} </td>
+            <td> {{ entry.name }} </td>
+            <td> {{ entry.type.__name__ }} </td>
+            <td class="applicable" style="display:none;"> {{ entry.success }} </td>
+            <td class="reason" style="display:none;"> {{ entry.exception }} </td>
+        </tr>
+        {% endfor %}
+    </table>
+    </section>
+
+    <script type="text/python" id="script">
+from browser import console, document, window, alert, bind, html
+from pprint import  pformat
+import re
+
+document["clipboard_button"].bind("click", lambda event: window.navigator.clipboard.writeText(document["result"].text))
+
+args = {"pattern": document["pattern"].value, "aspectize_dunders": False}
+
+{% raw %}
+result_str = f"""use.apply_aspect({document["module_name"].text}, {document["decorator"].text}, 
+**{pformat(args)})"""
+{% endraw %}
+document["result"].text = result_str
+
+
+@bind(document["hide_failures"], "click")
+def show_failures_button_clicked(event):
+    if document["hide_failures"].checked:
+        for x in document.select(".failure"): 
+            x.style.display = "none"
+        document["applicable_header"].style.display = "none"
+        document["reason_header"].style.display = "none"
+        for x in document.select(".applicable"): 
+            x.style.display = "none"
+        for x in document.select(".reason"): 
+            x.style.display = "none"
+        
+    else:
+        for x in document.select(".failure"): 
+            x.style.display = "table-row"
+
+        document["applicable_header"].style.display = "table-cell"
+        document["reason_header"].style.display = "table-cell"
+        for x in document.select(".applicable"): 
+            x.style.display = "table-cell"
+        for x in document.select(".reason"):
+            x.style.display = "table-cell"
+
+def show_warning(content):
+    document["apply_filter_warning"].textContent = content
+    document["apply_filter_warning"].style.display = "inline-block"
+    document["apply_filter_warning"].class_name = "visible"
+
+@bind(document["apply_filter_button"], "click")
+def apply_filter(event):
+    document["apply_filter_warning"].addEventListener("transitionend", do_filter);
+    show_warning(f"""Working.. (applying filter to {len(document.querySelectorAll('[id^="row_"]'))} objects)""")
+    
+def do_filter(*args):
+    aspectize_dunders = document["aspectize_dunders"].checked
+    pattern = re.compile(document["pattern"].value, re.DOTALL)
+
+    for x in document.querySelectorAll('[id^="row_"]'):
+        name = x.children[1].text
+        selected = False
+        classes = set(x.className.split(" "))
+
+        if pattern.match(name):
+            selected = True 
+
+        if not aspectize_dunders:
+            if name.startswith("__") and name.endswith("__"):
+                selected = False
+
+        if selected:
+            classes |= {"selected"}
+        else:
+            classes -= {"selected"}
+        x.class_name = ' '.join(c for c in classes)
+        document["apply_filter_warning"].class_name = "hidden"
+
+    args = {"pattern": document["pattern"].value, "aspectize_dunders": aspectize_dunders}
+
+    {% raw %}
+    result_str = f"""use.apply_aspect({document["module_name"].text}, {document["decorator"].text}, 
+    **{pformat(args)})"""
+    {% endraw %}
+    document["result"].text = result_str
+    </script>
+</body>
+
+</html>

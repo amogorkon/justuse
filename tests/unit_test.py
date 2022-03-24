@@ -1,15 +1,21 @@
+import io
 import os
 import re
 import subprocess
 import sys
 import tempfile
 import warnings
-from contextlib import AbstractContextManager, closing
+from collections.abc import Callable
+from contextlib import AbstractContextManager, closing, redirect_stdout
+from datetime import datetime
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, distribution
 from importlib.util import find_spec
 from pathlib import Path
+from subprocess import STDOUT, check_output
+from textwrap import dedent
 from threading import _shutdown_locks
+from types import ModuleType
 from unittest.mock import patch
 from warnings import catch_warnings, filterwarnings
 
@@ -20,35 +26,48 @@ import requests
 from furl import furl as URL
 from hypothesis import assume, example, given
 from hypothesis import strategies as st
+from pytest import fixture, mark, raises, skip
 
 is_win = sys.platform.startswith("win")
 
 __package__ = "tests"
 import logging
 
-import use
-from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
+from use import auto_install, fatal_exceptions, no_cleanup, use
+from use.aspectizing import _unwrap, _wrap
+from use.hash_alphabet import (JACK_as_num, hexdigest_as_JACK, is_JACK,
+                               num_as_hexdigest)
+from use.pimp import _parse_name
+from use.pydantics import JustUse_Info, PyPI_Project, PyPI_Release, Version
 
 log = logging.getLogger(".".join((__package__, __name__)))
 log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)
 
-use.config["testing"] = True
+use.config.testing = True
+use.config.no_browser = True
 
 # this is actually a test!
 from tests.simple_funcs import three
 
 
-@pytest.fixture()
+@fixture()
 def reuse():
-    # making a completely new one each time would take ages (_registry)
-    use._using = {}
-    use._aspects = {}
-    use._reloaders = {}
+    """
+    Return the `use` module in a clean state for "reuse."
+
+    NOTE: making a completely new one each time would take
+    ages, due to expensive _registry setup, re-downloading
+    venv packages, etc., so if we are careful to reset any
+    additional state changes on a case-by-case basis,
+    this approach is more efficient and is the clear winner.
+    """
+    use._using.clear()
+    use.main._reloaders.clear()
     return use
 
 
 def test_access_to_home(reuse):
-    test = reuse.Path.home() / ".justuse-python/packages/test"
+    test = reuse.config.packages / "test"
     test.touch(mode=0o644, exist_ok=True)
     with open(test, "w") as file:
         file.write("test")
@@ -58,12 +77,12 @@ def test_access_to_home(reuse):
 
 
 def test_other_case(reuse):
-    with pytest.raises(NotImplementedError):
+    with raises(NotImplementedError):
         reuse(2, modes=reuse.fatal_exceptions)
 
 
 def test_fail_dir(reuse):
-    with pytest.raises(ImportError):
+    with raises(ImportError):
         reuse(Path(""))
 
 
@@ -123,28 +142,28 @@ def test_classical_install_no_version(reuse):
 
 
 def test_PEBKAC_hash_no_version(reuse):
-    with pytest.raises(RuntimeWarning):
+    with raises(RuntimeWarning):
         reuse(
             "pytest",
-            hashes="asdf",
+            hashes="addf",
             modes=reuse.auto_install,
         )
 
 
 def test_PEBKAC_nonexisting_pkg(reuse):
     # non-existing pkg
-    with pytest.raises(ImportError):
+    with raises(ImportError):
         reuse(
             "4-^df",
             modes=reuse.auto_install,
             version="0.0.1",
-            hashes="asdf",
+            hashes="addf",
         )
 
 
 def test_PEBKAC_impossible_version(reuse):
     # impossible version
-    with pytest.raises(TypeError):  # version must be either str or tuple
+    with raises(TypeError):  # version must be either str or tuple
         reuse(
             "pytest",
             modes=reuse.auto_install,
@@ -156,11 +175,11 @@ def test_PEBKAC_impossible_version(reuse):
 def test_autoinstall_PEBKAC(reuse):
     with patch("webbrowser.open"):
         # auto-install requested, but no version or hashes specified
-        with pytest.raises(RuntimeWarning):
+        with raises(RuntimeWarning):
             reuse("pytest", modes=reuse.auto_install)
 
         # forgot hashes
-        with pytest.raises(packaging.version.InvalidVersion):
+        with raises(packaging.version.InvalidVersion):
             reuse("pytest", version="-1", modes=reuse.auto_install)
 
 
@@ -176,7 +195,7 @@ def test_version_warning(reuse):
 def test_use_global_install(reuse):
     from . import foo
 
-    with pytest.raises(NameError):
+    with raises(NameError):
         foo.bar()
 
     reuse.install()
@@ -258,8 +277,7 @@ def test_is_version_satisfied(reuse):
 
 
 def test_find_windows_artifact(reuse):
-    data = reuse._get_package_data("protobuf")
-    assert reuse.Version("3.17.3") in reuse._get_package_data("protobuf").releases
+    assert reuse.Version("3.17.3") in reuse._get_data_from_pypi(package_name="protobuf").releases
 
 
 def test_classic_import_same_version(reuse):
@@ -285,28 +303,6 @@ def test_classic_import_diff_version(reuse):
     assert w[0].category == use.VersionWarning
 
 
-@pytest.mark.skipif(True, reason="Not working, needs investigation")
-def test_use_ugrade_version_warning(reuse):
-    version = "0.0.0"
-    with warnings.catch_warnings(record=True) as w:
-        filterwarnings(action="always", module="use")
-        # no other way to change __version__ before the actual import while the version check happens on import
-        test_use = reuse(
-            reuse.Path(reuse.__file__).absolute(),
-            initial_globals={
-                "test_version": version,
-                "test_config": {"version_warning": True},
-            },
-        )
-        assert (
-            reuse.Version(test_use.test_version)
-            == reuse.Version(test_use.__version__)
-            == reuse.Version(version)
-        )
-    assert len(w) != 0
-    assert w[0].category == use.VersionWarning
-
-
 class Restorer:
     def __enter__(self):
         self.locks = set(_shutdown_locks)
@@ -316,32 +312,38 @@ class Restorer:
             lock.release()
 
 
-@pytest.mark.skipif(is_win, reason="windows reloading")
 def test_reloading(reuse):
     fd, file = tempfile.mkstemp(".py", "test_module")
     with Restorer():
         mod = None
         newfile = f"{file}.t"
         for check in range(1):
+            if sys.platform[:3] == "win":
+                newfile = file
             with open(newfile, "w") as f:
                 f.write(f"def foo(): return {check}")
                 f.flush()
-            os.rename(newfile, file)
+            if sys.platform[:3] != "win":
+                os.rename(newfile, file)
             mod = mod or reuse(Path(file), modes=reuse.reloading)
             while mod.foo() < check:
                 pass
 
 
 def test_suggestion_works(reuse):
-    with patch("webbrowser.open"):
+    name = "package-example"
+    with patch("webbrowser.open"), io.StringIO() as buf, redirect_stdout(buf):
         try:
-            mod = reuse("example-pypi-package/examplepy", modes=reuse.auto_install)
+            mod = reuse(name, modes=reuse.auto_install)
             assert False, f"Actually returned mod: {mod}"
-        except (RuntimeWarning, RuntimeError) as rw:
-            last_line = rw.args[0].strip().splitlines()[-1]
-            log.info("Using last line as suggested artifact: %s", repr(last_line))
-            mod = eval(last_line)
-            log.info("suggest artifact returning: %s", mod)
+        except RuntimeWarning:
+            version = buf.getvalue().splitlines()[-1].strip()
+        try:
+            mod = reuse(name, version=version, modes=reuse.auto_install)
+            assert False, f"Actually returned mod: {mod}"
+        except RuntimeWarning:
+            recommended_hash = buf.getvalue().splitlines()[-1].strip()
+        mod = reuse(name, version=version, hashes={recommended_hash}, modes=reuse.auto_install)
         assert mod
 
 
@@ -350,7 +352,7 @@ def test_clear_registry(reuse):
     try:
         fd, file = tempfile.mkstemp(".db", "test_registry")
         with closing(open(fd, "rb")):
-            reuse.registry = reuse._set_up_registry(Path(file))
+            reuse.registry = reuse._set_up_registry(path=Path(file))
             reuse.cleanup()
     finally:
         reuse.registry = reuse._set_up_registry()
@@ -358,22 +360,22 @@ def test_clear_registry(reuse):
 
 def installed_or_skip(reuse, name, version=None):
     if not (spec := find_spec(name)):
-        pytest.skip(f"{name} not installed")
+        skip(f"{name} not installed")
         return False
     try:
         dist = distribution(spec.name)
     except PackageNotFoundError as pnfe:
-        pytest.skip(f"{name} partially installed: {spec=}, {pnfe}")
+        skip(f"{name} partially installed: {spec=}, {pnfe}")
 
     if not (
         (ver := dist.metadata["version"]) and (not version or reuse.Version(ver) == reuse.Version(version))
     ):
-        pytest.skip(f"found '{name}' v{ver}, but require v{version}")
+        skip(f"found '{name}' v{ver}, but require v{version}")
         return False
     return True
 
 
-@pytest.mark.parametrize(
+@mark.parametrize(
     "name, version, hashes",
     (
         (
@@ -386,12 +388,14 @@ def installed_or_skip(reuse, name, version=None):
             "6.2.4",
             {"91ef2131a9bd6be8f76f1f08eac5c5317221d6ad1e143ae03894b862e8976890"},
         ),
-        # ("pytest-cov", "2.12.1"),
-        # ("pytest-env", "0.6.2"),
-        # ("requests", "2.24.0"),
-        # ("furl", "2.1.2"),
-        # ("wheel", "0.36.2"),
-        # ("icontract", "2.5.4"),
+        (
+            "pytest-cov",
+            "2.12.1",
+            {
+                "261ceeb8c227b726249b376b8526b600f38667ee314f910353fa318caa01f4d7",
+                "261bb9e47e65bd099c89c3edf92972865210c36813f80ede5277dceb77a4a62a",
+            },
+        ),
     ),
 )
 def test_85_pywt_jupyter_ubuntu_case1010(reuse, name, version, hashes):
@@ -399,40 +403,15 @@ def test_85_pywt_jupyter_ubuntu_case1010(reuse, name, version, hashes):
     In jupyter (Lubuntu VM):
     pywt = use("pywt", version="1.1.1")
     """
-    # TODO
     if not installed_or_skip(reuse, name, version):
         return
     mod = reuse(name, version=reuse.Version(version))
     assert mod
 
 
-@pytest.mark.parametrize(
-    "name, version, hashes",
-    (
-        (
-            "pytest",
-            "6.2.5",
-            {"7310f8d27bc79ced999e760ca304d69f6ba6c6649c0b60fb0e04a4a77cacc134"},
-        ),
-    ),
-)
-def test_86_numpy_case1011(reuse, name, version, hashes):
-    """Can't use("numpy", version="1.20.0", modes=use.auto_install)
-
-    on windows, py39:
-    use("numpy", version="1.20.0", auto_install=True)
-    """
-    if not installed_or_skip(reuse, name, version):
-        return
-    mod = use(
-        name,
-        version=reuse.Version(version),
-        hashes=hashes,
-        modes=use.auto_install,
-    )
-    assert (reuse.Version(modver) if (modver := reuse._get_version(mod=mod)) else version) == reuse.Version(
-        version
-    )
+def test_387_usepath_filename(reuse):
+    mod = use(use.Path(".file_for_test387.py"))
+    assert mod
 
 
 def test_hash_alphabet():
@@ -452,13 +431,12 @@ class ScopedCwd(AbstractContextManager):
         os.chdir(self._oldcwd)
 
 
-@pytest.mark.skipif(is_win, reason="Windows TODO")
 def test_read_wheel_metadata(reuse):
-    bytes = requests.get(
+    content = requests.get(
         "https://files.pythonhosted.org/packages/45/80/cdf0df938fe63457f636d859499f4aab3d0411a90fd9472ad720a0b7eab6/justuse-0.5.0.tar.gz"
     ).content
     file = Path(tempfile.mkstemp(".tar.gz", "justuse-0.5.0")[1])
-    file.write_bytes(bytes)
+    file.write_bytes(content)
     whl_path = file
     if whl_path.exists():
         assert whl_path.exists()
@@ -471,3 +449,255 @@ def test_read_wheel_metadata(reuse):
 
 def test_383_use_name(reuse):
     assert use("pprint").pprint([1, 2, 3]) is None
+
+
+def test_use_version_upgrade_warning(reuse):
+    version = reuse.Version("0.0.0")
+    srcdir = reuse.Path(reuse.__spec__.origin).parent.parent
+    with ScopedCwd(srcdir):
+        output = check_output(
+            [
+                sys.executable,
+                "-c",
+                dedent(
+                    f"""
+                    import os
+                    os.environ['USE_VERSION'] = '{version!s}'
+                    import use
+                    """
+                ),
+            ],
+            encoding="utf-8",
+            shell=False,
+            stderr=STDOUT,
+        )
+        match = re.search(r"(?P<category>[a-zA-Z_]+): " r"(?:(?!\d).)* (?P<version>\d+\.\d+\.\d+)", output)
+        assert match
+        assert match.group("category") == use.VersionWarning.__name__
+        assert match.group("version") == str(version)
+
+
+def test_fraction_of_day(reuse):
+    assert reuse.fraction_of_day(datetime(2020, 1, 1)) == 0.0
+    assert reuse.fraction_of_day(datetime(2020, 1, 1, 12)) == 500.0
+    assert reuse.fraction_of_day(datetime(2020, 1, 1, 18)) == 750.0
+    assert reuse.fraction_of_day(datetime(2020, 1, 1, 12, 30, 30)) == 521.180556
+    assert reuse.fraction_of_day(datetime(2020, 1, 1, 12, 30, 30, 90000)) == 521.181597
+
+
+def test_nirvana(reuse):
+    with raises(reuse.NirvanaWarning):
+        reuse()
+
+
+@given(st.text())
+@example("1t")
+def test_jack(text):
+    assume(text.isprintable())
+    sha = sha256(text.encode("utf-8")).hexdigest()
+    assert sha == num_as_hexdigest(JACK_as_num(hexdigest_as_JACK(sha)))
+
+
+def test_pypi_model():
+    release = PyPI_Release(
+        comment_text="test",
+        digests={"md5": "asdf"},
+        url="https://files.pythonhost",
+        ext=".whl",
+        packagetype="bdist_wheel",
+        distribution="numpy",
+        requires_python=False,
+        python_version="cp3",
+        python_tag="cp3",
+        platform_tag="cp4",
+        filename="numpy-1.19.5-cp3-cp3-cp4-bdist_wheel.whl",
+        abi_tag="cp3",
+        yanked=False,
+        version="1.19.5",
+    )
+    assert type(release)(**release.dict()) == release
+
+    info = JustUse_Info(
+        distribution="numpy",
+        version="1.19.5",
+        build_tag="cp4",
+        python_tag="cp4",
+        abi_tag="cp4",
+        platform_tag="cp4",
+        ext="whl",
+    )
+    assert type(info)(**info.dict()) == info
+
+
+def test_setup_py_works(reuse):
+    with ScopedCwd(Path(__file__).parent.parent):
+        result = subprocess.check_output([sys.executable, "setup.py", "--help"], shell=False)
+        assert result
+
+
+def test_443_py_test(reuse):
+    try:
+        imported = "py" in sys.modules
+        import py.test
+
+        if not imported:
+            del sys.modules["py"]
+    except ImportError:
+        skip("py.test is not installed")
+        return
+    mod = use("py.test")
+    assert mod
+
+
+def test_441_discord(reuse):
+    try:
+        imported = "discord" in sys.modules
+        import discord
+
+        if not imported:
+            del sys.modules["discord"]
+    except ImportError:
+        skip("discord is not installed")
+        return
+    mod = use("discord")
+    assert mod
+
+
+def test_441_discord(reuse):
+    try:
+        imported = "discord" in sys.modules
+        import discord
+
+        if not imported:
+            del sys.modules["discord"]
+    except ImportError:
+        skip("discord is not installed")
+        return
+    mod = use("discord")
+    assert mod
+
+
+@mark.parametrize(
+    "name,expected",
+    [("", (None, None)), ("foo", ("foo", "foo")), ("foo/bar", ("foo", "bar")), ("foo.py", ("foo", "foo.py"))],
+)
+def test_parse_name(name, expected):
+    assert _parse_name(name) == expected
+
+
+def test_51_sqlalchemy_failure_default_to_none(reuse):
+    mod = use(
+        "sqlalchemy",
+        version="0.7.1",
+        hashes={"45df54adf"},  # the real thing takes 12 sec to run, way too long for a test
+        # SQLAlchemy-0.7.1.tar.gz (2.3 MB) - only a single artifact
+        # Uploaded Jun 5, 2011 source
+        # but it's bugged on import - it's looking for time.clock(), which isn't a thing (anymore)
+        modes=auto_install | no_cleanup,
+        default=None,
+    )
+    assert mod is None
+
+
+@mark.parametrize(
+    "package_name, module_name, version, hashes",
+    (
+        (
+            "numpy",
+            "numpy",
+            "1.21.0",
+            {
+                "K孈諺搓稞㭯函攢訦冁舏在偦鸕覘延䅣微",  # cp39-macosx_10_14_x86_64
+                "W余跒䌹㔟倠咥膆酐䄩物绁䣹萦䱒䀒嵲㫀",  # cp310-manylinux_2_17_x86_64.manylinux2014_x86_64
+                "U燊仓虑觖䢾䪍㼞䙼⑾鮹爠䂸泫驊鏓慥脲",  # cp310-macosx_10_14_x86_64
+                "P䂹瀑蚜萃暧㡩栅訉慯忲磵殣怊伟躂岜㠽",  # cp39-manylinux_2_17_aarch64.manylinux2014_aarch64
+                "S驈烽堶堢苩觌宣陖阆㦯葅霙䇣锽鸋㻔摌",  # cp310-macosx_11_0_arm64
+                "鉳䥩猉罺䢢䚘㞐朤体颛軀辗﨏䍜圑蒷塶",  # cp310-win_amd64
+                "N䥐昺飂薏嵋㻝阫鎴蝧愩蚓臞敼鯩冓蝸銒",  # cp310-manylinux_2_17_aarch64.manylinux2014_aarch64
+                "M㐸丮䫈䩷ɽ燃䄻混蛳稝鉇役泃宵艞顃㼵",  # cp38-manylinux_2_17_x86_64.manylinux2014_x86_64
+                "l䭌㻧䈘樉䎜胵賡秖磗伳玌鄵㝷乺ʜ䩗㞄",  # cp39-win32
+                "jǛ湄閈䌣鮴䥎堃㛓笸埩眣庚捡鈕㞻鍇錭",  # cp38-win32
+                "O珌㡾㷗鴥拁嵹㒞㔹鐝Ȼ扡庇甄臞摉鮝厐",  # cp38-manylinux_2_17_aarch64.manylinux2014_aarch64
+                "蕧胸瓲工䛹侒囜第䞢棖頟䗯锩㠋㞭谶㥚",  # cp38-win_amd64
+                "P钉殯㓜魴壬谚蝇弄鈻馇蕔祏绿佡謊濔弡",  # cp39-win_amd64
+                "k蜆蓭鑶禬茌犿违維郈盇肀根棿嶠纭恦㗼",  # cp310-win32
+                "Z序套䁳暙鐁鎨樫姡鳵曧頲㲿槤誐笷楆㖑",  # pp38-manylinux_2_17_x86_64.manylinux2014_x86_64
+                "J䘻鏤熆钣吚檭䟆颃稆㥌绊錽乸棈獒轧䐥",  # cp38-macosx_10_14_x86_64
+                "k胨唃嫟鶛睉銤噶㝅婡䲍逪萻㲛撁佘籧趏",  # cp38-macosx_11_0_arm64
+                "k頃跊ó銋訋簴冴蛞铘诪韚秂坿櫹围㾶歆",  # cp39-macosx_11_0_arm64
+                "VƂ㫰雲巠䝲偯鷔餙䬸歏匧漃祌轘夽㑐㵿",  # cp39-manylinux_2_17_x86_64.manylinux2014_x86_64
+            },
+        ),
+    ),
+)
+def test_specific_packages(reuse, package_name, module_name, version, hashes):
+    """This covers #448 and all other issues that relate to specific packages and versions.
+
+    Consider this a regression test against specific reported bugs,
+    a minimal sample from the mass test.
+    """
+    mod = reuse((package_name, module_name), version=version, hashes=hashes, modes=auto_install | no_cleanup)
+    assert isinstance(mod, ModuleType)
+
+
+def test_451_ignore_spaces_in_hashes(reuse):
+    # single hash
+    mod = use("package-example", version="0.1", hashes="Y復㝿浯䨩䩯鷛㬉鼵爔滥哫鷕逮 愁墕萮緩", modes=auto_install | no_cleanup)
+    assert mod
+    del mod
+    # hash list
+    mod = use(
+        "package-example", version="0.1", hashes={"Y復㝿浯䨩䩯鷛㬉鼵爔滥哫鷕逮 愁墕萮緩"}, modes=auto_install | no_cleanup
+    )
+    assert mod
+    del mod
+
+
+def f(x):
+    return x**2
+
+
+def test_decorate(reuse):
+    def decorator(func):
+        def wrapper(x):
+            return func(x + 1)
+
+        return wrapper
+
+    _wrap(thing=sys.modules[__name__], obj=f, decorator=decorator, name="f")
+    assert f(3) == 16
+    _unwrap(thing=sys.modules[__name__], name="f")
+    assert f(3) == 9
+
+
+def test_454_bad_metadata(reuse):
+    name = "pyinputplus"
+    with patch("webbrowser.open"), io.StringIO() as buf, redirect_stdout(buf):
+        try:
+            reuse(name, modes=reuse.auto_install)
+        except RuntimeWarning:
+            version = buf.getvalue().splitlines()[-1].strip()
+        try:
+            reuse(name, version=version, modes=reuse.auto_install)
+        except RuntimeWarning:
+            recommended_hash = buf.getvalue().splitlines()[-1].strip()
+        mod = reuse(
+            name, version=version, hashes={recommended_hash}, modes=reuse.auto_install | reuse.no_cleanup
+        )
+        assert mod
+
+
+def test_454_no_tags(reuse):
+    """No version and no platform tags given - a surprisingly common issue."""
+
+    version = "3.1.2"
+    name = "pyspark"
+    with patch("webbrowser.open"), io.StringIO() as buf, redirect_stdout(buf):
+        try:
+            reuse(name, version=version, modes=reuse.auto_install)
+        except RuntimeWarning:
+            recommended_hash = buf.getvalue().splitlines()[-1].strip()
+        mod = reuse(
+            name, version=version, hashes={recommended_hash}, modes=reuse.auto_install | reuse.no_cleanup
+        )
+        assert mod

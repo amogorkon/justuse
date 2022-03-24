@@ -14,6 +14,14 @@
 
 # Just use() python the way you want!
 
+```mermaid
+graph TD;
+    A[just]-->B["use()"];
+    B --> C["Path()"]
+    B --> D["URL()"]
+    B --> E[Packages]
+```
+
 ## Installation
 To install, enter `python -m pip install justuse` in a commandline, then you can `import use` in your code and simply use() stuff. Check for examples below and our [Showcase](https://github.com/amogorkon/justuse/blob/unstable/docs/Showcase.ipynb)!
 
@@ -22,10 +30,10 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [x] inline version-checking
 - [x] safely import code from an online URL - towards an unhackable infrastructure ("Rather die than get corrupted!")
 - [x] initial module globals - a straight forward solution to diamond/cyclic imports
-- [x] decorate all specified callables (functions, methods, classes, ..) on import via pattern matching, aspect-orientation made easy
+- [x] decorate *everything* callable recursively via pattern matching, aspect-orientation made easy (except closures, those are *hard*)
 - [x] return a given default if an exception happened during an import, simplifying optional dependencies
 - [x] safe hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
-- [x] safely auto-install version-tagged pure python packages from PyPI (packages with C-extensions like numpy don't work yet)
+- [x] safely auto-install version-tagged pure python packages from PyPI
 - [x] have multiple versions of the same package installed and loaded in the same program without conflicts
 - [x] auto-install packages with C-extensions and other precompiled stuff
 - [x] no-hassle inline auto-installation of (almost) all conda packages
@@ -34,8 +42,9 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [ ] all justuse-code is compiled to a single, standalone .py file - just drop it into your own code without installation
 - [ ] provide a visual representation of the internal dependency graph
 - [ ] module-level variable guards aka "module-properties"
-- [ ] isolation of packages via subprocess/subinterpreter for clean un-/reloading
+- [ ] isolation of software components with arbitrary sub-interpreters (python 2.7, ironpython..) inspired by [jupyter messaging](https://jupyter-client.readthedocs.io/en/latest/messaging.html)
 - [ ] slot-based plugin architecture (to ensure reproducable testability of plugin-combinations)
+- [ ] optional on-site compilation of fully annotated python code via cython
 - [ ] document everything!
 - [ ] test everything!
 

@@ -1,6 +1,7 @@
 import os, sys
+
 from pathlib import Path
-src = import_base = Path(__file__).parent.parent / "src"
+src = import_base = Path(__file__).parent / "../../src"
 cwd = Path().cwd()
 os.chdir(src)
 sys.path.insert(0, "") if "" not in sys.path else None
