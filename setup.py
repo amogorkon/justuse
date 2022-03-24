@@ -64,15 +64,16 @@ meta = {
 
 
 requires = (
-    "requests(>= 2.24.0)",
-    "packaging(== 21.0)",
-    "pydantic(>= 1.8.2)",
-    "typeguard(>= 2.12.1)",
-    "pip",
+    "beartype( >= 0.8.1)",
     "furl(>= 2.1.2)",
-    "wheel(>= 0.36.2)",
     "icontract(>= 2.5.4)",
-    "hypothesis(>=6.23.1)",
+    "jinja2",
+    "packaging(== 21.0)",
+    "pip",
+    "pydantic(>= 1.8.2)",
+    "requests",
+    "toml",
+    "wheel",
 )
 
 
