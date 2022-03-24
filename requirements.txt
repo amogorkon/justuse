@@ -1,13 +1,12 @@
-packaging == 21.0  #!
-pip #!
-pydantic >= 1.8.2  #!
-pytest ~= 6.2.4  #-
-pytest-cov ~= 2.12.1  #-
-pytest-env ~= 0.6.2  #-
-requests ~= 2.24.0  #!
-furl ~= 2.1.2  #!
-wheel ~= 0.36.2  #!
-icontract ~= 2.5.4  #-
-beartype >= 0.8.1  #-
-hypothesis ~= 6.23.1  #-
-jinja2 ~= 3.0.3
+beartype >= 0.8.1 
+furl >= 2.1.2 
+icontract >= 2.5.4 
+jinja2
+packaging == 21.0 
+pip
+pydantic >= 1.8.2 
+requests
+toml
+wheel
+pytest
+hypothesis
