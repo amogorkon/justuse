@@ -164,9 +164,10 @@ def apply_aspect(
         )
         visited.add(id(wrapped))
 
-    # this is the last thing in the original call, after all the recursion
     if last and dry_run:
-        if not config.no_browser:
+        if config.no_browser:
+            print("Tried to do a dry run and display the results, but no_browser is set in config.")
+        else:
             print("Please check your browser to select options and filters for aspects.")
             _web_aspectized_dry_run(
                 decorator=decorator,
@@ -175,8 +176,6 @@ def apply_aspect(
                 hits=hits,
                 module_name=module_name,
             )
-        else:
-            print("Tried to do a dry run and display the results, but no_browser is set in config.")
     return thing
 
 
