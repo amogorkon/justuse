@@ -29,7 +29,7 @@ import tempfile
 from collections import namedtuple
 from datetime import datetime
 from enum import Enum, IntEnum
-from logging import DEBUG, basicConfig, getLogger
+from logging import basicConfig, getLogger
 from pathlib import Path
 from typing import NamedTuple
 from uuid import uuid4
@@ -87,7 +87,7 @@ basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
     datefmt=f"%Y%m%d {fraction_of_day()}",
     # datefmt="%Y-%m-%d %H:%M:%S",
-    level=DEBUG,
+    level=config.debug_level,
 )
 
 # !!! SEE NOTE !!!
