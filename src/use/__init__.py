@@ -95,7 +95,7 @@ basicConfig(
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.7.2"
+__version__ = "0.7.4"
 # for tests
 __version__ = os.getenv("USE_VERSION", __version__)
 __name__ = "use"

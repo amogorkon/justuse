@@ -1,5 +1,5 @@
 from time import perf_counter_ns
-from statistics import mean, stdev, median
+from statistics import geometric_mean, stdev, median
 from enum import Enum, IntEnum
 
 import numpy as np
@@ -190,7 +190,7 @@ def timeit(func):
         before = perf_counter_ns()
         func()
         res.append(perf_counter_ns() - before)
-    for f in (min, mean, median, stdev):
+    for f in (min, geometric_mean, median, stdev):
         print(f.__name__, f"{f(res)} ns ({round(f(res)/10**9,5)} s)")
     return res
 
