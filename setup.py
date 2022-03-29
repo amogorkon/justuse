@@ -1,6 +1,8 @@
 import os
 import sys
 
+from pathlib import Path
+
 from setuptools import find_packages
 from setuptools import setup
 
@@ -78,13 +80,14 @@ requires = (
 )
 
 
-with open("README.md") as f:
-    LONG_DESCRIPTION = f.read()
-
+LONG_DESCRIPTION = Path("README.md").read_text()
 setup(
     packages=find_packages(where="src"),
-    package_dir={"": "src", "templates": "src/templates"},
+    package_dir={
+        "": "src",
+    },
     package_name="use",
+    include_package_data=True,
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
     requires=requires,
