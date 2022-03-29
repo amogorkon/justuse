@@ -95,7 +95,7 @@ basicConfig(
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.7.4"
+__version__ = "0.7.5"
 # for tests
 __version__ = os.getenv("USE_VERSION", __version__)
 __name__ = "use"
@@ -169,10 +169,10 @@ from use.aspectizing import apply_aspect
 from use.buffet_old import buffet_table
 from use.main import *
 from use.messages import *
+
 ### NEEDED FOR TESTS!! ###
 from use.pimp import *
-from use.pimp import (_get_data_from_pypi, _get_version, _is_version_satisfied,
-                      _parse_name, get_supported)
+from use.pimp import _get_data_from_pypi, _get_version, _is_version_satisfied, _parse_name, get_supported
 from use.pydantics import *
 from use.tools import *
 
