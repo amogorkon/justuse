@@ -32,7 +32,6 @@ from use import (
     AmbiguityWarning,
     Hash,
     Modes,
-    ModInUse,
     NotReloadableWarning,
     NoValidationWarning,
     UnexpectedHash,
@@ -43,18 +42,17 @@ from use import (
     home,
     sessionID,
 )
-from use.aspectizing import apply_aspect
+from collections import namedtuple
+from use.aspectizing import _applied_decorators, apply_aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
 from use.pimp import _build_mod, _ensure_path, _fail_or_default, _parse_name
 from use.pydantics import Version
 from use.tools import methdispatch
-from use.aspectizing import _applied_decorators
 
 log = getLogger(__name__)
 
 # internal subpackage imports
-test_config: str = locals().get("test_config", {})
 test_version: str = locals().get("test_version", None)
 
 _reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
@@ -69,6 +67,8 @@ def _release_locks():
 
 
 atexit.register(_release_locks)
+
+ModInUse = namedtuple("ModInUse", "name mod path spec frame")
 
 
 class ProxyModule(ModuleType):
