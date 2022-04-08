@@ -50,11 +50,11 @@ class Configuration(BaseModel):
 
 
 class Version(PkgVersion):
-    def __new__(cls, *args, **kwargs):
+    def __new__(self, *args, **kwargs):
         if args and isinstance(args[0], Version):
             return args[0]
         else:
-            return super(cls, Version).__new__(cls)
+            return super(self, Version).__new__(self)
 
     def __init__(self, versionobj: Optional[Union[PkgVersion, str]] = None, *, major=0, minor=0, patch=0):
         if isinstance(versionobj, Version):
