@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import traceback
+from collections import namedtuple
 from collections.abc import Callable
 from datetime import datetime
 from logging import DEBUG, INFO, NOTSET, getLogger, root
@@ -28,25 +29,14 @@ import toml
 from furl import furl as URL
 from icontract import require
 
-from use import (
-    AmbiguityWarning,
-    Hash,
-    Modes,
-    NotReloadableWarning,
-    NoValidationWarning,
-    UnexpectedHash,
-    VersionWarning,
-    __version__,
-    buffet_table,
-    config,
-    home,
-    sessionID,
-)
-from collections import namedtuple
+from use import (AmbiguityWarning, Hash, Modes, NotReloadableWarning,
+                 NoValidationWarning, UnexpectedHash, VersionWarning,
+                 __version__, buffet_table, config, home, sessionID)
 from use.aspectizing import _applied_decorators, apply_aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
-from use.pimp import _build_mod, _ensure_path, _fail_or_default, _parse_name
+from use.pimp import (_build_mod, _ensure_path, _fail_or_default, _parse_name,
+                      _real_path)
 from use.pydantics import Version
 from use.tools import methdispatch
 
@@ -68,7 +58,7 @@ def _release_locks():
 
 atexit.register(_release_locks)
 
-ModInUse = namedtuple("ModInUse", "name mod path spec frame")
+ModInUse = namedtuple("ModInUse", "name mod path spec")
 
 
 class ProxyModule(ModuleType):
@@ -358,9 +348,9 @@ CREATE TABLE IF NOT EXISTS "hashes" (
                 self.del_entry(name, version)
         self.registry.connection.commit()
 
-    def _set_mod(self, *, name, mod, frame, path=None, spec=None):
+    def _set_mod(self, *, name, mod, path=None, spec=None):
         """Helper to get the order right."""
-        self._using[name] = ModInUse(name, mod, path, spec, frame)
+        self._using[name] = ModInUse(name, mod, path, spec)
 
     @methdispatch
     def __call__(self, thing, /, *args, **kwargs):
@@ -412,7 +402,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             return _fail_or_default(ImportError(exc), default)
 
         frame = inspect.getframeinfo(inspect.currentframe())
-        self._set_mod(name=name, mod=mod, frame=frame)
+        self._set_mod(name=name, mod=mod)
         if as_import:
             sys.modules[as_import] = mod
         return ProxyModule(mod)
@@ -423,7 +413,6 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         path,
         /,
         *,
-        package_name=None,
         initial_globals=None,
         as_import: str = None,
         default=Modes.fastfail,
@@ -450,84 +439,26 @@ CREATE TABLE IF NOT EXISTS "hashes" (
 
         exc = None
         mod = None
+        original_cwd = Path.cwd()
 
         if path.is_dir():
             return _fail_or_default(ImportError(f"Can't import directory {path}"), default)
 
-        original_cwd = source_dir = Path.cwd()
         try:
-            # calling from another use()d module
-            # let's see where we started
-            main_mod = __import__("__main__")
-            # there are a number of ways to call use() from a non-use() starting point
-            # let's first check if we are running in jupyter
-            jupyter = "ipykernel" in sys.modules
-            # we're in jupyter, we use the CWD as set in the notebook
-            if not jupyter and hasattr(main_mod, "__file__"):
-                # problem: user wants to use.Path("some_file_in_the_same_dir")
-                # so we have to figure out where the file of the calling function is.
-                # but the *calling* function could also be a decorator, living completely elsewhere
-                # so we have to figure out whether we're being called by a decorator first.
-                # We use use.__call__ as landmark, because that's the official entry point
-                # and we can count on it being called. From there we need to check whether it was aspectized.
-                # If it was, we need to skip those decorators before finally get to the user code and
-                # we can actually see from where we've been called.
-                frame = inspect.currentframe()
-                while True:
-                    if frame.f_code == Use.__call__.__code__:
-                        break
-                    else:
-                        frame = frame.f_back
-                # a few more steps..
-                for x in _applied_decorators:
-                    frame = frame.f_back
-                try:
-                    # frame is in __call__ (or the last decorator we control), we need to step one more frame back
-                    source_dir = Path(frame.f_back.f_code.co_filename).resolve().parent
-                # we are being called from a shell like thonny, so we have to assume cwd
-                except OSError:
-                    source_dir = Path.cwd()
-
-            if source_dir is None:
-                if main_mod.__loader__ and hasattr(main_mod.__loader__, "path"):
-                    source_dir = _ensure_path(main_mod.__loader__.path).parent
-                else:
-                    source_dir = Path.cwd()
-            if not source_dir.joinpath(path).exists():
-                if files := [*[*source_dir.rglob(f"**/{path}")]]:
-                    source_dir = _ensure_path(files[0]).parent
-                else:
-                    source_dir = Path.cwd()
-            if not source_dir.exists():
-                return _fail_or_default(
-                    NotImplementedError("Can't determine a relative path from a virtual file."),
-                    default,
-                )
-            if not path.exists():
-                path = source_dir.joinpath(path).resolve()
-            if not path.exists():
-                return _fail_or_default(ImportError(f"Sure '{path}' exists?"), default)
-            if not path.is_absolute():
-                path = path.resolve()
-            try:
-                name = path.relative_to(source_dir)
-            except ValueError:
-                source_dir = path.parent
-                os.chdir(source_dir)
-                name = path.relative_to(source_dir)
-            ext = name.as_posix().rpartition(".")[-1]
-            name_as_path_with_ext = name.as_posix()
-            name_as_path = name_as_path_with_ext[: -len(ext) - (1 if ext else 0)]
-            name = name_as_path.replace("/", ".")
-            name_parts = name.split(".")
-            package_name = package_name or ".".join(name_parts[:-1])
-            module_name = path.stem  # sic!
+            name, module_name, package_name, path = _real_path(
+                path=path, _applied_decorators=_applied_decorators, landmark=Use.__call__.__code__
+            )
+        except (NotImplementedError, ImportError) as e:
+            exc = e
+        if exc:
+            return _fail_or_default(exc, default)
+        try:
             if reloading:
                 try:
                     with open(path, "rb") as rfile:
                         code = rfile.read()
                     # initial instance, if this doesn't work, just throw the towel
-                    mod = _build_mod(
+                    result = _build_mod(
                         module_name=module_name,
                         code=code,
                         initial_globals=initial_globals,
@@ -535,10 +466,12 @@ CREATE TABLE IF NOT EXISTS "hashes" (
                         package_name=package_name,
                     )
                 except KeyError:
-                    exc = traceback.format_exc()
-                if exc:
-                    return _fail_or_default(ImportError(exc), default)
-                mod = ProxyModule(mod)
+                    result = ImportError(traceback.format_exc())
+                if isinstance(result, ModuleType):
+                    mod = ProxyModule(result)
+                else:
+                    return _fail_or_default(result, default)
+                    
                 reloader = ModuleReloader(
                     proxy=mod,
                     name=name,
@@ -572,8 +505,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
                 with open(path, "rb") as rfile:
                     code = rfile.read()
                 # the path needs to be set before attempting to load the new module - recursion confusing ftw!
-                frame = inspect.getframeinfo(inspect.currentframe())
-                self._set_mod(name=module_name, mod=mod, frame=frame)
+                self._set_mod(name=module_name, mod=mod)
                 try:
                     mod = _build_mod(
                         module_name=module_name,
@@ -594,8 +526,8 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             return _fail_or_default(ImportError(exc), default)
         if as_import:
             sys.modules[as_import] = mod
-        frame = inspect.getframeinfo(inspect.currentframe())
-        self._set_mod(name=name, mod=mod, frame=frame)
+        self._set_mod(name=name, mod=mod)
+
         return ProxyModule(mod)
 
     @__call__.register(type(None))  # singledispatch is picky - can't be anything but a type
@@ -809,6 +741,5 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             return _fail_or_default(result, default)
 
         if isinstance(result, ModuleType):
-            frame = inspect.getframeinfo(inspect.currentframe())
-            self._set_mod(name=name, mod=result, spec=spec, frame=frame)
+            self._set_mod(name=name, mod=result, spec=spec)
             return ProxyModule(result)

@@ -409,7 +409,7 @@ def test_85_pywt_jupyter_ubuntu_case1010(reuse, name, version, hashes):
 
 
 def test_387_usepath_filename(reuse):
-    mod = use(use.Path(".file_for_test387.py"))
+    mod = use(use.Path(".tests/.file_for_test387.py"))
     assert mod
 
 
