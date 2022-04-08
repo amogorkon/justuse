@@ -1,7 +1,3 @@
-class Test:
-    def __init__(self, x):
-        self.x = x
+import use
 
-    def foo(self):
-        return self.x
-
+mod = use(use.Path("../tests/.tests/modE.py"))

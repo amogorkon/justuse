@@ -3,10 +3,10 @@ Delegating package installation to pip, packaging and friends.
 """
 
 
-
 import codecs
 import contextlib
 import importlib.util
+import inspect
 import linecache
 import os
 import platform
@@ -31,8 +31,7 @@ from shutil import rmtree
 from sqlite3 import Cursor
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import (Any, Iterable, Optional, Protocol, TypeVar, Union,
-                    runtime_checkable)
+from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, runtime_checkable
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -44,11 +43,9 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import (Hash, InstallationError, Modes, UnexpectedHash,
-                 VersionWarning, config, sessionID)
+from use import Hash, InstallationError, Modes, UnexpectedHash, VersionWarning, config, sessionID
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-from use.messages import (UserMessage, _web_pebkac_no_hash,
-                          _web_pebkac_no_version_no_hash)
+from use.messages import UserMessage, _web_pebkac_no_hash, _web_pebkac_no_version_no_hash
 from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version
 from use.tools import pipes
 
@@ -127,12 +124,10 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 from pip._internal.models.target_python import get_supported
         if not get_supported:
             with contextlib.suppress(ImportError):
-                from pip._internal.utils.compatibility_tags import \
-                    get_supported
+                from pip._internal.utils.compatibility_tags import get_supported
         if not get_supported:
             with contextlib.suppress(ImportError):
-                from pip._internal.resolution.resolvelib.factory import \
-                    get_supported
+                from pip._internal.resolution.resolvelib.factory import get_supported
     get_supported = get_supported or (lambda: [])
 
     items: list[PlatformTag] = [PlatformTag(platform=tag.platform) for tag in get_supported()]
@@ -858,7 +853,6 @@ def _is_platform_compatible(
         f"py{tags.interpreter_version()}",
     }
 
-
     if info.platform_tag:
         given_platform_tags = info.platform_tag.split(".") << map(PlatformTag) >> frozenset
     else:
@@ -973,3 +967,72 @@ def _fail_or_default(exception: BaseException, default: Any):
 #         proj = _filter_by_version(proj, version)
 
 #     _web_pebkac_no_hash(package_name=package_name, version=version, name=name, project=proj)
+
+
+def _real_path(*, path: Path, _applied_decorators: dict, landmark) -> tuple[str, str, str, Path]:
+    source_dir = Path.cwd()
+    # calling from another use()d module
+    # let's see where we started
+    main_mod = __import__("__main__")
+    # there are a number of ways to call use() from a non-use() starting point
+    # let's first check if we are running in jupyter
+    jupyter = "ipykernel" in sys.modules
+    # we're in jupyter, we use the CWD as set in the notebook
+    if not jupyter and hasattr(main_mod, "__file__"):
+        # problem: user wants to use.Path("some_file_in_the_same_dir")
+        # so we have to figure out where the file of the calling function is.
+        # but the *calling* function could also be a decorator, living completely elsewhere
+        # so we have to figure out whether we're being called by a decorator first.
+        # We use use.__call__ as landmark, because that's the official entry point
+        # and we can count on it being called. From there we need to check whether it was aspectized.
+        # If it was, we need to skip those decorators before finally get to the user code and
+        # we can actually see from where we've been called.
+        frame = inspect.currentframe()
+        while True:
+            if frame.f_code == landmark:
+                break
+            else:
+                frame = frame.f_back
+        # a few more steps..
+        for x in _applied_decorators:
+            frame = frame.f_back
+        try:
+            # frame is in __call__ (or the last decorator we control), we need to step one more frame back
+            source_dir = Path(frame.f_back.f_code.co_filename).resolve().parent
+        # we are being called from a shell like thonny, so we have to assume cwd
+        except OSError:
+            source_dir = Path.cwd()
+
+    if source_dir is None:
+        if main_mod.__loader__ and hasattr(main_mod.__loader__, "path"):
+            source_dir = _ensure_path(main_mod.__loader__.path).parent
+        else:
+            source_dir = Path.cwd()
+    if not source_dir.joinpath(path).exists():
+        if files := [*[*source_dir.rglob(f"**/{path}")]]:
+            source_dir = _ensure_path(files[0]).parent
+        else:
+            source_dir = Path.cwd()
+    if not source_dir.exists():
+        raise NotImplementedError("Can't determine a relative path from a virtual file.")
+    if not path.exists():
+        path = source_dir.joinpath(path).resolve()
+    if not path.exists():
+        raise ImportError(f"Sure '{path}' exists?")
+    if not path.is_absolute():
+        path = path.resolve()
+    try:
+        name = path.relative_to(source_dir)
+    except ValueError:
+        source_dir = path.parent
+        os.chdir(source_dir)
+        name = path.relative_to(source_dir)
+    ext = name.as_posix().rpartition(".")[-1]
+    name_as_path_with_ext = name.as_posix()
+    name_as_path = name_as_path_with_ext[: -len(ext) - (1 if ext else 0)]
+    name = name_as_path.replace("/", ".")
+    name_parts = name.split(".")
+    package_name = ".".join(name_parts[:-1])
+    module_name = path.stem  # sic!
+
+    return name, module_name, package_name, path
