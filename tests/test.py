@@ -1,12 +1,4 @@
-import os
+s = 'abcdefgabcd'
+set(s)
 
-from pathlib import Path
-
-here = Path()
-os.chdir(Path(__file__).resolve().parent / "../src/")
-
-import use
-
-mod = use("pip")
-
-os.chdir(here)
+print(''.join(x for x in s if x not in set(s)))

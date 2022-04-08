@@ -35,9 +35,8 @@ import logging
 
 from use import auto_install, fatal_exceptions, no_cleanup, use
 from use.aspectizing import _unwrap, _wrap
-from use.hash_alphabet import (JACK_as_num, hexdigest_as_JACK, is_JACK,
-                               num_as_hexdigest)
-from use.pimp import _parse_name
+from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
+from use.pimp import _get_data_from_pypi, _is_version_satisfied, _parse_name
 from use.pydantics import JustUse_Info, PyPI_Project, PyPI_Release, Version
 
 log = logging.getLogger(".".join((__package__, __name__)))
@@ -227,7 +226,7 @@ def test_is_version_satisfied(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert reuse._is_version_satisfied(info.get("requires_python", ""), sys_version)
+    assert _is_version_satisfied(info.get("requires_python", ""), sys_version)
 
     # requires >= python 4!
     info = {
@@ -250,7 +249,7 @@ def test_is_version_satisfied(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert False == reuse._is_version_satisfied(info.get("requires_python", ""), reuse.Version(sys_version))
+    assert False == _is_version_satisfied(info.get("requires_python", ""), reuse.Version(sys_version))
 
     # pure python
     info = {
@@ -273,11 +272,11 @@ def test_is_version_satisfied(reuse):
         "yanked": False,
         "yanked_reason": None,
     }
-    assert reuse._is_version_satisfied(info.get("requires_python", ""), sys_version)
+    assert _is_version_satisfied(info.get("requires_python", ""), sys_version)
 
 
 def test_find_windows_artifact(reuse):
-    assert reuse.Version("3.17.3") in reuse._get_data_from_pypi(package_name="protobuf").releases
+    assert reuse.Version("3.17.3") in _get_data_from_pypi(package_name="protobuf").releases
 
 
 def test_classic_import_same_version(reuse):
@@ -410,7 +409,7 @@ def test_85_pywt_jupyter_ubuntu_case1010(reuse, name, version, hashes):
 
 
 def test_387_usepath_filename(reuse):
-    mod = use(use.Path(".file_for_test387.py"))
+    mod = use(use.Path(".tests/.file_for_test387.py"))
     assert mod
 
 
@@ -473,8 +472,8 @@ def test_use_version_upgrade_warning(reuse):
         )
         match = re.search(r"(?P<category>[a-zA-Z_]+): " r"(?:(?!\d).)* (?P<version>\d+\.\d+\.\d+)", output)
         assert match
-        assert match.group("category") == use.VersionWarning.__name__
-        assert match.group("version") == str(version)
+        assert match["category"] == use.VersionWarning.__name__
+        assert match["version"] == str(version)
 
 
 def test_fraction_of_day(reuse):

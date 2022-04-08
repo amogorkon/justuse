@@ -1,10 +1,13 @@
 """
 This is where the story begins. Welcome to JustUse!
 Only imports and project-global constants are defined here. 
+All superfluous imports are deleted to clean up the namespace - and thus help()
+
 """
 
 
 import sys
+from datetime import timezone
 
 if sys.version_info < (3, 9) and "tests" not in sys.modules:
     import gc
@@ -22,26 +25,30 @@ if sys.version_info < (3, 9) and "tests" not in sys.modules:
                 "__class_getitem__": classmethod(GenericAlias),
             }
         )
+    del (gc,)
+    del types
+    del typing
+    del ABCMeta
+    del Callable
+    del CellType
+    del GenericAlias
 
-import hashlib
+
 import os
 import tempfile
 from collections import namedtuple
 from datetime import datetime
 from enum import Enum, IntEnum
-from logging import DEBUG, basicConfig, getLogger
+from logging import basicConfig, getLogger
 from pathlib import Path
-from typing import NamedTuple
 from uuid import uuid4
-from warnings import catch_warnings, filterwarnings, simplefilter
+from warnings import catch_warnings, filterwarnings
 
-import toml
 from beartype import beartype
 from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
 
-from use.pydantics import Configuration
-
 sessionID = uuid4()
+del uuid4
 
 home = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python")))
 
@@ -51,10 +58,16 @@ except PermissionError:
     # this should fix the permission issues on android #80
     home = tempfile.mkdtemp(prefix="justuse_")
 
+import toml
+
 (home / "config.toml").touch(mode=0o755, exist_ok=True)
 config_dict = toml.load(home / "config.toml")
+del toml
+
+from use.pydantics import Configuration
 
 config = Configuration(**config_dict)
+del Configuration
 
 config.logs.mkdir(mode=0o755, parents=True, exist_ok=True)
 config.packages.mkdir(mode=0o755, parents=True, exist_ok=True)
@@ -68,7 +81,7 @@ for file in (
 
 def fraction_of_day(now: datetime = None) -> float:
     if now is None:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
     return round(
         (
             now.hour / 24
@@ -87,7 +100,7 @@ basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
     datefmt=f"%Y%m%d {fraction_of_day()}",
     # datefmt="%Y-%m-%d %H:%M:%S",
-    level=DEBUG,
+    level=config.debug_level,
 )
 
 # !!! SEE NOTE !!!
@@ -95,7 +108,7 @@ basicConfig(
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.7.1"
+__version__ = "0.7.5"
 # for tests
 __version__ = os.getenv("USE_VERSION", __version__)
 __name__ = "use"
@@ -145,48 +158,50 @@ with catch_warnings():
 
     filterwarnings("ignore", category=BeartypeDecorHintPep585DeprecationWarning, module="beartype")
 
-    from use.hash_alphabet import *
 
-    ModInUse = namedtuple("ModInUse", "name mod path spec frame")
-
-    class Hash(Enum):
-        sha256 = hashlib.sha256
-        blake = hashlib.blake2s
-
-    class Modes(IntEnum):
-        auto_install = 2**0
-        fatal_exceptions = 2**1
-        reloading = 2**2
-        no_public_installation = 2**3
-        fastfail = 2**4
-        recklessness = 2**5
-        no_browser = 2**6
-        no_cleanup = 2**7
+import hashlib
 
 
-from use.aspectizing import *
+class Hash(Enum):
+    sha256 = hashlib.sha256
+    blake = hashlib.blake2s
+
+
+del hashlib
+
+
+class Modes(IntEnum):
+    auto_install = 2**0
+    fatal_exceptions = 2**1
+    reloading = 2**2
+    no_public_installation = 2**3
+    fastfail = 2**4
+    recklessness = 2**5
+    no_browser = 2**6
+    no_cleanup = 2**7
+
+
 from use.aspectizing import apply_aspect
 from use.buffet_old import buffet_table
-from use.main import *
-from use.messages import *
-
-### NEEDED FOR TESTS!! ###
-from use.pimp import *
-from use.pimp import _get_data_from_pypi, _get_version, _is_version_satisfied, _parse_name, get_supported
-from use.pydantics import *
-from use.tools import *
+from use.main import ProxyModule, Use, test_version
+from use.pydantics import Version
 
 for member in Modes:
     setattr(Use, member.name, member.value)
 
 use = Use()
 
+del os
 use.__dict__.update(dict(globals()))
 use = ProxyModule(use)
+if not test_version:
+    sys.modules["use"] = use
+
+del test_version
+del use.__dict__["test_version"]
+del sys
+del use.__dict__["sys"]
 
 with catch_warnings():
     filterwarnings("ignore", category=BeartypeDecorHintPep585DeprecationWarning, module="beartype")
     # apply_aspect(use, beartype, check=isbeartypeable, pattern="")
-
-if not test_version:
-    sys.modules["use"] = use

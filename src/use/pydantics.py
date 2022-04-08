@@ -3,11 +3,15 @@ Pydantic model for the PyPI JSON API.
 """
 import os
 import re
+
+from logging import INFO
 from logging import getLogger
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
+from typing import Union
 
 import packaging
+
 from packaging.version import Version as PkgVersion
 from pydantic import BaseModel
 
@@ -24,6 +28,7 @@ class BaseModel(BaseModel):
 
 
 class Configuration(BaseModel):
+    debug_level: int = INFO  # 20
     version_warning: bool = True
     no_browser: bool = False
     disable_jack: bool = bool(int(os.getenv("DISABLE_JACK", "0")))
@@ -45,11 +50,11 @@ class Configuration(BaseModel):
 
 
 class Version(PkgVersion):
-    def __new__(cls, *args, **kwargs):
+    def __new__(self, *args, **kwargs):
         if args and isinstance(args[0], Version):
             return args[0]
         else:
-            return super(cls, Version).__new__(cls)
+            return super(self, Version).__new__(self)
 
     def __init__(self, versionobj: Optional[Union[PkgVersion, str]] = None, *, major=0, minor=0, patch=0):
         if isinstance(versionobj, Version):

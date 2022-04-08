@@ -1,0 +1,8 @@
+graft src/use/templates/
+graft docs
+
+include README.md
+include LICENSE
+include CODE_OF_CONDUCT.md
+include requirements.txt
+recursive-include src
