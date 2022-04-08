@@ -472,8 +472,8 @@ def test_use_version_upgrade_warning(reuse):
         )
         match = re.search(r"(?P<category>[a-zA-Z_]+): " r"(?:(?!\d).)* (?P<version>\d+\.\d+\.\d+)", output)
         assert match
-        assert match.group("category") == use.VersionWarning.__name__
-        assert match.group("version") == str(version)
+        assert match["category"] == use.VersionWarning.__name__
+        assert match["version"] == str(version)
 
 
 def test_fraction_of_day(reuse):
