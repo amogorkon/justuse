@@ -2,6 +2,7 @@ from time import perf_counter_ns
 from statistics import geometric_mean, stdev, median
 from enum import Enum, IntEnum
 
+from time import sleep
 import numpy as np
 import sys
 
@@ -169,7 +170,7 @@ def test_gauss():
 def test_gaussmf():
     return [gaussmf(x, 0, 10) for x in random_vars]
 
-from time import sleep
+
 test_funcs = [
     lambda: list({}),
     lambda: list({1: 2}),
@@ -184,21 +185,47 @@ test_funcs = [
     lambda: sleep(0.5),
 ]
 
+from collections import defaultdict
+import inspect
+
+
+foo = defaultdict(int)
+foo["hello"] = 1
+foo["world"] = 2
+def test_dict1():
+    return dict(foo)
+
+def test_dict2():
+    return {**foo}
+
+def test_bool1():
+    return not not foo
+
+def test_bool2():
+    return bool(foo)
+
+
+def test_tuple():
+    return 3 in (1,3)
+
+def test_set():
+    return 3 in {1,3}
+
 def timeit(func):
     res = []
-    for _ in range(100):
+    for _ in range(10_000_000):
         before = perf_counter_ns()
         func()
-        res.append(perf_counter_ns() - before)
+        after = perf_counter_ns()
+        res.append(after - before)
+    print("####################")
+    print(inspect.getsource(func))
     for f in (min, geometric_mean, median, stdev):
         print(f.__name__, f"{f(res)} ns ({round(f(res)/10**9,5)} s)")
     return res
 
 
-import inspect
+test_funcs = [test_tuple, test_set]
 
 for f in test_funcs:
-    print("####################")
-    print(inspect.getsource(f))
     timeit(f)
-    

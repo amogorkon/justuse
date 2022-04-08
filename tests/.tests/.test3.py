@@ -1,1 +1,1 @@
-print("FOO!")
+print("adsf".translate({ord("a"): ord("b")}))
