@@ -29,14 +29,24 @@ import toml
 from furl import furl as URL
 from icontract import require
 
-from use import (AmbiguityWarning, Hash, Modes, NotReloadableWarning,
-                 NoValidationWarning, UnexpectedHash, VersionWarning,
-                 __version__, buffet_table, config, home, sessionID)
+from use import (
+    AmbiguityWarning,
+    Hash,
+    Modes,
+    NotReloadableWarning,
+    NoValidationWarning,
+    UnexpectedHash,
+    VersionWarning,
+    __version__,
+    buffet_table,
+    config,
+    home,
+    sessionID,
+)
 from use.aspectizing import _applied_decorators, apply_aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
-from use.pimp import (_build_mod, _ensure_path, _fail_or_default, _parse_name,
-                      _real_path)
+from use.pimp import _build_mod, _ensure_path, _fail_or_default, _parse_name, _real_path
 from use.pydantics import Version
 from use.tools import methdispatch
 
@@ -448,87 +458,64 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             name, module_name, package_name, path = _real_path(
                 path=path, _applied_decorators=_applied_decorators, landmark=Use.__call__.__code__
             )
-        except (NotImplementedError, ImportError) as e:
-            exc = e
-        if exc:
-            return _fail_or_default(exc, default)
+        except (NotImplementedError, ImportError):
+            exc = traceback.format_exc()
+
+        with open(path, "rb") as rfile:
+            code = rfile.read()
         try:
-            if reloading:
-                try:
-                    with open(path, "rb") as rfile:
-                        code = rfile.read()
-                    # initial instance, if this doesn't work, just throw the towel
-                    result = _build_mod(
-                        module_name=module_name,
-                        code=code,
-                        initial_globals=initial_globals,
-                        module_path=path.resolve(),
-                        package_name=package_name,
-                    )
-                except KeyError:
-                    result = ImportError(traceback.format_exc())
-                if isinstance(result, ModuleType):
-                    mod = ProxyModule(result)
-                else:
-                    return _fail_or_default(result, default)
-                    
-                reloader = ModuleReloader(
-                    proxy=mod,
-                    name=name,
-                    path=path,
-                    initial_globals=initial_globals,
-                    package_name=package_name,
-                )
-                _reloaders[mod] = reloader
-
-                threaded = False
-                # this looks like a hack, but isn't one -
-                # jupyter is running an async loop internally, which works better async than threaded!
-                try:
-                    asyncio.get_running_loop()
-                # we're dealing with non-async code, we need threading
-                except RuntimeError:
-                    # can't have the code inside the handler because of "during handling of X, another exception Y happened"
-                    threaded = True
-                if not threaded:
-                    reloader.start_async()
-                else:
-                    reloader.start_threaded()
-
-                if not all(
-                    inspect.isfunction(value)
-                    for key, value in mod.__dict__.items()
-                    if key not in initial_globals.keys() and not key.startswith("__")
-                ):
-                    warn(UserMessage.not_reloadable(name), NotReloadableWarning)
-            else:  # NOT reloading
-                with open(path, "rb") as rfile:
-                    code = rfile.read()
-                # the path needs to be set before attempting to load the new module - recursion confusing ftw!
-                self._set_mod(name=module_name, mod=mod)
-                try:
-                    mod = _build_mod(
-                        module_name=module_name,
-                        code=code,
-                        initial_globals=initial_globals,
-                        module_path=path,
-                        package_name=package_name,
-                    )
-                except KeyError:
-                    del self._using[name]
-                    exc = traceback.format_exc()
+            mod = _build_mod(
+                module_name=module_name,
+                code=code,
+                initial_globals=initial_globals,
+                module_path=path,
+                package_name=package_name,
+            )
         except KeyError:
             exc = traceback.format_exc()
-        finally:
-            # let's not confuse the user and restore the cwd to the original in any case
-            os.chdir(original_cwd)
+        if exc:
+            return _fail_or_default(exc, default)
+        mod = ProxyModule(mod)
+
+        if reloading:
+            reloader = ModuleReloader(
+                proxy=mod,
+                name=name,
+                path=path,
+                initial_globals=initial_globals,
+                package_name=package_name,
+            )
+            _reloaders[mod] = reloader
+
+            threaded = False
+            # this looks like a hack, but isn't one -
+            # jupyter is running an async loop internally, which works better async than threaded!
+            try:
+                asyncio.get_running_loop()
+            # we're dealing with non-async code, we need threading
+            except RuntimeError:
+                # can't have the code inside the handler because of "during handling of X, another exception Y happened"
+                threaded = True
+            if not threaded:
+                reloader.start_async()
+            else:
+                reloader.start_threaded()
+
+            if not all(
+                inspect.isfunction(value)
+                for key, value in mod.__dict__.items()
+                if key not in initial_globals.keys() and not key.startswith("__")
+            ):
+                warn(UserMessage.not_reloadable(name), NotReloadableWarning)
+
+        os.chdir(original_cwd)
         if exc:
             return _fail_or_default(ImportError(exc), default)
+
         if as_import:
             sys.modules[as_import] = mod
         self._set_mod(name=name, mod=mod)
-
-        return ProxyModule(mod)
+        return mod
 
     @__call__.register(type(None))  # singledispatch is picky - can't be anything but a type
     def _use_kwargs(
