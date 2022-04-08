@@ -178,12 +178,13 @@ test_funcs = [
     lambda: [3, 3, 4],
     lambda: [],
     lambda: list({0, 1, 2, 3, ...}),
-    lambda: list({3, 9, 9}),
+    lambda: list({3, 9}),
     lambda: list(set()),
     lambda: [],
     lambda: [1, 2, 1, 1],
     lambda: sleep(0.5),
 ]
+
 
 from collections import defaultdict
 import inspect
@@ -206,7 +207,7 @@ def test_bool2():
 
 
 def test_tuple():
-    return 3 in (1,3)
+    return 3 in {1, 3}
 
 def test_set():
     return 3 in {1,3}
