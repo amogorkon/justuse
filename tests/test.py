@@ -1,4 +1,5 @@
-s = 'abcdefgabcd'
-set(s)
+from collections import Counter
 
-print(''.join(x for x in s if x not in set(s)))
+s = 'abcdefgabcd'
+
+print(''.join(dict.fromkeys(s)))
