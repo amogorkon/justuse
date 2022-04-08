@@ -29,14 +29,31 @@ import toml
 from furl import furl as URL
 from icontract import require
 
-from use import (AmbiguityWarning, Hash, Modes, NotReloadableWarning,
-                 NoValidationWarning, UnexpectedHash, VersionWarning,
-                 __version__, buffet_table, config, home, sessionID)
+from use import (
+    AmbiguityWarning,
+    Hash,
+    Modes,
+    NotReloadableWarning,
+    NoValidationWarning,
+    UnexpectedHash,
+    VersionWarning,
+    __version__,
+    buffet_table,
+    config,
+    home,
+    sessionID,
+)
 from use.aspectizing import _applied_decorators, apply_aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
-from use.pimp import (_build_mod, _ensure_path, _fail_or_default, _parse_name,
-                      _real_path)
+from use.pimp import (
+    _build_mod,
+    _ensure_path,
+    _fail_or_default,
+    _modules_are_compatible,
+    _parse_name,
+    _real_path,
+)
 from use.pydantics import Version
 from use.tools import methdispatch
 
@@ -161,6 +178,8 @@ class ModuleReloader:
                         initial_globals=self.initial_globals,
                         module_path=self.path.resolve(),
                     )
+                    if not _modules_are_compatible(self.proxy, mod):
+                        continue
                     self.proxy.__implementation = mod
                 except KeyError:
                     traceback.print_exc()
@@ -182,12 +201,13 @@ class ModuleReloader:
                             initial_globals=self.initial_globals,
                             module_path=self.path,
                         )
+                        if not _modules_are_compatible(self.proxy, mod):
+                            continue
                         self.proxy._ProxyModule__implementation = mod
                     except KeyError:
                         traceback.print_exc()
                 last_filehash = current_filehash
             time.sleep(1)
-            
 
     def stop(self):
         self._stopped = True
