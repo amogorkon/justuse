@@ -1,1 +1,1 @@
-print("adsf".translate({ord("a"): ord("b")}))
+import beartype, inspect

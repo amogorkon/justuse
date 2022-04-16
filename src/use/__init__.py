@@ -181,10 +181,11 @@ class Modes(IntEnum):
     no_cleanup = 2**7
 
 
-from use.aspectizing import apply_aspect
+from use.aspectizing import (apply_aspect, iter_submodules, show_aspects,
+                             show_profiling, tinny_profiler, woody_logger)
 from use.buffet_old import buffet_table
 from use.main import ProxyModule, Use, test_version
-from use.pydantics import Version
+from use.pydantics import Version, git
 
 for member in Modes:
     setattr(Use, member.name, member.value)
@@ -204,4 +205,4 @@ del use.__dict__["sys"]
 
 with catch_warnings():
     filterwarnings("ignore", category=BeartypeDecorHintPep585DeprecationWarning, module="beartype")
-    # apply_aspect(use, beartype, check=isbeartypeable, pattern="")
+    apply_aspect(use, beartype)

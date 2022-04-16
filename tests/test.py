@@ -1,4 +1,7 @@
-for x in range(12):
-    if x % 2==0:
-        continue
-    print(x)
+import requests
+from pprint import pprint
+
+owner = "amogorkon"
+repo = "justuse"
+url = f"https://api.github.com/repos/{owner}/{repo}/commits"
+pprint(requests.get(url).json())
