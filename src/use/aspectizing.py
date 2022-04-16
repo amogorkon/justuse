@@ -1,21 +1,21 @@
-import builtins
+import ast
+import contextlib
+import importlib
 import inspect
+import pkgutil
 import re
 import sys
 from collections import namedtuple
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from enum import Enum
 from functools import wraps
-from importlib.util import spec_from_loader
 from logging import getLogger
 from pathlib import Path
 from time import perf_counter_ns
 from types import ModuleType
-from typing import Any, DefaultDict, Deque, Optional
-from warnings import catch_warnings, filterwarnings
+from typing import Any, DefaultDict, Deque, Optional, Union
 
 from beartype import beartype
-from beartype.roar import BeartypeDecorHintPep585DeprecationWarning
 from icontract import require
 
 log = getLogger(__name__)
@@ -45,51 +45,52 @@ def is_callable(thing):
         return False
 
 
-HIT = namedtuple("Hit", "qualname name type success exception dunder")
+HIT = namedtuple("Hit", "qualname name type success exception dunder module_name")
 
 
-@beartype
 def apply_aspect(
-    thing: Any,
+    thing: Union[object, Iterable[object]],
     decorator: Callable,
     /,
     *,
     check: Callable = is_callable,
-    pattern: str = "",
-    module_name: Optional[str] = None,
-    regex: Optional[re.Pattern] = None,
-    aspectize_dunders: bool = False,
-    recursive: bool = True,
     dry_run: bool = False,
-    visited: Optional[set[int]] = None,
+    pattern: str = "",
     excluded_names: Optional[set[str]] = None,
     excluded_types: Optional[set[type]] = None,
-    hits: Optional[list[HIT]] = None,
-    last: bool = True,  # and first
-    qualname_lst: Optional[list] = None,
-) -> Any:
+    file=None,
+) -> None:
     """Apply the aspect as a side-effect, no copy is created."""
-    name = getattr(thing, "__name__", str(thing))
-    if not qualname_lst:
-        qualname_lst = []
 
-    # to prevent recursion into the depths of hell and beyond
-    if visited is None:
-        visited = {id(obj) for obj in vars(object).values()}
-        visited.add(id(type))
+    regex = re.compile(pattern, re.DOTALL)
 
-    if id(thing) in visited:
-        return
+    if excluded_names is None:
+        excluded_names = set()
+    if excluded_types is None:
+        excluded_types = set()
 
-    qualname_lst.append(name)
+    visited = {id(obj) for obj in vars(object).values()}
+    visited.add(id(type))
 
-    # initial call
-    if module_name is None:
-        try:
-            module_name = inspect.getmodule(thing).__name__
-        except AttributeError:
-            module_name = "<unknown>"
-    else:  # recursive call - let's stick within the module boundary
+    hits = []
+
+    def aspectize(
+        thing: Any,
+        decorator: Callable,
+        /,
+        *,
+        qualname_lst: Optional[list] = None,
+        module_name: str,
+    ) -> Iterable[HIT]:
+        name = getattr(thing, "__name__", str(thing))
+        if not qualname_lst:
+            qualname_lst = []
+        if id(thing) in visited:
+            return
+
+        qualname_lst.append(name)
+
+        # let's stick within the module boundary
         try:
             thing_module_name = inspect.getmodule(thing).__name__
         except AttributeError:
@@ -97,86 +98,79 @@ def apply_aspect(
         if thing_module_name != module_name:
             return
 
-    if hits is None:
-        hits = []
+        for name in dir(thing):
+            qualname = "" if len(qualname_lst) < 3 else "..." + ".".join(qualname_lst[-3:]) + "." + name
+            obj = getattr(thing, name, None)
+            qualname = getattr(obj, "__qualname__", qualname)
 
-    if excluded_names is None:
-        excluded_names = set()
-    if excluded_types is None:
-        excluded_types = set()
+            if obj is None:
+                continue
+            # Time to get serious!
 
-    # We compile once so in subsequent recursive calls, we have it already.
-    if not regex:
-        regex = re.compile(pattern, re.DOTALL)
+            if type(obj) == type:
+                aspectize(obj, decorator, qualname_lst=qualname_lst, module_name=module_name)
 
-    for name in dir(thing):
-        qualname = "" if len(qualname_lst) < 3 else "..." + ".".join(qualname_lst[-3:]) + "." + name
-        obj = getattr(thing, name, None)
-        qualname = getattr(obj, "__qualname__", qualname)
+            if id(obj) in visited:
+                continue
 
-        if obj is None:
-            continue
-        # Time to get serious!
+            if (
+                qualname in excluded_names
+                or type(obj) in excluded_types
+                or not check(obj)
+                or not regex.match(name)
+            ):
+                continue
 
-        if recursive and type(obj) == type:
-            apply_aspect(
-                obj,
-                decorator,
-                check=check,
-                pattern=pattern,
-                module_name=module_name,
-                regex=regex,
-                aspectize_dunders=aspectize_dunders,
-                excluded_names=excluded_names,
-                excluded_types=excluded_types,
-                recursive=True,
-                visited=visited,
-                dry_run=dry_run,
-                hits=hits,
-                last=False,
-                qualname_lst=qualname_lst,
+            msg = ""
+            success = True
+
+            try:
+                wrapped = _wrap(thing=thing, obj=obj, decorator=decorator, name=name)
+                if dry_run:
+                    _unwrap(thing=thing, name=name)
+            except BaseException as exc:
+                wrapped = obj
+                success = False
+                msg = str(exc)
+                if file:
+                    print(msg, file=file)
+            assert isinstance(name, str) and len(name) > 0
+            assert isinstance(module_name, str) and module_name != ""
+
+            hits.append(
+                HIT(
+                    qualname,
+                    name,
+                    type(wrapped),
+                    success,
+                    msg,
+                    name.startswith("__") and name.endswith("__"),
+                    module_name,
+                )
             )
+            visited.add(id(wrapped))
 
-        if id(obj) in visited:
-            continue
-
-        if (
-            qualname in excluded_names
-            or type(obj) in excluded_types
-            or not check(obj)
-            or not regex.match(name)
-        ):
-            continue
-
-        msg = ""
-        success = True
-
+    def call(m):
         try:
-            wrapped = _wrap(thing=thing, obj=obj, decorator=decorator, name=name)
-            if dry_run:
-                _unwrap(thing=thing, name=name)
-        except BaseException as exc:
-            wrapped = obj
-            success = False
-            msg = str(exc)
-        hits.append(
-            HIT(qualname, name, type(wrapped), success, msg, name.startswith("__") and name.endswith("__"))
-        )
-        visited.add(id(wrapped))
+            module_name = inspect.getmodule(m).__name__
+        except AttributeError:
+            module_name = "<unknown>"
+        aspectize(m, decorator, module_name=module_name)
 
-    if last and dry_run:
+    if isinstance(thing, Iterable):
+        for x in thing:
+            call(x)
+    else:
+        call(thing)
+
+    if dry_run:
         if config.no_browser:
             print("Tried to do a dry run and display the results, but no_browser is set in config.")
         else:
             print("Please check your browser to select options and filters for aspects.")
             _web_aspectized_dry_run(
-                decorator=decorator,
-                pattern=pattern,
-                check=check,
-                hits=hits,
-                module_name=module_name,
+                decorator=decorator, pattern=pattern, check=check, hits=hits, module_name=str(thing)
             )
-    return thing
 
 
 @beartype
@@ -228,9 +222,6 @@ def woody_logger(func: Callable) -> Callable:
         before = perf_counter_ns()
         res = func(*args, **kwargs)
         after = perf_counter_ns()
-        # log.debug(
-        #     f"{func.__module__}::{getattr(func, '__qualname__', func.__name__)}({args}, {kwargs}) -> {res} {type(res)}"
-        # )
         print(
             f"-> {module}{qualname} (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {res} {type(res)}"
         )
@@ -265,3 +256,49 @@ def tinny_profiler(func: callable) -> callable:
 
 def show_profiling():
     _web_tinny_profiler(_timings)
+
+
+def _is_builtin(name, mod):
+    if name in sys.builtin_module_names:
+        return True
+
+    if hasattr(mod, "__file__"):
+        relpath = Path(mod.__file__).parent.relative_to((Path(sys.executable).parent / "lib"))
+        if relpath == Path():
+            return True
+        if relpath.parts[0] == "site-packages":
+            return False
+    return True
+
+
+def _get_imports_from_module(mod):
+    if not hasattr(mod, "__file__"):
+        return
+    with open(mod.__file__, "rb") as file:
+        with contextlib.suppress(ValueError):
+            for x in ast.walk(ast.parse(file.read())):
+                if isinstance(x, ast.Import):
+                    name = x.names[0].name
+                    if (mod := sys.modules.get(name)) and not _is_builtin(name, mod):
+                        yield name, mod
+                if isinstance(x, ast.ImportFrom):
+                    name = x.module
+                    if (mod := sys.modules.get(name)) and not _is_builtin(name, mod):
+                        yield name, mod
+
+
+def iter_submodules(mod: ModuleType, visited=None, results=None) -> set[ModuleType]:
+    """Find all modules recursively that were imported as dependency from  the given module."""
+    if results is None:
+        results = set()
+    if visited is None:
+        visited = set()
+    for name, x in _get_imports_from_module(mod):
+        if name in visited:
+            continue
+        visited.add(name)
+        results.add(name)
+        for name, x in _get_imports_from_module(sys.modules[name]):
+            results.add(x)
+            iter_submodules(x, visited, results)
+    return results

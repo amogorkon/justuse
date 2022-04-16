@@ -35,11 +35,9 @@ __package__ = "tests"
 import logging
 
 from use import auto_install, fatal_exceptions, no_cleanup, use
-from use.aspectizing import _unwrap, _wrap
-from use.hash_alphabet import (JACK_as_num, hexdigest_as_JACK, is_JACK,
-                               num_as_hexdigest)
-from use.pimp import (_check, _get_data_from_pypi, _is_compatible,
-                      _is_version_satisfied, _parse_name)
+from use.aspectizing import _unwrap, _wrap, find_dependency_modules
+from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
+from use.pimp import _check, _get_data_from_pypi, _is_compatible, _is_version_satisfied, _parse_name
 from use.pydantics import JustUse_Info, PyPI_Project, PyPI_Release, Version
 
 log = logging.getLogger(".".join((__package__, __name__)))
@@ -763,3 +761,7 @@ def test_signature_compatibility():
     assert not _check(typing.List[int], typing.Sequence[int])
     assert not _check(Sequence[int], typing.Sequence)
     assert _check(Sequence[int], typing.Sequence[int])
+
+
+def test_dependencies():
+    find_dependency_modules
