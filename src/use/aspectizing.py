@@ -1,8 +1,6 @@
 import ast
 import contextlib
-import importlib
 import inspect
-import pkgutil
 import re
 import sys
 from collections import namedtuple
@@ -202,7 +200,13 @@ def _unwrap(*, thing: Any, name: str):
     return original
 
 
-def woody_logger(func: Callable) -> Callable:
+def _qualname(thing):
+    module = getattr(thing, "__module__", None) or getattr(thing.__class__, "__module__", None)
+    qualname = getattr(thing, "__qualname__", None) or getattr(thing, "__name__", None) or str(thing)
+    return f"{module}::{qualname}"
+
+
+def woody_logger(thing: Callable) -> Callable:
     """
     Decorator to log/track/debug calls and results.
 
@@ -211,21 +215,34 @@ def woody_logger(func: Callable) -> Callable:
     Returns:
         function: The decorated callable.
     """
-    qualname = getattr(func, "__qualname__", None) or getattr(func, "__name__", None) or str(func)
-    module = getattr(func, "__module__", None) or getattr(func.__class__, "__module__", None)
-    if module:
-        module += "."
+    # A class is an instance of type - its type is also type, but only checking for `type(thing) is type`
+    # would exclude metaclasses other than type - not complicated at all.
+    if isinstance(thing, type):
+        # wrapping the class means wrapping `__new__` mainly, which must return the original class, not just a proxy -
+        # because a proxy never could hold up under scrutiny of type(), which can't be faked (like, at all).
+        class wrapper(thing.__class__):
+            def __new__(cls, *args, **kwargs):
+                print(f"{args} {kwargs} -> {thing.__name__}()")
+                before = perf_counter_ns()
+                res = thing(*args, **kwargs)
+                after = perf_counter_ns()
+                print(
+                    f"-> {thing.__name__}() (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {type(res)}"
+                )
+                return res
 
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        print(f"{args} {kwargs} -> {module}{qualname}")
-        before = perf_counter_ns()
-        res = func(*args, **kwargs)
-        after = perf_counter_ns()
-        print(
-            f"-> {module}{qualname} (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {res} {type(res)}"
-        )
-        return res
+    else:
+        # Wrapping a function is way easier..
+        @wraps(thing)
+        def wrapper(*args, **kwargs):
+            print(f"{args} {kwargs} -> {_qualname(thing)}")
+            before = perf_counter_ns()
+            res = thing(*args, **kwargs)
+            after = perf_counter_ns()
+            print(
+                f"-> {_qualname(thing)} (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {res} {type(res)}"
+            )
+            return res
 
     return wrapper
 
