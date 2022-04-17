@@ -1,8 +1,6 @@
 import ast
 import contextlib
 import sys
-from importlib import metadata
-from _frozen_importlib import BuiltinImporter
 from pathlib import Path
 
 from pprint import pprint
@@ -10,20 +8,19 @@ from pprint import pprint
 import beartype
 import numpy
 
+
 def is_builtin(name, mod):
     if name in sys.builtin_module_names:
         return True
-    
+
     if hasattr(mod, "__file__"):
-        relpath = Path(mod.__file__).parent.relative_to(
-                (Path(sys.executable).parent / "lib"))
+        relpath = Path(mod.__file__).parent.relative_to((Path(sys.executable).parent / "lib"))
         if relpath == Path():
             return True
         if relpath.parts[0] == "site-packages":
             return False
     return True
 
-    
 
 def get_imports_from_module(mod):
     if not hasattr(mod, "__file__"):

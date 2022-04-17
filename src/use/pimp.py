@@ -26,7 +26,6 @@ from importlib.metadata import Distribution, PackageNotFoundError, PackagePath
 from itertools import chain, product, zip_longest
 from logging import getLogger
 from numbers import Complex, Integral, Number, Rational, Real
-from os.path import abspath, split
 from pathlib import Path, PureWindowsPath, WindowsPath
 from shutil import rmtree
 from sqlite3 import Cursor
