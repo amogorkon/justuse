@@ -108,7 +108,7 @@ basicConfig(
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.7.5"
+__version__ = "0.7.7"
 # for tests
 __version__ = os.getenv("USE_VERSION", __version__)
 __name__ = "use"
@@ -181,10 +181,16 @@ class Modes(IntEnum):
     no_cleanup = 2**7
 
 
-from use.aspectizing import (apply_aspect, iter_submodules, show_aspects,
-                             show_profiling, tinny_profiler, woody_logger)
+from use.aspectizing import (
+    apply_aspect,
+    iter_submodules,
+    show_aspects,
+    show_profiling,
+    tinny_profiler,
+    woody_logger,
+)
 from use.buffet_old import buffet_table
-from use.main import ProxyModule, Use, test_version
+from use.main import URL, ProxyModule, Use, test_version
 from use.pydantics import Version, git
 
 for member in Modes:
@@ -205,4 +211,4 @@ del use.__dict__["sys"]
 
 with catch_warnings():
     filterwarnings("ignore", category=BeartypeDecorHintPep585DeprecationWarning, module="beartype")
-    apply_aspect(use, beartype)
+    apply_aspect(use.iter_submodules(use), beartype)

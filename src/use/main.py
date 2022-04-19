@@ -25,7 +25,6 @@ from typing import Any, Optional, Union
 from warnings import warn
 
 import requests
-import toml
 from furl import furl as URL
 from icontract import require
 

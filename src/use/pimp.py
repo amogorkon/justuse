@@ -988,11 +988,11 @@ def _real_path(*, path: Path, _applied_decorators: dict, landmark) -> tuple[str,
             else:
                 frame = frame.f_back
         # a few more steps..
-        for x in _applied_decorators:
+        for x in _applied_decorators[landmark]:
             frame = frame.f_back
         try:
-            # frame is in __call__ (or the last decorator we control), we need to step one more frame back
-            source_dir = Path(frame.f_back.f_code.co_filename).resolve().parent
+            # frame is in __call__ (or rather methdispatch), we need to step two frames back
+            source_dir = Path(frame.f_back.f_back.f_code.co_filename).resolve().parent
         # we are being called from a shell like thonny, so we have to assume cwd
         except OSError:
             source_dir = Path.cwd()

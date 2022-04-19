@@ -23,9 +23,9 @@ from use.messages import _web_aspectized, _web_aspectized_dry_run, _web_tinny_pr
 
 # TODO: use an extra WeakKeyDict as watchdog for object deletions and trigger cleanup in these here
 _applied_decorators: DefaultDict[tuple[object, str], Deque[Callable]] = DefaultDict(Deque)
-"{qualname: [callable]} - to see which decorators are applied, in which order"
+"to see which decorators are applied, in which order"
 _aspectized_functions: DefaultDict[tuple[object, str], Deque[Callable]] = DefaultDict(Deque)
-"{qualname: [callable]} - the actually decorated functions to undo aspectizing"
+"the actually decorated functions to undo aspectizing"
 
 
 def show_aspects():
