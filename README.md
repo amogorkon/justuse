@@ -19,7 +19,8 @@ graph TD;
     A[just]-->B["use()"];
     B --> C["Path()"]
     B --> D["URL()"]
-    B --> E[Packages]
+    B --> E[packages]
+    B --> F[git]
 ```
 
 ## Installation
@@ -33,10 +34,12 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [x] decorate *everything* callable recursively via pattern matching, aspect-orientation made easy (except closures, those are *hard*)
 - [x] return a given default if an exception happened during an import, simplifying optional dependencies
 - [x] safe hot auto-reloading of function-only local modules - a REPL-like dev experience with files in jupyter and regular python interpreters
+- [x] signature compatibility checks for all callables in hot reloading modules as a first line of defense against invading bugs
 - [x] safely auto-install version-tagged pure python packages from PyPI
 - [x] have multiple versions of the same package installed and loaded in the same program without conflicts
 - [x] auto-install packages with C-extensions and other precompiled stuff
 - [x] no-hassle inline auto-installation of (almost) all conda packages
+- [ ] install packages directly from github with signature compatibility check for all callables 
 - [ ] attach birdseye debugger to a loaded module as a mode
 - [ ] try to pull packages from a P2P network before pulling from PyPI or conda directly
 - [ ] all justuse-code is compiled to a single, standalone .py file - just drop it into your own code without installation
