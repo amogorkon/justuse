@@ -2,8 +2,8 @@
 Delegating package installation to pip, packaging and friends.
 """
 
-
 import codecs
+import collections
 import contextlib
 import importlib.util
 import inspect
@@ -23,15 +23,15 @@ from functools import reduce
 from importlib import metadata
 from importlib.machinery import ModuleSpec, SourceFileLoader
 from importlib.metadata import Distribution, PackageNotFoundError, PackagePath
-from itertools import chain, product
+from itertools import chain, product, zip_longest
 from logging import getLogger
-from os.path import abspath, split
+from numbers import Complex, Integral, Number, Rational, Real
 from pathlib import Path, PureWindowsPath, WindowsPath
 from shutil import rmtree
 from sqlite3 import Cursor
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, runtime_checkable
+from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, get_args, get_origin, runtime_checkable
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -268,7 +268,7 @@ def _pebkac_no_hash(
     releases = _get_releases(project)
 
     if version not in (r.version for r in releases):
-        last_version = next(iter(reversed(project.releases)))
+        last_version = project.releases >> reversed >> iter >> next
         return RuntimeWarning(Message.no_distribution_found(package_name, version, last_version))
 
     project = _filter_by_version(releases, version=version)
@@ -782,13 +782,16 @@ def _get_data_from_pypi(*, package_name: str, version: str = None) -> PyPI_Proje
 
 @beartype
 def _filter_by_platform(releases: list[PyPI_Release], *, tags: frozenset[PlatformTag]) -> list[PyPI_Release]:
-    filtered = [
-        release for release in releases if _is_compatible(release, platform_tags=tags, include_sdist=False)
-    ]
+    def compatible(info: PyPI_Release, include_sdist=False) -> bool:
+        return (
+            _is_platform_compatible(info, tags, include_sdist)
+            and not info.yanked
+            and (include_sdist or info.justuse.ext not in ("tar", "tar.gz" "zip"))
+        )
+
+    filtered = [release for release in releases if compatible(release, include_sdist=False)]
     if not filtered:
-        return [
-            release for release in releases if _is_compatible(release, platform_tags=tags, include_sdist=True)
-        ]
+        return [release for release in releases if compatible(release, include_sdist=True)]
     return filtered
 
 
@@ -869,15 +872,6 @@ def _is_platform_compatible(
 
     return any(supported_tags.intersection(given_python_tag)) and (
         (info.is_sdist and include_sdist) or any(given_platform_tags.intersection(platform_tags))
-    )
-
-
-@beartype
-def _is_compatible(info: PyPI_Release, platform_tags, include_sdist=False) -> bool:
-    return (
-        _is_platform_compatible(info, platform_tags, include_sdist)
-        and not info.yanked
-        and (include_sdist or info.justuse.ext not in ("tar", "tar.gz" "zip"))
     )
 
 
@@ -994,11 +988,11 @@ def _real_path(*, path: Path, _applied_decorators: dict, landmark) -> tuple[str,
             else:
                 frame = frame.f_back
         # a few more steps..
-        for x in _applied_decorators:
+        for x in _applied_decorators[landmark]:
             frame = frame.f_back
         try:
-            # frame is in __call__ (or the last decorator we control), we need to step one more frame back
-            source_dir = Path(frame.f_back.f_code.co_filename).resolve().parent
+            # frame is in __call__ (or rather methdispatch), we need to step two frames back
+            source_dir = Path(frame.f_back.f_back.f_code.co_filename).resolve().parent
         # we are being called from a shell like thonny, so we have to assume cwd
         except OSError:
             source_dir = Path.cwd()
@@ -1036,3 +1030,144 @@ def _real_path(*, path: Path, _applied_decorators: dict, landmark) -> tuple[str,
     module_name = path.stem  # sic!
 
     return name, module_name, package_name, path
+
+
+numerics = [bool, Integral, Rational, Real, Complex]
+
+
+class NotComparableWarning(UserWarning):
+    pass
+
+
+def _modules_are_compatible(pre, post):
+    for name, pre_obj in pre.__dict__.items():
+        if callable(pre_obj):
+            try:
+                post_obj = getattr(post, name)
+            except AttributeError:
+                return False
+            if _is_compatible(pre_obj, post_obj):
+                continue
+            else:
+                return False
+    return True
+
+
+def _is_compatible(pre, post):
+    sig = inspect.signature(pre)
+    pre_sig = []
+    # first separate args and kwargs so we can sort kwargs alphabetically
+    args = []
+    kwargs = []
+
+    for k, v in sig.parameters.items():
+        if v.kind is v.VAR_KEYWORD or v.POSITIONAL_OR_KEYWORD:
+            kwargs.append((k, v))
+        else:
+            args.append((k, v))
+
+    for k, v in args:
+        v = v.annotation
+        pre_sig.append(v if v is not inspect._empty else Any)
+
+    for k, v in sorted(kwargs):
+        v = v.annotation
+        pre_sig.append(v if v is not inspect._empty else Any)
+
+    v = sig.return_annotation
+    pre_sig.append(v if v is not inspect._empty else Any)
+
+    sig = inspect.signature(post)
+    post_sig = []
+
+    args = []
+    kwargs = []
+
+    for k, v in sig.parameters.items():
+        if v.kind is v.VAR_KEYWORD or v.POSITIONAL_OR_KEYWORD:
+            kwargs.append((k, v))
+        else:
+            args.append((k, v))
+
+    for k, v in args:
+        v = v.annotation
+        post_sig.append(v if v is not inspect._empty else Any)
+
+    for k, v in sorted(kwargs):
+        v = v.annotation
+        post_sig.append(v if v is not inspect._empty else Any)
+
+    v = sig.return_annotation
+    post_sig.append(v if v is not inspect._empty else Any)
+    return all(_check(x, y) for x, y in zip_longest(pre_sig, post_sig, fillvalue=Any))
+
+
+def _check(x, y):
+    if config.debugging:
+        print(
+            f"checking:\n  "
+            f"{x!r:<30} "
+            f"({type(x).__module__}.{type(x).__qualname__})\n  "
+            f"{y!r:<30} "
+            f"({type(y).__module__}.{type(y).__qualname__})"
+        )
+
+    # narrowing {(Any => Any) | (Any => something)} is OK
+    if x is Any:
+        return True
+    # broadening (something => Any) is NOK
+    if y is Any:
+        return False
+
+    # now to the more specific cases (something => something else)
+    with contextlib.suppress(TypeError):  # issubclass is allergic to container classes (types.GenericAlias)
+        # let's first check if we're dealing with numbers
+        if issubclass(x, Number) and issubclass(y, Number):
+            # since the generic implementations aren't actual subclasses of each other
+            # we have to map to the numeric tower classes
+            for X in numerics:
+                if issubclass(x, X):
+                    break
+            x = X
+            for Y in numerics:
+                if issubclass(y, Y):
+                    break
+            y = Y
+    # Need to do this *before* we access `__name__`
+    X = get_origin(x) or x
+    Y = get_origin(y) or y
+
+    # the other important type hierarchy are
+    # containers
+    # let's check if the user is using typing
+    # classes and educate them to use
+    # collections.abc instead
+    for name, t in {"X": X, "Y": Y}.items():
+        if t.__module__ != "typing":
+            continue
+        tca = getattr(collections.abc, t.__name__, 0)
+        if not tca:
+            continue
+        warn(
+            NotComparableWarning(
+                f"{t} is of a type from the typing "
+                " module, which can't be compared. "
+                "Please use a type from the "
+                "`collections.abc` module (`{tca!r}`)."
+            )
+        )
+        locals().__setitem__(name, tca)
+
+    if X is not None and Y is not None:
+        # (Sequence => list) is OK, (list => Sequence) is NOK
+        return (
+            all(_check(x_, y_) for x_, y_ in zip_longest(get_args(x), get_args(y), fillvalue=Any))
+            if issubclass(Y, X)
+            else False
+        )
+
+    try:
+        # (x => y) where y is not a subclass of x is NOK
+        return issubclass(y, x)
+    except TypeError:  # (int => list[int]) or (list[int] => int) NOK
+        return False

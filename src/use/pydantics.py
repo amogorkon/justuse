@@ -49,12 +49,19 @@ class Configuration(BaseModel):
         validate_assignment = True
 
 
+class git(BaseModel):
+    repo: str
+    host: str = "github.com"
+    branch: str = "main"
+    commit: Optional[str] = None
+
+
 class Version(PkgVersion):
-    def __new__(self, *args, **kwargs):
+    def __new__(cls, *args, **kwargs):
         if args and isinstance(args[0], Version):
             return args[0]
         else:
-            return super(self, Version).__new__(self)
+            return super(cls, Version).__new__(cls)
 
     def __init__(self, versionobj: Optional[Union[PkgVersion, str]] = None, *, major=0, minor=0, patch=0):
         if isinstance(versionobj, Version):

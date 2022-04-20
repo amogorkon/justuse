@@ -25,7 +25,6 @@ from typing import Any, Optional, Union
 from warnings import warn
 
 import requests
-import toml
 from furl import furl as URL
 from icontract import require
 
@@ -46,8 +45,15 @@ from use import (
 from use.aspectizing import _applied_decorators, apply_aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
-from use.pimp import _build_mod, _ensure_path, _fail_or_default, _parse_name, _real_path
-from use.pydantics import Version
+from use.pimp import (
+    _build_mod,
+    _ensure_path,
+    _fail_or_default,
+    _modules_are_compatible,
+    _parse_name,
+    _real_path,
+)
+from use.pydantics import Version, git
 from use.tools import methdispatch
 
 log = getLogger(__name__)
@@ -116,7 +122,6 @@ class ProxyModule(ModuleType):
         assert isinstance(other, Callable)
 
         kwargs = {
-            "aspectize_dunders": True,
             "excluded_types": {
                 ProxyModule,
             },
@@ -171,6 +176,8 @@ class ModuleReloader:
                         initial_globals=self.initial_globals,
                         module_path=self.path.resolve(),
                     )
+                    if not _modules_are_compatible(self.proxy, mod):
+                        continue
                     self.proxy.__implementation = mod
                 except KeyError:
                     traceback.print_exc()
@@ -192,6 +199,8 @@ class ModuleReloader:
                             initial_globals=self.initial_globals,
                             module_path=self.path,
                         )
+                        if not _modules_are_compatible(self.proxy, mod):
+                            continue
                         self.proxy._ProxyModule__implementation = mod
                     except KeyError:
                         traceback.print_exc()
@@ -206,6 +215,12 @@ class ModuleReloader:
 
 
 class Use(ModuleType):
+    """
+    # Welcome to the world of use
+
+    *asdf* adsf
+    """
+
     def __init__(self):
         self._using = _using
         # might run into issues during testing otherwise
@@ -416,6 +431,16 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         if as_import:
             sys.modules[as_import] = mod
         return ProxyModule(mod)
+
+    @__call__.register(git)
+    def _use_git(
+        self,
+        git_repo: git,
+        /,
+        *,
+        modes=0,
+    ) -> ProxyModule:
+        """Install git repo."""
 
     @__call__.register(Path)
     def _use_path(

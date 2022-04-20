@@ -1,4 +1,7 @@
-s = 'abcdefgabcd'
-set(s)
+import requests
+from pprint import pprint
 
-print(''.join(x for x in s if x not in set(s)))
+owner = "amogorkon"
+repo = "justuse"
+url = f"https://api.github.com/repos/{owner}/{repo}/commits"
+pprint(requests.get(url).json())
