@@ -1,58 +1,51 @@
 import ast
-import contextlib
-import sys
-from pathlib import Path
+import inspect
 
-from pprint import pprint
-
-import beartype
-import numpy
+from collections.abc import Callable
+from itertools import takewhile
+from textwrap import dedent
 
 
-def is_builtin(name, mod):
-    if name in sys.builtin_module_names:
-        return True
+class _PipeTransformer(ast.NodeTransformer):
+    def visit_BinOp(self, node):
+        if not isinstance(node.op, (ast.LShift, ast.RShift)):
+            return node
+        if not isinstance(node.right, ast.Call):
+            return self.visit(
+                ast.Call(
+                    func=node.right,
+                    args=[node.left],
+                    keywords=[],
+                    starargs=None,
+                    kwargs=None,
+                    lineno=node.right.lineno,
+                    col_offset=node.right.col_offset,
+                )
+            )
+        node.right.args.insert(0 if isinstance(node.op, ast.RShift) else len(node.right.args), node.left)
+        return self.visit(node.right)
 
-    if hasattr(mod, "__file__"):
-        relpath = Path(mod.__file__).parent.relative_to((Path(sys.executable).parent / "lib"))
-        if relpath == Path():
-            return True
-        if relpath.parts[0] == "site-packages":
-            return False
-    return True
-
-
-def get_imports_from_module(mod):
-    if not hasattr(mod, "__file__"):
-        return
-    with open(mod.__file__, "rb") as file:
-        with contextlib.suppress(ValueError):
-            for x in ast.walk(ast.parse(file.read())):
-                if isinstance(x, ast.Import):
-                    name = x.names[0].name
-                    if (mod := sys.modules.get(name)) and not is_builtin(name, mod):
-                        yield name
-                if isinstance(x, ast.ImportFrom):
-                    name = x.module
-                    if (mod := sys.modules.get(name)) and not is_builtin(name, mod):
-                        yield name
-
-
-def get_submodules(mod, visited=None, results=None):
-    if results is None:
-        results = set()
-    if visited is None:
-        visited = set()
-    for name in get_imports_from_module(mod):
-        if name in visited:
-            continue
-        visited.add(name)
-        results.add(name)
-        for x in get_imports_from_module(sys.modules[name]):
-            results.add(x)
-            get_submodules(sys.modules[x], visited, results)
-    return results
-
-
-pprint(list(get_submodules(beartype)))
-print(len(get_submodules(beartype)))
+def pipes(func_or_class):
+    if inspect.isclass(func_or_class):
+        decorator_frame = inspect.stack()[1]
+        ctx = decorator_frame[0].f_locals
+        first_line_number = decorator_frame[2]
+    else:
+        ctx = func_or_class.__globals__
+        first_line_number = func_or_class.__code__.co_firstlineno
+    source = inspect.getsource(func_or_class)
+    tree = ast.parse(dedent(source))
+    ast.increment_lineno(tree, first_line_number - 1)
+    source_indent = sum(1 for _ in takewhile(str.isspace, source)) + 1
+    for node in ast.walk(tree):
+        if hasattr(node, "col_offset"):
+            node.col_offset += source_indent
+    tree.body[0].decorator_list = [
+        d
+        for d in tree.body[0].decorator_list
+        if isinstance(d, ast.Call) and d.func.id != "pipes" or isinstance(d, ast.Name) and d.id != "pipes"
+    ]
+    tree = _PipeTransformer().visit(tree)
+    code = compile(tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec")
+    exec(code, ctx)
+    return ctx[tree.body[0].name]

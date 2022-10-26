@@ -1,4 +1,1 @@
-import use
-
-print(use.Path.cwd())
-mod = use(use.Path("tests/.tests/.file_for_test387.py"))
+print([''.join(["fizz" if x % 3 == 0 else '', "buzz" if x % 5 == 0 else '']) or x for x in range(20)])

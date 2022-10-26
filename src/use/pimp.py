@@ -599,12 +599,7 @@ def _download_artifact(*, artifact_path: Path, url: URL, hash_algo: Hash, hash_v
 
 @beartype
 def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
-    for n, s in product(meta["names"], importlib.machinery.EXTENSION_SUFFIXES):
-        if n.endswith(s):
-            return False
-    if ".tar" in str(artifact_path):
-        return False
-    return True
+    return next((False for n, s in product(meta["names"], importlib.machinery.EXTENSION_SUFFIXES) if n.endswith(s)), ".tar" not in str(artifact_path))
 
 
 @beartype
@@ -790,9 +785,7 @@ def _filter_by_platform(releases: list[PyPI_Release], *, tags: frozenset[Platfor
         )
 
     filtered = [release for release in releases if compatible(release, include_sdist=False)]
-    if not filtered:
-        return [release for release in releases if compatible(release, include_sdist=True)]
-    return filtered
+    return filtered or [release for release in releases if compatible(release, include_sdist=True)]
 
 
 @beartype
@@ -895,8 +888,6 @@ def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> 
     version = getattr(mod, "version", version)
     if callable(version):
         version = version()
-    if isinstance(version, str):
-        return Version(version)
     return Version(version)
 
 
@@ -988,7 +979,7 @@ def _real_path(*, path: Path, _applied_decorators: dict, landmark) -> tuple[str,
             else:
                 frame = frame.f_back
         # a few more steps..
-        for x in _applied_decorators[landmark]:
+        for _ in _applied_decorators[landmark]:
             frame = frame.f_back
         try:
             # frame is in __call__ (or rather methdispatch), we need to step two frames back
@@ -1171,3 +1162,25 @@ def _check(x, y):
         return issubclass(y, x)
     except TypeError:  # (int => list[int]) or (list[int] => int) NOK
         return False
+
+
+# function to run code in a jupyter notebook sandbox
+def run_in_notebook(code):
+    """Run code in a jupyter notebook sandbox.
+
+    This function is useful to run code in a jupyter notebook
+    without having to run the notebook server.
+
+    Parameters
+    ----------
+    code : str
+        The code to run.
+
+    Returns
+    -------
+    None
+
+    """
+    from IPython.display import display, Javascript
+
+    display(Javascript(f"IPython.notebook.kernel.execute('{code}')"))

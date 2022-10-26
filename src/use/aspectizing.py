@@ -37,13 +37,23 @@ def show_aspects():
 
 def is_callable(thing):
     try:
-        object.__getattribute__(thing, "__call__")
-        return True
+        return callable(
+            object.__getattribute__(type(thing), "__call__")
+        )  # to even catch weird non-callable __call__ methods
     except AttributeError:
         return False
 
 
 HIT = namedtuple("Hit", "qualname name type success exception dunder module_name")
+
+
+def really_callable(thing):
+    try:
+        thing.__get__
+        thing.__call__
+        return True
+    except Exception:
+        return False
 
 
 def apply_aspect(

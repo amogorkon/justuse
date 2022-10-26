@@ -4,8 +4,10 @@ Module to hold the decorators and other utility functions used in justuse.
 
 import ast
 import inspect
+
 from collections.abc import Callable
-from functools import singledispatch, update_wrapper
+from functools import singledispatch
+from functools import update_wrapper
 from itertools import takewhile
 from textwrap import dedent
 
@@ -31,25 +33,6 @@ class _PipeTransformer(ast.NodeTransformer):
         node.right.args.insert(0 if isinstance(node.op, ast.RShift) else len(node.right.args), node.left)
         return self.visit(node.right)
 
-
-# singledispatch for methods
-def methdispatch(func):
-    dispatcher = singledispatch(func)
-
-    def wrapper(*args, **kwargs):
-
-        # so we can dispatch on None
-        if len(args) == 1:
-            if not kwargs:
-                raise NirvanaWarning("No use trying to use Nothing.")
-            args = args + (None,)
-        return dispatcher.dispatch(args[1].__class__)(*args, **kwargs)
-
-    wrapper.register = dispatcher.register
-    update_wrapper(wrapper, func)
-    return wrapper
-
-
 def pipes(func_or_class):
     if inspect.isclass(func_or_class):
         decorator_frame = inspect.stack()[1]
@@ -74,3 +57,20 @@ def pipes(func_or_class):
     code = compile(tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec")
     exec(code, ctx)
     return ctx[tree.body[0].name]
+
+# singledispatch for methods
+def methdispatch(func):
+    dispatcher = singledispatch(func)
+
+    def wrapper(*args, **kwargs):
+
+        # so we can dispatch on None
+        if len(args) == 1:
+            if not kwargs:
+                raise NirvanaWarning("No use trying to use Nothing.")
+            args = args + (None,)
+        return dispatcher.dispatch(args[1].__class__)(*args, **kwargs)
+
+    wrapper.register = dispatcher.register
+    update_wrapper(wrapper, func)
+    return wrapper

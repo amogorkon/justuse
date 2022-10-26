@@ -1,9 +1,10 @@
-import use
-from beartype import beartype
+from hashlib import sha1
+from time import time
+from base64 import b64encode
 
-mod = use("requests")
-use.apply_aspect(mod, beartype)
-use.apply_aspect(mod, use.tinny_profiler)
-for _ in range(1000):
-    mod.get("https://pypi.org/project/beartype/")
-use.show_profiling()
+
+
+m = sha1()
+m.update(f"Pharmatech 1663345906.1270907 49166977".encode())
+print(b64encode(m.hexdigest().encode()))
+print(int(m.hexdigest(), 16))
