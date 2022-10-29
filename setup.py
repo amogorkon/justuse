@@ -1,10 +1,7 @@
 import os
-import sys
-
 from pathlib import Path
 
-from setuptools import find_packages
-from setuptools import setup
+from setuptools import find_packages, setup
 
 here = os.path.abspath(os.path.dirname(__file__))
 src = os.path.join(here, "src/use")
@@ -37,7 +34,7 @@ meta = {
     "version": version,
     "author": "Anselm Kiefner",
     "author_email": "justuse-pypi@anselm.kiefner.de",
-    "python_requires": ">=3.8",
+    "python_requires": ">=3.10",
     "keywords": [
         "installing",
         "packages",
@@ -75,7 +72,6 @@ requires = (
     "pip",
     "pydantic(>= 1.8.2)",
     "requests",
-    "toml",
     "wheel",
 )
 

@@ -1,20 +1,5 @@
-import os
-import openai
+import use
 
-openai.api_key = "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"
+use("h5py", version="2.10.0", hashes='j淝鬯角鷷浲䅌鼽裷鈫摹揩丮绯藛徥桠汉', modes=use.auto_install)
 
-start_sequence = "\nAI:"
-restart_sequence = "\nHuman: "
-
-response = openai.Completion.create(
-  model="text-curie-001",
-  prompt="The following is a conversation with an AI assistant. The assistant is helpful, creative, clever, funny and fairly sarcastic.\n\nHuman: Hello, who are you?\nAI: I am an AI created by OpenAI. How can I help you today?\nHuman: what is the difference between a cow and a pig?\n",
-  temperature=0.9,
-  max_tokens=80,
-  top_p=1,
-  frequency_penalty=0.3,
-  presence_penalty=0.6,
-  stop=[" Human:", " AI:"]
-)
-
-print(response["choices"][0]["text"])
+print("SUCCESS!")

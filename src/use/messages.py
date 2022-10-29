@@ -193,6 +193,9 @@ use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
     no_recommendation = (
         lambda package_name, version: f"We could not find any release for {package_name} {version} that appears to be compatible with this platform. Check your browser for a list of hashes and select manually."
     )
+    bad_version_given = (
+        lambda package_name, version: f"{package_name} apparently has no version {version}, please check your spelling."
+    )
 
 
 class StrMessage(UserMessage):

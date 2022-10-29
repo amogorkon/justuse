@@ -3,6 +3,7 @@ Main classes that act as API for the user to interact with.
 """
 
 
+
 import asyncio
 import atexit
 import hashlib
@@ -59,7 +60,7 @@ from use.tools import methdispatch
 log = getLogger(__name__)
 
 # internal subpackage imports
-test_version: str = locals().get("test_version", None)
+test_version: str = locals().get("test_version")
 
 _reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
 _using = {}

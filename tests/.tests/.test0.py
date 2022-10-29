@@ -1,51 +1,32 @@
-import ast
-import inspect
+import requests
+from pprint import pprint
+from use import pydantics
+from pydantic import BaseModel
+from typing import Optional
 
-from collections.abc import Callable
-from itertools import takewhile
-from textwrap import dedent
 
+package_name = "h5py"
+json_url = 'https://pypi.org/pypi/h5py/json'
+json_url = 'https://pypi.org/pypi/h5py/2.10.0/json'
+reply = requests.get(json_url).json()
 
-class _PipeTransformer(ast.NodeTransformer):
-    def visit_BinOp(self, node):
-        if not isinstance(node.op, (ast.LShift, ast.RShift)):
-            return node
-        if not isinstance(node.right, ast.Call):
-            return self.visit(
-                ast.Call(
-                    func=node.right,
-                    args=[node.left],
-                    keywords=[],
-                    starargs=None,
-                    kwargs=None,
-                    lineno=node.right.lineno,
-                    col_offset=node.right.col_offset,
-                )
-            )
-        node.right.args.insert(0 if isinstance(node.op, ast.RShift) else len(node.right.args), node.left)
-        return self.visit(node.right)
-
-def pipes(func_or_class):
-    if inspect.isclass(func_or_class):
-        decorator_frame = inspect.stack()[1]
-        ctx = decorator_frame[0].f_locals
-        first_line_number = decorator_frame[2]
-    else:
-        ctx = func_or_class.__globals__
-        first_line_number = func_or_class.__code__.co_firstlineno
-    source = inspect.getsource(func_or_class)
-    tree = ast.parse(dedent(source))
-    ast.increment_lineno(tree, first_line_number - 1)
-    source_indent = sum(1 for _ in takewhile(str.isspace, source)) + 1
-    for node in ast.walk(tree):
-        if hasattr(node, "col_offset"):
-            node.col_offset += source_indent
-    tree.body[0].decorator_list = [
-        d
-        for d in tree.body[0].decorator_list
-        if isinstance(d, ast.Call) and d.func.id != "pipes" or isinstance(d, ast.Name) and d.id != "pipes"
-    ]
-    tree = _PipeTransformer().visit(tree)
-    code = compile(tree, filename=(ctx["__file__"] if "__file__" in ctx else "repl"), mode="exec")
-    exec(code, ctx)
-    return ctx[tree.body[0].name]
+class PyPI_URL(BaseModel):
+    digests: dict[str, str]
+    url: str
+    packagetype: str
+    distribution: str
+    requires_python: Optional[str]
+    python_version: Optional[str]
+    python_tag: Optional[str]
+    platform_tag: str
+    filename: str
+    abi_tag: str
+    yanked: bool
+    distribution: Optional[str]
+    build_tag: Optional[str]
+    python_tag: Optional[str]
+    abi_tag: Optional[str]
+    platform_tag: Optional[str]
+    ext: Optional[str]
+    
+urls = [PyPI_URL(**R) for R in reply["urls"]]

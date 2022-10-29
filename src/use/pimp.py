@@ -22,7 +22,7 @@ from functools import lru_cache as cache
 from functools import reduce
 from importlib import metadata
 from importlib.machinery import ModuleSpec, SourceFileLoader
-from importlib.metadata import Distribution, PackageNotFoundError, PackagePath
+from importlib.metadata import Distribution
 from itertools import chain, product, zip_longest
 from logging import getLogger
 from numbers import Complex, Integral, Number, Rational, Real
@@ -31,11 +31,10 @@ from shutil import rmtree
 from sqlite3 import Cursor
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import Any, Iterable, Optional, Protocol, TypeVar, Union, get_args, get_origin, runtime_checkable
+from typing import Any, Optional, Protocol, TypeVar, Union, get_args, get_origin, runtime_checkable
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
-import packaging
 import requests
 from beartype import beartype
 from furl import furl as URL
@@ -43,10 +42,10 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import Hash, InstallationError, Modes, UnexpectedHash, VersionWarning, config, sessionID
-from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
-from use.messages import UserMessage, _web_pebkac_no_hash, _web_pebkac_no_version_no_hash
-from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version
+from use import Hash, InstallationError, Modes, UnexpectedHash, VersionWarning, config
+from use.hash_alphabet import hexdigest_as_JACK, num_as_hexdigest
+from use.messages import UserMessage, _web_pebkac_no_hash
+from use.pydantics import PyPI_Project, PyPI_Release, PyPI_URL, RegistryEntry, Version
 from use.tools import pipes
 
 log = getLogger(__name__)
@@ -132,7 +131,7 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
 
     items: list[PlatformTag] = [PlatformTag(platform=tag.platform) for tag in get_supported()]
 
-    items.extend(PlatformTag(platform=str(tag)) for tag in packaging.tags._platform_tags())
+    items.extend(PlatformTag(platform=str(tag)) for tag in tags.platform_tags())
 
     return frozenset(items)
 
@@ -264,18 +263,23 @@ def _pebkac_no_hash(
     hash_algo: Hash,
     **kwargs,
 ) -> RuntimeWarning:
-    project = _get_data_from_pypi(package_name=package_name, version=version)
-    releases = _get_releases(project)
+    # let's check if package name is correct
+    url = f"https://pypi.org/pypi/{package_name}"
+    response = requests.get(url)
+    if response.status_code == 404:
+        return ImportError(UserMessage.pebkac_unsupported(package_name))
+    elif response.status_code != 200:
+        return RuntimeWarning(UserMessage.web_error(url, response))
+    # let's check if the version is a thing
+    url = f"https://pypi.org/pypi/{package_name}/{version}/json"
+    response = requests.get(url)
+    if response.status_code == 404:
+        return RuntimeWarning(UserMessage.bad_version_given(package_name, version))
+    # looks good, let's get the releases for this version
+    urls = response.json()["urls"]
+    releases = [PyPI_Release(**url, version=version) for url in urls]
 
-    if version not in (r.version for r in releases):
-        last_version = project.releases >> reversed >> iter >> next
-        return RuntimeWarning(Message.no_distribution_found(package_name, version, last_version))
-
-    project = _filter_by_version(releases, version=version)
-    filtered = _filter_by_platform(
-        releases,
-        tags=get_supported(),
-    )
+    filtered = _filter_by_platform(releases, tags=get_supported())
     ordered = _sort_releases(filtered)
 
     if not no_browser:
@@ -599,7 +603,10 @@ def _download_artifact(*, artifact_path: Path, url: URL, hash_algo: Hash, hash_v
 
 @beartype
 def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
-    return next((False for n, s in product(meta["names"], importlib.machinery.EXTENSION_SUFFIXES) if n.endswith(s)), ".tar" not in str(artifact_path))
+    return next(
+        (False for n, s in product(meta["names"], importlib.machinery.EXTENSION_SUFFIXES) if n.endswith(s)),
+        ".tar" not in str(artifact_path),
+    )
 
 
 @beartype
@@ -1181,6 +1188,6 @@ def run_in_notebook(code):
     None
 
     """
-    from IPython.display import display, Javascript
+    from IPython.display import Javascript, display
 
     display(Javascript(f"IPython.notebook.kernel.execute('{code}')"))

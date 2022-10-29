@@ -22,11 +22,6 @@ log = getLogger(__name__)
 # This is necessary to compare sys.version_info with Version and make some tests more elegant, amongst other things.
 
 
-class BaseModel(BaseModel):
-    def __repr__(self):
-        return self.__class__.__name__
-
-
 class Configuration(BaseModel):
     debug_level: int = INFO  # 20
     version_warning: bool = True
@@ -196,28 +191,23 @@ class PyPI_Info(BaseModel):
 
 
 class PyPI_URL(BaseModel):
+    abi_tag: Optional[str]
+    build_tag: Optional[str]
     digests: dict[str, str]
     url: str
     packagetype: str
-    distribution: str
     requires_python: Optional[str]
     python_version: Optional[str]
-    python_tag: Optional[str]
-    platform_tag: str
     filename: str
-    abi_tag: str
     yanked: bool
-    version: Version
     distribution: Optional[str]
-    build_tag: Optional[str]
     python_tag: Optional[str]
-    abi_tag: Optional[str]
     platform_tag: Optional[str]
     ext: Optional[str]
 
 
 class PyPI_Project(BaseModel):
-    releases: dict[Version, list[PyPI_Release]] = {}
+    releases: Optional[dict[Version, list[PyPI_Release]]] = {}
     urls: list[PyPI_URL] = None
     last_serial: int = None
     info: PyPI_Info = None
@@ -225,7 +215,7 @@ class PyPI_Project(BaseModel):
     class Config:
         extra = "ignore"
 
-    def __init__(self, *, releases, urls, info, **kwargs):
+    def __init__(self, *, releases=None, urls, info, **kwargs):
         try:
             for version in list(releases.keys()):
                 if not isinstance(version, str):

@@ -58,10 +58,13 @@ except PermissionError:
     # this should fix the permission issues on android #80
     home = tempfile.mkdtemp(prefix="justuse_")
 
-import toml
+
+import tomllib as toml
 
 (home / "config.toml").touch(mode=0o755, exist_ok=True)
-config_dict = toml.load(home / "config.toml")
+
+with open(home / "config.toml", "rb") as f:
+    config_dict = toml.load(f)
 del toml
 
 from use.pydantics import Configuration
@@ -108,7 +111,7 @@ basicConfig(
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.7.8"
+__version__ = "0.8.0"
 # for tests
 __version__ = os.getenv("USE_VERSION", __version__)
 __name__ = "use"
@@ -189,7 +192,7 @@ from use.aspectizing import (
     tinny_profiler,
     woody_logger,
 )
-from use.buffet_old import buffet_table
+from use.buffet import buffet_table
 from use.main import URL, ProxyModule, Use, test_version
 from use.pydantics import Version, git
 
