@@ -59,7 +59,10 @@ except PermissionError:
     home = tempfile.mkdtemp(prefix="justuse_")
 
 
-import tomllib as toml
+if sys.version < (3, 11):
+    import tomli as toml
+else:
+    import tomllib as toml
 
 (home / "config.toml").touch(mode=0o755, exist_ok=True)
 
