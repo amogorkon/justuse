@@ -59,7 +59,7 @@ except PermissionError:
     home = tempfile.mkdtemp(prefix="justuse_")
 
 
-if sys.version < (3, 11):
+if sys.version_info < (3, 11):
     import tomli as toml
 else:
     import tomllib as toml
