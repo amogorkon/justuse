@@ -473,6 +473,8 @@ def _auto_install(
     # else: we have to download the package and install it
 
     releases = _get_releases_from_pypi(package_name=package_name, version=version)
+    if isinstance(releases, Exception):
+        return releases
     # we *did* ask the user to give us hashes of artifacts that *should* work, so let's check for those.
     # We can't be sure which one of those hashes will work on this platform, so let's try all of them.
 
@@ -763,7 +765,7 @@ def _load_venv_entry(*, module_name: str, installation_path: Path) -> ModuleType
 @beartype
 def _get_project_from_pypi(*, package_name: str) -> PyPI_Project | Exception:
     # let's check if package name is correct
-    url = f"https://pypi.org/pypi/{package_name}"
+    url = f"https://pypi.org/pypi/{package_name}/json"
     response = requests.get(url)
     if response.status_code == 404:
         return ImportError(UserMessage.pebkac_unsupported(package_name))

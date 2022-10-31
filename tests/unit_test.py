@@ -637,8 +637,11 @@ def test_specific_packages(reuse, package_name, module_name, version, hashes):
     Consider this a regression test against specific reported bugs,
     a minimal sample from the mass test.
     """
-    mod = reuse((package_name, module_name), version=version, hashes=hashes, modes=auto_install | no_cleanup)
-    assert isinstance(mod, ModuleType)
+    if sys.version_info < (3, 11):
+        mod = reuse(
+            (package_name, module_name), version=version, hashes=hashes, modes=auto_install | no_cleanup
+        )
+        assert isinstance(mod, ModuleType)
 
 
 def test_451_ignore_spaces_in_hashes(reuse):
