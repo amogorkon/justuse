@@ -110,7 +110,7 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
     (*ahem* pip, package_resources, packaging.tags *cough*)
     whose modules are notoriously resource-hungry.
 
-    Returns a set containing all platform _platform_tags
+    Returns a set containing all platform
     supported on the current system.
     """
     get_supported = None
@@ -131,7 +131,11 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
 
     items: list[PlatformTag] = [PlatformTag(platform=tag.platform) for tag in get_supported()]
 
-    items.extend(PlatformTag(platform=str(tag)) for tag in tags.platform_tags())
+    # yay backwards compatibility..
+    if hasattr(tags, "platform_tags"):
+        items.extend(PlatformTag(platform=str(tag)) for tag in tags.platform_tags())
+    else:
+        items.extend(PlatformTag(platform=str(tag)) for tag in packaging.tags._platform_tags())
 
     return frozenset(items)
 
