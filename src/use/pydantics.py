@@ -250,6 +250,8 @@ class PyPI_Project(BaseModel):
                 info=info,
                 **kwargs,
             )
+        except AttributeError:
+            pass
         finally:
             releases = None
             info = None

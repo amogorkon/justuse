@@ -135,7 +135,7 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
     if hasattr(tags, "platform_tags"):
         items.extend(PlatformTag(platform=str(tag)) for tag in tags.platform_tags())
     else:
-        items.extend(PlatformTag(platform=str(tag)) for tag in packaging.tags._platform_tags())
+        items.extend(PlatformTag(platform=str(tag)) for tag in tags._platform_tags())
 
     return frozenset(items)
 
@@ -267,22 +267,7 @@ def _pebkac_no_hash(
     hash_algo: Hash,
     **kwargs,
 ) -> RuntimeWarning:
-    # let's check if package name is correct
-    url = f"https://pypi.org/pypi/{package_name}"
-    response = requests.get(url)
-    if response.status_code == 404:
-        return ImportError(UserMessage.pebkac_unsupported(package_name))
-    elif response.status_code != 200:
-        return RuntimeWarning(UserMessage.web_error(url, response))
-    # let's check if the version is a thing
-    url = f"https://pypi.org/pypi/{package_name}/{version}/json"
-    response = requests.get(url)
-    if response.status_code == 404:
-        return RuntimeWarning(UserMessage.bad_version_given(package_name, version))
-    # looks good, let's get the releases for this version
-    urls = response.json()["urls"]
-    releases = [PyPI_Release(**url, version=version) for url in urls]
-
+    releases = _get_releases_from_pypi(package_name=package_name, version=version)
     filtered = _filter_by_platform(releases, tags=get_supported())
     ordered = _sort_releases(filtered)
 
@@ -319,7 +304,9 @@ def _pebkac_no_version_no_hash(
     **kwargs,
 ) -> Exception:
     # let's try to make an educated guess and give a useful suggestion
-    proj = _get_data_from_pypi(package_name=package_name)
+    proj = _get_project_from_pypi(package_name=package_name)
+    if isinstance(proj, Exception):
+        return proj
     releases = _get_releases(proj)
 
     ordered = releases >> _filter_by_platform(tags=get_supported()) >> _sort_releases
@@ -484,20 +471,21 @@ def _auto_install(
         return ImportError(msg)
 
     # else: we have to download the package and install it
-    project = _get_data_from_pypi(package_name=package_name, version=version)
+
+    releases = _get_releases_from_pypi(package_name=package_name, version=version)
     # we *did* ask the user to give us hashes of artifacts that *should* work, so let's check for those.
     # We can't be sure which one of those hashes will work on this platform, so let's try all of them.
 
     for H in user_provided_hashes:
         log.info(f"Attempting auto-installation of <{num_as_hexdigest(H)}>...")
         url = next(
-            (URL(purl.url) for purl in project.urls if H == int(purl.digests[hash_algo.name], 16)),
+            (URL(R.url) for R in releases if H == int(R.digests[hash_algo.name], 16)),
             None,
         )
 
         if not url:
             return UnexpectedHash(
-                f"user provided {user_provided_hashes}, do not match any of the {len(project.urls)} possible artifacts"
+                f"user provided {user_provided_hashes}, do not match any of the {len(releases)} possible artifacts"
             )
 
         # got an url for an artifact with a hash given by the user, let's install it
@@ -772,18 +760,35 @@ def _load_venv_entry(*, module_name: str, installation_path: Path) -> ModuleType
     raise ImportError(msg)
 
 
-@cache(maxsize=512)
-def _get_data_from_pypi(*, package_name: str, version: str = None) -> PyPI_Project:
-    if version:
-        json_url = f"https://pypi.org/pypi/{package_name}/{version}/json"
-    else:
-        json_url = f"https://pypi.org/pypi/{package_name}/json"
-    response = requests.get(json_url)
+@beartype
+def _get_project_from_pypi(*, package_name: str) -> PyPI_Project | Exception:
+    # let's check if package name is correct
+    url = f"https://pypi.org/pypi/{package_name}"
+    response = requests.get(url)
     if response.status_code == 404:
-        raise ImportError(UserMessage.pebkac_unsupported(package_name))
+        return ImportError(UserMessage.pebkac_unsupported(package_name))
     elif response.status_code != 200:
-        raise RuntimeWarning(UserMessage.web_error(json_url, response))
+        return RuntimeWarning(UserMessage.web_error(url, response))
     return PyPI_Project(**response.json())
+
+
+@beartype
+def _get_releases_from_pypi(*, package_name: str, version: Version) -> list[PyPI_Release] | Exception:
+    # let's check if package name is correct
+    url = f"https://pypi.org/pypi/{package_name}"
+    response = requests.get(url)
+    if response.status_code == 404:
+        return ImportError(UserMessage.pebkac_unsupported(package_name))
+    elif response.status_code != 200:
+        return RuntimeWarning(UserMessage.web_error(url, response))
+    # let's check if the version is a thing
+    url = f"https://pypi.org/pypi/{package_name}/{version}/json"
+    response = requests.get(url)
+    if response.status_code == 404:
+        return RuntimeWarning(UserMessage.bad_version_given(package_name, version))
+    # looks good, let's get the releases for this version
+    urls = response.json()["urls"]
+    return [PyPI_Release(**url, version=version) for url in urls]
 
 
 @beartype

@@ -37,7 +37,7 @@ import logging
 from use import auto_install, fatal_exceptions, no_cleanup, use
 from use.aspectizing import _unwrap, _wrap, iter_submodules
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
-from use.pimp import _check, _get_data_from_pypi, _is_compatible, _is_version_satisfied, _parse_name
+from use.pimp import _check, _get_project_from_pypi, _is_compatible, _is_version_satisfied, _parse_name
 from use.pydantics import JustUse_Info, PyPI_Project, PyPI_Release, Version
 
 log = logging.getLogger(".".join((__package__, __name__)))
@@ -277,7 +277,7 @@ def test_is_version_satisfied(reuse):
 
 
 def test_find_windows_artifact(reuse):
-    assert reuse.Version("3.17.3") in _get_data_from_pypi(package_name="protobuf").releases
+    assert reuse.Version("3.17.3") in _get_project_from_pypi(package_name="protobuf").releases
 
 
 def test_classic_import_same_version(reuse):
