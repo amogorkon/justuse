@@ -9,34 +9,8 @@ All superfluous imports are deleted to clean up the namespace - and thus help()
 import sys
 from datetime import timezone
 
-if sys.version_info < (3, 9) and "tests" not in sys.modules:
-    import gc
-    import types
-    import typing
-    from abc import ABCMeta
-    from collections.abc import Callable
-    from types import CellType
-    from typing import _GenericAlias as GenericAlias
-
-    for t in (list, dict, set, tuple, frozenset, ABCMeta, Callable, CellType):
-        r = gc.get_referents(t.__dict__)[0]
-        r.update(
-            {
-                "__class_getitem__": classmethod(GenericAlias),
-            }
-        )
-    del (gc,)
-    del types
-    del typing
-    del ABCMeta
-    del Callable
-    del CellType
-    del GenericAlias
-
-
 import os
 import tempfile
-from collections import namedtuple
 from datetime import datetime
 from enum import Enum, IntEnum
 from logging import basicConfig, getLogger
@@ -114,7 +88,7 @@ basicConfig(
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.8.0"
+__version__ = "0.8.1"
 # for tests
 __version__ = os.getenv("USE_VERSION", __version__)
 __name__ = "use"

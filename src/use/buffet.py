@@ -26,7 +26,7 @@ def buffet_table(case, kwargs):
 #            |  |  |  +----------------- auto-install requested?
 #            |  |  |  |
 #            v  v  v  v      
-        case _, _, 0, 0: return ImportError(Message.cant_import(**kwargs))
+        case _, _, 0, 0: return ImportError(Message.cant_import(kwargs["package_name"]))
         case 0, _, 1, 0: return _import_public_no_install(**kwargs)
         case 1, _, 1, 0: return _import_public_no_install(**kwargs) >> _ensure_version(**kwargs)
         case 0, 0, _, 1: return _pebkac_no_version_no_hash(**kwargs)

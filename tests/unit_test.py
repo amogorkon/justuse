@@ -6,7 +6,7 @@ import sys
 import tempfile
 import typing
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from contextlib import AbstractContextManager, closing, redirect_stdout
 from datetime import datetime
 from hashlib import sha256
@@ -34,11 +34,11 @@ is_win = sys.platform.startswith("win")
 __package__ = "tests"
 import logging
 
-from use import auto_install, fatal_exceptions, no_cleanup, use
+from use import auto_install, no_cleanup, use
 from use.aspectizing import _unwrap, _wrap, iter_submodules
 from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, is_JACK, num_as_hexdigest
 from use.pimp import _check, _get_project_from_pypi, _is_compatible, _is_version_satisfied, _parse_name
-from use.pydantics import JustUse_Info, PyPI_Project, PyPI_Release, Version
+from use.pydantics import JustUse_Info, PyPI_Release, Version
 
 log = logging.getLogger(".".join((__package__, __name__)))
 log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)
@@ -694,8 +694,7 @@ def test_454_bad_metadata(reuse):
 def test_454_no_tags(reuse):
     """No version and no platform tags given - a surprisingly common issue."""
 
-    version = "3.1.2"
-    name = "pyspark"
+    name, version = "pyspark", "3.1.2"
     with patch("webbrowser.open"), io.StringIO() as buf, redirect_stdout(buf):
         try:
             reuse(name, version=version, modes=reuse.auto_install)
