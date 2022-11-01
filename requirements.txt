@@ -1,4 +1,4 @@
-beartype >= 0.8.1
+beartype >= 0.11.0
 furl ~= 2.1.2
 hypothesis ~= 6.23.1
 icontract ~= 2.5.4

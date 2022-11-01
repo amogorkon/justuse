@@ -181,7 +181,9 @@ use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
         lambda package_name, target_version: f"Tried to auto-install {package_name} {target_version} but failed because there was a problem with the JSON from PyPI."
     )
     pebkac_no_version_no_hash = _web_pebkac_no_version_no_hash
-    cant_import = lambda name: f"No pkg installed named {name} and auto-installation not requested. Aborting."
+    cant_import = (
+        lambda package_name: f"No pkg installed named {package_name} and auto-installation not requested. Aborting."
+    )
     cant_import_no_version = (
         lambda package_name: f"Failed to auto-install '{package_name}' because no version was specified."
     )
