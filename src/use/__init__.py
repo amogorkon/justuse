@@ -6,12 +6,10 @@ All superfluous imports are deleted to clean up the namespace - and thus help()
 """
 
 
-import sys
-from datetime import timezone
-
 import os
+import sys
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum, IntEnum
 from logging import basicConfig, getLogger
 from pathlib import Path
@@ -31,7 +29,6 @@ try:
 except PermissionError:
     # this should fix the permission issues on android #80
     home = tempfile.mkdtemp(prefix="justuse_")
-
 
 if sys.version_info < (3, 11):
     import tomli as toml
@@ -88,7 +85,7 @@ basicConfig(
 # current use __version__ variable **AS A STRING LITERAL** from
 # this file. If you do anything except updating the version,
 # please check that setup.py can still be executed.
-__version__ = "0.8.1"
+__version__ = "0.8.1.1"
 # for tests
 __version__ = os.getenv("USE_VERSION", __version__)
 __name__ = "use"

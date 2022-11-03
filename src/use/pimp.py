@@ -31,7 +31,8 @@ from shutil import rmtree
 from sqlite3 import Cursor
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import Any, Optional, Protocol, TypeVar, Union, get_args, get_origin, runtime_checkable
+from typing import (Any, Optional, Protocol, TypeVar, Union, get_args,
+                    get_origin, runtime_checkable)
 from warnings import catch_warnings, filterwarnings, warn
 
 import furl
@@ -42,10 +43,12 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import Hash, InstallationError, Modes, UnexpectedHash, VersionWarning, config
+from use import (Hash, InstallationError, Modes, UnexpectedHash,
+                 VersionWarning, config)
 from use.hash_alphabet import hexdigest_as_JACK, num_as_hexdigest
 from use.messages import UserMessage, _web_pebkac_no_hash
-from use.pydantics import PyPI_Project, PyPI_Release, PyPI_URL, RegistryEntry, Version
+from use.pydantics import (PyPI_Project, PyPI_Release, PyPI_URL, RegistryEntry,
+                           Version)
 from use.tools import pipes
 
 log = getLogger(__name__)
@@ -123,10 +126,12 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 from pip._internal.models.target_python import get_supported
         if not get_supported:
             with contextlib.suppress(ImportError):
-                from pip._internal.utils.compatibility_tags import get_supported
+                from pip._internal.utils.compatibility_tags import \
+                    get_supported
         if not get_supported:
             with contextlib.suppress(ImportError):
-                from pip._internal.resolution.resolvelib.factory import get_supported
+                from pip._internal.resolution.resolvelib.factory import \
+                    get_supported
     get_supported = get_supported or (lambda: [])
 
     items: list[PlatformTag] = [PlatformTag(platform=tag.platform) for tag in get_supported()]
@@ -477,7 +482,6 @@ def _auto_install(
         return releases
     # we *did* ask the user to give us hashes of artifacts that *should* work, so let's check for those.
     # We can't be sure which one of those hashes will work on this platform, so let's try all of them.
-
     for H in user_provided_hashes:
         log.info(f"Attempting auto-installation of <{num_as_hexdigest(H)}>...")
         url = next(
@@ -697,7 +701,7 @@ def _install(
             "--prefix",
             str(venv_root),
             "--progress-bar",
-            "ascii",
+            "on",
             "--prefer-binary",
             "--exists-action",
             "i",
