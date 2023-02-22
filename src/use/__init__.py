@@ -48,6 +48,7 @@ del Configuration
 
 config.logs.mkdir(mode=0o755, parents=True, exist_ok=True)
 config.packages.mkdir(mode=0o755, parents=True, exist_ok=True)
+config.web_modules.mkdir(mode=0o755, parents=True, exist_ok=True)
 
 for file in (
     config.logs / "usage.log",

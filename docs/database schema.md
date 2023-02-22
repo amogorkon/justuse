@@ -4,7 +4,7 @@ This is the schema of the registry database for reference.
 * Each distribution corresponds to a single downloadable and installable file, called an artifact.
 * Each artifact has hashes that are generated using certain algorithms, which map to a very large number (no matter how this number is represented otherwise - as hexdigest or JACK or something else).
 * Once a distribution has been installed the artifact could be removed (since everything is now unpacked, compiled etc), but it also can be kept for further P2P sharing.
-* The distribution is installed in a venv, isolated. 
+* The distribution is installed in a venv, isolated.
 
 ```mermaid
 
@@ -39,3 +39,8 @@ This is the schema of the registry database for reference.
     artifacts ||--o{ distributions : "foreign key"
 
 ```
+
+# use(URL)
+In case of a single module being imported from a web-source, the module is cached in <home>/web-modules as a file with a 
+random but valid module name. We keep track of the mapping via DB: artifact.artifact_path -> web-URI used to fetch the 
+module, artifact.module_path -> module-file

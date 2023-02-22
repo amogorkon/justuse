@@ -35,6 +35,7 @@ class Configuration(BaseModel):
     packages: Path = (
         Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute() / "packages"
     )
+    web_modules: Path = Path(os.getenv("JUSTUSE-HOME", str(Path.home() / ".justuse-python"))) / "web-modules"
     logs: Path = Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute() / "logs"
     registry: Path = (
         Path(os.getenv("JUSTUSE_HOME", str(Path.home() / ".justuse-python"))).absolute() / "registry.db"

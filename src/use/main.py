@@ -216,9 +216,8 @@ class ModuleReloader:
 
 class Use(ModuleType):
     """
-    # Welcome to the world of use
+    Welcome to the world of use
 
-    *asdf* adsf
     """
 
     def __init__(self):
@@ -396,6 +395,33 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         default=Modes.fastfail,
         modes=0,
     ) -> ProxyModule:
+        """
+        Import a module from a web source.
+
+        >>> load = use(
+                use.URL("https://raw.githubusercontent.com/amogorkon/stay/master/src/stay/stay.py"), modes=use.recklessness
+                , import_as="stay").Decoder()
+        >>> for x in load("a: b"): x
+        {'a': 'b'}
+
+        Args:
+            url (URL): a web url, wrapped with use.URL()
+            hash_algo (_type_, optional): Hash algo used to check. Defaults to Hash.sha256.
+            hash_value (_type_, optional): Hash value used to pin the content. Defaults to None.
+            initial_globals (Optional[dict[Any, Any]], optional): Any globals passed into the module. Defaults to None.
+            import_as (str, optional): Valid identifier which should be used for "importing" -
+                means the module can be imported anywhere else using this name. Defaults to None.
+            default (_type_, optional): Any value (like a different module) in case importing fails. Defaults to Modes.fastfail.
+            modes (int, optional):
+                * use.recklessness - to skip hash validation
+
+
+        Raises:
+            ImportError: If no default is given, return ImportError if the module cannot be imported
+
+        Returns:
+            ProxyModule: the module wrapped with use.ProxyModule for convenience
+        """
         log.debug(f"use-url: {url}")
         reckless = Modes.recklessness & modes
 
@@ -414,11 +440,22 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             warn(UserMessage.no_validation(url, hash_algo, this_hash), NoValidationWarning)
 
         name = url.path.segments[-1]
+        path = config.web_modules / f"{name}_{int(time.time())}"
+        path.touch(mode=0o755)
+        with open(path, "wb") as file:
+            file.write(response.content)
+
+        if import_as:
+            assert import_as.islower(), f"import-as must be all lowercase, not {import_as}"
+            assert import_as.isidentifier(), f"expected identifier, not {import_as}"
+            assert (
+                import_as not in sys.modules
+            ), f"already imported some other module with the identifier {import_as}"
         try:
             mod = _build_mod(
-                module_name=name,
+                module_name=import_as or name,
                 code=response.content,
-                module_path=_ensure_path(url.path),
+                module_path=path,
                 initial_globals=initial_globals,
             )
         except KeyError:
@@ -426,12 +463,9 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         if exc := None:
             return _fail_or_default(ImportError(exc), default)
         mod = ProxyModule(mod)
-
-        self._set_mod(name=name, mod=mod)
         if import_as:
-            assert import_as.isidentifier()
-            assert import_as not in sys.modules
             sys.modules[import_as] = mod
+
         return mod
 
     @__call__.register(git)
@@ -565,18 +599,18 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         https://github.com/amogorkon/justuse/wiki/Use-String
 
         Args:
-                name (str): The name of the pkg to import.
-                version (str or Version, optional): The version of the pkg to import. Defaults to None.
-                hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
-                hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
-                default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
-                modes (int, optional): Any combination of Use.modes . Defaults to 0.
+            name (str): The name of the pkg to import.
+            version (str or Version, optional): The version of the pkg to import. Defaults to None.
+            hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
+            hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
+            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
+            modes (int, optional): Any combination of Use.modes . Defaults to 0.
 
         Raises:
-                RuntimeWarning: May be raised if the auto-installation of the pkg fails for some reason.
+            RuntimeWarning: May be raised if the auto-installation of the pkg fails for some reason.
 
         Returns:
-                ProxyModule|Any: Module if successful, default as specified otherwise.
+            ProxyModule|Any: Module if successful, default as specified otherwise.
         """
         log.debug(f"use-kwargs: {package_name} {module_name} {version} {hashes}")
         return self._use_package(
@@ -609,18 +643,18 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         https://github.com/amogorkon/justuse/wiki/Use-String
 
         Args:
-                name (str): The name of the pkg to import.
-                version (str or Version, optional): The version of the pkg to import. Defaults to None.
-                hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
-                hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
-                default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
-                modes (int, optional): Any combination of Use.modes . Defaults to 0.
+            name (str): The name of the pkg to import.
+            version (str or Version, optional): The version of the pkg to import. Defaults to None.
+            hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
+            hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
+            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
+            modes (int, optional): Any combination of Use.modes . Defaults to 0.
 
         Raises:
-                RuntimeWarning: May be raised if the auto-installation of the pkg fails for some reason.
+            RuntimeWarning: May be raised if the auto-installation of the pkg fails for some reason.
 
         Returns:
-                ProxyModule|Any: Module if successful, default as specified otherwise.
+            ProxyModule|Any: Module if successful, default as specified otherwise.
         """
         log.debug(f"use-tuple: {pkg_tuple} {version} {hashes}")
         package_name, module_name = pkg_tuple
@@ -654,19 +688,19 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         https://github.com/amogorkon/justuse/wiki/Use-String
 
         Args:
-                name (str): The name of the pkg to import.
-                version (str or Version, optional): The version of the pkg to import. Defaults to None.
-                hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
-                hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
-                default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to Modes.fastfail.
-                modes (int, optional): Any combination of Use.modes . Defaults to 0.
+            name (str): The name of the pkg to import.
+            version (str or Version, optional): The version of the pkg to import. Defaults to None.
+            hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
+            hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
+            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to Modes.fastfail.
+            modes (int, optional): Any combination of Use.modes . Defaults to 0.
 
         Raises:
-                RuntimeWarning: May be raised if something non-critical happens during import.
-                ImportError: May be raised if the auto-installation of the pkg fails for some reason.
+            RuntimeWarning: May be raised if something non-critical happens during import.
+            ImportError: May be raised if the auto-installation of the pkg fails for some reason.
 
         Returns:
-                ProxyModule|Any: Module (wrapped in a ProxyModule) if successful, default as specified if the requested Module couldn't be imported for some reason.
+            ProxyModule|Any: Module (wrapped in a ProxyModule) if successful, default as specified if the requested Module couldn't be imported for some reason.
         """
         package_name, module_name = _parse_name(name)
         return self._use_package(
