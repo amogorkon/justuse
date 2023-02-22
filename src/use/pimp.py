@@ -1,7 +1,6 @@
 """
 Delegating package installation to pip, packaging and friends.
 """
-
 import codecs
 import collections
 import contextlib
@@ -31,24 +30,21 @@ from shutil import rmtree
 from sqlite3 import Cursor
 from subprocess import CalledProcessError, run
 from types import ModuleType
-from typing import (Any, Optional, Protocol, TypeVar, Union, get_args,
-                    get_origin, runtime_checkable)
+from typing import Any, Optional, TypeVar, Union, get_args, get_origin
 from warnings import catch_warnings, filterwarnings, warn
 
-import furl
 import requests
 from beartype import beartype
+import furl
 from furl import furl as URL
 from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import (Hash, InstallationError, Modes, UnexpectedHash,
-                 VersionWarning, config)
+from use import Hash, InstallationError, Modes, UnexpectedHash, VersionWarning, config
 from use.hash_alphabet import hexdigest_as_JACK, num_as_hexdigest
 from use.messages import UserMessage, _web_pebkac_no_hash
-from use.pydantics import (PyPI_Project, PyPI_Release, PyPI_URL, RegistryEntry,
-                           Version)
+from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version
 from use.tools import pipes
 
 log = getLogger(__name__)
@@ -126,12 +122,10 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
                 from pip._internal.models.target_python import get_supported
         if not get_supported:
             with contextlib.suppress(ImportError):
-                from pip._internal.utils.compatibility_tags import \
-                    get_supported
+                from pip._internal.utils.compatibility_tags import get_supported
         if not get_supported:
             with contextlib.suppress(ImportError):
-                from pip._internal.resolution.resolvelib.factory import \
-                    get_supported
+                from pip._internal.resolution.resolvelib.factory import get_supported
     get_supported = get_supported or (lambda: [])
 
     items: list[PlatformTag] = [PlatformTag(platform=tag.platform) for tag in get_supported()]
@@ -444,7 +438,11 @@ def _auto_install(
     cleanup: bool,
     **kwargs,
 ) -> Union[ModuleType, BaseException]:
-    """Install, if necessary, the package and import the module in any possible way."""
+    """Install, if necessary, the package and import the module in any possible way.
+
+    Args:
+        user_provided_hashes (object): 
+    """
     if func:
         result = func()
         if isinstance(result, (Exception, ModuleType)):
@@ -631,9 +629,7 @@ def _find_module_in_venv(package_name: str, version: Version, relp: str) -> Path
         dist = Distribution.from_name(package_name)
         log.info("dist=%s", dist)
         log.debug("dist.files=%s", dist.files)
-        path_set = dist.files
-        log.debug("path_set=%s", path_set)
-        for path in path_set:
+        for path in dist.files:
             log.debug("path=%s", path)
             file = dist.locate_file(path)
             log.debug("file=%s", file)

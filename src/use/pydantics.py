@@ -145,6 +145,7 @@ class PyPI_Release(BaseModel):
             self.packagetype == "sdist" or self.python_version == "source" or self.justuse.abi_tag == "none"
         )
 
+# TODO: cleanup, this is too weird
     @property
     def justuse(self) -> JustUse_Info:
         pp = Path(self.filename)

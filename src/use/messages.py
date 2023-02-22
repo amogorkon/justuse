@@ -114,8 +114,8 @@ def _web_pebkac_no_hash(
                 continue
             table[hash_name].append(
                 entry(
-                    rel.python_tag,
-                    rel.platform_tag,
+                    rel.justuse.python_tag,
+                    rel.justuse.platform_tag,
                     hash_name,
                     hash_value,
                     hexdigest_as_JACK(hash_value),

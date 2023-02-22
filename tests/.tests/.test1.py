@@ -1,10 +1,5 @@
-from base64 import b64encode
-from hashlib import blake2b
-from json import dumps
+from random import choice, seed
 
-print(b64encode(dumps({"type":"hello"}).encode()),
-      x := b64encode(dumps({"payload": "world"}).encode()),
-      b64encode(blake2b(x).hexdigest().encode()),
-sep=".")
+seed(15^3)
 
-print(b64encode("print('hello to you, too')".encode()))
+print(choice(["batman", "spiderman", "panther"]))
