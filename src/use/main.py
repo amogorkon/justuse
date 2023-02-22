@@ -3,7 +3,6 @@ Main classes that act as API for the user to interact with.
 """
 
 
-
 import asyncio
 import atexit
 import hashlib
@@ -393,7 +392,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         hash_algo=Hash.sha256,
         hash_value=None,
         initial_globals: Optional[dict[Any, Any]] = None,
-        as_import: str = None,
+        import_as: str = None,
         default=Modes.fastfail,
         modes=0,
     ) -> ProxyModule:
@@ -426,12 +425,14 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             raise
         if exc := None:
             return _fail_or_default(ImportError(exc), default)
+        mod = ProxyModule(mod)
 
-        frame = inspect.getframeinfo(inspect.currentframe())
         self._set_mod(name=name, mod=mod)
-        if as_import:
-            sys.modules[as_import] = mod
-        return ProxyModule(mod)
+        if import_as:
+            assert import_as.isidentifier()
+            assert import_as not in sys.modules
+            sys.modules[import_as] = mod
+        return mod
 
     @__call__.register(git)
     def _use_git(
@@ -450,7 +451,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         /,
         *,
         initial_globals=None,
-        as_import: str = None,
+        import_as: str = None,
         default=Modes.fastfail,
         modes=0,
     ) -> ProxyModule:
@@ -468,8 +469,9 @@ CREATE TABLE IF NOT EXISTS "hashes" (
                 Optional[ModuleType]: The module if it was imported, otherwise whatever was specified as default.
         """
         initial_globals = initial_globals or {}
-        if as_import:
-            assert as_import.isidentifier()
+        if import_as:
+            assert import_as.isidentifier()
+            assert import_as not in sys.modules
 
         reloading = bool(Use.reloading & modes)
 
@@ -538,8 +540,8 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         if exc:
             return _fail_or_default(ImportError(exc), default)
 
-        if as_import:
-            sys.modules[as_import] = mod
+        if import_as:
+            sys.modules[import_as] = mod
         self._set_mod(name=name, mod=mod)
         return mod
 
