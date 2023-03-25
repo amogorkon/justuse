@@ -441,7 +441,7 @@ def _auto_install(
     """Install, if necessary, the package and import the module in any possible way.
 
     Args:
-        user_provided_hashes (object): 
+        user_provided_hashes (object):
     """
     if func:
         result = func()
@@ -1064,7 +1064,6 @@ def _modules_are_compatible(pre, post):
 
 def _is_compatible(pre, post):
     sig = inspect.signature(pre)
-    pre_sig = []
     # first separate args and kwargs so we can sort kwargs alphabetically
     args = []
     kwargs = []
@@ -1075,17 +1074,8 @@ def _is_compatible(pre, post):
         else:
             args.append((k, v))
 
-    for k, v in args:
-        v = v.annotation
-        pre_sig.append(v if v is not inspect._empty else Any)
-
-    for k, v in sorted(kwargs):
-        v = v.annotation
-        pre_sig.append(v if v is not inspect._empty else Any)
-
-    v = sig.return_annotation
-    pre_sig.append(v if v is not inspect._empty else Any)
-
+    pre_sig = []
+    v = _extracted_from__is_compatible_(args, pre_sig, kwargs, sig)
     sig = inspect.signature(post)
     post_sig = []
 
@@ -1098,17 +1088,24 @@ def _is_compatible(pre, post):
         else:
             args.append((k, v))
 
-    for k, v in args:
-        v = v.annotation
-        post_sig.append(v if v is not inspect._empty else Any)
-
-    for k, v in sorted(kwargs):
-        v = v.annotation
-        post_sig.append(v if v is not inspect._empty else Any)
-
-    v = sig.return_annotation
-    post_sig.append(v if v is not inspect._empty else Any)
+    v = _extracted_from__is_compatible_(args, post_sig, kwargs, sig)
     return all(_check(x, y) for x, y in zip_longest(pre_sig, post_sig, fillvalue=Any))
+
+
+# TODO Rename this here and in `_is_compatible`
+def _extracted_from__is_compatible_(args, arg1, kwargs, sig):
+    for k, result in args:
+        result = result.annotation
+        arg1.append(result if result is not inspect._empty else Any)
+
+    for k, result in sorted(kwargs):
+        result = result.annotation
+        arg1.append(result if result is not inspect._empty else Any)
+
+    result = sig.return_annotation
+    arg1.append(result if result is not inspect._empty else Any)
+
+    return result
 
 
 def _check(x, y):

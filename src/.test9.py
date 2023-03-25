@@ -1,1 +1,5 @@
-print([''.join(["fizz" if x % 3 == 0 else '', "buzz" if x % 5 == 0 else '']) or x for x in range(20)])
+tuples = (1, 2), (23, 4)
+
+
+def f(x):
+    return x * 2

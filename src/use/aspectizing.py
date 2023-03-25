@@ -4,7 +4,7 @@ import inspect
 import re
 import sys
 from collections import namedtuple
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Sized
 from enum import Enum
 from functools import wraps
 from logging import getLogger
@@ -69,7 +69,6 @@ def apply_aspect(
     file=None,
 ) -> None:
     """Apply the aspect as a side-effect, no copy is created."""
-
     regex = re.compile(pattern, re.DOTALL)
 
     if excluded_names is None:
@@ -176,6 +175,7 @@ def apply_aspect(
             print("Tried to do a dry run and display the results, but no_browser is set in config.")
         else:
             print("Please check your browser to select options and filters for aspects.")
+            log.warning("Please check your browser to select options and filters for aspects.")
             _web_aspectized_dry_run(
                 decorator=decorator, pattern=pattern, check=check, hits=hits, module_name=str(thing)
             )
@@ -211,9 +211,35 @@ def _unwrap(*, thing: Any, name: str):
 
 
 def _qualname(thing):
+    if type(thing) is bool:
+        return str(thing)
     module = getattr(thing, "__module__", None) or getattr(thing.__class__, "__module__", None)
-    qualname = getattr(thing, "__qualname__", None) or getattr(thing, "__name__", None) or str(thing)
-    return f"{module}::{qualname}"
+    qualname = (
+        getattr(thing, "__qualname__", None)
+        or getattr(thing, "__name__", None)
+        or f"{type(thing).__name__}()"
+    )
+    qualname = destringified(qualname)
+    return qualname if module == "builtins" else f"{module}::{qualname}"
+
+def destringified(thing):
+    return str(thing).replace("'", "")
+
+def describe(thing):
+    if thing is None:
+        return "None"
+    if type(thing) is bool:
+        return str(thing)
+    if isinstance(thing, (Sized)):
+        if len(thing) == 0:
+            return f"{_qualname(type(thing))} (empty)"
+        if len(thing) < 4:
+            return f"{_qualname(type(thing))}{destringified([_qualname(x) for x in thing])}]"
+        else:
+            return f"{_qualname(type(thing))}[{_qualname(type(thing[0]))}] ({len(thing)} items)"
+    if isinstance(thing, (Iterable)):
+        return f"{_qualname(type(thing))} (content indeterminable)"
+    return _qualname(thing)
 
 
 def woody_logger(thing: Callable) -> Callable:
@@ -227,30 +253,57 @@ def woody_logger(thing: Callable) -> Callable:
     """
     # A class is an instance of type - its type is also type, but only checking for `type(thing) is type`
     # would exclude metaclasses other than type - not complicated at all.
+    name = _qualname(thing)
+
     if isinstance(thing, type):
         # wrapping the class means wrapping `__new__` mainly, which must return the original class, not just a proxy -
         # because a proxy never could hold up under scrutiny of type(), which can't be faked (like, at all).
         class wrapper(thing.__class__):
             def __new__(cls, *args, **kwargs):
-                print(f"{args} {kwargs} -> {thing.__name__}()")
+                # let's check who's calling us
+                caller = inspect.currentframe().f_back.f_code.co_name
+                print(f"{caller}({args} {kwargs}) -> {name}()")
                 before = perf_counter_ns()
                 res = thing(*args, **kwargs)
                 after = perf_counter_ns()
                 print(
-                    f"-> {thing.__name__}() (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {type(res)}"
+                    f"-> {name}() (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {type(res)}",
+                    sep="\n",
                 )
                 return res
 
     else:
-        # Wrapping a function is way easier..
+        # Wrapping a function is way easier.. except..
         @wraps(thing)
         def wrapper(*args, **kwargs):
-            print(f"{args} {kwargs} -> {_qualname(thing)}")
+            # let's check who's calling us
+            caller = inspect.currentframe().f_back.f_code
+            if caller.co_name == "<module>":
+                caller = Path(caller.co_filename).name
+            else:
+                caller = f"{Path(caller.co_filename).name}::{caller.co_name}"
+            print(
+                f"{caller}([{', '.join(describe(a) for a in args)}] {destringified({k: describe(v) for k, v in kwargs.items()}) if len(kwargs) < 4 else f'dict of len{len(kwargs)}'}) -> {_qualname(thing)}"
+            )
             before = perf_counter_ns()
             res = thing(*args, **kwargs)
             after = perf_counter_ns()
+            if isinstance(res, (Sized)):
+                print(
+                    f"-> {describe(thing)} (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {describe(res)}",
+                    sep="\n",
+                )
+                return res
+            if isinstance(res, (Iterable)):  # TODO: Iterable? Iterator? Generator? Ahhhh!
+                print(
+                    f"-> {describe(thing)} (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {describe(res)}",
+                    sep="\n",
+                )
+                return res
+
             print(
-                f"-> {_qualname(thing)} (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {res} {type(res)}"
+                f"-> {describe(thing)} (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {describe(res)}",
+                sep="\n",
             )
             return res
 

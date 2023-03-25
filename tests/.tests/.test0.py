@@ -1,18 +1,10 @@
-from typing import Any, NamedTuple
+import sys
 
-def typed(row, idx: int, kind: type, default: Any = ..., debugging=False):
-    res = row[idx]
-    if default is not ...:
-        if res == "" or res is None:
-            return default
-        assert (
-            type(res) is kind or res is None
-        ), f"'{res}'"
-        return res
-    else:
-        assert (
-            type(res) is kind
-        ), f"'{res}' ({type(res)}) is not {kind}! "
-    return res
+import numpy as np
 
-typed([""], 0, int, 2)
+#for name, mod in list(sys.modules.items()):
+#    del sys.modules[name]
+#    sys.modules[f"'numpy'.name.removeprefix('numpy.')"] = mod
+
+for x in sys.modules:
+    print(x)

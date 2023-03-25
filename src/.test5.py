@@ -1,13 +1,29 @@
+import sys
+import time
+import logging
 import use
+from pathlib import Path
 
-FastAPI = use(
-    "fastapi",
-    version="0.85.2",
-    modes=use.auto_install,
-    hash_algo=use.Hash.sha256,
-    hashes={
-        "M䎹仏攡䪥䠌珥踄歕嬇䔟ȏ蛍㓤㖶㖣系㲯",  # None-None
-        "P褸貦莋㟝縉擣樹鮗綞躋馐㛍㥂髟榛㐿牒",  # None-None
-    },
-)
-print(use.__version__)
+Observer = use('watchdog.observers', version='2.3.0', modes=use.auto_install, hash_algo=use.Hash.sha256, hashes={
+    'Q鉨麲㺝翪峬夛冕廛䀳迆婃儈正㛣辐Ǵ娇',  # py3-win_amd64 
+}).Observer
+
+LoggingEventHandler = use('watchdog.events', version='2.3.0', modes=use.auto_install, hash_algo=use.Hash.sha256, hashes={
+    'Q鉨麲㺝翪峬夛冕廛䀳迆婃儈正㛣辐Ǵ娇',  # py3-win_amd64 
+}).LoggingEventHandler
+
+
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S')
+path = Path(r"E:\Dropbox\code\_test")
+event_handler = LoggingEventHandler()
+observer = Observer()
+observer.schedule(event_handler, path)
+observer.start()
+try:
+    while True:
+        time.sleep(1)
+finally:
+    observer.stop()
+    observer.join()

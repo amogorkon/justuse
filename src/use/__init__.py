@@ -72,9 +72,11 @@ def fraction_of_day(now: datetime = None) -> float:
     )
 
 
+# sourcery skip: avoid-builtin-shadow
 basicConfig(
     filename=config.logs / "usage.log",
     filemode="a",
+    encoding="UTF-8",  #
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
     datefmt=f"%Y%m%d {fraction_of_day()}",
     # datefmt="%Y-%m-%d %H:%M:%S",
@@ -93,7 +95,6 @@ __name__ = "use"
 __package__ = "use"
 
 log = getLogger(__name__)
-log.info(f"### SESSION START {datetime.now().strftime('%Y/%m/%d %H:%M:%S')} {sessionID} ###")
 
 import use.logutil
 

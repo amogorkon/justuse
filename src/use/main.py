@@ -6,7 +6,7 @@ Main classes that act as API for the user to interact with.
 import asyncio
 import atexit
 import hashlib
-import importlib.util
+import importlib
 import inspect
 import os
 import shutil
@@ -56,7 +56,26 @@ from use.pimp import (
 from use.pydantics import Version, git
 from use.tools import methdispatch
 
+
+def excel_style_datetime(now: datetime) -> float:
+    """
+    Build a float representing the current time in the excel format.
+    First 4 digits are the year, the next two are the month, the next two are the day followed
+    by a decimal point, then time in fraction of the day.
+
+    Args:
+        now (datetime): datetime instance to be converted
+
+    Returns:
+        float: Excel style datetime
+    """
+    return int(f"{now.year:04d}{now.month:02d}{now.day:02d}") + round(
+        (now.hour * 3600 + now.minute * 60 + now.second) / 86400, 6
+    )
+
+
 log = getLogger(__name__)
+log.info(f"↓↓↓ JUSTUSE SESSION {excel_style_datetime(datetime.now())} ID:{sessionID} ↓↓↓")
 
 # internal subpackage imports
 test_version: str = locals().get("test_version")
@@ -69,7 +88,7 @@ def _release_locks():
     for _ in range(2):
         [lock.unlock() for lock in threading._shutdown_locks]
         [reloader.stop() for reloader in _reloaders.values()]
-    log.info(f"### SESSION END {datetime.now().strftime('%Y/%m/%d %H:%M:%S')} {sessionID} ###")
+    log.info(f"↑↑↑ JUSTUSE SESSION {excel_style_datetime(datetime.now())} ID:{sessionID} ↑↑↑")
 
 
 atexit.register(_release_locks)
@@ -107,8 +126,6 @@ class ProxyModule(ModuleType):
 
     def __matmul__(self, other: Callable):
         thing = self.__implementation
-        if not other:
-            raise NotImplementedError
 
         # a little hack in order to be able to do `use @ numpy`...
         if isinstance(self.__implementation, Use):
@@ -130,13 +147,21 @@ class ProxyModule(ModuleType):
 
         return apply_aspect(thing, other, **kwargs)
 
-    def __call__(self, *args, **kwargs):
-        with self.__condition:
-            return self.__implementation(*args, **kwargs)
+        # to allow `numpy @ use` for a quick check
 
-    # to allow `numpy @ use` for a quick check
     def __rmatmul__(self, *args, **kwargs):
         return ProxyModule.__matmul__(self, *args, **kwargs)
+
+    # forwarding method calls - allowing even weirder modules?
+    # https://github.com/GrahamDumpleton/wrapt/blob/develop/src/wrapt/wrappers.py
+
+    def __call__(*args, **kwargs):
+        def _unpack_self(self, *args):
+            return self, args
+
+        self, args = _unpack_self(*args)
+
+        return self._ProxyModule__implementation(*args, **kwargs)
 
 
 class ModuleReloader:
@@ -422,40 +447,70 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         Returns:
             ProxyModule: the module wrapped with use.ProxyModule for convenience
         """
-        log.debug(f"use-url: {url}")
-        reckless = Modes.recklessness & modes
-
-        response = requests.get(str(url))
-        if response.status_code != 200:
-            raise ImportError(UserMessage.web_error(url, response))
-        this_hash = hash_algo.value(response.content).hexdigest()
-
-        if hash_value and not reckless:
-            if this_hash != hash_value:
-                return _fail_or_default(
-                    UnexpectedHash(f"{this_hash} does not match the expected hash {hash_value} - aborting!"),
-                    default,
-                )
-        else:
-            warn(UserMessage.no_validation(url, hash_algo, this_hash), NoValidationWarning)
-
-        name = url.path.segments[-1]
-        path = config.web_modules / f"{name}_{int(time.time())}"
-        path.touch(mode=0o755)
-        with open(path, "wb") as file:
-            file.write(response.content)
-
         if import_as:
             assert import_as.islower(), f"import-as must be all lowercase, not {import_as}"
             assert import_as.isidentifier(), f"expected identifier, not {import_as}"
-            assert (
-                import_as not in sys.modules
-            ), f"already imported some other module with the identifier {import_as}"
+            if import_as in sys.modules:
+                if isinstance(sys.modules[import_as], ProxyModule):
+                    return sys.modules[import_as]
+                else:
+                    raise ImportError(f"already imported some other module with the identifier {import_as}")
+
+        log.debug(f"use-url: {url}")
+        name = url.path.segments[-1]
+        reckless = Modes.recklessness & modes
+
+        content = None
+        if query := self.registry.execute(
+            f"SELECT module_path FROM artifacts WHERE artifact_path='{str(url)}'"
+        ).fetchone():
+            module_path = Path(query["module_path"])
+        else:
+            module_path = None
+
+        if module_path is None or not Path(module_path).exists():
+            self.registry.execute(f"DELETE FROM artifacts WHERE artifact_path='{str(url)}'")
+            for p in config.web_modules.glob(f"*_{name}"):
+                p.unlink()
+        else:
+            content = Path(module_path).read_bytes()
+
+        if not content:
+            response = requests.get(str(url))
+            if response.status_code != 200:
+                raise ImportError(UserMessage.web_error(url, response))
+            content = response.content
+
+            this_hash = hash_algo.value(content).hexdigest()
+
+            if not reckless:
+                if hash_value:
+                    if this_hash != hash_value:
+                        return _fail_or_default(
+                            UnexpectedHash(
+                                f"{this_hash} does not match the expected hash {hash_value} - aborting!"
+                            ),
+                            default,
+                        )
+                else:
+                    warn(UserMessage.no_validation(url, hash_algo, this_hash), NoValidationWarning)
+
+            module_path = config.web_modules / f"{excel_style_datetime(datetime.now())}_{name}"
+            module_path.touch(mode=0o755)
+            module_path.write_bytes(content)
+            self.registry.execute(
+                """
+INSERT OR IGNORE INTO artifacts (artifact_path, module_path)
+VALUES (?, ?)
+""",
+                (str(url), str(module_path)),
+            )
+
         try:
             mod = _build_mod(
                 module_name=import_as or name,
-                code=response.content,
-                module_path=path,
+                code=content,
+                module_path=module_path,
                 initial_globals=initial_globals,
             )
         except KeyError:
@@ -465,7 +520,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         mod = ProxyModule(mod)
         if import_as:
             sys.modules[import_as] = mod
-
+        self.registry.connection.commit()
         return mod
 
     @__call__.register(git)
@@ -504,7 +559,6 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         """
         initial_globals = initial_globals or {}
         if import_as:
-            assert import_as.isidentifier()
             assert import_as not in sys.modules
 
         reloading = bool(Use.reloading & modes)
@@ -592,6 +646,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         hashes: Optional[Union[str, list[str]]] = None,
         default=Modes.fastfail,
         modes: int = 0,
+        import_as: str = None,
     ) -> ProxyModule:
         """
         Import a pkg by name.
@@ -623,6 +678,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             default=default,
             modes=modes,
             Message=KwargMessage,
+            import_as=import_as,
         )
 
     @__call__.register(tuple)
@@ -636,6 +692,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         hashes: Optional[Union[str, list[str]]] = None,
         default=Modes.fastfail,
         modes: int = 0,
+        import_as: str = None,
     ) -> ProxyModule:
         """
         Import a pkg by name.
@@ -668,6 +725,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             default=default,
             modes=modes,
             Message=TupleMessage,
+            import_as=import_as,
         )
 
     @__call__.register(str)
@@ -681,6 +739,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         hashes: Optional[Union[str, list[str]]] = None,
         default=Modes.fastfail,
         modes: int = 0,
+        import_as: str = None,
     ) -> ProxyModule:
         """
         Import a pkg by name.
@@ -713,6 +772,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             default=default,
             modes=modes,
             Message=StrMessage,
+            import_as=import_as,
         )
 
     @require(lambda hash_algo: hash_algo != None)
@@ -728,6 +788,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         hash_algo: Hash,
         modes: int = 0,
         Message: type = UserMessage,
+        import_as: str = None,
     ):
         auto_install = bool(Modes.auto_install & modes)
         no_public_installation = bool(Modes.no_public_installation & modes)
@@ -762,7 +823,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             spec = importlib.util.find_spec(module_name.replace("-", "_"))
 
         case = bool(version), bool(hashes), bool(spec), auto_install
-        log.info("case = %s", case)
+        log.info(f"{name}, {package_name}, {module_name}, {version}, {case}")
         # welcome to the buffet table, where everything is a lie
         kwargs = {
             "name": name,
@@ -791,4 +852,24 @@ CREATE TABLE IF NOT EXISTS "hashes" (
 
         if isinstance(result, ModuleType):
             self._set_mod(name=name, mod=result, spec=spec)
+            if import_as:
+                M = sys.modules[module_name]
+                sys.modules[import_as] = M
+                del sys.modules[module_name]
+
             return ProxyModule(result)
+
+
+def excel_style_datetime(now: datetime) -> float:
+    """
+    Build a float representing the current time in the excel format.
+    First 4 digits are the year, the next two are the month, the next two are the day followed
+    by a decimal point, then time in fraction of the day.
+    Args:
+        now (datetime): datetime instance to be converted
+    Returns:
+        float: Excel style datetime
+    """
+    return int(f"{now.year:04d}{now.month:02d}{now.day:02d}") + round(
+        (now.hour * 3600 + now.minute * 60 + now.second) / 86400, 6
+    )
