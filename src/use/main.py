@@ -9,6 +9,7 @@ import hashlib
 import importlib
 import inspect
 import os
+import py_compile
 import shutil
 import sqlite3
 import sys
@@ -52,6 +53,7 @@ from use.pimp import (
     _modules_are_compatible,
     _parse_name,
     _real_path,
+    module_from_pyc,
 )
 from use.pydantics import Version, git
 from use.tools import methdispatch
@@ -470,10 +472,25 @@ CREATE TABLE IF NOT EXISTS "hashes" (
 
         if module_path is None or not Path(module_path).exists():
             self.registry.execute(f"DELETE FROM artifacts WHERE artifact_path='{str(url)}'")
+            self.registry.connection.commit()
             for p in config.web_modules.glob(f"*_{name}"):
                 p.unlink()
+            # pyc and other shenanigans
+            for p in config.web_modules.glob(f"*_{name}?"):
+                p.unlink()
+        elif (module_path.parent / f"{module_path.name}c").exists():
+            module_path = module_path.parent / f"{module_path.name}c"
+            try:
+                mod = ProxyModule(module_from_pyc(name, module_path, initial_globals))
+                if import_as:
+                    sys.modules[import_as] = mod
+                return ProxyModule(mod)
+            except:
+                raise
         else:
             content = Path(module_path).read_bytes()
+            # compile the module into a pyc file and save it for next time
+            py_compile.compile(module_path, module_path.parent / f"{module_path.name}c", optimize=2)
 
         if not content:
             response = requests.get(str(url))
@@ -498,6 +515,8 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             module_path = config.web_modules / f"{excel_style_datetime(datetime.now())}_{name}"
             module_path.touch(mode=0o755)
             module_path.write_bytes(content)
+            py_compile.compile(module_path, module_path.parent / f"{module_path.name}c", optimize=2)
+
             self.registry.execute(
                 """
 INSERT OR IGNORE INTO artifacts (artifact_path, module_path)
@@ -505,6 +524,7 @@ VALUES (?, ?)
 """,
                 (str(url), str(module_path)),
             )
+            self.registry.connection.commit()
 
         try:
             mod = _build_mod(
@@ -520,7 +540,6 @@ VALUES (?, ?)
         mod = ProxyModule(mod)
         if import_as:
             sys.modules[import_as] = mod
-        self.registry.connection.commit()
         return mod
 
     @__call__.register(git)

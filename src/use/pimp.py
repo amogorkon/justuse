@@ -4,6 +4,7 @@ Delegating package installation to pip, packaging and friends.
 import codecs
 import collections
 import contextlib
+import importlib.machinery
 import importlib.util
 import inspect
 import linecache
@@ -33,9 +34,9 @@ from types import ModuleType
 from typing import Any, Optional, TypeVar, Union, get_args, get_origin
 from warnings import catch_warnings, filterwarnings, warn
 
+import furl
 import requests
 from beartype import beartype
-import furl
 from furl import furl as URL
 from icontract import ensure, require
 from packaging import tags
@@ -912,7 +913,7 @@ def _get_version(name: Optional[str] = None, package_name=None, /, mod=None) -> 
 def _build_mod(
     *,
     module_name,
-    code,
+    code: bytes,
     initial_globals: Optional[dict[str, Any]],
     module_path,
     package_name="",
@@ -927,7 +928,6 @@ def _build_mod(
     loader = SourceFileLoader(module_name, str(module_path))
     mod.__loader__ = loader
     mod.__spec__ = ModuleSpec(module_name, loader)
-    sys.modules[module_name] = mod
     code_text = codecs.decode(code)
     # module file "<", ">" chars are specially handled by inspect
     getattr(linecache, "cache")[module_path] = (
@@ -1199,3 +1199,29 @@ def run_in_notebook(code):
     from IPython.display import Javascript, display
 
     display(Javascript(f"IPython.notebook.kernel.execute('{code}')"))
+
+
+def module_from_pyc(module_name: str, path: Path, initial_globals: dict):
+    """Create a module from a pyc file.
+
+    Parameters
+    ----------
+    module_name : str
+        The name of the module.
+    path : Path
+        The path to the pyc file.
+    initial_globals : dict
+        The initial globals to pass to the module.
+
+    Returns
+    -------
+    module
+        The module
+
+    """
+    initial_globals = initial_globals or {}
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    mod = importlib.util.module_from_spec(spec)
+    mod.__dict__.update(initial_globals)
+    spec.loader.exec_module(mod)
+    return mod

@@ -6,26 +6,32 @@ from random import seed, randint
 from collections import Counter
 
 
-
+print("RUNNING...")
 ##########################################
 
-D = {k: None for k in range(1000000)}
-S = set(range(1000000))
+class Test1:
+    __slots__ = "foo",
+
+t1 = Test1()
 
 def test0():
-    seed(0)
-    for _ in range(100):
-        D[randint(1,1000000)]
+    t1.foo = 'foo'
+    t1.foo
+    del t1.foo
+
+class Test2:
+    pass
+
+t2 = Test2()
 
 def test1():
-    seed(0)
-    for _ in range(100):
-        randint(1,1000000) in S
-
+    t2.foo = 'foo'
+    t2.foo
+    del t2.foo
 
 ##########################################
 
-test_funcs = [test0, test1]
+test_funcs = [test0, test1,]
 #test_funcs = []
 
 def rel_stdev(res):
@@ -33,7 +39,7 @@ def rel_stdev(res):
 
 def timeit(func):
     res = []
-    for _ in range(100000):  # https://en.wikipedia.org/wiki/Sample_size_determination#Tables
+    for _ in range(1000000):  # https://en.wikipedia.org/wiki/Sample_size_determination#Tables
         before = perf_counter_ns()
         func()
         after = perf_counter_ns()
