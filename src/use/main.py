@@ -5,8 +5,10 @@ Main classes that act as API for the user to interact with.
 
 import asyncio
 import atexit
+import contextlib
 import hashlib
 import importlib
+import importlib.metadata
 import inspect
 import os
 import py_compile
@@ -29,32 +31,15 @@ import requests
 from furl import furl as URL
 from icontract import require
 
-from use import (
-    AmbiguityWarning,
-    Hash,
-    Modes,
-    NotReloadableWarning,
-    NoValidationWarning,
-    UnexpectedHash,
-    VersionWarning,
-    __version__,
-    buffet_table,
-    config,
-    home,
-    sessionID,
-)
+from use import (AmbiguityWarning, Hash, Modes, NotReloadableWarning,
+                 NoValidationWarning, UnexpectedHash, VersionWarning,
+                 __version__, buffet_table, config, home, sessionID)
 from use.aspectizing import _applied_decorators, apply_aspect
 from use.hash_alphabet import JACK_as_num, is_JACK, num_as_hexdigest
 from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
-from use.pimp import (
-    _build_mod,
-    _ensure_path,
-    _fail_or_default,
-    _modules_are_compatible,
-    _parse_name,
-    _real_path,
-    module_from_pyc,
-)
+from use.pimp import (_build_mod, _ensure_path, _fail_or_default,
+                      _modules_are_compatible, _parse_name, _real_path,
+                      module_from_pyc)
 from use.pydantics import Version, git
 from use.tools import methdispatch
 
@@ -834,6 +819,12 @@ VALUES (?, ?)
         # let's first see if the user might mean something else entirely
         if _ensure_path(f"./{module_name}.py").exists():
             warn(Message.ambiguous_name_warning(name), AmbiguityWarning)
+
+        installed = False
+        with contextlib.suppress(importlib.metadata.PackageNotFoundError):
+            installed_version = Version(importlib.metadata.version(package_name))
+            if installed_version == version:
+                installed = True
         spec = None
 
         if name in self._using:
@@ -841,7 +832,7 @@ VALUES (?, ?)
         elif not auto_install:
             spec = importlib.util.find_spec(module_name.replace("-", "_"))
 
-        case = bool(version), bool(hashes), bool(spec), auto_install
+        case = bool(version), bool(hashes), installed, auto_install
         log.info(f"{name}, {package_name}, {module_name}, {version}, {case}")
         # welcome to the buffet table, where everything is a lie
         kwargs = {

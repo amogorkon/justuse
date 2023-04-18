@@ -9,37 +9,28 @@ from collections import Counter
 print("RUNNING...")
 ##########################################
 
-class Test1:
-    __slots__ = "foo",
-
-t1 = Test1()
+from collections import deque
 
 def test0():
-    t1.foo = 'foo'
-    t1.foo
-    del t1.foo
-
-class Test2:
-    pass
-
-t2 = Test2()
+    L = []
+    for x in range(1000):
+        L.insert(0, x)
 
 def test1():
-    t2.foo = 'foo'
-    t2.foo
-    del t2.foo
+    D = deque()
+    for x in range(1000):
+        D.appendleft(x)
 
 ##########################################
 
-test_funcs = [test0, test1,]
-#test_funcs = []
+test_funcs = [test0, test1]
 
 def rel_stdev(res):
     return stdev(res)/mean(res)
 
 def timeit(func):
     res = []
-    for _ in range(1000000):  # https://en.wikipedia.org/wiki/Sample_size_determination#Tables
+    for _ in range(100000):  # https://en.wikipedia.org/wiki/Sample_size_determination#Tables
         before = perf_counter_ns()
         func()
         after = perf_counter_ns()

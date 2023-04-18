@@ -355,17 +355,12 @@ def _import_public_no_install(
         metadata.PathDistribution.from_name(module_name)
     except metadata.PackageNotFoundError:  # indeed builtin!
         builtin = True
-    # TODO ehhh.. builtin needs to be handled differently?
 
     mod = sys.modules.get(module_name)
     imported = bool(mod)
 
     if not mod:
         mod = importlib.import_module(module_name)
-
-    # # ? does this solve the caching issue?
-    # if not imported:
-    #     del sys.modules[module_name]
     return mod
 
 
@@ -428,6 +423,7 @@ def _check_db_for_installation(*, registry=Cursor, package_name=str, version) ->
 
 @beartype
 def _auto_install(
+    mod: ModuleType | Exception | None = None,
     *,
     package_name: str,
     module_name: str,
@@ -444,6 +440,9 @@ def _auto_install(
     Args:
         user_provided_hashes (object):
     """
+    if isinstance(mod, ModuleType | Exception):
+        return mod
+
     if func:
         result = func()
         if isinstance(result, (Exception, ModuleType)):
@@ -668,6 +667,8 @@ def _install(
     else:
         installation_path = site_pkgs_dir[0]
         module_paths = venv_root.rglob(f"**/{relp}")
+        for path in module_paths:
+            path.chmod(0o700)
 
     python_exe = Path(sys.executable)
 
@@ -1220,6 +1221,7 @@ def module_from_pyc(module_name: str, path: Path, initial_globals: dict):
 
     """
     initial_globals = initial_globals or {}
+    log.info(f"{Path.cwd()=} {module_name=} {path=}")
     spec = importlib.util.spec_from_file_location(module_name, path)
     mod = importlib.util.module_from_spec(spec)
     mod.__dict__.update(initial_globals)
