@@ -1,13 +1,11 @@
 """
 Collection of the messages directed to the user.
-How it works is quite magical - the lambdas prevent the f-strings from being prematuraly evaluated, and are only evaluated once returned.
 Fun fact: f-strings are firmly rooted in the AST.
 """
 
 import webbrowser
 from collections import defaultdict, namedtuple
 from collections.abc import Callable
-from enum import Enum
 from pathlib import Path
 from shutil import copy
 from statistics import geometric_mean, median, stdev
@@ -19,6 +17,7 @@ import use
 from use import __version__, config, home
 from use.hash_alphabet import hexdigest_as_JACK
 from use.pydantics import PyPI_Release, Version
+from use.tools import ALL, VERBOSE, apply
 
 env = Environment(
     loader=FileSystemLoader(Path(__file__).parent / "templates"),
@@ -100,15 +99,6 @@ def _web_aspectized_dry_run(
     webbrowser.open(f"file://{home}/aspects_dry_run.html")
 
 
-def _web_pebkac_no_version_no_hash(*, name, pkg_name, version, no_browser: bool):
-    if not no_browser:
-        webbrowser.open(f"https://snyk.io/advisor/python/{pkg_name}")
-    return f"""Please specify version and hash for auto-installation of {pkg_name!r}.
-{"" if no_browser else "A webbrowser should open to the Snyk Advisor to check whether the package is vulnerable or malicious."}
-If you want to auto-install the latest version, try the following line to select all viable hashes:
-use("{name}", version="{version!s}", modes=use.auto_install)"""
-
-
 @beartype
 def _web_pebkac_no_hash(
     *,
@@ -152,88 +142,77 @@ def _web_pebkac_no_hash(
     webbrowser.open(f"file://{home}/web_exception.html")
 
 
-class UserMessage(Enum):
-    not_reloadable = (
-        lambda name: f"Beware {name} also contains non-function objects, it may not be safe to reload!"
-    )
-    couldnt_connect_to_db = (
-        lambda e: f"Could not connect to the registry database, please make sure it is accessible. ({e})"
-    )
-    use_version_warning = (
-        lambda max_version: f"""Justuse is version {Version(__version__)}, but there is a newer version {max_version} available on PyPI.
+@apply(staticmethod, ALL.methods, mode=VERBOSE)
+class UserMessage:
+    def not_reloadable(*, name):
+        return f"Beware {name} also contains non-function objects, it may not be safe to reload!"
+
+    def couldnt_connect_to_db(*, e):
+        return f"Could not connect to the registry database, please make sure it is accessible. ({e})"
+
+    def use_version_warning(*, max_version):
+        return f"""Justuse is version {Version(__version__)}, but there is a newer version {max_version} available on PyPI.
 To find out more about the changes check out https://github.com/amogorkon/justuse/wiki/What's-new
 Please consider upgrading via
 python -m pip install -U justuse
 """
-    )
-    cant_use = (
-        lambda thing: f"Only pathlib.Path, yarl.URL and str are valid sources of things to import, but got {type(thing)}."
-    )
-    web_error = (
-        lambda url,
-        response: f"Could not load {url} from the interwebs, got a {response.status_code} error."
-    )
-    no_validation = (
-        lambda url,
-        hash_algo,
-        this_hash: f"""Attempting to import from the interwebs with no validation whatsoever!
+
+    def cant_use(*, thing):
+        return f"Only pathlib.Path, yarl.URL and str are valid sources of things to import, but got {type(thing)}."
+
+    def web_error(*, url, response):
+        return f"Could not load {url} from the interwebs, got a {response.status_code} error."
+
+    def no_validation(*, url, hash_algo, this_hash):
+        return f"""Attempting to import from the interwebs with no validation whatsoever!
 To safely reproduce:
 use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
-    )
-    version_warning = (
-        lambda pkg_name,
-        target_version,
-        this_version: f"{pkg_name} expected to be version {target_version}, but got {this_version} instead"
-    )
-    ambiguous_name_warning = (
-        lambda pkg_name: f"Attempting to load the pkg '{pkg_name}', if you rather want to use the local module: use(use._ensure_path('{pkg_name}.py'))"
-    )
-    pebkac_missing_hash = (
-        lambda *,
-        name,
-        pkg_name,
-        version,
-        recommended_hash,
-        no_browser: f"""Failed to auto-install {pkg_name!r} because hashes aren't specified.
+
+    def version_warning(*, pkg_name, target_version, this_version):
+        return f"{pkg_name} expected to be version {target_version}, but got {this_version} instead"
+
+    def ambiguous_name_warning(*, pkg_name):
+        return f"Attempting to load the pkg '{pkg_name}', if you rather want to use the local module: use(use._ensure_path('{pkg_name}.py'))"
+
+    def pebkac_missing_hash(*, name, pkg_name, version, recommended_hash, no_browser):
+        return f"""Failed to auto-install {pkg_name!r} because hashes aren't specified.
         {"" if no_browser else "A webbrowser should open with a list of available hashes for different platforms for you to pick."}"
         If you want to use the package only on this platform, this should work:
     use("{name}", version="{version!s}", hashes={recommended_hash!r}, modes=use.auto_install)"""
-    )
-    pebkac_unsupported = (
-        lambda pkg_name: f"We could not find any version or release for {pkg_name} that could satisfy our requirements!"
-    )
-    pip_json_mess = (
-        lambda pkg_name,
-        target_version: f"Tried to auto-install {pkg_name} {target_version} but failed because there was a problem with the JSON from PyPI."
-    )
-    pebkac_no_version_no_hash = _web_pebkac_no_version_no_hash
-    cant_import = (
-        lambda pkg_name: f"No pkg installed named {pkg_name} and auto-installation not requested. Aborting."
-    )
-    cant_import_no_version = (
-        lambda pkg_name: f"Failed to auto-install '{pkg_name}' because no version was specified."
-    )
 
-    no_distribution_found = (
-        lambda pkg_name,
-        version,
-        last_version: f"Failed to find any distribution for {pkg_name} version {version} that can be run on this platform. (For your information, the most recent version of {pkg_name} is {last_version})"
-    )
+    def pebkac_unsupported(*, pkg_name):
+        return f"We could not find any version or release for {pkg_name} that could satisfy our requirements!"
 
-    no_recommendation = (
-        lambda pkg_name,
-        version: f"We could not find any release for {pkg_name} {version} that appears to be compatible with this platform. Check your browser for a list of hashes and select manually."
-    )
-    bad_version_given = (
-        lambda pkg_name,
-        version: f"{pkg_name} apparently has no version {version}, please check your spelling."
-    )
+    def pip_json_mess(*, pkg_name, target_version):
+        return f"Tried to auto-install {pkg_name} {target_version} but failed because there was a problem with the JSON from PyPI."
+
+    def cant_import(*, pkg_name):
+        return f"No pkg installed named {pkg_name} and auto-installation not requested. Aborting."
+
+    def pebkac_no_version_no_hash(*, name, pkg_name, version, no_browser: bool):
+        if not no_browser:
+            webbrowser.open(f"https://snyk.io/advisor/python/{pkg_name}")
+        return f"""Please specify version and hash for auto-installation of {pkg_name!r}.
+    {"" if no_browser else "A webbrowser should open to the Snyk Advisor to check whether the package is vulnerable or malicious."}
+    If you want to auto-install the latest version, try the following line to select all viable hashes:
+    use("{name}", version="{version!s}", modes=use.auto_install)"""
+
+    def cant_import_no_version(*, pkg_name):
+        return f"Failed to auto-install '{pkg_name}' because no version was specified."
+
+    def no_distribution_found(*, pkg_name, version, last_version):
+        return f"Failed to find any distribution for {pkg_name} version {version} that can be run on this platform. (For your information, the most recent version of {pkg_name} is {last_version})"
+
+    def no_recommendation(*, pkg_name, version):
+        return f"We could not find any release for {pkg_name} {version} that appears to be compatible with this platform. Check your browser for a list of hashes and select manually."
+
+    def bad_version_given(*, pkg_name, version):
+        return f"{pkg_name} apparently has no version {version}, please check your spelling."
 
 
 class StrMessage(UserMessage):
-    cant_import = (
-        lambda pkg_name: f"No pkg installed named {pkg_name} and auto-installation not requested. Aborting."
-    )
+    def cant_import(*, pkg_name):
+        return f"No pkg installed named {pkg_name} and auto-installation not requested. Aborting."
 
 
 class TupleMessage(UserMessage):
