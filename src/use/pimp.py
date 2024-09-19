@@ -43,7 +43,15 @@ from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 
-from use import Hash, InstallationError, Modes, UnexpectedHash, VersionWarning, config
+from use import (
+    Hash,
+    InstallationError,
+    Modes,
+    UnexpectedHash,
+    VersionWarning,
+    config,
+)
+from use.classes import ProxyModule
 from use.hash_alphabet import hexdigest_as_JACK, num_as_hexdigest
 from use.messages import UserMessage, _web_pebkac_no_hash
 from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version
@@ -72,14 +80,14 @@ class PlatformTag:
 
 @beartype
 def _ensure_version(
-    result: ModuleType | Exception, *, name, requested_version, **kwargs
+    result: ModuleType | Exception, *, name, req_ver, **kwargs
 ) -> ModuleType | Exception:
     if not isinstance(result, ModuleType):
         return result
     result_version = _get_version(mod=result)
-    if result_version != requested_version:
+    if result_version != req_ver:
         warn(
-            UserMessage.version_warning(name, requested_version, result_version),
+            UserMessage.version_warning(name, req_ver, result_version),
             category=VersionWarning,
         )
     return result
@@ -259,7 +267,7 @@ def _pebkac_no_version(
             return result
         assert False, f"{func}() returned {result!r}"
 
-    return RuntimeWarning(Message.cant_import_no_version(name))
+    return RuntimeWarning(Message.cant_import_no_version(name=name))
 
 
 @beartype
@@ -562,24 +570,34 @@ def _save_package_info(
 ):
     """Update the registry to contain the pkg's metadata."""
     if not registry.execute(
-        f"SELECT * FROM distributions WHERE name='{pkg_name}' AND version='{version}'"
+        "SELECT * FROM distributions WHERE name=? AND version=?", (pkg_name, version)
     ).fetchone():
         registry.execute(
-            f"""
+            """
 INSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
-VALUES ('{pkg_name}', '{version}', '{installation_path}', {time.time()}, {installation_path is None})
-"""
+VALUES (?, ?, ?, ?, ?)
+""",
+            (
+                pkg_name,
+                version,
+                installation_path,
+                time.time(),
+                installation_path is None,
+            ),
         )
         registry.execute(
-            f"""
+            """
 INSERT OR IGNORE INTO artifacts (distribution_id, artifact_path)
-VALUES ({registry.lastrowid}, '{artifact_path}')
-"""
+VALUES (?, ?)
+""",
+            (registry.lastrowid, artifact_path),
         )
         registry.execute(
-            f"""
+            """
 INSERT OR IGNORE INTO hashes (artifact_id, algo, value)
-VALUES ({registry.lastrowid}, '{hash_algo.name}', '{hash_value}')"""
+VALUES (?, ?, ?)
+""",
+            (registry.lastrowid, hash_algo.name, hash_value),
         )
     registry.connection.commit()
 
@@ -819,8 +837,7 @@ def _get_releases_from_pypi(
         return RuntimeWarning(UserMessage.bad_version_given(pkg_name, req_ver))
     # looks good, let's get the releases for this version
     urls = response.json()["urls"]
-    releases = [PyPI_Release(**url, version=req_ver) for url in urls]
-    return releases
+    return [PyPI_Release(**url, version=req_ver) for url in urls]
 
 
 @beartype
@@ -1269,3 +1286,16 @@ def module_from_pyc(mod_name: str, path: Path, initial_globals: dict):
     mod.__dict__.update(initial_globals)
     spec.loader.exec_module(mod)
     return mod
+
+
+def _import_as(import_as: str):
+    assert import_as.islower(), f"import-as must be all lowercase, not {import_as}"
+    assert import_as.isidentifier(), f"expected identifier, not {import_as}"
+    if import_as not in sys.modules:
+        return None
+    if isinstance(sys.modules[import_as], ProxyModule):
+        return sys.modules[import_as]
+    else:
+        raise ImportError(
+            f"already imported some other module with the identifier {import_as}"
+        )

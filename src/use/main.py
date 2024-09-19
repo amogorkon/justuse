@@ -5,7 +5,6 @@ Main classes that act as API for the user to interact with.
 import asyncio
 import atexit
 import contextlib
-import hashlib
 import importlib
 import importlib.metadata
 import inspect
@@ -17,7 +16,6 @@ import sys
 import threading
 import time
 import traceback
-from collections.abc import Callable
 from datetime import datetime
 from functools import singledispatchmethod
 from logging import DEBUG, getLogger, root
@@ -43,19 +41,37 @@ from use import (
     home,
     sessionID,
 )
-from use.aspectizing import _applied_decorators, apply_aspect
+from use.classes import ProxyModule, ModuleReloader
+from use.aspectizing import _applied_decorators
 from use.hash_alphabet import JACK_as_num, is_JACK
 from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
 from use.pimp import (
     _build_mod,
     _ensure_path,
     _fail_or_default,
-    _modules_are_compatible,
+    _is_builtin,
     _parse_name,
     _real_path,
     module_from_pyc,
+    _import_as,
 )
 from use.pydantics import Version, git
+
+now = time.perf_counter_ns()
+counter_ = 0
+
+
+def timer():
+    global now, counter_
+    counter_ += 1
+    cf = inspect.currentframe()
+    print(
+        f"Time to #{counter_} at L{cf.f_back.f_lineno}({Path(inspect.getframeinfo(cf).filename).name}) in {(time.perf_counter_ns() - now) / 1_000_000_000:.2f} s"
+    )
+    now = time.perf_counter_ns()
+
+
+timer()
 
 
 def excel_style_datetime(now: datetime) -> float:
@@ -99,151 +115,6 @@ def _release_locks():
 atexit.register(_release_locks)
 
 
-class ProxyModule(ModuleType):
-    def __init__(self, mod):
-        self.__implementation = mod
-        self.__condition = threading.RLock()
-
-    def __getattribute__(self, name):
-        if name in (
-            "_ProxyModule__implementation",
-            "_ProxyModule__condition",
-            "",
-            "__class__",
-            "__metaclass__",
-            "__instancecheck__",
-        ):
-            return object.__getattribute__(self, name)
-        with self.__condition:
-            return getattr(self.__implementation, name)
-
-    def __setattr__(self, name, value):
-        if name in (
-            "_ProxyModule__implementation",
-            "_ProxyModule__condition",
-        ):
-            object.__setattr__(self, name, value)
-            return
-        with self.__condition:
-            setattr(self.__implementation, name, value)
-
-    def __matmul__(self, other: Callable):
-        thing = self.__implementation
-
-        # a little hack in order to be able to do `use @ numpy`...
-        if isinstance(self.__implementation, Use):
-            thing = other
-
-            def some_decorator(x):
-                return x
-
-            other = some_decorator
-
-        assert isinstance(other, Callable)
-
-        kwargs = {
-            "excluded_types": {
-                ProxyModule,
-            },
-            "dry_run": True,
-        }
-
-        return apply_aspect(thing, other, **kwargs)
-
-        # to allow `numpy @ use` for a quick check
-
-    def __rmatmul__(self, *args, **kwargs):
-        return ProxyModule.__matmul__(self, *args, **kwargs)
-
-    # forwarding method calls - allowing even weirder modules?
-    # https://github.com/GrahamDumpleton/wrapt/blob/develop/src/wrapt/wrappers.py
-
-    def __call__(*args, **kwargs):
-        def _unpack_self(self, *args):
-            return self, args
-
-        self, args = _unpack_self(*args)
-
-        return self._ProxyModule__implementation(*args, **kwargs)
-
-
-class ModuleReloader:
-    def __init__(self, *, proxy, name, path, pkg_name, initial_globals):
-        self.proxy = proxy
-        "ProxyModula that we refer to."
-        self.name = name
-        self.path = path
-        self.pkg_name = pkg_name
-        self.initial_globals = initial_globals
-        self._condition = threading.RLock()
-        self._stopped = True
-        self._thread = None
-
-    def start_async(self):
-        loop = asyncio.get_running_loop()
-        loop.create_task(self.run_async())
-
-    @require(lambda self: self._thread is None or self._thread.is_alive())
-    def start_threaded(self):
-        self._stopped = False
-        atexit.register(self.stop)
-        self._thread = threading.Thread(
-            target=self.run_threaded, name=f"reloader__{self.name}"
-        )
-        self._thread.start()
-
-    async def run_async(self):
-        last_filehash = None
-        while not self._stopped:
-            with open(self.path, "rb") as file:
-                code = file.read()
-            current_filehash = hashlib.blake2b(code).hexdigest()
-            if current_filehash != last_filehash:
-                try:
-                    mod = _build_mod(
-                        mod_name=self.name,
-                        code=code,
-                        initial_globals=self.initial_globals,
-                        module_path=self.path.resolve(),
-                    )
-                    if not _modules_are_compatible(self.proxy, mod):
-                        continue
-                    self.proxy.__implementation = mod
-                except KeyError:
-                    traceback.print_exc()
-            last_filehash = current_filehash
-            await asyncio.sleep(1)
-
-    def run_threaded(self):
-        last_filehash = None
-        while not self._stopped:
-            with self._condition:
-                with open(self.path, "rb") as file:
-                    code = file.read()
-                current_filehash = hashlib.blake2b(code).hexdigest()
-                if current_filehash != last_filehash:
-                    try:
-                        mod = _build_mod(
-                            mod_name=self.name,
-                            code=code,
-                            initial_globals=self.initial_globals,
-                            module_path=self.path,
-                        )
-                        if not _modules_are_compatible(self.proxy, mod):
-                            continue
-                        self.proxy._ProxyModule__implementation = mod
-                    except KeyError:
-                        traceback.print_exc()
-                last_filehash = current_filehash
-            time.sleep(1)
-
-    def stop(self):
-        self._stopped = True
-
-    def __del__(self):
-        self.stop()
-
-
 class Use(ModuleType):
     """
     Welcome to the world of use
@@ -252,16 +123,19 @@ class Use(ModuleType):
 
     def __init__(self):
         # might run into issues during testing otherwise
+        timer()
         self.registry = self._set_up_registry()
         "Registry sqlite DB to store all relevant package metadata."
-
+        timer()
         if config.debugging:
             root.setLevel(DEBUG)
 
         if config.version_warning:
             try:
+                timer()
                 response = requests.get("https://pypi.org/pypi/justuse/json")
                 "Checking if there's a new version of justuse."
+                timer()
                 data = response.json()
                 max_version = max(
                     Version(version) for version in data["releases"].keys()
@@ -287,6 +161,7 @@ class Use(ModuleType):
 
     def _set_up_registry(self, *, registry=None, path: Path | None = None):
         # recreating reuses the registry connection and file
+        timer()
         if registry is None:
             if path or test_version and "DB_TEST" not in os.environ:
                 registry = sqlite3.connect(path or ":memory:").cursor()
@@ -307,7 +182,7 @@ CREATE TABLE IF NOT EXISTS "artifacts" (
 	"distribution_id"   INTEGER,
 	"import_relpath" TEXT,
 	"artifact_path" TEXT,
-  "module_path" TEXT,
+    "module_path" TEXT,
 	PRIMARY KEY("id" AUTOINCREMENT),
 	FOREIGN KEY("distribution_id") REFERENCES "distributions"("id") ON DELETE CASCADE
 );
@@ -334,6 +209,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
 		"""
         )
         registry.connection.commit()
+        timer()
         return registry
 
     def recreate_registry(self):
@@ -351,7 +227,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
         ).fetchall():
             if table["name"] == "sqlite_sequence":
                 continue
-            self.registry.execute(f"DROP TABLE {table['name']};")
+            self.registry.execute("DROP TABLE ?;", (table["name"],))
             self.registry.connection.commit()
 
     def install(self):
@@ -376,7 +252,10 @@ CREATE TABLE IF NOT EXISTS "hashes" (
     def del_entry(self, name, version):
         # TODO: CASCADE to artifacts etc
         self.registry.execute(
-            "DELETE FROM hashes WHERE artifact_id IN (SELECT id FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?))",
+            """
+DELETE FROM hashes
+WHERE artifact_id
+IN (SELECT id FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?))""",
             (name, str(version)),
         )
         self.registry.execute(
@@ -402,9 +281,11 @@ CREATE TABLE IF NOT EXISTS "hashes" (
                     sub.unlink()
             path.rmdir()
 
-        for name, version, artifact_path, installation_path in self.registry.execute(
-            "SELECT name, version, artifact_path, installation_path FROM distributions JOIN artifacts on distributions.id = distribution_id"
-        ).fetchall():
+        for name, version, artifact_path, installation_path in self.registry.execute("""
+SELECT name, version, artifact_path, installation_path
+FROM distributions
+JOIN artifacts on distributions.id = distribution_id
+""").fetchall():
             if not (
                 _ensure_path(artifact_path).exists()
                 and _ensure_path(installation_path).exists()
@@ -459,25 +340,15 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             ProxyModule: the module wrapped with use.ProxyModule for convenience
         """
         if import_as:
-            assert (
-                import_as.islower()
-            ), f"import-as must be all lowercase, not {import_as}"
-            assert import_as.isidentifier(), f"expected identifier, not {import_as}"
-            if import_as in sys.modules:
-                if isinstance(sys.modules[import_as], ProxyModule):
-                    return sys.modules[import_as]
-                else:
-                    raise ImportError(
-                        f"already imported some other module with the identifier {import_as}"
-                    )
+            if (mod := _import_as(import_as)) is not None:
+                return mod
 
         log.debug(f"use-url: {url}")
         name = url.path.segments[-1]
-        reckless = Modes.recklessness & modes
 
-        content = None
         if query := self.registry.execute(
-            f"SELECT module_path FROM artifacts WHERE artifact_path='{str(url)}'"
+            "SELECT module_path FROM artifacts WHERE artifact_path=?",
+            (str(url),),
         ).fetchone():
             module_path = Path(query["module_path"])
         else:
@@ -485,7 +356,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
 
         if module_path is None or not Path(module_path).exists():
             self.registry.execute(
-                f"DELETE FROM artifacts WHERE artifact_path='{str(url)}'"
+                "DELETE FROM artifacts WHERE artifact_path=?", (str(url),)
             )
             self.registry.connection.commit()
             for p in config.web_modules.glob(f"*_{name}"):
@@ -497,8 +368,6 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             module_path = module_path.parent / f"{module_path.name}c"
             try:
                 mod = ProxyModule(module_from_pyc(name, module_path, initial_globals))
-                if import_as:
-                    sys.modules[import_as] = mod
                 return ProxyModule(mod)
             except:
                 raise
@@ -517,7 +386,7 @@ CREATE TABLE IF NOT EXISTS "hashes" (
 
             this_hash = hash_algo.value(content).hexdigest()
 
-            if not reckless:
+            if not Modes.recklessness & modes:
                 if hash_value:
                     if this_hash != hash_value:
                         return _fail_or_default(
@@ -562,8 +431,6 @@ VALUES (?, ?)
         if exc := None:
             return _fail_or_default(ImportError(exc), default)
         mod = ProxyModule(mod)
-        if import_as:
-            sys.modules[import_as] = mod
         return mod
 
     @__call__.register
@@ -859,6 +726,7 @@ VALUES (?, ?)
             or _is_builtin(pkg_name),
             auto_install,
         )
+
         log.info(
             f"{name=}, {pkg_name=}, {mod_name=}, {hashes=}, {req_ver=}, {installed_version=}, {auto_install=}, {case=}"
         )
