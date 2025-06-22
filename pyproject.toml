@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "justuse"
+version = "0.9.1.1.0"
+description = "a pure-python alternative to import"
+readme = "README.md"
+authors = [
+    { name = "Anselm Kiefner", email = "justuse-pypi@anselm.kiefner.de" },
+]
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+keywords = [
+    "installing",
+    "packages",
+    "hot reload",
+    "auto install",
+    "aspect oriented",
+    "version checking",
+    "functional",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = [
+    "beartype>=0.18.5",
+    "furl>=2.1.3",
+    "icontract>=2.6.6",
+    "jinja2",
+    "packaging==24.1",
+    "pip",
+    "pydantic>=2.8.2",
+    "requests",
+    "wheel",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-cov",
+    "pytest-env",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["use"]
+include-package-data = true
