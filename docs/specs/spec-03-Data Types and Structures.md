@@ -2,13 +2,100 @@
 
 ## 1. Core Data Types
 
-### Enums & Flags
 
-| Type | Values | Purpose |
-|------|--------|---------|
-| **Modes** | `auto_install`, `reloading`, `fastfail` | Behavior control |
-| **Hash** | `SHA256`, `BLAKE2s`, `JACK` | Algorithm selection |
-| **SourceType** | `URL`, `Path`, `git`, `string` | Import source types |
+#### Modes
+
+| Mode                  | Purpose                                                        |
+|-----------------------|----------------------------------------------------------------|
+| auto_install          | Automatically install missing packages from PyPI/conda          |
+| fatal_exceptions      | Raise exceptions instead of warnings for critical errors         |
+| reloading             | Enable hot-reloading of modules on file change                 |
+| no_public_installation| Disallow installation from public package indexes               |
+| fastfail              | Fail immediately on error, no retries or fallbacks              |
+| recklessness          | Allow unsafe operations (e.g., unverified URLs)                 |
+| no_browser            | Disable browser-based install flows and prompts                 |
+| no_cleanup            | Skip cleanup of temporary files and artifacts                   |
+
+
+#### Classes and Types
+
+```mermaid
+classDiagram
+    class Hash {
+        sha256
+        blake
+    }
+    class Modes {
+        auto_install
+        fatal_exceptions
+        reloading
+        no_public_installation
+        fastfail
+        recklessness
+        no_browser
+        no_cleanup
+    }
+    class ModeFlags {
+        AUTO_INSTALL
+        FATAL_EXCEPTIONS
+        RELOADING
+        FASTFAIL
+        RECKLESS
+        DEFAULT
+        NO_PUBLIC_INSTALLATION
+        NO_CLEANUP
+        NO_BROWSER
+    }
+    class ProxyModule {
+        __implementation
+        __condition
+        __init__(mod)
+        __getattribute__(name)
+        __setattr__(name, value)
+        __rmatmul__(*args, **kwargs)
+        __call__(*args, **kwargs)
+    }
+    ProxyModule --|> ModuleType
+
+    class ModuleReloader {
+        proxy
+        name
+        path
+        pkg_name
+        initial_globals
+        _condition
+        _stopped
+        _thread
+        __init__(proxy, name, path, pkg_name, initial_globals)
+        start_async()
+        start_threaded()
+        run_async()
+        run_threaded()
+        stop()
+        __del__()
+    }
+    ModuleReloader --> ProxyModule : uses
+
+    class Use
+    Use --|> ModuleType
+
+    class JustuseIssue
+    class NirvanaWarning
+    class VersionWarning
+    class NotReloadableWarning
+    class NoValidationWarning
+    class AmbiguityWarning
+    class UnexpectedHash
+    class InstallationError
+
+    NirvanaWarning --|> JustuseIssue
+    VersionWarning --|> JustuseIssue
+    NotReloadableWarning --|> JustuseIssue
+    NoValidationWarning --|> JustuseIssue
+    AmbiguityWarning --|> JustuseIssue
+    UnexpectedHash --|> JustuseIssue
+    InstallationError --|> JustuseIssue
+```
 
 ### Registry Schema
 
@@ -42,87 +129,6 @@ erDiagram
     artifacts ||--o{ hashes : verified_by
 ```
 
-## 2. API Reference
-
-### Core Import API
-
-| Function | Parameters | Returns | Example |
-|----------|------------|---------|---------|
-| `use(pkg)` | package name, version, modes | Module | `use('numpy', version='1.21.0')` |
-| `use(URL)` | url, hash_algo, hash_value | Module | `use(URL('http://...'), hash_algo=Hash.SHA256)` |
-| `use(Path)` | path, modes, globals_dict | Module | `use(Path('mod.py'), modes=reloading)` |
-
-### Source Types
-
-```python
-# String packages
-use('numpy', version='1.21.0', modes=use.auto_install)
-
-# URLs with verification
-use(use.URL('https://example.com/mod.py'), hash_algo=use.Hash.SHA256, hash_value='abc...')
-
-# Local paths with reloading
-use(use.Path('my_module.py'), modes=use.reloading)
-
-# Git repositories
-use(use.git('https://github.com/user/repo.git', branch='main', subpath='src/mod.py'))
-
-# Tuple imports
-use(('package_name', 'submodule'))
-```
-
-### Configuration API
-
-| Method | Purpose | Example |
-|--------|---------|---------|
-| `configure()` | Global settings | `use.configure(modes=use.auto_install, timeout=30)` |
-| `context manager` | Temporary config | `with use.configure(modes=use.fastfail): ...` |
-
-### Advanced Features
-
-| Feature | Syntax | Purpose |
-|---------|--------|---------|
-| **Aspect decoration** | `mod @ (predicate, pattern, decorator)` | Apply decorators to callables |
-| **Default fallback** | `use('pkg', default=use.SafeStub())` | Graceful degradation |
-| **Global injection** | `use(use.Path('mod.py'), globals_dict={...})` | Resolve circular deps |
-| **Registry ops** | `use.registry.list_installations()` | Metadata management |
-
-### Error Handling
-
-```mermaid
-classDiagram
-    class JustUseError {
-        +message: str
-    }
-
-    class VersionError {
-        +expected: str
-        +actual: str
-    }
-
-    class SecurityError {
-        +source: str
-        +reason: str
-    }
-
-    class ReloadError {
-        +module: str
-        +cause: str
-    }
-
-    JustUseError <|-- VersionError
-    JustUseError <|-- SecurityError
-    JustUseError <|-- ReloadError
-
-    VersionError <|-- VersionMismatchError
-    VersionError <|-- VersionNotFoundError
-
-    SecurityError <|-- HashMismatchError
-    SecurityError <|-- UntrustedSourceError
-
-    ReloadError <|-- SignatureMismatchError
-    ReloadError <|-- NotReloadableError
-```
 
 ## 3. Registry Operations
 
@@ -137,40 +143,7 @@ classDiagram
 
 # Features & Capabilities
 
-| Category | Features |
-|----------|----------|
-| **Core** | Unified import API (`use()`), inline version checking, hash pinning & verification (SHA256/BLAKE2s/JACK), auto-installation (PyPI, conda, C-extensions), multi-version support, hot auto-reloading, initial module globals, aspect-oriented programming (recursive decoration), default fallbacks, ProxyModule abstraction, registry & audit (SQLite), modes & flags (auto_install, fastfail, fatal_exceptions, no_browser, etc.), no-browser mode |
-| **Security** | HTTPS enforcement, audit logging, configurable security levels, no public installation mode, hash verification, signature compatibility (planned), isolation (planned), module-level variable guards (planned) |
-| **Configuration** | Layered config: env vars, config file, runtime flags, per-import options; testing & debugging support |
-| **Error Handling** | Hierarchical error types, recovery strategies (fallbacks, isolated envs, registry rebuild, revert on reload failure), warning escalation |
-| **Observability** | Usage metrics, immutable audit logs, compliance support |
-| **Testing & Quality** | Comprehensive test suite (unit, integration, security, performance), CI/CD integration, mock infrastructure |
-| **Planned/Advanced** | Plugin/slot architecture, visual dependency graph, P2P sourcing, on-site compilation (Cython), sub-interpreter isolation, signature verification, module-level guards |
 
----
-
-## Use-Case Patterns
-
-### use(Path)
-Import a local file as a module.
-
-### use(str)
-Import a module by name from installed packages or trigger auto-installation.
-
-### use(URL)
-#### reckless
-* Use a web-based module by URL, without hash pinning. Useful for internal testing, but unsafe for production.
-* Content can change or be tampered with.
-
-#### static
-* Content is fixed by hash. URL is just a transport; hash ensures integrity.
-* Downloaded content is stored as an artifact with a hash, compiled into another artifact (system-specific hash).
-
-#### dynamic
-* Content is dependent only on the URL and can change at any time.
-
-### use(git)
-* For content hosted on GitHub, GitLab, etc. Content is fixed by commit hash, making it auditable and reproducible. Useful for both development and production.
 
 
 # Schema
