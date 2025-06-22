@@ -5,12 +5,14 @@ Delegating package installation to pip, packaging and friends.
 import codecs
 import collections
 import contextlib
+import datetime
 import importlib.machinery
 import importlib.util
 import inspect
 import linecache
 import os
 import platform
+import py_compile
 import re
 import sys
 import tarfile
@@ -91,6 +93,11 @@ def _ensure_version(
             category=VersionWarning,
         )
     return result
+
+
+def _hash(algo, content: bytes) -> int:
+    """Calculate a hash of content using the specified algorithm."""
+    int(algo(content).hexdigest(), 16)
 
 
 # fmt: off
@@ -423,8 +430,8 @@ def _check_db_for_installation(
         """
         SELECT
             artifact_path, installation_path, pure_python_package
-        FROM distributions
-        JOIN artifacts ON artifacts.id = distributions.id
+        FROM installations
+        JOIN artifacts ON artifacts.id = installations.id
         WHERE name=? AND version=?
         ORDER BY artifacts.id DESC
         """,
@@ -570,11 +577,11 @@ def _save_package_info(
 ):
     """Update the registry to contain the pkg's metadata."""
     if not registry.execute(
-        "SELECT * FROM distributions WHERE name=? AND version=?", (pkg_name, version)
+        "SELECT * FROM installations WHERE name=? AND version=?", (pkg_name, version)
     ).fetchone():
         registry.execute(
             """
-INSERT INTO distributions (name, version, installation_path, date_of_installation, pure_python_package)
+INSERT INTO installations (name, version, installation_path, date_of_installation, pure_python_package)
 VALUES (?, ?, ?, ?, ?)
 """,
             (
@@ -610,8 +617,7 @@ def _download_artifact(
     # let's check if we downloaded it already, just in case
     if (
         artifact_path.exists()
-        and int(hash_algo.value(artifact_path.read_bytes()).hexdigest(), 16)
-        == hash_value
+        and _hash(hash_algo.value, artifact_path.read_bytes()) == hash_value
     ):
         log.info("Artifact already downloaded. Hashes matching.")
         return
@@ -619,16 +625,11 @@ def _download_artifact(
     log.info("Downloading artifact from PyPI...")
     data = requests.get(url).content
     artifact_path.write_bytes(data)
-    if int(hash_algo.value(artifact_path.read_bytes()).hexdigest(), 16) != hash_value:
+    if _hash(hash_algo.value, artifact_path.read_bytes()) != hash_value:
         # let's try once again, cosmic rays and all, believing in pure dumb luck
-        log.info("Artifact downloaded but hashes don't match. Trying again...")
+        log.info("Artifact downloaded but hashes don't match. WTH?")
         data = requests.get(url).content
         artifact_path.write_bytes(data)
-    if int(hash_algo.value(artifact_path.read_bytes()).hexdigest(), 16) != hash_value:
-        # this means either PyPI is hacked or there is a man-in-the-middle
-        raise ImportError(
-            "Hashes don't match. Aborting. Something very fishy is going on."
-        )
     log.info("Download successful.")
     return
 
@@ -848,7 +849,7 @@ def _filter_by_platform(
         return (
             _is_platform_compatible(info, tags, include_sdist)
             and not info.yanked
-            and (include_sdist or info.justuse.ext not in ("tar", "tar.gz" "zip"))
+            and (include_sdist or info.justuse.ext not in ("tar", "tar.gzzip"))
         )
 
     filtered = [
@@ -1104,6 +1105,88 @@ def _modules_are_compatible(pre, post):
             else:
                 return False
     return True
+
+
+def _get_content_from_url(
+    url,
+    registry: Cursor,
+    name: str,
+    hash_algo,
+    hash_value: str | None = None,
+    reckless: bool = False,
+) -> bytes:
+    if query := registry.execute(
+        "SELECT module_path FROM artifacts WHERE artifact_path=?",
+        (str(url),),
+    ).fetchone():
+        module_path = Path(query["module_path"])
+    else:
+        module_path = None
+
+    if module_path is None or not Path(module_path).exists():
+        registry.execute("DELETE FROM artifacts WHERE artifact_path=?", (str(url),))
+        registry.connection.commit()
+        for p in config.web_modules.glob(f"*_{name}"):
+            p.unlink()
+        # pyc and other shenanigans
+        for p in config.web_modules.glob(f"*_{name}?"):
+            p.unlink()
+    elif (module_path.parent / f"{module_path.name}c").exists():
+        module_path = module_path.parent / f"{module_path.name}c"
+        try:
+            mod = ProxyModule(module_from_pyc(name, module_path, initial_globals))
+            return ProxyModule(mod)
+        except:
+            raise
+    else:
+        content = Path(module_path).read_bytes()
+        # compile the module into a pyc file and save it for next time
+        py_compile.compile(
+            module_path, module_path.parent / f"{module_path.name}c", optimize=2
+        )
+
+    if not content:
+        response = requests.get(str(url))
+        if response.status_code != 200:
+            raise ImportError(UserMessage.web_error(url, response))
+        content = response.content
+
+        this_hash = hash_algo.value(content).hexdigest()
+
+        if not reckless:
+            if hash_value:
+                if this_hash != hash_value:
+                    return _fail_or_default(
+                        UnexpectedHash(
+                            f"{this_hash} does not match the expected hash {hash_value} - aborting!"
+                        ),
+                        default,
+                    )
+            else:
+                warn(
+                    UserMessage.no_validation(url, hash_algo, this_hash),
+                    NoValidationWarning,
+                )
+
+        module_path = (
+            config.web_modules / f"{excel_style_datetime(datetime.now())}_{name}"
+        )
+        module_path.touch(mode=0o755)
+        module_path.write_bytes(content)
+        py_compile.compile(
+            module_path, module_path.parent / f"{module_path.name}c", optimize=2
+        )
+
+        registry.execute(
+            """
+INSERT OR IGNORE INTO artifacts (artifact_path, module_path)
+VALUES (?, ?)
+""",
+            (str(url), str(module_path)),
+        )
+        registry.connection.commit()
+
+    return content
 
 
 def _is_compatible(pre, post):

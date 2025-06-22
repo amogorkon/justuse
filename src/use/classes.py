@@ -5,8 +5,10 @@ import threading
 import time
 import traceback
 from types import ModuleType
-from typing import Callable
+
 from icontract import require
+
+from use.pimp import _build_mod, _modules_are_compatible
 
 
 class ProxyModule(ModuleType):

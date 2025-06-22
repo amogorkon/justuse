@@ -1,5 +1,17 @@
 """
 Main classes that act as API for the user to interact with.
+
+We use the following definitions:
+* hash: The hash of a singular file (whether archive, source or binary - an artifact), always defined by the algorithm used. Is also specific to a specific environment - python version, operating system, etc.
+* artifact: A single file - a module, archive, source or binary.
+* installation: A package that has been installed into a virtual environment for local use.
+
+The idea is that artifacts can readily and savely be shared peer to peer while installations must be locally managed and are not save to share.
+This is due to the fact that installations are tied (possibly compiled against) to the local environment and contain information that is not relevant to
+other environments and also may contain sensitive information.
+
+
+
 """
 
 import asyncio
@@ -9,7 +21,6 @@ import importlib
 import importlib.metadata
 import inspect
 import os
-import py_compile
 import shutil
 import sqlite3
 import sys
@@ -32,8 +43,6 @@ from use import (
     Hash,
     Modes,
     NotReloadableWarning,
-    NoValidationWarning,
-    UnexpectedHash,
     VersionWarning,
     __version__,
     buffet_table,
@@ -41,19 +50,19 @@ from use import (
     home,
     sessionID,
 )
-from use.classes import ProxyModule, ModuleReloader
 from use.aspectizing import _applied_decorators
+from use.classes import ModuleReloader, ProxyModule
 from use.hash_alphabet import JACK_as_num, is_JACK
 from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
 from use.pimp import (
     _build_mod,
     _ensure_path,
     _fail_or_default,
+    _get_content_from_url,
+    _import_as,
     _is_builtin,
     _parse_name,
     _real_path,
-    module_from_pyc,
-    _import_as,
 )
 from use.pydantics import Version, git
 
@@ -180,14 +189,13 @@ class Use(ModuleType):
 CREATE TABLE IF NOT EXISTS "artifacts" (
 	"id"    INTEGER,
 	"distribution_id"   INTEGER,
-	"import_relpath" TEXT,
 	"artifact_path" TEXT,
     "module_path" TEXT,
 	PRIMARY KEY("id" AUTOINCREMENT),
-	FOREIGN KEY("distribution_id") REFERENCES "distributions"("id") ON DELETE CASCADE
+	FOREIGN KEY("distribution_id") REFERENCES "installations"("id") ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS "distributions" (
+CREATE TABLE IF NOT EXISTS "installations" (
 	"id"    INTEGER,
 	"name"  TEXT NOT NULL,
 	"version"   TEXT NOT NULL,
@@ -255,15 +263,15 @@ CREATE TABLE IF NOT EXISTS "hashes" (
             """
 DELETE FROM hashes
 WHERE artifact_id
-IN (SELECT id FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?))""",
+IN (SELECT id FROM artifacts WHERE distribution_id IN (SELECT id FROM installations WHERE name=? AND version=?))""",
             (name, str(version)),
         )
         self.registry.execute(
-            "DELETE FROM artifacts WHERE distribution_id IN (SELECT id FROM distributions WHERE name=? AND version=?)",
+            "DELETE FROM artifacts WHERE distribution_id IN (SELECT id FROM installations WHERE name=? AND version=?)",
             (name, str(version)),
         )
         self.registry.execute(
-            "DELETE FROM distributions WHERE name=? AND version=?", (name, str(version))
+            "DELETE FROM installations WHERE name=? AND version=?", (name, str(version))
         )
         self.registry.connection.commit()
 
@@ -283,8 +291,8 @@ IN (SELECT id FROM artifacts WHERE distribution_id IN (SELECT id FROM distributi
 
         for name, version, artifact_path, installation_path in self.registry.execute("""
 SELECT name, version, artifact_path, installation_path
-FROM distributions
-JOIN artifacts on distributions.id = distribution_id
+FROM installations
+JOIN artifacts on installations.id = distribution_id
 """).fetchall():
             if not (
                 _ensure_path(artifact_path).exists()
@@ -306,7 +314,7 @@ JOIN artifacts on distributions.id = distribution_id
         /,
         *,
         hash_algo=Hash.sha256,
-        hash_value=None,
+        hash_value=None | int,
         initial_globals: dict[Any, Any] | None = None,
         import_as: str = None,
         default=Modes.fastfail,
@@ -323,12 +331,12 @@ JOIN artifacts on distributions.id = distribution_id
 
         Args:
             url (URL): a web url, wrapped with use.URL()
-            hash_algo (_type_, optional): Hash algo used to check. Defaults to Hash.sha256.
-            hash_value (_type_, optional): Hash value used to pin the content. Defaults to None.
+            hash_algo (Hash, optional): Hash algo used to check. Defaults to Hash.sha256.
+            hash_value (str, optional): Hash value used to pin the content. Defaults to None.
             initial_globals (Optional[dict[Any, Any]], optional): Any globals passed into the module. Defaults to None.
             import_as (str, optional): Valid identifier which should be used for "importing" -
                 means the module can be imported anywhere else using this name. Defaults to None.
-            default (_type_, optional): Any value (like a different module) in case importing fails. Defaults to Modes.fastfail.
+            default (Any, optional): Any value (like a different module) in case importing fails. Defaults to Modes.fastfail.
             modes (int, optional):
                 * use.recklessness - to skip hash validation
 
@@ -339,85 +347,22 @@ JOIN artifacts on distributions.id = distribution_id
         Returns:
             ProxyModule: the module wrapped with use.ProxyModule for convenience
         """
+        log.debug(f"use-url: {url}")
         if import_as:
             if (mod := _import_as(import_as)) is not None:
                 return mod
 
-        log.debug(f"use-url: {url}")
+        reckless = bool(modes & Modes.recklessness)
         name = url.path.segments[-1]
 
-        if query := self.registry.execute(
-            "SELECT module_path FROM artifacts WHERE artifact_path=?",
-            (str(url),),
-        ).fetchone():
-            module_path = Path(query["module_path"])
-        else:
-            module_path = None
+        # url, content, pyc - in reverse order of appearance
+        result = _get_pyc(url, hash_algo, hash_value)
+        if isinstance(result, Exception):
+            return _fail_or_default(result, default)
 
-        if module_path is None or not Path(module_path).exists():
-            self.registry.execute(
-                "DELETE FROM artifacts WHERE artifact_path=?", (str(url),)
-            )
-            self.registry.connection.commit()
-            for p in config.web_modules.glob(f"*_{name}"):
-                p.unlink()
-            # pyc and other shenanigans
-            for p in config.web_modules.glob(f"*_{name}?"):
-                p.unlink()
-        elif (module_path.parent / f"{module_path.name}c").exists():
-            module_path = module_path.parent / f"{module_path.name}c"
-            try:
-                mod = ProxyModule(module_from_pyc(name, module_path, initial_globals))
-                return ProxyModule(mod)
-            except:
-                raise
-        else:
-            content = Path(module_path).read_bytes()
-            # compile the module into a pyc file and save it for next time
-            py_compile.compile(
-                module_path, module_path.parent / f"{module_path.name}c", optimize=2
-            )
-
-        if not content:
-            response = requests.get(str(url))
-            if response.status_code != 200:
-                raise ImportError(UserMessage.web_error(url, response))
-            content = response.content
-
-            this_hash = hash_algo.value(content).hexdigest()
-
-            if not Modes.recklessness & modes:
-                if hash_value:
-                    if this_hash != hash_value:
-                        return _fail_or_default(
-                            UnexpectedHash(
-                                f"{this_hash} does not match the expected hash {hash_value} - aborting!"
-                            ),
-                            default,
-                        )
-                else:
-                    warn(
-                        UserMessage.no_validation(url, hash_algo, this_hash),
-                        NoValidationWarning,
-                    )
-
-            module_path = (
-                config.web_modules / f"{excel_style_datetime(datetime.now())}_{name}"
-            )
-            module_path.touch(mode=0o755)
-            module_path.write_bytes(content)
-            py_compile.compile(
-                module_path, module_path.parent / f"{module_path.name}c", optimize=2
-            )
-
-            self.registry.execute(
-                """
-INSERT OR IGNORE INTO artifacts (artifact_path, module_path)
-VALUES (?, ?)
-""",
-                (str(url), str(module_path)),
-            )
-            self.registry.connection.commit()
+        content, module_path = _get_content_from_url(
+            url, self.registry, name, hash_algo, hash_value, reckless
+        )
 
         try:
             mod = _build_mod(

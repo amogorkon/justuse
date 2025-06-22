@@ -9,7 +9,7 @@ import os
 import sys
 import tempfile
 from datetime import datetime, timezone
-from enum import Enum, IntEnum
+from enum import Enum, Flag, IntEnum, auto
 from logging import basicConfig, getLogger
 from pathlib import Path
 from uuid import uuid4
@@ -161,7 +161,30 @@ class Modes(IntEnum):
     no_cleanup = 2**7
 
 
-from use.aspectizing import apply as apply
+class ModeFlags(Flag):
+    AUTO_INSTALL = auto()
+    FATAL_EXCEPTIONS = auto()
+    RELOADING = auto()
+    FASTFAIL = auto()
+    RECKLESS = auto()
+    DEFAULT = auto()
+    NO_PUBLIC_INSTALLATION = auto()
+    NO_CLEANUP = auto()
+    NO_BROWSER = auto()
+
+
+(
+    AUTO_INSTALL,
+    FATAL_EXCEPTIONS,
+    RELOADING,
+    FASTFAIL,
+    RECKLESS,
+    DEFAULT,
+    NO_PUBLIC_INSTALLATION,
+    NO_CLEANUP,
+    NO_BROWSER,
+) = ModeFlags
+
 from use.aspectizing import apply_aspect
 from use.aspectizing import iter_submodules as iter_submodules
 from use.aspectizing import show_aspects as show_aspects
