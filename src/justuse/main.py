@@ -1,24 +1,16 @@
+from .utils import excel_style_datetime, home
+from .pydantics import git
+from .pydantics import Version
 """
 Main classes that act as API for the user to interact with.
 
-We use the following definitions:
-* hash: The hash of a singular file (whether archive, source or binary - an artifact), always defined by the algorithm used. Is also specific to a specific environment - python version, operating system, etc.
-* artifact: A single file - a module, archive, source or binary.
-* installation: A package that has been installed into a virtual environment for local use.
-
-The idea is that artifacts can readily and savely be shared peer to peer while installations must be locally managed and are not save to share.
-This is due to the fact that installations are tied (possibly compiled against) to the local environment and contain information that is not relevant to
-other environments and also may contain sensitive information.
-
-
-
+Check the /docs/specs for details!
 """
 
 import asyncio
 import atexit
 import contextlib
 import importlib
-import importlib.metadata
 import inspect
 import os
 import shutil
@@ -29,7 +21,7 @@ import time
 import traceback
 from datetime import datetime
 from functools import singledispatchmethod
-from logging import DEBUG, getLogger, root
+from logging import DEBUG, getLogger
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -39,22 +31,14 @@ import requests
 from furl import furl as URL
 from icontract import require
 
-from use import (
-    Hash,
-    Modes,
-    NotReloadableWarning,
-    VersionWarning,
-    __version__,
-    buffet_table,
-    config,
-    home,
-    sessionID,
-)
-from use.aspectizing import _applied_decorators
-from use.classes import ModuleReloader, ProxyModule
-from use.hash_alphabet import JACK_as_num, is_JACK
-from use.messages import KwargMessage, StrMessage, TupleMessage, UserMessage
-from use.pimp import (
+from . import sessionID
+from .aspectizing import _applied_decorators
+from .classes import ModuleReloader, ProxyModule
+from .constants import Modes
+from . import config
+from .hash_alphabet import JACK_as_num, is_JACK
+from .messages import KwargMessage, StrMessage, TupleMessage, UserMessage
+from .pimp import (
     _build_mod,
     _ensure_path,
     _fail_or_default,
@@ -63,8 +47,39 @@ from use.pimp import (
     _is_builtin,
     _parse_name,
     _real_path,
+    _get_pyc,
 )
-from use.pydantics import Version, git
+
+now = time.perf_counter_ns()
+counter_ = 0
+
+try:
+    from . import (
+        Hash,
+        Modes,
+        NotReloadableWarning,
+        VersionWarning,
+        __version__,
+        buffet_table,
+        config,
+        home,
+        sessionID,
+    )
+except ImportError:
+    pass
+
+
+def timer():
+    global now, counter_
+    counter_ += 1
+    cf = inspect.currentframe()
+    print(
+        f"Time to #{counter_} at L{cf.f_back.f_lineno}({Path(inspect.getframeinfo(cf).filename).name}) in {(time.perf_counter_ns() - now) / 1_000_000_000:.2f} s"
+    )
+    now = time.perf_counter_ns()
+
+
+timer()
 
 now = time.perf_counter_ns()
 counter_ = 0
@@ -83,21 +98,8 @@ def timer():
 timer()
 
 
-def excel_style_datetime(now: datetime) -> float:
-    """
-    Build a float representing the current time in the excel format.
-    First 4 digits are the year, the next two are the month, the next two are the day followed
-    by a decimal point, then time in fraction of the day.
 
-    Args:
-        now (datetime): datetime instance to be converted
 
-    Returns:
-        float: Excel style datetime
-    """
-    return int(f"{now.year:04d}{now.month:02d}{now.day:02d}") + round(
-        (now.hour * 3600 + now.minute * 60 + now.second) / 86400, 6
-    )
 
 
 log = getLogger(__name__)
@@ -137,7 +139,7 @@ class Use(ModuleType):
         "Registry sqlite DB to store all relevant package metadata."
         timer()
         if config.debugging:
-            root.setLevel(DEBUG)
+            log.setLevel(DEBUG)
 
         if config.version_warning:
             try:
@@ -178,7 +180,7 @@ class Use(ModuleType):
                 try:
                     registry = sqlite3.connect(home / "registry.db").cursor()
                 except Exception as e:
-                    raise RuntimeError(UserMessage.couldnt_connect_to_db(e)) from e
+                    raise RuntimeError(UserMessage.couldnt_connect_to_db()) from e
         registry.row_factory = lambda cursor, row: {
             col[0]: row[idx] for idx, col in enumerate(cursor.description)
         }
@@ -187,34 +189,34 @@ class Use(ModuleType):
         registry.executescript(
             """
 CREATE TABLE IF NOT EXISTS "artifacts" (
-	"id"    INTEGER,
-	"distribution_id"   INTEGER,
-	"artifact_path" TEXT,
+    "id"    INTEGER,
+    "distribution_id"   INTEGER,
+    "artifact_path" TEXT,
     "module_path" TEXT,
-	PRIMARY KEY("id" AUTOINCREMENT),
-	FOREIGN KEY("distribution_id") REFERENCES "installations"("id") ON DELETE CASCADE
+    PRIMARY KEY("id" AUTOINCREMENT),
+    FOREIGN KEY("distribution_id") REFERENCES "installations"("id") ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS "installations" (
-	"id"    INTEGER,
-	"name"  TEXT NOT NULL,
-	"version"   TEXT NOT NULL,
-	"installation_path" TEXT,
-	"date_of_installation"  INTEGER,
-	"number_of_uses"    INTEGER,
-	"date_of_last_use"  INTEGER,
-	"pure_python_package"   INTEGER NOT NULL DEFAULT 1,
-	PRIMARY KEY("id" AUTOINCREMENT)
+    "id"    INTEGER,
+    "name"  TEXT NOT NULL,
+    "version"   TEXT NOT NULL,
+    "installation_path" TEXT,
+    "date_of_installation"  INTEGER,
+    "number_of_uses"    INTEGER,
+    "date_of_last_use"  INTEGER,
+    "pure_python_package"   INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY("id" AUTOINCREMENT)
 );
 
 CREATE TABLE IF NOT EXISTS "hashes" (
-	"algo"  TEXT NOT NULL,
-	"value" INTEGER NOT NULL,
-	"artifact_id"   INTEGER NOT NULL,
-	PRIMARY KEY("algo","value"),
-	FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id") ON DELETE CASCADE
+    "algo"  TEXT NOT NULL,
+    "value" INTEGER NOT NULL,
+    "artifact_id"   INTEGER NOT NULL,
+    PRIMARY KEY("algo","value"),
+    FOREIGN KEY("artifact_id") REFERENCES "artifacts"("id") ON DELETE CASCADE
 );
-		"""
+        """
         )
         registry.connection.commit()
         timer()
@@ -710,19 +712,6 @@ JOIN artifacts on installations.id = distribution_id
             return ProxyModule(result)
 
 
-def excel_style_datetime(now: datetime) -> float:
-    """
-    Build a float representing the current time in the excel format.
-    First 4 digits are the year, the next two are the month, the next two are the day followed
-    by a decimal point, then time in fraction of the day.
-    Args:
-        now (datetime): datetime instance to be converted
-    Returns:
-        float: Excel style datetime
-    """
-    return int(f"{now.year:04d}{now.month:02d}{now.day:02d}") + round(
-        (now.hour * 3600 + now.minute * 60 + now.second) / 86400, 6
-    )
 
 
 def _hashes(hashes: str | list[str] | None) -> set[int]:

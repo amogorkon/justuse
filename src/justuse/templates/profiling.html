@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="profiling.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.10/brython.min.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.10/brython_stdlib.js">
+    </script>
+
+
+    <title>Justuse</title>
+</head>
+
+<body onload="brython()">
+    <header>
+        <p>
+        <h1>Tinny Profiler Statistics</h1>
+        </p>
+    </header>
+    <p> These are the statistics of the tinny profiler gathered since applying the decorator.</p>
+
+    <p>
+    <table>
+        <tr>
+            <th> QualName</th>
+            <th> Name </th>
+            <th> Number of calls </th>
+            <th> Total time spent </th>
+            <th> Minimum </th>
+            <th> Geometric Mean </th>
+            <th> Median </th>
+            <th> Standard Deviation </th>
+        </tr>
+        {% for entry in timings %}
+        <tr id="row_{{loop.index}}">
+            <td>{{entry.qualname}}</td>
+            <td>{{entry.name}}</td>
+            <td>{{entry.len}}</td>
+            <td>{{ (entry.total / 10**9)|round(5) }} sec</td>
+            <td>{{ entry.min }} ns ({{ (entry.min / 10**9)|round(5)}} sec)</td>
+            <td>{{ entry.geom_mean|int }} ns ({{ (entry.geom_mean / 10**9)|round(5) }} sec)</td>
+            <td>{{ entry.median }} ns ({{ (entry.median/ 10**9)|round(5) }} sec)</td>
+            <td>{{ entry.stdev|int}} ns ({{(entry.stdev / 10**9)|round(5)}} sec)</td>
+        </tr>
+        {% endfor %}
+    </table>
+    </p>
+
+    <script type="text/python" id="script">
+from browser import console, document, window, alert, bind, html
+
+
+</script>
+
+</body>
+
+</html>

@@ -13,11 +13,11 @@ from statistics import geometric_mean, median, stdev
 from beartype import beartype
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-import use
-from use import __version__, config, home
-from use.hash_alphabet import hexdigest_as_JACK
-from use.pydantics import PyPI_Release, Version
-from use.tools import ALL, VERBOSE, apply
+from . import __version__, config, home
+from .pydantics import Version
+from .hash_alphabet import hexdigest_as_JACK
+from .pydantics import PyPI_Release
+from .tools import ALL, VERBOSE, apply
 
 env = Environment(
     loader=FileSystemLoader(Path(__file__).parent / "templates"),
@@ -115,7 +115,7 @@ def _web_pebkac_no_hash(
     table = defaultdict(lambda: [])
     for rel in (rel for rel in releases if rel.version == version):
         for hash_name, hash_value in rel.digests.items():
-            if hash_name not in (x.name for x in use.Hash):
+            if hash_name not in (x.name for x in config.Hash):
                 continue
             table[hash_name].append(
                 entry(
@@ -237,8 +237,8 @@ def _web_aspectizing_overview(*, decorator, check, pattern, visited, hits):
 </html>
 """
 
-    with open(use.home / "aspectizing_overview.html", "w") as f:
+    with open(home / "aspectizing_overview.html", "w") as f:
         f.write(msg)
     if not config.testing:
-        webbrowser.open(use.home / "aspectizing_overview.html")
+        webbrowser.open(str(home / "aspectizing_overview.html"))
     return msg

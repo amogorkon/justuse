@@ -3,8 +3,10 @@
 
 from logging import getLogger
 
-from use.messages import UserMessage as Message
-from use.pimp import (
+from pypeduct import pyped
+
+from .messages import UserMessage as Message
+from .pimp import (
     _auto_install,
     _ensure_version,
     _import_public_no_install,
@@ -12,13 +14,12 @@ from use.pimp import (
     _pebkac_no_version,
     _pebkac_no_version_no_hash,
 )
-from use.tools import pipes
 
 log = getLogger(__name__)
 
 
 # fmt: off
-@pipes
+@pyped
 def buffet_table(case, kwargs):
     match case:
 #            +-------------------------- version specified?

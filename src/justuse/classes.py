@@ -8,7 +8,7 @@ from types import ModuleType
 
 from icontract import require
 
-from use.pimp import _build_mod, _modules_are_compatible
+from .modutils import _build_mod, _modules_are_compatible
 
 
 class ProxyModule(ModuleType):

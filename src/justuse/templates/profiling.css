@@ -1,0 +1,134 @@
+
+
+body {
+    font-family: Arial Unicode MS, Lucida Sans Unicode, DejaVu Sans, Quivira, Symbola, Code2000;
+    padding: 30px;
+    line-height: 1.6;
+    background:#131313;
+    color:#fff;
+}
+
+* {
+    box-sizing: border-box;
+    }
+
+h1 {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    animation: glitch 5s linear infinite alternate-reverse;
+    color: #50BFE6;
+}
+
+@keyframes glitch{
+    2%,64%{
+      transform: translate(2px,0) skew(50deg);
+      opacity: 0;
+      text-shadow: 0 0 50px #50BFE6;
+    }
+    4%,60%{
+      transform: translate(-2px,0) skew(-10deg);
+      opacity: 0.7;
+      text-shadow: 0 0 20px #50BFE6;
+    }
+    62%{
+      transform: translate(0,0) skew(0deg); 
+      opacity: 1;
+      text-shadow: 0 0 10px #50BFE6;
+    }
+    80%{
+      opacity: 1;
+      text-shadow: 0 0 5px #50BFE6;
+    }
+  }
+
+h1:before,
+h1:after{
+  content: attr(title);
+  position: absolute;
+  left: 0;
+}
+
+h1:before{
+  animation: glitchTop 1s linear infinite;
+  clip-path: polygon(0 0, 100% 0, 100% 33%, 0 33%);
+  -webkit-clip-path: polygon(0 0, 100% 0, 100% 33%, 0 33%);
+}
+
+@keyframes glitchTop{
+  2%,64%{
+    transform: translate(2px,-2px);
+  }
+  4%,60%{
+    transform: translate(-2px,2px);
+  }
+  62%{
+    transform: translate(13px,-1px) skew(-13deg); 
+  }
+}
+
+h1:after{
+  animation: glitchBottom 1.5s linear infinite;
+  clip-path: polygon(0 67%, 100% 67%, 100% 100%, 0 100%);
+  -webkit-clip-path: polygon(0 67%, 100% 67%, 100% 100%, 0 100%);
+}
+
+@keyframes glitchBottom{
+  2%,64%{
+    transform: translate(-2px,0);
+  }
+  4%,60%{
+    transform: translate(-2px,0);
+  }
+  62%{
+    transform: translate(-22px,5px) skew(21deg); 
+  }
+}
+
+section {
+position: relative;
+margin: 0 auto;
+z-index: 0;
+color: white;
+}
+
+
+
+th {
+    border-bottom:1px solid black;}
+
+tr {border: 1px  white; }
+
+p {
+font-size: 1em;
+}
+
+div {
+display: inline-block;
+}
+
+
+body {
+padding: 3em;
+}
+
+.p {
+margin-top: 300px;
+text-align: center;
+display: block;
+font-size: 1em;
+}
+
+
+table {
+    color: black;
+    left: 0;
+    top: 38px;
+    width: 100%;
+    font-size: 1em;
+    text-align: left;
+    background-color: #93beff;
+    padding: 40px 0;
+    border-collapse: collapse;
+    }

@@ -12,12 +12,12 @@ from time import perf_counter_ns
 from types import ModuleType
 from typing import Any, DefaultDict, Deque, Optional, Union
 
+import config
 from beartype import beartype
 
-log = getLogger(__name__)
+from .messages import _web_aspectized_dry_run, _web_tinny_profiler
 
-from use import config
-from use.messages import _web_aspectized_dry_run, _web_tinny_profiler
+log = getLogger(__name__)
 
 # TODO: use an extra WeakKeyDict as watchdog for object deletions and trigger cleanup in these here
 _applied_decorators: DefaultDict[tuple[object, str], Deque[Callable]] = DefaultDict(
@@ -295,7 +295,7 @@ def woody_logger(thing: Callable) -> Callable:
                 res = thing(*args, **kwargs)
                 after = perf_counter_ns()
                 print(
-                    f"-> {name}() (in {after - before} ns ({round((after - before) / 10** 9, 5)} sec) -> {type(res)}",
+                    f"-> {name}() (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {type(res)}",
                     sep="\n",
                 )
                 return res
@@ -318,7 +318,7 @@ def woody_logger(thing: Callable) -> Callable:
             after = perf_counter_ns()
             if isinstance(res, (Sized)):
                 print(
-                    f"-> {describe(thing)} (in {after - before} ns ({round((after - before) / 10** 9, 5)} sec) -> {describe(res)}",
+                    f"-> {describe(thing)} (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {describe(res)}",
                     sep="\n",
                 )
                 return res
@@ -326,13 +326,13 @@ def woody_logger(thing: Callable) -> Callable:
                 res, (Iterable)
             ):  # TODO: Iterable? Iterator? Generator? Ahhhh!
                 print(
-                    f"-> {describe(thing)} (in {after - before} ns ({round((after - before) / 10** 9, 5)} sec) -> {describe(res)}",
+                    f"-> {describe(thing)} (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {describe(res)}",
                     sep="\n",
                 )
                 return res
 
             print(
-                f"-> {describe(thing)} (in {after - before} ns ({round((after - before) / 10** 9, 5)} sec) -> {describe(res)}",
+                f"-> {describe(thing)} (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {describe(res)}",
                 sep="\n",
             )
             return res

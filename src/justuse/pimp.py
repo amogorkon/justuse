@@ -44,20 +44,19 @@ from furl import furl as URL
 from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
+from pypeduct import pyped
 
-from use import (
-    Hash,
-    InstallationError,
-    Modes,
-    UnexpectedHash,
-    VersionWarning,
-    config,
-)
-from use.classes import ProxyModule
-from use.hash_alphabet import hexdigest_as_JACK, num_as_hexdigest
-from use.messages import UserMessage, _web_pebkac_no_hash
-from use.pydantics import PyPI_Project, PyPI_Release, RegistryEntry, Version
-from use.tools import pipes
+from .constants import Hash, Modes
+from .exceptions import InstallationError, UnexpectedHash, VersionWarning
+from . import config
+from .classes import ProxyModule
+from .pydantics import Version
+from .hash_alphabet import hexdigest_as_JACK, num_as_hexdigest
+from .messages import UserMessage, _web_pebkac_no_hash
+from .globals import initial_globals, default
+from .exceptions import NoValidationWarning
+from .utils import excel_style_datetime
+from .pydantics import PyPI_Project, PyPI_Release, RegistryEntry
 
 log = getLogger(__name__)
 
@@ -101,7 +100,7 @@ def _hash(algo, content: bytes) -> int:
 
 
 # fmt: off
-@pipes
+@pyped
 def _ensure_path(value: bytes| str| furl.Path | Path) -> Path:
     if isinstance(value, (str, bytes)):
         return Path(value).absolute()
@@ -198,7 +197,7 @@ class TarFunctions:
 
 
 @beartype
-@pipes
+@pyped
 def archive_meta(artifact_path):
     DIST_PKG_INFO_REGEX = re.compile("(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$")
 
@@ -278,7 +277,7 @@ def _pebkac_no_version(
 
 
 @beartype
-@pipes
+@pyped
 def _pebkac_no_hash(
     *,
     name: str,
@@ -321,7 +320,7 @@ def _pebkac_no_hash(
 
 
 @beartype
-@pipes
+@pyped
 def _pebkac_no_version_no_hash(
     *,
     name: str,
@@ -866,7 +865,7 @@ def _get_releases(project: PyPI_Project) -> list[PyPI_Release]:
 
 
 @beartype
-@pipes
+@pyped
 def _sort_releases(releases: list[PyPI_Release]) -> list[PyPI_Release]:
     return sorted(
         releases,
@@ -895,7 +894,7 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
 
 
 @beartype
-@pipes
+@pyped
 def _is_platform_compatible(
     info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
 ) -> bool:

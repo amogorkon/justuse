@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="stylesheet.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.10/brython.min.js">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3.10/brython_stdlib.js">
+    </script>
+
+
+    <title>Justuse</title>
+</head>
+
+<body onload="brython()">
+    <header>
+        <h1>Auto-installation of {{package_name}} version {{version}}</h1>
+        <div id="name" style="display:none">{{name}}</div>
+        <div id="version" style="display:none">{{version}}</div>
+        Please specify the hash corresponding to the platform you want to run your code on and the python version you
+        want to run your code with.
+        Values from different hash algorithms can't be mixed together, but regular hexdigests and JACK
+        representations are interchangeable. After you selected everything you want, copy & paste the snippet below into
+        your code.
+    </header>
+
+    <p>
+        <button class="button" , id="clipboard_button">Copy to Clipboard</button>
+    </p>
+    <p>
+        <textarea id="result" rows="5" style="resize: none;" readonly cols="120">use('{{name}}', version='{{version}}', modes=use.auto_install, hash_algo=use.Hash.sha256, hashes={ 
+                ... 
+            })</textarea>
+    </p>
+    <p>
+        <label>
+            <input type="checkbox" id="jack_button">
+            <span class="button" for="jack_button" id="jack_button_label">Hash as hexdigest</span>
+        </label>
+
+
+    </p>
+    {% for hash_name in table.keys()%}
+    <section>
+        <div>
+            <button>{{hash_name}}</button>
+        </div>
+        <table id="{{hash_name}}">
+            <tr>
+                <th> Python</th>
+                <th> Platform </th>
+                <th id="hash_header"> Hash </th>
+                <th id="jack_header" style="display:none;"> JACK </th>
+            </tr>
+            {% for entry in table[hash_name] %}
+            <tr id="row_{{loop.index}}" class="row_not_selected">
+                <td style="display:none;"><input type="checkbox" , id="row_selected_{{loop.index}}"></td>
+                <td id=python_row_{{loop.index}}> {{ entry.python }} </td>
+                <td id=platform_row_{{loop.index}}> {{ entry.platform }} </td>
+                <td id="hash_value_row_{{loop.index}}"> {{ entry.hash_value}} </td>
+                <td id="jack_value_row_{{loop.index}}" style="display:none;"> {{ entry.jack_value}} </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </section>
+    {% endfor %}
+
+    <script type="text/python" id="script">
+from browser import console, document, window, alert, bind, html
+
+document["clipboard_button"].bind("click", lambda event: window.navigator.clipboard.writeText(document["result"].text))
+
+@bind(document["jack_button"], "click")
+def jack_button_clicked(event):
+    if event.target.checked:
+        document["jack_button_label"].text = "Hash as JACK"
+        document["hash_header"].style.display = "none"
+        document["jack_header"].style.display = "table-cell"
+        for i, row in enumerate(document.select("tr")):
+            if i == 0: continue
+            document[f"hash_value_row_{i}"].style.display = "none"
+            document[f"jack_value_row_{i}"].style.display = "table-cell"
+    else:
+        document["jack_button_label"].text = "Hash as hexdigest"
+        document["hash_header"].style.display = "table-cell"
+        document["jack_header"].style.display = "none"
+        for i, row in enumerate(document.select("tr")):
+            if i == 0: continue
+            document[f"hash_value_row_{i}"].style.display = "table-cell"
+            document[f"jack_value_row_{i}"].style.display = "none"
+    refresh_result()
+
+def table_clicked_select(event):
+    event.target.parentElement.className = "row_selected"
+    document[event.target.parentElement.id].bind("click", table_clicked_unselect)
+    refresh_result()
+
+
+def table_clicked_unselect(event):
+    event.target.parentElement.className = "row_not_selected"
+    document[event.target.parentElement.id].bind("click", table_clicked_select)
+    refresh_result()
+
+def refresh_result():
+    hashes = set()
+    for row in document.select(".row_selected"):
+        if document["jack_button"].checked: 
+            hashes.add((document[f"python_{row.id}"].text, document[f"platform_{row.id}"].text, document[f"jack_value_{row.id}"].text))
+        else:
+            hashes.add((document[f"python_{row.id}"].text, document[f"platform_{row.id}"].text, document[f"hash_value_{row.id}"].text))
+
+    hash_str = "{\n    " + "\n    ".join(f"'{H}',  # {python}-{platform}" for python, platform, H in hashes) + " \n}"
+    document["result"].text =  f"use('{document['name'].text}', version='{document['version'].text}', modes=use.auto_install, hash_algo=use.Hash.sha256, hashes={hash_str})"
+
+for x in document.select(".row_not_selected"): x.bind("click", table_clicked_select)
+</script>
+
+</body>
+
+</html>
