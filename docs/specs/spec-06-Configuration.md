@@ -78,15 +78,15 @@ debounce_ms = 100          # File change debounce
 ```python
 # Development setup
 use.configure(
-    modes=use.reloading | use.auto_install,
-    hash_algo=use.Hash.BLAKE2s,
+    modes=reloading | auto_install,
+    hash_algo=Hash.BLAKE2s,
     timeout=60,
     debug_level='DEBUG'
 )
 
 # Production setup
 use.configure(
-    modes=use.fastfail,
+    modes=fastfail,
     require_hashes=True,
     auto_install=False,
     timeout=10,
@@ -96,7 +96,7 @@ use.configure(
 # Testing setup
 use.configure(
     registry=":memory:",
-    modes=use.fastfail,
+    modes=fastfail,
     timeout=5,
     cache_duration=0
 )
@@ -123,18 +123,18 @@ def configure_for_environment():
 
     configs = {
         'development': {
-            'modes': use.reloading | use.auto_install,
+            'modes': reloading | auto_install,
             'debug_level': 'DEBUG',
             'timeout': 60
         },
         'production': {
-            'modes': use.fastfail,
+            'modes': fastfail,
             'require_hashes': True,
             'auto_install': False,
             'audit_level': 'full'
         },
         'ci': {
-            'modes': use.fastfail,
+            'modes': fastfail,
             'timeout': 5,
             'auto_install': False,
             'registry': ':memory:'

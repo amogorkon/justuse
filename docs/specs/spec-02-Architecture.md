@@ -70,9 +70,9 @@ graph TB
 |------------|-------|---------|
 | String | `pkg_name` → `_use_str` → `_use_package` | Package import |
 | Tuple | `(pkg, mod)` → `_use_tuple` | Submodule import |
-| URL | `use.URL` → `_use_url` | Remote download |
+| URL | `URL` → `_use_url` | Remote download |
 | Path | `pathlib.Path` → `_use_path` | Local file |
-| git | `use.git` → `_use_git` | Repository clone |
+| git | `git` → `_use_git` | Repository clone |
 | kwargs | `None + kwargs` → `_use_kwargs` | Keyword-based |
 
 ## 3. Core Workflows

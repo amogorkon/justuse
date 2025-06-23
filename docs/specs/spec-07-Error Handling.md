@@ -1,12 +1,66 @@
 # Error Handling
 
+
 ## JSON Error Handling for Agents & LLMs
 
 JustUse supports structured, agent-friendly error output for real-time debugging, CI, and LLM workflows. JSON diagnostics are emitted via a dedicated logger, and the logger's configuration determines the output destination (stdout, file, etc.).
 
 - Errors are output as structured JSON envelopes via a dedicated logger (e.g., `justuse.json` logger). The logger's configuration determines the output destination (stdout, file, etc.).
 - Human-readable diagnostics are sent to `stderr` (for developers).
-- Output mode is auto-detected (env/config/TTY). See llms.md for schema and details.
+- Output mode is auto-detected (env/config/TTY).
+
+
+
+### Extensibility
+
+> **Extensibility Note:**
+> The JustUse error hierarchy is designed for easy extension. Users can subclass any error (e.g., `JustUseError`, `SecurityError`) to add custom fields, behaviors, or serialization logic. Custom error classes will automatically integrate with the JSON envelope and logger if they implement a `to_json()` or similar method.
+
+
+> **Interoperability Note:**
+> The JustUse JSON error envelope is designed to be compatible with [RFC 7807](https://datatracker.ietf.org/doc/html/rfc7807) (Problem Details for HTTP APIs), enabling maximum interoperability with agent frameworks, LLMs, and external systems.
+
+
+
+### Error Code Registry
+
+> **Error Code Reference:**
+> All error codes (`error_id` fields, e.g., JU1000–JU5999) are formally documented in the JustUse error code registry:
+> https://github.com/justuse-py/specs/error-codes.md
+
+
+### Security & Privacy Note
+
+> **Security/Privacy Note:**
+> When including error context or recovery actions, always ensure that secrets, credentials, tokens, or sensitive file paths are not leaked in logs, JSON envelopes, or diagnostics. Sanitize or redact such information before output.
+
+> **Schema Reference:**
+> The formal JSON schema for JustUse errors is available at:
+> https://github.com/justuse-py/specs/json-error-envelope.schema.json
+
+```mermaid
+erDiagram
+    ERROR_ENVELOPE {
+        string error_id
+        string type
+        string severity
+        string message
+        object context
+        array recovery_actions
+        string error_namespace
+        string justuse_version
+        string timestamp
+    }
+    RECOVERY_ACTIONS {
+        string type
+        string description
+        string command
+        string file
+        string path
+        string value
+    }
+    ERROR_ENVELOPE ||--o{ RECOVERY_ACTIONS : includes
+```
 
 > **Note:**
 > - Complex errors and tracebacks are displayed interactively in the browser using Brython for a better debugging experience.
@@ -105,14 +159,14 @@ classDiagram
 import warnings
 
 # Convert security warnings to errors
-warnings.filterwarnings('error', category=use.SecurityWarning)
+warnings.filterwarnings('error', category=SecurityWarning)
 
 # Ignore performance warnings
-warnings.filterwarnings('ignore', category=use.PerformanceWarning)
+warnings.filterwarnings('ignore', category=PerformanceWarning)
 
 # Custom warning handler
 def custom_warning_handler(message, category, filename, lineno):
-    if category == use.NotReloadableWarning:
+    if category == NotReloadableWarning:
         print(f"Reload failed: {message}")
         # Optionally restart or fallback
 
@@ -136,35 +190,49 @@ warnings.showwarning = custom_warning_handler
 # Registry recovery
 try:
     use.registry.validate()
-except use.CorruptedRegistryError:
+except CorruptedRegistryError:
     backup_path = use.registry.backup()
     use.registry.recreate()
     print(f"Registry rebuilt, backup at {backup_path}")
 
 # Module recovery
-mod = use(use.Path('changing_module.py'), modes=use.reloading)
+mod = use(Path('changing_module.py'), modes=reloading)
 if not mod._reload_status.success:
     print("Reload failed, manual restart required")
     mod._revert_to_previous()
 
 # Network recovery with fallback
 sources = [
-    use.URL('https://primary.com/mod.py'),
-    use.URL('https://backup.com/mod.py'),
-    use.Path('local_fallback/mod.py')
+    URL('https://primary.com/mod.py'),
+    URL('https://backup.com/mod.py'),
+    Path('local_fallback/mod.py')
 ]
 
 for source in sources:
     try:
         mod = use(source, timeout=10)
         break
-    except (use.TimeoutError, use.SecurityError):
+    except (TimeoutError, SecurityError):
         continue
 else:
     raise ImportError("All sources failed")
 ```
 
-## 5. Debugging Support
+
+## 5. Testing Patterns for Error Handling
+
+### Error Output Testing
+
+- Test that all error classes produce correct human-readable output (`str(e)`, `repr(e)`).
+- Test that all error classes produce valid JSON envelopes (RFC 7807 compatible) via the logger or direct serialization.
+- Test that error context and recovery actions are included in the JSON output.
+
+### Recovery/Fallback Logic Testing
+
+- Test that fallback and recovery strategies (e.g., retry, revert, alternative source) are triggered and logged as specified.
+- Test that registry and module recovery APIs work as documented.
+
+> **Tip:** Use parameterized tests to cover multiple error types and recovery scenarios. Consider snapshot testing for JSON error output.
 
 ### Debug Configuration
 

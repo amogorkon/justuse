@@ -34,9 +34,7 @@
 | Error Handling         | Hierarchical error types, warnings, and recovery mechanisms                 |
 | Extensibility          | Pluggable sources, aspect-oriented programming, and plugin architecture     |
 
-> **Note:** Complex errors and tracebacks are displayed interactively in the browser using Brython for a better debugging experience. Aspect-oriented features include module-level wrapping and browser-based dry-run/decorator selection UIs.
-
-> **Note:** Complex errors and tracebacks are displayed interactively in the browser using Brython for a better debugging experience.
+> **Note:** Complex errors and tracebacks are displayed interactively in the browser using Brython for a better human debugging experience. Aspect-oriented features include module-level wrapping and browser-based dry-run/decorator selection UIs, while agents and LLMs can parse structured JSON diagnostics for real-time debugging and compliance.
 
 ## Architecture
 
@@ -92,13 +90,13 @@ graph TB
 
 ```python
 # Development: hot-reload, auto-install
-mod = use(use.Path('my_module.py'), modes=use.reloading | use.auto_install)
+mod = use(Path('my_module.py'), modes=reloading | auto_install)
 
 # Production: strict, secure
-secure_mod = use('package', version='1.0.0', hash_value='abc...', modes=use.fastfail)
+secure_mod = use('package', version='1.0.0', hash_value='abc...', modes=fastfail)
 
 # Security-conscious import
-mod = use('secure_package', hash_value='verified_hash', modes=use.fastfail)
+mod = use('secure_package', hash_value='verified_hash', modes=fastfail)
 ```
 
 ## Observability & Audit
@@ -228,21 +226,33 @@ graph LR
 
 ---
 
+
+**Current Status (June 2025):**
+- `JustUseError` base class implemented with `.to_dict()` / `.to_json()` methods
+- `emit_error()` now routes output based on `json_mode()` detection
+- `suggested_actions` and `recovery_primitives` merged into `recovery_actions`
+- All errors now include `error_namespace` and `justuse_version`
+- Ambiguity warning detection and reporting is active and tested
+- JSON diagnostics can be emitted to stdout or file (configurable)
+- Formal error code registry (JU1000–JU5999) in use
+- Copilot/agent workflows simulated in test suite
+- CI pipeline runs lint, test, security scan, and coverage
+- Mock infrastructure covers PyPI, file system, and network
+- VS Code extension for diagnostics/quick-fix is in prototyping
+
 **Next Steps:**
-- Implement `JustUseError` base class with `.to_dict()` / `.to_json()`
-- Add `emit_error()` that switches stdout/stderr based on `json_mode()`
-- Merge `suggested_actions` and `recovery_primitives` into `recovery_actions`
-- Include `error_namespace` and `justuse_version`
-- Optional: Emit diagnostics `.json` files or JSON Lines logs
-- Create formal error code registry (JU1000–JU5999)
-- Simulate Copilot workflows in test suite
-- Prototype VS Code extension for diagnostics and quick-fix handling
+- Expand agent-driven recovery actions and quick-fix suggestions
+- Broaden RFC 7807 compatibility and diagnostics export
+- Enhance test coverage for edge cases and error recovery
+- Finalize VS Code extension for public release
+
 
 ## Testing & Quality
 
-- Unit, integration, security, and performance tests
-- CI pipeline: lint, test, security scan, coverage
+- Unit, integration, security, and performance tests in place
+- CI pipeline: lint, test, security scan, coverage (all active)
 - Mock infrastructure for PyPI, file system, and network
+- Ambiguity and error handling scenarios covered in tests
 
 
 ## See Also

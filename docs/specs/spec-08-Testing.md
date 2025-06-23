@@ -117,18 +117,18 @@ def test_hash_verification():
     content = b"malicious code"
     expected_hash = "abc123..."  # Hash of legitimate content
 
-    with pytest.raises(use.HashMismatchError):
-        use._verify_content(content, use.Hash.SHA256, expected_hash)
+    with pytest.raises(HashMismatchError):
+        use._verify_content(content, Hash.SHA256, expected_hash)
 
 def test_certificate_validation():
     """Test SSL certificate validation"""
-    with pytest.raises(use.CertificateError):
-        use(use.URL('https://self-signed.badssl.com/module.py'))
+    with pytest.raises(CertificateError):
+        use(URL('https://self-signed.badssl.com/module.py'))
 
 def test_path_traversal_prevention():
     """Test path traversal attack prevention"""
-    with pytest.raises(use.SecurityError):
-        use(use.Path('../../../etc/passwd'))
+    with pytest.raises(SecurityError):
+        use(Path('../../../etc/passwd'))
 ```
 
 ## 6. Performance Testing

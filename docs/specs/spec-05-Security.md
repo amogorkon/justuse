@@ -108,7 +108,7 @@ use.configure(
 # Secure import patterns
 secure_mod = use('package',
                 version='1.0.0',
-                hash_algo=use.Hash.SHA256,
+                hash_algo=Hash.SHA256,
                 hash_value='verified_hash_here',
                 require_signature=True)
 
