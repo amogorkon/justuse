@@ -40,7 +40,7 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [x] have multiple versions of the same package installed and loaded in the same program without conflicts
 - [x] auto-install packages with C-extensions and other precompiled stuff
 - [x] no-hassle inline auto-installation of (almost) all conda packages
-- [ ] install packages directly from github with signature compatibility check for all callables 
+- [ ] install packages directly from github with signature compatibility check for all callables
 - [ ] attach birdseye debugger to a loaded module as a mode
 - [ ] try to pull packages from a P2P network before pulling from PyPI or conda directly
 - [ ] all justuse-code is compiled to a single, standalone .py file - just drop it into your own code without installation
@@ -70,22 +70,22 @@ Well, those shortcomings of the import statement kept bugging me. And when I stu
 Here are a few tidbits on how to use() stuff to wet your appetite, for a more in-depth overview, check out our [Showcase](https://github.com/amogorkon/justuse/blob/unstable/docs/Showcase.ipynb)!
 
  `import use`
- 
+
  `np = use("numpy", version="1.19.2")` corresponds to `import numpy as np; if np.version != "1.19.2": warn()`
- 
+
  `use("pprint").pprint(some_dict)` corresponds to a one-off `from pprint import pprint; pprint(some_dict)` without importing it into the global namespace
- 
- `tools = use(use.Path("/media/sf_Dropbox/code/tools.py"), reloading=True)` impossible to realize with classical imports
- 
+
+ `tools = use(Path("/media/sf_Dropbox/code/tools.py"), reloading=True)` impossible to realize with classical imports
+
  `test = use("functions", initial_globals={"foo":34, "bar":49})` also impossible with the classical import statement, although importlib can help
- 
- `utils = use(use.URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
+
+ `utils = use(URL("https://raw.githubusercontent.com/PIA-Group/BioSPPy/7696d682dc3aafc898cd9161f946ea87db4fed7f/biosppy/utils.py"),
             hashes={"95f98f25ef8cfa0102642ea5babbe6dde3e3a19d411db9164af53a9b4cdcccd8"})` no chance with classical imports
-            
- `np = use("numpy", version="1.21.0rc2", hashes={"3c90b0bb77615bda5e007cfa4c53eb6097ecc82e247726e0eb138fcda769b45d"}, modes=use.auto_install)` inline installation of packages and importing the same package with different versions in parallel in the same code - most people wouldn't even dream of that!
+
+ `np = use("numpy", version="1.21.0rc2", hashes={"3c90b0bb77615bda5e007cfa4c53eb6097ecc82e247726e0eb138fcda769b45d"}, modes=auto_install)` inline installation of packages and importing the same package with different versions in parallel in the same code - most people wouldn't even dream of that!
 
 ## There are strange chinese symbols in my hashes, am I being hacked?
-Nope. SHA256 hashes normally are pretty long (64 characters per hexdigest) and we require them defined within regular python code. Additionally, if you want to support multiple platforms, you need to supply a hash for every platform - which can add up to huge blocks of visual noise. Since Python 3 supports unicode by default, why not use the whole range of printable characters to encode those hashes? It's easier said than done - turns out emojis don't work well across different systems and editors - however, it *is* feasible to merge the Japanese, ASCII, Chinese and Korean alphabets into a single, big one we call JACK - which can be used to reliably encode those hashes in merely 18 characters. Since humans aren't supposed to manually type those hashes but simply copy&paste them anyway, there is only the question how to get them if you only have hexdigests at hand for some reason. Simply do `use.hexdigest_as_JACK(H)` and you're ready to go. Of course we also support classical hexdigests as fallback.
+Nope. SHA256 hashes normally are pretty long (64 characters per hexdigest) and we require them defined within regular python code. Additionally, if you want to support multiple platforms, you need to supply a hash for every platform - which can add up to huge blocks of visual noise. Since Python 3 supports unicode by default, why not use the whole range of printable characters to encode those hashes? It's easier said than done - turns out emojis don't work well across different systems and editors - however, it *is* feasible to merge the Japanese, ASCII, Chinese and Korean alphabets into a single, big one we call JACK - which can be used to reliably encode those hashes in merely 18 characters. Since humans aren't supposed to manually type those hashes but simply copy&paste them anyway, there is only the question how to get them if you only have hexdigests at hand for some reason. Simply do `hexdigest_as_JACK(H)` and you're ready to go. Of course we also support classical hexdigests as fallback.
 
 ## Beware of Magic!
 Inspired by the q package/module, use() is a subclass of ModuleType, which is a callable class that replaces the module on import, so that only 'import use' is needed to be able to call use() on things.
