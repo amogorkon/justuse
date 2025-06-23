@@ -1,0 +1,1 @@
+This folder is for AI experiments and testing. FOR AI ONLY.

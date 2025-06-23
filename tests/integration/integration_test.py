@@ -33,7 +33,7 @@ is_win = sys.platform.startswith("win")
 import use
 
 __package__ = "tests"
-from tests.unit_test import reuse, ScopedCwd
+from tests.unit_test_deprecated import reuse, ScopedCwd
 
 import logging
 
@@ -160,7 +160,9 @@ def test_simple_url(reuse):
     try:
         os.chdir(Path(__file__).parent.parent.parent)
 
-        with http.server.HTTPServer(("", port), http.server.SimpleHTTPRequestHandler) as svr:
+        with http.server.HTTPServer(
+            ("", port), http.server.SimpleHTTPRequestHandler
+        ) as svr:
             foo_uri = f"http://localhost:{port}/tests/.tests/foo.py"
             print(f"starting thread to handle HTTP request on port {port}")
             import threading

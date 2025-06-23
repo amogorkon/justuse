@@ -1,22 +1,22 @@
-from decimal import Decimal, getcontext
+"""WIP. Don't run via pytest, rather use `py tests/test.py`."""
 
-def compute(n):
-    getcontext().prec = n
-    res = Decimal(0)
-    for i in range(n):
-        a = Decimal(1)/(16**i)
-        b = Decimal(4)/(8*i+1)
-        c = Decimal(2)/(8*i+4)
-        d = Decimal(1)/(8*i+5)
-        e = Decimal(1)/(8*i+6)
-        r = a*(b-c-d-e)
-        res += r
-    return res
+import inspect
 
-from time import perf_counter
+from justuse import use
 
-for x in range(1,10000, 100):
-    before = perf_counter()
-    compute(x)
-    after = perf_counter()
-    print(after-before)
+# ===========================================
+
+
+def test_use():
+    use("time")
+
+
+# ===========================================
+
+for name, func in globals().copy().items():
+    if name.startswith("test_"):
+        print(f" ↓↓↓↓↓↓↓ {name} ↓↓↓↓↓↓")
+        print(inspect.getsource(func))
+        func()
+        print(f"↑↑↑↑↑↑ {name} ↑↑↑↑↑↑")
+        print()
