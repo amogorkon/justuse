@@ -1,4 +1,4 @@
-from use.pimp import _is_version_satisfied
+from justuse.pimp import _is_version_satisfied
 
 
 def test_is_version_satisfied(reuse):

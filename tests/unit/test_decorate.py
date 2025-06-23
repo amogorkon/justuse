@@ -1,6 +1,6 @@
 import sys
 
-from use.aspectizing import _unwrap, _wrap
+from justuse.aspectizing import _unwrap, _wrap
 
 
 def f(x):

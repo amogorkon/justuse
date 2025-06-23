@@ -1,14 +1,14 @@
 import io
 import json
 import logging
-import os
 import re
 import sys
 import traceback
-from pathlib import Path
 from typing import Optional
 
 import packaging
+
+from justuse import Path, use, auto_install
 
 sys.path.insert(1, str((Path(__file__).parent.parent.parent / "src").absolute()))
 use_py = Path(__file__).parent.parent.parent / "src" / "use" / "use.py"
@@ -20,9 +20,6 @@ __import__("use")
 use_py = Path(__file__).parent.parent.parent / "src" / "use" / "use.py"
 assert use_py.exists()
 print(Path(__file__).parent.parent.parent / "src")
-sys.path.append(str(Path(__file__).parent.parent.parent / "src"))
-os.chdir(Path(__file__).parent)
-import use
 from pydantic import BaseModel
 
 
@@ -59,14 +56,15 @@ class Packages(BaseModel):
 
 
 def test_package(pkg: PackageToTest) -> tuple[bool, dict]:
-
     log1 = start_capture_logs()
     retry = None
     use_version: Optional[str] = None
     try:
-        use(pkg.name, modes=use.auto_install)
+        use(pkg.name, modes=auto_install)
     except RuntimeWarning as e:
-        if str(e).startswith("Please specify version and hash for auto-installation of"):
+        if str(e).startswith(
+            "Please specify version and hash for auto-installation of"
+        ):
             retry = str(e.args[0]).strip().strip(".").splitlines()[-1]
             hashes = re.findall("hashes={([^}]+)}", str(e))[0]
             hashes = {_hash.strip("'") for _hash in hashes.split(", ")}
@@ -96,11 +94,15 @@ def test_package(pkg: PackageToTest) -> tuple[bool, dict]:
             {
                 "name": pkg.name,
                 "stars": pkg.stars,
-                "err": {"type": "InvalidVersion", "value": pkg.versions, "picked": "None"},
+                "err": {
+                    "type": "InvalidVersion",
+                    "value": pkg.versions,
+                    "picked": "None",
+                },
             },
         )
 
-    except Exception as e:
+    except Exception:
         exc_type, exc_value, _ = sys.exc_info()
         tb = traceback.format_exc()
         return (
@@ -123,7 +125,9 @@ def test_package(pkg: PackageToTest) -> tuple[bool, dict]:
 
     logs = start_capture_logs()
     try:
-        module = use(pkg.name, version=use_version, modes=use.auto_install, hashes=hashes)
+        module = use(
+            pkg.name, version=use_version, modes=use.auto_install, hashes=hashes
+        )
         assert module
         return (
             True,
@@ -135,7 +139,7 @@ def test_package(pkg: PackageToTest) -> tuple[bool, dict]:
             },
         )
 
-    except Exception as e:
+    except Exception:
         exc_type, exc_value, _ = sys.exc_info()
         tb = traceback.format_exc()
         return (

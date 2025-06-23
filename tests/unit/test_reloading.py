@@ -1,7 +1,8 @@
 import sys
 import tempfile
-from pathlib import Path
 from threading import _shutdown_locks
+
+from justuse import Path
 
 
 class Restorer:

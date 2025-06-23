@@ -1,4 +1,4 @@
-from use.pydantics import JustUse_Info, PyPI_Release
+from justuse.pydantics import JustUse_Info, PyPI_Release
 
 
 def test_pypi_model():

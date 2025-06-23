@@ -1,6 +1,7 @@
 import tempfile
 from contextlib import closing
-from pathlib import Path
+
+from justuse import Path
 
 
 def test_clear_registry(reuse):

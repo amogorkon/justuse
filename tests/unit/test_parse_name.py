@@ -1,5 +1,5 @@
 import pytest
-from use.pimp import _parse_name
+from justuse.pimp import _parse_name
 
 
 @pytest.mark.parametrize(

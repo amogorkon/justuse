@@ -1,9 +1,9 @@
-import use
+from justuse import use, auto_install
 
 mod = use(
     "pandas",
     version="1.3.3",
-    modes=use.auto_install,
+    modes=auto_install,
     hashes={
         "68408a39a54ebadb9014ee5a4fae27b2fe524317bc80adf56c9ac59e8f8ea431",
         "e9bc59855598cb57f68fdabd4897d3ed2bc3a3b3bef7b868a0153c4cd03f3207",

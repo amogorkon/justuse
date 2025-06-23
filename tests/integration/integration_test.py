@@ -1,18 +1,12 @@
 import functools
+import logging
 import os
-import re
 import sys
-import tempfile
-import warnings
-from collections.abc import Callable
-from contextlib import closing
 from importlib.machinery import SourceFileLoader
-from pathlib import Path
-from threading import _shutdown_locks
 
-import packaging.tags
-import packaging.version
 import pytest
+
+from justuse import URL, Path, config
 
 if Path("src").is_dir():
     sys.path.insert(0, "") if "" not in sys.path else None
@@ -24,21 +18,18 @@ if Path("src").is_dir():
     try:
         sys.path.clear()
         sys.path.__iadd__(lpath + [os.path.join(os.getcwd(), "src")] + rpath)
-        import use
     finally:
         sys.path.clear()
         sys.path.__iadd__(lpath + rpath)
 import_base = Path(__file__).parent.parent / "src"
 is_win = sys.platform.startswith("win")
-import use
 
 __package__ = "tests"
-from tests.unit_test_deprecated import reuse, ScopedCwd
 
-import logging
+from tests.unit_test_deprecated import ScopedCwd
 
 log = logging.getLogger(".".join((__package__, __name__)))
-log.setLevel(logging.DEBUG if use.config.debugging else logging.NOTSET)
+log.setLevel(logging.DEBUG if config.debugging else logging.NOTSET)
 
 
 params = [
@@ -98,8 +89,6 @@ def test_redownload_module(reuse):
 
 
 def double_function(func):
-    import functools
-
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs) * 2
@@ -113,7 +102,7 @@ def test_aspectize_defaults(reuse):
     if "tests.simple_funcs" in sys.modules:
         del sys.modules["tests.simple_funcs"]
     with ScopedCwd(srcdir):
-        mod = reuse(reuse.Path("./tests/simple_funcs.py"), package_name="tests")
+        mod = reuse(Path("./tests/simple_funcs.py"), package_name="tests")
         assert mod.two() == 2
 
 
@@ -123,7 +112,7 @@ def test_aspectize_function_by_name(reuse):
     if "tests.simple_funcs" in sys.modules:
         del sys.modules["tests.simple_funcs"]
     with ScopedCwd(srcdir):
-        mod = reuse(reuse.Path("./tests/simple_funcs.py"), package_name="tests") @ (
+        mod = reuse(Path("./tests/simple_funcs.py"), package_name="tests") @ (
             reuse.isfunction,
             "two",
             double_function,
@@ -139,7 +128,7 @@ def test_aspectize_all_functions(reuse):
     if "tests.simple_funcs" in sys.modules:
         del sys.modules["tests.simple_funcs"]
     with ScopedCwd(srcdir):
-        mod = reuse(reuse.Path("./tests/simple_funcs.py"), package_name="tests") @ (
+        mod = reuse(Path("./tests/simple_funcs.py"), package_name="tests") @ (
             reuse.isfunction,
             "",
             double_function,
@@ -170,8 +159,8 @@ def test_simple_url(reuse):
             thd = threading.Thread(target=svr.handle_request)
             thd.start()
             print(f"loading foo module via use(URL({foo_uri}))")
-            with pytest.warns(use.NoValidationWarning):
-                mod = reuse(reuse.URL(foo_uri), initial_globals={"a": 42})
+            with pytest.warns(NoValidationWarning):
+                mod = reuse(URL(foo_uri), initial_globals={"a": 42})
                 assert mod.test() == 42
     finally:
         os.chdir(orig_cwd)
@@ -204,7 +193,7 @@ def test_autoinstall_protobuf(reuse):
 def suggested_artifact(reuse, *args, **kwargs):
     reuse.pimp._clean_sys_modules(args[0].split("/")[-1].split(".")[0])
     try:
-        mod = reuse(*args, modes=reuse.auto_install | reuse.Modes.fastfail, **kwargs)
+        mod = reuse(*args, modes=auto_install | fastfail, **kwargs)
         return mod
     except RuntimeWarning as rw:
         last_line = str(rw).strip().splitlines()[-1].strip()

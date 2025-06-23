@@ -3,12 +3,13 @@ import os
 import sys
 from collections.abc import Callable
 from contextlib import redirect_stdout
-from pathlib import Path
 from time import time
 from types import ModuleType
 from unittest.mock import patch
 
 from pytest import fixture, mark
+
+from justuse import Path
 
 src = import_base = Path(__file__).parent.parent / "src"
 cwd = Path().cwd()

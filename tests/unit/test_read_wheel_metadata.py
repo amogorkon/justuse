@@ -1,7 +1,8 @@
 import tempfile
-from pathlib import Path
 
 import requests
+
+from justuse import Path
 
 
 def test_read_wheel_metadata(reuse):

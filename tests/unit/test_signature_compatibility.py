@@ -1,7 +1,7 @@
 import typing
 from collections.abc import Sequence
 
-from use.pimp import _check, _is_compatible
+from justuse.pimp import _check, _is_compatible
 
 
 def test_same_signature_different_kwarg_order():

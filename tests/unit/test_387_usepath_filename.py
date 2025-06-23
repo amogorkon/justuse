@@ -1,6 +1,4 @@
-from pathlib import Path
-
-from justuse import use
+from justuse import use, Path
 
 
 class ScopedCwd:
@@ -21,5 +19,5 @@ class ScopedCwd:
 
 def test_387_usepath_filename(reuse):
     with ScopedCwd(Path(__file__).parent):
-        mod = use(use.Path(".tests/.file_for_test387.py"))
+        mod = use(Path("../.tests/.file_for_test387.py"))
         assert mod

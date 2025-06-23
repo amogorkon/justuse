@@ -1,6 +1,7 @@
 import subprocess
 import sys
-from pathlib import Path
+
+from justuse import Path
 
 
 def test_setup_py_works(reuse):

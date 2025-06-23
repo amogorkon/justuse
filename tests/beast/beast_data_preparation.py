@@ -1,8 +1,11 @@
-from pathlib import Path
-from packaging.version import Version as PkgVersion, InvalidVersion
+import json
 from typing import Optional, Union
 
-import json
+from packaging.version import InvalidVersion
+from packaging.version import Version as PkgVersion
+
+from justuse import Path
+
 
 class Version(PkgVersion):
     def __new__(cls, *args, **kwargs):
@@ -11,10 +14,17 @@ class Version(PkgVersion):
         else:
             return super(cls, Version).__new__(cls)
 
-    def __init__(self, versionobj: Optional[Union[PkgVersion, str]] = None, *, major=0, minor=0, patch=0):
+    def __init__(
+        self,
+        versionobj: Optional[Union[PkgVersion, str]] = None,
+        *,
+        major=0,
+        minor=0,
+        patch=0,
+    ):
         if isinstance(versionobj, Version):
             return
-        
+
         if versionobj:
             try:
                 super(Version, self).__init__(versionobj)
@@ -49,12 +59,15 @@ class Version(PkgVersion):
     def validate(cls, value):
         return Version(value)
 
-p = (Path(__file__).parent.absolute() / "../integration/pypi.json")
+
+p = Path(__file__).parent.absolute() / "../integration/pypi.json"
 
 with open(p) as file:
     data = json.load(file)["data"]
-    
-DATA = [(d["name"], d["name"], str(max(Version(v) for v in d["versions"]))) for d in data]
+
+DATA = [
+    (d["name"], d["name"], str(max(Version(v) for v in d["versions"]))) for d in data
+]
 
 p = (Path(__file__).parent.absolute() / "../beast_data.json").resolve()
 with open(p, "w") as file:

@@ -1,21 +1,25 @@
 import json
-from os import PathLike
-import subprocess
 import shutil
-from pathlib import Path
+import subprocess
+from os import PathLike
 
-import use
 from test_single import Packages
+
+from justuse import Path, home
 
 
 def manage_disk(max_size=5_000_000_000):
-    if not (use.home / "venv").exists():
+    if not (home / "venv").exists():
         return
-    if not any((use.home / "venv").iterdir()):
+    if not any((home / "venv").iterdir()):
         return
-    current_usage = int(subprocess.check_output(["du", "-sb", f"{use.home}/venv"]).split(b"\t")[0])
+    current_usage = int(
+        subprocess.check_output(["du", "-sb", f"{home}/venv"]).split(b"\t")[0]
+    )
     if current_usage > max_size:
-        process = subprocess.Popen(f"du -sb {use.home}/venv/* | sort -n -r", shell=True, stdout=subprocess.PIPE)
+        process = subprocess.Popen(
+            f"du -sb {home}/venv/* | sort -n -r", shell=True, stdout=subprocess.PIPE
+        )
         venv_usages = process.communicate()[0].split(b"\n")
         for venv in venv_usages:
             try:
@@ -24,7 +28,9 @@ def manage_disk(max_size=5_000_000_000):
                 size = int(size)
                 venv_package = path.split("/")[-1]
 
-                print(f"Deleting {venv_package} to make extra space, freed {size/1_000_000} MB")
+                print(
+                    f"Deleting {venv_package} to make extra space, freed {size / 1_000_000} MB"
+                )
                 shutil.rmtree(path)
                 current_usage -= size
                 if current_usage < max_size:
@@ -39,7 +45,12 @@ def clear_cache():
         shutil.rmtree("results")
 
 
-def run_test(packages: Packages, results_dir: PathLike, max_to_run: int = 1, max_venv_space: int = 5_000_000_000):
+def run_test(
+    packages: Packages,
+    results_dir: PathLike,
+    max_to_run: int = 1,
+    max_venv_space: int = 5_000_000_000,
+):
     for i, pkg in enumerate(packages.data):
         if i >= max_to_run:
             break
@@ -51,11 +62,17 @@ def run_test(packages: Packages, results_dir: PathLike, max_to_run: int = 1, max
         subprocess.call(f"python test_single.py {i}", shell=True)
         n_passed = len(list((results_dir / "pass").glob("*.json")))
         n_failed = len(list((results_dir / "fail").glob("*.json")))
-        print(i, pkg.name, n_failed + n_passed, n_failed, n_passed, f"{100 * n_passed / (n_failed + n_passed)}%")
+        print(
+            i,
+            pkg.name,
+            n_failed + n_passed,
+            n_failed,
+            n_passed,
+            f"{100 * n_passed / (n_failed + n_passed)}%",
+        )
 
 
 def combine_package_output(results_dir: PathLike, folder: str):
-
     packages = []
     for file_path in (results_dir / folder).glob("*.json"):
         with open(file_path, "r") as f:
@@ -68,7 +85,14 @@ def combine_package_output(results_dir: PathLike, folder: str):
 
 
 if __name__ == "__main__":
-    NAUGHTY_PACKAGES = ["assimp", "metakernel", "pscript", "airflow", "tensorflow", "tensorflow-gpu"]
+    NAUGHTY_PACKAGES = [
+        "assimp",
+        "metakernel",
+        "pscript",
+        "airflow",
+        "tensorflow",
+        "tensorflow-gpu",
+    ]
 
     with open("pypi.json", "r") as f:
         packages = Packages(data=json.load(f)["data"])

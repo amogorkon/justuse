@@ -1,4 +1,4 @@
-from use.aspectizing import iter_submodules
+from justuse.aspectizing import iter_submodules
 
 
 def test_dependencies():

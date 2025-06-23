@@ -1,7 +1,7 @@
 from justuse import auto_install, no_cleanup, use
 
 
-def test_451_ignore_spaces_in_hashes(reuse):
+def test_451_ignore_spaces_in_hashes():
     # single hash
     mod = use(
         "package-example",

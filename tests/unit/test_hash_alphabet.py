@@ -1,6 +1,6 @@
 from hashlib import sha256
 
-from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
+from justuse.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 
 
 def test_hash_alphabet():

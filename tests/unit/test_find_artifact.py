@@ -1,4 +1,4 @@
-from use.pimp import _get_project_from_pypi
+from justuse.pimp import _get_project_from_pypi
 
 
 def test_find_windows_artifact(reuse):

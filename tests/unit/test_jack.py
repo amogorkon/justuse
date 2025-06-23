@@ -2,7 +2,7 @@ from hashlib import sha256
 
 from hypothesis import assume, example, given
 from hypothesis import strategies as st
-from use.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
+from justuse.hash_alphabet import JACK_as_num, hexdigest_as_JACK, num_as_hexdigest
 
 
 @given(st.text())

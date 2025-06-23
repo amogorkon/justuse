@@ -2,13 +2,8 @@
 
 import inspect
 
-from justuse import use
 
 # ===========================================
-
-
-def test_use():
-    use("time")
 
 
 # ===========================================
