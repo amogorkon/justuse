@@ -1,10 +1,16 @@
 # Version string for packaging and runtime
-__version__ = "0.9.1.1.0"
+__version__ = "2025.26"
+
+from pathlib import Path
 
 from .config import home, sessionID
-from .constants import Hash, ModeFlags, Modes
-from .exceptions import JustuseIssue
-from .main import ProxyModule, Use
+from .constants import Hash, Modes
+from .main import URL, ProxyModule, Use
+from .repo import Repo
+
+auto_install = Modes.auto_install
+no_cleanup = Modes.no_cleanup
+reloading = Modes.reloading
 
 use = ProxyModule(Use())
 
@@ -12,9 +18,13 @@ __all__ = [
     "home",
     "sessionID",
     "Hash",
-    "ModeFlags",
     "Modes",
-    "JustuseIssue",
+    "auto_install",
+    "no_cleanup",
+    "reloading",
     "ProxyModule",
     "use",
+    "Path",
+    "URL",
+    "Repo",
 ]
