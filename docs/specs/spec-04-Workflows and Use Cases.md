@@ -1,3 +1,26 @@
+# GitHub Hot Reloading
+
+JustUse supports hot reloading for modules loaded from GitHub repositories via the `Repo.github` interface. When enabled, a background thread will poll the remote repository for new commits and automatically reload the module if changes are detected.
+
+**Workflow:**
+1. Use `Repo.github(...)` to specify the repository, file path, and branch/ref.
+2. Call `reload_threaded()` on the repo object to start the background watcher.
+3. The loaded module will be updated in place when new commits are detected.
+
+**Example:**
+```python
+from justuse import Repo, use
+repo = Repo.github("amogorkon/justuse", "tests/.tests/test_module.py")
+mod = use(repo)
+repo.reload_threaded()  # Enable hot reloading
+print(mod.test_function())  # Will reflect latest code after remote update
+```
+
+**Notes:**
+- The reload thread checks for new commits every 60 seconds by default.
+- If a `ProxyModule` is used, its implementation is updated automatically.
+- Handles missing proxies and errors gracefully.
+- Useful for live development, demos, and collaborative workflows.
 # Integration & Workflows
 
 This document is the authoritative collection of all JustUse use cases, workflows, and integration patterns. It covers every supported import mode, configuration, and advanced usage scenario.
