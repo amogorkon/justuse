@@ -5,7 +5,6 @@ Delegating package installation to pip, packaging and friends.
 import codecs
 import collections
 import contextlib
-import datetime
 import importlib.machinery
 import importlib.util
 import inspect
@@ -21,6 +20,7 @@ import traceback
 import zipfile
 import zipimport
 from collections.abc import Callable
+from datetime import datetime
 from functools import lru_cache as cache
 from functools import reduce
 from importlib import metadata
@@ -39,24 +39,25 @@ from warnings import catch_warnings, filterwarnings, warn
 
 import furl
 import requests
-from beartype import beartype
 from furl import furl as URL
-from icontract import ensure, require
 from packaging import tags
 from packaging.specifiers import SpecifierSet
 from pypeduct import pyped
 
-from .constants import Hash, Modes
-from .exceptions import InstallationError, UnexpectedHash, VersionWarning
-from . import config
 from .classes import ProxyModule
-from .pydantics import Version
+from .config import config
+from .constants import Hash, Modes
+from .exceptions import (
+    InstallationError,
+    NoValidationWarning,
+    UnexpectedHash,
+    VersionWarning,
+)
+from .globals import default, initial_globals
 from .hash_alphabet import hexdigest_as_JACK, num_as_hexdigest
 from .messages import UserMessage, _web_pebkac_no_hash
-from .globals import initial_globals, default
-from .exceptions import NoValidationWarning
-from .utils import excel_style_datetime
-from .pydantics import PyPI_Project, PyPI_Release, RegistryEntry
+from .pydantics import PyPIProjectInfo, PythonPackageInfo, RegistryEntry, Version
+from .utils import assumption, excel_style_datetime
 
 log = getLogger(__name__)
 
@@ -69,17 +70,16 @@ class PlatformTag:
         return self.platform
 
     def __repr__(self):
-        return f"use.PlatformTag({self.platform!r})"
+        return f"PlatformTag({self.platform!r})"
 
     def __hash__(self):
         return hash(self.platform)
 
-    @require(lambda self, other: isinstance(other, self.__class__))
     def __eq__(self, other):
+        assert assumption(other, self.__class__)
         return self.platform == other.platform
 
 
-@beartype
 def _ensure_version(
     result: ModuleType | Exception, *, name, req_ver, **kwargs
 ) -> ModuleType | Exception:
@@ -96,28 +96,27 @@ def _ensure_version(
 
 def _hash(algo, content: bytes) -> int:
     """Calculate a hash of content using the specified algorithm."""
-    int(algo(content).hexdigest(), 16)
+    return int(algo(content).hexdigest(), 16)
 
 
 # fmt: off
 @pyped
-def _ensure_path(value: bytes| str| furl.Path | Path) -> Path:
+def _ensure_path(value: bytes | str | furl.Path | Path) -> Path:
     if isinstance(value, (str, bytes)):
         return Path(value).absolute()
     if isinstance(value, furl.Path):
         return (
             Path.cwd(),
             value.segments
-            << map(Path)
-            << tuple
-            << reduce(Path.__truediv__),
-        ) << reduce(Path.__truediv__)
+            >> map(Path)
+            >> tuple
+            >> reduce(Path.__truediv__),
+        ) >> reduce(Path.__truediv__)
     return value
 # fmt: on
 
 
 @cache
-@beartype
 def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
     """
     Results of this function are cached. They are expensive to
@@ -157,10 +156,9 @@ def get_supported() -> frozenset[PlatformTag]:  # cov: exclude
     return frozenset(items)
 
 
-@beartype
 def _filter_by_version(
-    releases: list[PyPI_Release], *, version: Version
-) -> list[PyPI_Release]:
+    releases: list[PythonPackageInfo], *, version: Version
+) -> list[PythonPackageInfo]:
     return list(filter(lambda r: r.version == version, releases))
 
 
@@ -196,8 +194,6 @@ class TarFunctions:
             return (Path(entry_name).stem, text)
 
 
-@beartype
-@pyped
 def archive_meta(artifact_path):
     DIST_PKG_INFO_REGEX = re.compile("(dist-info|-INFO|\\.txt$|(^|/)[A-Z0-9_-]+)$")
 
@@ -208,7 +204,9 @@ def archive_meta(artifact_path):
 
     archive, names = functions.get()
     meta = (
-        names << filter(DIST_PKG_INFO_REGEX.search) << map(functions.read_entry) >> dict
+        list(filter(DIST_PKG_INFO_REGEX.search, names))
+        >> map(functions.read_entry)
+        >> dict
     )
     meta.update(
         dict(
@@ -229,7 +227,7 @@ def archive_meta(artifact_path):
     meta["names"] = names
     meta["import_name"] = import_name
     for relpath in sorted(
-        [n for n in names if len(n) > 4 and n[-3:] == ".py"],
+        [n for n in names if len(n) > 4 and n.endswith(".py")],
         key=lambda n: (
             not n.startswith(import_name),
             not n.endswith("__init__.py"),
@@ -244,7 +242,6 @@ def archive_meta(artifact_path):
     return meta
 
 
-@beartype
 def _clean_sys_modules(pkg_name: str) -> None:
     for k in dict([
         (k, v)
@@ -259,7 +256,6 @@ def _clean_sys_modules(pkg_name: str) -> None:
             del sys.modules[k]
 
 
-@beartype
 def _pebkac_no_version(
     *,
     name: str,
@@ -276,8 +272,6 @@ def _pebkac_no_version(
     return RuntimeWarning(Message.cant_import_no_version(name=name))
 
 
-@beartype
-@pyped
 def _pebkac_no_hash(
     *,
     name: str,
@@ -319,7 +313,6 @@ def _pebkac_no_hash(
     )
 
 
-@beartype
 @pyped
 def _pebkac_no_version_no_hash(
     *,
@@ -374,7 +367,6 @@ def _pebkac_no_version_no_hash(
     )
 
 
-@beartype
 def _import_public_no_install(
     *,
     mod_name: str,
@@ -421,7 +413,6 @@ def _parse_name(name: str) -> tuple[str, str]:
     return (pkg_name, mod_name)
 
 
-@beartype
 def _check_db_for_installation(
     *, registry=Cursor, pkg_name=str, version
 ) -> RegistryEntry | None:
@@ -442,7 +433,6 @@ def _check_db_for_installation(
     return RegistryEntry(**query) if query else None
 
 
-@beartype
 def _auto_install(
     mod: ModuleType | Exception | None = None,
     *,
@@ -499,6 +489,21 @@ def _auto_install(
     # else: we have to download the package and install it
 
     releases = _get_releases_from_pypi(pkg_name=pkg_name, req_ver=req_ver)
+    try:
+        return _load_venv_entry(
+            mod_name=mod_name,
+            installation_path=entry.installation_path,
+        )
+    except BaseException as err:
+        traceback.print_exc(file=sys.stderr)
+        msg = err
+    finally:
+        os.chdir(original_cwd)
+    return ImportError(msg)
+
+    # else: we have to download the package and install it
+
+    releases = _get_releases_from_pypi(pkg_name=pkg_name, req_ver=req_ver)
     if isinstance(releases, Exception):
         return releases
     # we *did* ask the user to give us hashes of artifacts that *should* work, so let's check for those.
@@ -517,6 +522,8 @@ def _auto_install(
 
         # got an url for an artifact with a hash given by the user, let's install it
         filename = url.asdict()["path"]["segments"][-1]
+        from .main import config
+
         artifact_path = config.packages / filename
         _download_artifact(
             artifact_path=artifact_path, url=url, hash_value=H, hash_algo=hash_algo
@@ -563,20 +570,25 @@ def _auto_install(
     return ImportError(msg)
 
 
-@beartype
 def _save_package_info(
     *,
     registry=Cursor,
     version: Version,
     artifact_path: Path,
     installation_path: Path,
-    hash_value=int,
+    hash_value: int,
     hash_algo: Hash,
-    pkg_name: str,
+    pkg_name: int,
 ):
+    assert assumption(registry, Cursor)
+    assert assumption(version, Version)
+    assert assumption(artifact_path, Path)
+    assert assumption(installation_path, Path)
+    assert assumption(hash_value, int)
     """Update the registry to contain the pkg's metadata."""
     if not registry.execute(
-        "SELECT * FROM installations WHERE name=? AND version=?", (pkg_name, version)
+        "SELECT * FROM installations WHERE name=? AND version=?",
+        (pkg_name, str(version)),
     ).fetchone():
         registry.execute(
             """
@@ -585,7 +597,7 @@ VALUES (?, ?, ?, ?, ?)
 """,
             (
                 pkg_name,
-                version,
+                str(version),
                 installation_path,
                 time.time(),
                 installation_path is None,
@@ -608,11 +620,14 @@ VALUES (?, ?, ?)
     registry.connection.commit()
 
 
-@beartype
-@ensure(lambda url: str(url).startswith("http"))
 def _download_artifact(
     *, artifact_path: Path, url: URL, hash_algo: Hash, hash_value: int
 ):
+    assert assumption(artifact_path, Path)
+    assert assumption(url, URL)
+    assert str(url).startswith("http"), f"url must start with 'http', got {url}"
+    assert assumption(hash_algo, Hash)
+    assert assumption(hash_value, int)
     # let's check if we downloaded it already, just in case
     if (
         artifact_path.exists()
@@ -633,8 +648,9 @@ def _download_artifact(
     return
 
 
-@beartype
 def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
+    assert assumption(artifact_path, Path)
+    assert assumption(meta, dict)
     return next(
         (
             False
@@ -645,8 +661,12 @@ def _is_pure_python_package(artifact_path: Path, meta: dict) -> bool:
     )
 
 
-@beartype
 def _find_module_in_venv(pkg_name: str, version: Version, relp: str) -> Path:
+    assert assumption(pkg_name, str)
+    assert assumption(version, Version)
+    assert assumption(relp, str)
+    from .main import config
+
     env_dir = config.venv / pkg_name / str(version)
     log.debug("env_dir=%s", env_dir)
     site_dirs = [
@@ -688,7 +708,6 @@ def _find_module_in_venv(pkg_name: str, version: Version, relp: str) -> Path:
     raise ImportError("No module in site_dirs")
 
 
-@beartype
 def _install(
     *,
     pkg_name: str,
@@ -697,11 +716,17 @@ def _install(
     artifact_path: Path,
 ) -> RegistryEntry:
     """Take care of the installation."""
+    assert assumption(pkg_name, str)
+    assert assumption(requested_version, (Version, type(None)))
+    assert assumption(force_install, bool)
+    assert assumption(artifact_path, Path)
     meta = archive_meta(artifact_path)
     import_parts = re.split("[\\\\/]", meta["import_relpath"])
     if "__init__.py" in import_parts:
         import_parts.remove("__init__.py")
     relp: str = meta["import_relpath"]
+    from .main import config
+
     venv_root = config.venv / pkg_name / str(requested_version)
     site_pkgs_dir = list(venv_root.rglob("site-packages"))
     if not any(site_pkgs_dir):
@@ -785,8 +810,9 @@ def _install(
     )
 
 
-@beartype
 def _load_venv_entry(*, mod_name: str, installation_path: Path) -> ModuleType:
+    assert assumption(mod_name, str)
+    assert assumption(installation_path, Path)
     if not mod_name:
         log.info("Module name is empty, returning empty Module.")
         return ModuleType("")
@@ -809,8 +835,8 @@ def _load_venv_entry(*, mod_name: str, installation_path: Path) -> ModuleType:
     raise ImportError(msg)
 
 
-@beartype
-def _get_project_from_pypi(*, pkg_name: str) -> PyPI_Project | Exception:
+def _get_project_from_pypi(*, pkg_name: str) -> PyPIProjectInfo | Exception:
+    assert assumption(pkg_name, str)
     # let's check if package name is correct
     url = f"https://pypi.org/pypi/{pkg_name}/json"
     response = requests.get(url)
@@ -818,13 +844,14 @@ def _get_project_from_pypi(*, pkg_name: str) -> PyPI_Project | Exception:
         return ImportError(UserMessage.pebkac_unsupported(pkg_name))
     elif response.status_code != 200:
         return RuntimeWarning(UserMessage.web_error(url, response))
-    return PyPI_Project(**response.json())
+    return PyPIProjectInfo(**response.json())
 
 
-@beartype
 def _get_releases_from_pypi(
     *, pkg_name: str, req_ver: Version
-) -> list[PyPI_Release] | Exception:
+) -> list[PythonPackageInfo] | Exception:
+    assert assumption(pkg_name, str)
+    assert assumption(req_ver, Version)
     # let's check if package name is correct
     response = requests.get(url := f"https://pypi.org/pypi/{pkg_name}")
     if response.status_code == 404:
@@ -837,14 +864,16 @@ def _get_releases_from_pypi(
         return RuntimeWarning(UserMessage.bad_version_given(pkg_name, req_ver))
     # looks good, let's get the releases for this version
     urls = response.json()["urls"]
-    return [PyPI_Release(**url, version=req_ver) for url in urls]
+    return [PythonPackageInfo(**url, version=req_ver) for url in urls]
 
 
-@beartype
 def _filter_by_platform(
-    releases: list[PyPI_Release], *, tags: frozenset[PlatformTag]
-) -> list[PyPI_Release]:
-    def compatible(info: PyPI_Release, include_sdist=False) -> bool:
+    releases: list[PythonPackageInfo], *, tags: frozenset[PlatformTag]
+) -> list[PythonPackageInfo]:
+    assert assumption(releases, list)
+    assert assumption(tags, frozenset)
+
+    def compatible(info: PythonPackageInfo, include_sdist=False) -> bool:
         return (
             _is_platform_compatible(info, tags, include_sdist)
             and not info.yanked
@@ -859,14 +888,13 @@ def _filter_by_platform(
     ]
 
 
-@beartype
-def _get_releases(project: PyPI_Project) -> list[PyPI_Release]:
+def _get_releases(project: PyPIProjectInfo) -> list[PythonPackageInfo]:
+    assert assumption(project, PyPIProjectInfo)
     return reduce(list.__add__, project.releases.values(), [])
 
 
-@beartype
-@pyped
-def _sort_releases(releases: list[PyPI_Release]) -> list[PyPI_Release]:
+def _sort_releases(releases: list[PythonPackageInfo]) -> list[PythonPackageInfo]:
+    assert assumption(releases, list)
     return sorted(
         releases,
         key=(
@@ -893,10 +921,9 @@ def _is_version_satisfied(specifier: str, sys_version) -> bool:
     return not specifier or sys_version in specifiers
 
 
-@beartype
 @pyped
 def _is_platform_compatible(
-    info: PyPI_Release, platform_tags: frozenset[PlatformTag], include_sdist=False
+    info: PythonPackageInfo, platform_tags: frozenset[PlatformTag], include_sdist=False
 ) -> bool:
     if not include_sdist and (
         ".tar" in info.justuse.ext or info.justuse.python_tag in ("cpsource", "sdist")
@@ -923,7 +950,7 @@ def _is_platform_compatible(
 
     if info.platform_tag:
         given_platform_tags = (
-            info.platform_tag.split(".") << map(PlatformTag) >> frozenset
+            info.platform_tag.split(".") >> map(PlatformTag) >> frozenset
         )
     else:
         return include_sdist
@@ -943,7 +970,6 @@ def _is_platform_compatible(
     )
 
 
-@beartype
 def _get_version(name: str | None = None, pkg_name=None, /, mod=None) -> Version | None:
     version: Callable[...] | Version | str | None = None
     for lookup_name in (name, pkg_name):
@@ -1004,7 +1030,7 @@ def _build_mod(
 
 
 def _fail_or_default(exception: BaseException, default: Any):
-    if default is not Modes.fastfail:
+    if default is not Modes.DEFAULT:
         return default
     else:
         raise exception
@@ -1022,7 +1048,7 @@ def _real_path(
     jupyter = "ipykernel" in sys.modules
     # we're in jupyter, we use the CWD as set in the notebook
     if not jupyter and hasattr(main_mod, "__file__"):
-        # problem: user wants to use.Path("some_file_in_the_same_dir")
+        # problem: user wants to Path("some_file_in_the_same_dir")
         # so we have to figure out where the file of the calling function is.
         # but the *calling* function could also be a decorator, living completely elsewhere
         # so we have to figure out whether we're being called by a decorator first.
@@ -1114,6 +1140,7 @@ def _get_content_from_url(
     hash_value: str | None = None,
     reckless: bool = False,
 ) -> bytes:
+    content = None  # Ensure content is always defined
     if query := registry.execute(
         "SELECT module_path FROM artifacts WHERE artifact_path=?",
         (str(url),),
@@ -1125,6 +1152,8 @@ def _get_content_from_url(
     if module_path is None or not Path(module_path).exists():
         registry.execute("DELETE FROM artifacts WHERE artifact_path=?", (str(url),))
         registry.connection.commit()
+        from .main import config
+
         for p in config.web_modules.glob(f"*_{name}"):
             p.unlink()
         # pyc and other shenanigans
@@ -1144,7 +1173,7 @@ def _get_content_from_url(
             module_path, module_path.parent / f"{module_path.name}c", optimize=2
         )
 
-    if not content:
+    if content is None or not content:
         response = requests.get(str(url))
         if response.status_code != 200:
             raise ImportError(UserMessage.web_error(url, response))
@@ -1201,7 +1230,7 @@ def _is_compatible(pre, post):
             args.append((k, v))
 
     pre_sig = []
-    v = _extracted_from__is_compatible_(args, pre_sig, kwargs, sig)
+    v = _extract_annotations_from_args(args, pre_sig, kwargs, sig)
     sig = inspect.signature(post)
     post_sig = []
 
@@ -1214,7 +1243,7 @@ def _is_compatible(pre, post):
         else:
             args.append((k, v))
 
-    v = _extracted_from__is_compatible_(args, post_sig, kwargs, sig)
+    v = _extract_annotations_from_args(args, post_sig, kwargs, sig)
     return all(_check(x, y) for x, y in zip_longest(pre_sig, post_sig, fillvalue=Any))
 
 
@@ -1229,8 +1258,7 @@ def _is_builtin(name: str) -> bool:
     )
 
 
-# TODO Rename this here and in `_is_compatible`
-def _extracted_from__is_compatible_(args, arg1, kwargs, sig):
+def _extract_annotations_from_args(args, arg1, kwargs, sig):
     for k, result in args:
         result = result.annotation
         arg1.append(result if result is not inspect._empty else Any)
