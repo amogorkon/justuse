@@ -31,8 +31,8 @@
         <button class="button" , id="clipboard_button">Copy to Clipboard</button>
     </p>
     <p>
-        <textarea id="result" rows="5" style="resize: none;" readonly cols="120">use('{{name}}', version='{{version}}', modes=use.auto_install, hash_algo=use.Hash.sha256, hashes={ 
-                ... 
+        <textarea id="result" rows="5" style="resize: none;" readonly cols="120">use('{{name}}', version='{{version}}', modes=auto_install, hash_algo=Hash.sha256, hashes={
+                ...
             })</textarea>
     </p>
     <p>
@@ -107,13 +107,13 @@ def table_clicked_unselect(event):
 def refresh_result():
     hashes = set()
     for row in document.select(".row_selected"):
-        if document["jack_button"].checked: 
+        if document["jack_button"].checked:
             hashes.add((document[f"python_{row.id}"].text, document[f"platform_{row.id}"].text, document[f"jack_value_{row.id}"].text))
         else:
             hashes.add((document[f"python_{row.id}"].text, document[f"platform_{row.id}"].text, document[f"hash_value_{row.id}"].text))
 
     hash_str = "{\n    " + "\n    ".join(f"'{H}',  # {python}-{platform}" for python, platform, H in hashes) + " \n}"
-    document["result"].text =  f"use('{document['name'].text}', version='{document['version'].text}', modes=use.auto_install, hash_algo=use.Hash.sha256, hashes={hash_str})"
+    document["result"].text =  f"use('{document['name'].text}', version='{document['version'].text}', modes=auto_install, hash_algo=Hash.sha256, hashes={hash_str})"
 
 for x in document.select(".row_not_selected"): x.bind("click", table_clicked_select)
 </script>
