@@ -10,14 +10,13 @@ from pathlib import Path
 from shutil import copy
 from statistics import geometric_mean, median, stdev
 
-from beartype import beartype
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from . import __version__, config, home
-from .pydantics import Version
+from .constants import Hash, Modes
 from .hash_alphabet import hexdigest_as_JACK
-from .pydantics import PyPI_Release
-from .tools import ALL, VERBOSE, apply
+from .pydantics import PythonPackageInfo, Version
+from .utils import ALL, apply, assumption
 
 env = Environment(
     loader=FileSystemLoader(Path(__file__).parent / "templates"),
@@ -80,10 +79,14 @@ def _web_aspectized(decorators, functions):
     webbrowser.open(f"file://{home}/aspects.html")
 
 
-@beartype
 def _web_aspectized_dry_run(
     *, decorator: Callable, hits: list, check: Callable, pattern: str, mod_name: str
 ):
+    assert assumption(decorator, Callable)
+    assert assumption(hits, list)
+    assert assumption(check, Callable)
+    assert assumption(pattern, str)
+    assert assumption(mod_name, str)
     copy(
         Path(__file__).absolute().parent / r"templates/aspects.css",
         home / "aspects.css",
@@ -99,14 +102,17 @@ def _web_aspectized_dry_run(
     webbrowser.open(f"file://{home}/aspects_dry_run.html")
 
 
-@beartype
 def _web_pebkac_no_hash(
     *,
     name: str,
     pkg_name: str,
     version: Version,
-    releases: list[PyPI_Release],
+    releases: list[PythonPackageInfo],
 ):
+    assert assumption(name, str)
+    assert assumption(pkg_name, str)
+    assert assumption(version, Version)
+    assert assumption(releases, list)
     copy(
         Path(__file__).absolute().parent / r"templates/stylesheet.css",
         home / "stylesheet.css",
@@ -115,7 +121,7 @@ def _web_pebkac_no_hash(
     table = defaultdict(lambda: [])
     for rel in (rel for rel in releases if rel.version == version):
         for hash_name, hash_value in rel.digests.items():
-            if hash_name not in (x.name for x in config.Hash):
+            if hash_name not in (x.name for x in Hash):
                 continue
             table[hash_name].append(
                 entry(
@@ -136,13 +142,10 @@ def _web_pebkac_no_hash(
         }
         file.write(env.get_template("hash-presentation.html").render(**args))
 
-    # from base64 import b64encode
-    # def data_uri_from_html(html_string):
-    #    return f'data:text/html;base64,{b64encode(html_string.encode()).decode()}'
     webbrowser.open(f"file://{home}/web_exception.html")
 
 
-@apply(staticmethod, ALL.methods, mode=VERBOSE)
+@apply(staticmethod, ALL.methods, mode=Modes.DEFAULT)
 class UserMessage:
     def not_reloadable(*, name):
         return f"Beware {name} also contains non-function objects, it may not be safe to reload!"
@@ -157,7 +160,7 @@ Please consider upgrading via
 python -m pip install -U justuse
 """
 
-    def cant_use(*, thing):
+    def cant_use(thing):
         return f"Only pathlib.Path, yarl.URL and str are valid sources of things to import, but got {type(thing)}."
 
     def web_error(*, url, response):
@@ -166,19 +169,19 @@ python -m pip install -U justuse
     def no_validation(*, url, hash_algo, this_hash):
         return f"""Attempting to import from the interwebs with no validation whatsoever!
 To safely reproduce:
-use(use.URL('{url}'), hash_algo=use.{hash_algo}, hash_value='{this_hash}')"""
+use(URL('{url}'), hash_algo={hash_algo}, hash_value='{this_hash}')"""
 
     def version_warning(*, pkg_name, target_version, this_version):
         return f"{pkg_name} expected to be version {target_version}, but got {this_version} instead"
 
     def ambiguous_name_warning(*, pkg_name):
-        return f"Attempting to load the pkg '{pkg_name}', if you rather want to use the local module: use(use._ensure_path('{pkg_name}.py'))"
+        return f"Attempting to load the pkg '{pkg_name}', if you rather want to use the local module: use(_ensure_path('{pkg_name}.py'))"
 
     def pebkac_missing_hash(*, name, pkg_name, version, recommended_hash, no_browser):
         return f"""Failed to auto-install {pkg_name!r} because hashes aren't specified.
         {"" if no_browser else "A webbrowser should open with a list of available hashes for different platforms for you to pick."}"
         If you want to use the package only on this platform, this should work:
-    use("{name}", version="{version!s}", hashes={recommended_hash!r}, modes=use.auto_install)"""
+    use("{name}", version="{version!s}", hashes={recommended_hash!r}, modes=auto_install)"""
 
     def pebkac_unsupported(*, pkg_name):
         return f"We could not find any version or release for {pkg_name} that could satisfy our requirements!"
