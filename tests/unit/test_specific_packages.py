@@ -45,4 +45,4 @@ def test_specific_packages(reuse, package_name, module_name, version, hashes):
             hashes=hashes,
             modes=auto_install | no_cleanup,
         )
-        assert isinstance(mod, ModuleType)
+        assert assumption(mod, ModuleType)
