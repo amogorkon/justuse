@@ -9,7 +9,9 @@ from pathlib import Path
 
 import packaging
 from packaging.version import Version as PkgVersion
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
+
+from .utils import assumption
 
 log = getLogger(__name__)
 
@@ -46,8 +48,7 @@ class Configuration(BaseModel):
         / "registry.db"
     )
 
-    class Config:
-        validate_assignment = True
+    model_config = ConfigDict(validate_assignment=True)
 
 
 class git(BaseModel):
@@ -118,15 +119,14 @@ def _delete_none(a_dict: dict[str, object]) -> dict[str, object]:
 
 
 class RegistryEntry(BaseModel):
-    class Config:
-        validate_assignment = True
+    model_config = ConfigDict(validate_assignment=True)
 
     artifact_path: Path
     installation_path: Path
     pure_python_package: bool
 
 
-class JustUse_Info(BaseModel):
+class JustUsePackageInfo(BaseModel):
     distribution: str | None = None
     version: str | None = None
     build_tag: str | None = None
@@ -136,7 +136,7 @@ class JustUse_Info(BaseModel):
     ext: str | None = None
 
 
-class PyPI_Release(BaseModel):
+class PythonPackageInfo(BaseModel):
     abi_tag: str | None = None
     build_tag: str | None = None
     distribution: str | None = None
@@ -152,8 +152,7 @@ class PyPI_Release(BaseModel):
     version: Version
     yanked: bool
 
-    class Config:
-        validate_assignment = True
+    model_config = ConfigDict(validate_assignment=True)
 
     @property
     def is_sdist(self):
@@ -165,7 +164,7 @@ class PyPI_Release(BaseModel):
 
     # TODO: cleanup, this is too weird
     @property
-    def justuse(self) -> JustUse_Info:
+    def justuse(self) -> JustUsePackageInfo:
         pp = Path(self.filename)
         if ".tar" in self.filename:
             ext = self.filename[self.filename.index(".tar") + 1 :]
@@ -177,8 +176,8 @@ class PyPI_Release(BaseModel):
             f"{_not_dash('distribution')}-{_not_dash('version')}-?{_not_dash_with_int('build_tag')}?-?{_not_dash('python_tag')}?-?{_not_dash('abi_tag')}?-?{_not_dash('platform_tag')}?",
             rest,
         ):
-            return JustUse_Info(**_delete_none(match.groupdict()), ext=ext)
-        return JustUse_Info()
+            return JustUsePackageInfo(**_delete_none(match.groupdict()), ext=ext)
+        return JustUsePackageInfo()
 
 
 def _not_dash(name: str) -> str:
@@ -189,15 +188,14 @@ def _not_dash_with_int(name: str) -> str:
     return f"(?P<{name}>[0-9][^-]*)"
 
 
-class PyPI_Downloads(BaseModel):
+class PyPIDownloadMetrics(BaseModel):
     last_day: int
     last_month: int
     last_week: int
 
 
-class PyPI_Info(BaseModel):
-    class Config:
-        extra = "ignore"
+class PyPIPackageInfo(BaseModel):
+    model_config = ConfigDict(extra="ignore")
 
     description_content_type: str | None
     download_url: str | None
@@ -215,7 +213,7 @@ class PyPI_Info(BaseModel):
     yanked_reason: str | None
 
 
-class PyPI_URL(BaseModel):
+class PyPIResourceLink(BaseModel):
     abi_tag: str | None
     build_tag: str | None
     digests: dict[str, str]
@@ -231,16 +229,17 @@ class PyPI_URL(BaseModel):
     ext: str | None
 
 
-class PyPI_Project(BaseModel):
-    releases: dict[Version, list[PyPI_Release]] | None = {}
-    urls: list[PyPI_URL] = None
-    last_serial: int = None
-    info: PyPI_Info = None
+class PyPIProjectInfo(BaseModel):
+    releases: dict[Version, list[PythonPackageInfo]] | None = Field(
+        default_factory=dict
+    )
+    urls: list[PyPIResourceLink] | None = None
+    last_serial: int | None = None
+    info: PyPIPackageInfo | None = None
 
-    class Config:
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")
 
-    def __init__(self, *, releases=None, urls, info, **kwargs):
+    def __init__(self, *, releases=None, urls=None, info=None, **kwargs):
         try:
             for version in list(releases.keys()):
                 if not isinstance(version, str):
@@ -256,22 +255,27 @@ class PyPI_Project(BaseModel):
                     **_parse_filename(rel_info["filename"]),
                     "version": Version(str(ver_str)),
                 }
-                if info.get("requires_python"):
-                    data["requires_python"] = info.get("requites_python")
-                if info.get("requires_dist"):
+                if info and info.get("requires_python"):
+                    data["requires_python"] = info.get("requires_python")
+                if info and info.get("requires_dist"):
                     data["requires_dist"] = info.get("requires_dist")
                 return data
 
-            super(PyPI_Project, self).__init__(
+            # Patch: allow missing pkg_name in info
+            if info is not None and "pkg_name" not in info:
+                info = dict(info)
+                info["pkg_name"] = kwargs.get("pkg_name") or info.get("name")
+
+            super(PyPIProjectInfo, self).__init__(
                 releases={
                     str(ver_str): [
                         get_info(rel_info, ver_str) for rel_info in release_infos
                     ]
-                    for ver_str, release_infos in releases.items()
+                    for ver_str, release_infos in (releases or {}).items()
                 },
                 urls=[
                     get_info(rel_info, ver_str)
-                    for ver_str, rel_infos in releases.items()
+                    for ver_str, rel_infos in (releases or {}).items()
                     for rel_info in rel_infos
                 ],
                 info=info,
@@ -293,7 +297,7 @@ def _parse_filename(filename) -> dict:
     {'distribution': 'numpy', 'version': '1.19.5', 'build_tag', 'python_tag': 'cp36', 'abi_tag': 'cp36m', 'platform_tag': 'macosx_10_9_x86_64', 'ext': 'whl'}
     """
     # Filename as API, seriously WTF...
-    assert isinstance(filename, str)
+    assert assumption(filename, str)
     distribution = version = build_tag = python_tag = abi_tag = platform_tag = None
     pp = Path(filename)
     packagetype = None
