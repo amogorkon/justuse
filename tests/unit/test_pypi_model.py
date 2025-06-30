@@ -1,8 +1,8 @@
-from justuse.pydantics import JustUse_Info, PyPI_Release
+from justuse.pydantics import JustUsePackageInfo, PythonPackageInfo
 
 
 def test_pypi_model():
-    release = PyPI_Release(
+    release = PythonPackageInfo(
         comment_text="test",
         digests={"md5": "asdf"},
         url="https://files.pythonhost",
@@ -20,7 +20,7 @@ def test_pypi_model():
     )
     assert type(release)(**release.dict()) == release
 
-    info = JustUse_Info(
+    info = JustUsePackageInfo(
         distribution="numpy",
         version="1.19.5",
         build_tag="cp4",

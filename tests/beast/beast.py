@@ -1,15 +1,16 @@
 import io
 import os
 import sys
+import json
+import logging
 from collections.abc import Callable
 from contextlib import redirect_stdout
 from time import time
 from types import ModuleType
 from unittest.mock import patch
-
 from pytest import fixture, mark
-
-from justuse import Path
+from justuse import Path, use
+from justuse.utils import assumption
 
 src = import_base = Path(__file__).parent.parent / "src"
 cwd = Path().cwd()
@@ -29,24 +30,16 @@ if sys.version_info < (3, 9) and "use" not in sys.modules:
             "__class_getitem__": classmethod(GenericAlias),
         })
 
-
-import use
-
 os.chdir(cwd)
 
 is_win = sys.platform.startswith("win")
 
 __package__ = "tests"
-import json
-import logging
-
-from justuse import use
 
 log = logging.getLogger(".".join((__package__, __name__)))
 log.setLevel(logging.DEBUG if "DEBUG" in os.environ else logging.NOTSET)
 
 use.config.testing = True
-
 
 @fixture()
 def reuse():
@@ -63,14 +56,12 @@ def reuse():
     use.main._reloaders.clear()
     return use
 
-
 p = Path(__file__).parent / "beast_data.json"
 
 with open(p) as file:
     data = json.load(file)
 
 begin = time()
-
 
 @mark.parametrize("package_name, module_name, version", data)
 def test_mass(reuse, package_name, module_name, version):
@@ -90,8 +81,7 @@ def test_mass(reuse, package_name, module_name, version):
             hashes=recommended_hash,
             modes=reuse.auto_install | reuse.no_cleanup,
         )
-        assert isinstance(mod, ModuleType)
-
+        assert assumption(mod, ModuleType)
 
 print("============================================================")
 print("ran", len(data), "tests in", (time() - begin) // 60, "minutes")

@@ -6,7 +6,8 @@ from importlib.machinery import SourceFileLoader
 
 import pytest
 
-from justuse import URL, Path, config
+from justuse import URL, Path, config, fastfail, auto_install
+from justuse.messages import NoValidationWarning
 
 if Path("src").is_dir():
     sys.path.insert(0, "") if "" not in sys.path else None
