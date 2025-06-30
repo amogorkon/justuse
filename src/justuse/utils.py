@@ -2,17 +2,20 @@
 Configuration, constants, and utility functions for justuse.
 """
 
-import hashlib
-import inspect
 import os
 import re
 import tempfile
 from collections.abc import Callable
 from datetime import datetime, timezone
-from enum import Enum, Flag, IntEnum, auto
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+from .constants import ALL, Modes
+
+VERBOSE = Modes.verbose
+INC_DUNDER = Modes.include_dunder
+
 
 # Home directory for justuse
 sessionID = uuid4()
@@ -23,11 +26,6 @@ try:
     home.mkdir(mode=0o755, parents=True, exist_ok=True)
 except PermissionError:
     home = tempfile.mkdtemp(prefix="justuse_")
-
-# Version string for packaging and runtime
-__version__ = "0.9.1.1.0"
-
-# Utility: fraction of day
 
 
 def fraction_of_day(now: datetime = None) -> float:
@@ -46,45 +44,6 @@ def fraction_of_day(now: datetime = None) -> float:
 
 
 # Enums and flags
-class Hash(Enum):
-    sha256 = hashlib.sha256
-    blake = hashlib.blake2s
-
-
-class Modes(IntEnum):
-    auto_install = 2**0
-    fatal_exceptions = 2**1
-    reloading = 2**2
-    no_public_installation = 2**3
-    fastfail = 2**4
-    recklessness = 2**5
-    no_browser = 2**6
-    no_cleanup = 2**7
-
-
-class ModeFlags(Flag):
-    AUTO_INSTALL = auto()
-    FATAL_EXCEPTIONS = auto()
-    RELOADING = auto()
-    FASTFAIL = auto()
-    RECKLESS = auto()
-    DEFAULT = auto()
-    NO_PUBLIC_INSTALLATION = auto()
-    NO_CLEANUP = auto()
-    NO_BROWSER = auto()
-
-
-(
-    AUTO_INSTALL,
-    FATAL_EXCEPTIONS,
-    RELOADING,
-    FASTFAIL,
-    RECKLESS,
-    DEFAULT,
-    NO_PUBLIC_INSTALLATION,
-    NO_CLEANUP,
-    NO_BROWSER,
-) = ModeFlags
 
 
 def excel_style_datetime(now: datetime) -> float:
@@ -111,23 +70,16 @@ def _is_callable(thing):
         return False
 
 
-class ALL(Enum):
-    methods = inspect.ismethod
-    properties = inspect.isdatadescriptor
-    functions = inspect.isfunction
-    classes = inspect.isclass
-
-
 def apply(
     decorator: Callable,
     kind: ALL,
     /,
     check=_is_callable,
     pattern="",
-    mode: ModeFlags = None,
+    mode: Modes = None,
 ):
     if mode is None:
-        mode = DEFAULT
+        mode = Modes.DEFAULT
 
     def sugar(*things: list[Any]):
         visited = {id(obj) for obj in vars(object).values()}
@@ -168,3 +120,26 @@ def apply(
         return things[0] if len(things) == 1 else things
 
     return sugar
+
+
+def assumption(obj: Any, *expected: type) -> bool:
+    """Check against multiple possible types.
+
+    Usage:
+        assert assumption(a, int)
+        assert assumption(b, str, float)
+    """
+    for exp in expected:
+        if isinstance(obj, exp):
+            return True
+    _raise_assert(obj, expected)  # type: ignore
+
+
+def _raise_assert(obj: Any, expected: tuple[type, ...]) -> bool:
+    if len(expected) == 1:  # type: ignore
+        msg = f"Expected {expected}, instead got {type(obj).__name__} (value: {obj})"
+    else:
+        msg = msg = (
+            f"Expected one of {expected}, instead got {type(obj).__name__} (value: {obj})"
+        )
+    raise AssertionError(msg)
