@@ -656,20 +656,52 @@ JOIN artifacts on installations.id = distribution_id
 
         result = buffet_table(case, kwargs)
         assert result
-        assert isinstance(result, (Exception, ModuleType))
+        assert assumption(result, Exception, ModuleType)
 
-        if isinstance(result, Exception):
-            return _fail_or_default(result, default)
+        return _finalize_result(result, import_as=import_as, default=default)
 
-        if isinstance(result, ModuleType):
-            if import_as:
-                M = sys.modules[mod_name]
-                sys.modules[import_as] = M
-                del sys.modules[mod_name]
+    @__call__.register
+    def _use_repo(
+        self,
+        repo: Repo,
+        /,
+        *,
+        import_as: str = None,
+        initial_globals: dict[Any, Any] | None = None,
+        default=Modes.DEFAULT,
+        modes=Modes.DEFAULT,
+    ) -> ProxyModule:
+        """
+        Import a module from a Repo object, supporting reloading via _reloaders.
+        """
+        assert assumption(repo, Repo)
+        initial_globals = initial_globals or {}
+        reloading = Modes.reloading in modes
+        log.debug(f"use-repo: {repo}")
 
-            return ProxyModule(result)
+        # initial mod
+        repo.sync()
+        mod = _finalize_result(
+            result=repo.load_module(),
+            import_as=import_as,
+            default=default,
+            initial_globals=initial_globals,
+        )
 
+        assert assumption(mod, ProxyModule)
+        repo.proxy = mod
 
+        if reloading:
+            threaded = False
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                threaded = True
+            if not threaded:
+                repo.reload_async()
+            else:
+                repo.reload_threaded()
+        return mod
 
 
 def _hashes(hashes: str | list[str] | None) -> set[int]:
@@ -691,3 +723,47 @@ def _installed_version(pkg_name: str) -> Version | None:
     with contextlib.suppress(importlib.metadata.PackageNotFoundError):
         return Version(importlib.metadata.version(pkg_name))
     return None
+
+
+def _finalize_result[T](
+    result: ModuleType | Exception,
+    *,
+    import_as=None,
+    default: T = None,
+    initial_globals: dict | None = None,
+) -> ProxyModule | T:
+    """
+    Handles the final steps of importing a module, including applying `import_as` and handling failures.
+
+    Args:
+        result (ModuleType | Exception): The result of the import process.
+        mod_name (str): The original module name.
+        import_as (str | None): The alias to use for importing the module.
+        default (Any): The default value to return in case of failure.
+
+    Returns:
+        ProxyModule | Any: The imported module wrapped in a ProxyModule, or the default value.
+    """
+    initial_globals = initial_globals or {}
+    assert assumption(result, Exception, ModuleType)
+    if isinstance(result, Exception):
+        if default is not Modes.DEFAULT:
+            return default
+
+        print("\nvvv ERROR CONTEXT and RECOVERY ACTIONS for agents and LLMs vvv")
+        print(result.to_json())
+        print("\n^^^ ERROR CONTEXT and RECOVERY ACTIONS for agents and LLMs ^^^")
+        raise result
+
+    result = ProxyModule(result)
+
+    if isinstance(initial_globals, dict) and initial_globals:
+        for key, value in initial_globals.items():
+            setattr(result, key, value)
+
+    if import_as:
+        sys.modules[import_as] = result
+        if len(import_as.split(".")) > 1:
+            result.__package__ = import_as.split()[0]
+
+    return result
