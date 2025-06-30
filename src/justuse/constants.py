@@ -3,7 +3,7 @@ Constants, enums, and flags for justuse.
 """
 
 import hashlib
-from enum import Enum, Flag, IntEnum, auto
+from enum import Enum, Flag, auto
 
 
 class Hash(Enum):
@@ -11,37 +11,17 @@ class Hash(Enum):
     blake = hashlib.blake2s
 
 
-class Modes(IntEnum):
-    auto_install = 2**0
-    fatal_exceptions = 2**1
-    reloading = 2**2
-    no_public_installation = 2**3
-    fastfail = 2**4
-    recklessness = 2**5
-    no_browser = 2**6
-    no_cleanup = 2**7
+class Modes(Flag):
+    """Flags for justuse runtime modes."""
 
-
-class ModeFlags(Flag):
-    AUTO_INSTALL = auto()
-    FATAL_EXCEPTIONS = auto()
-    RELOADING = auto()
-    FASTFAIL = auto()
-    RECKLESS = auto()
-    DEFAULT = auto()
-    NO_PUBLIC_INSTALLATION = auto()
-    NO_CLEANUP = auto()
-    NO_BROWSER = auto()
-
-
-(
-    AUTO_INSTALL,
-    FATAL_EXCEPTIONS,
-    RELOADING,
-    FASTFAIL,
-    RECKLESS,
-    DEFAULT,
-    NO_PUBLIC_INSTALLATION,
-    NO_CLEANUP,
-    NO_BROWSER,
-) = ModeFlags
+    auto_install = auto()  # Automatically install missing packages
+    fatal_exceptions = auto()  # Raise exceptions instead of handling gracefully
+    reloading = auto()  # Enable module reloading
+    no_public_installation = auto()  # Disallow public package installation
+    failfast = auto()  # Fail fast on errors
+    recklessness = auto()  # Allow risky operations
+    no_browser = auto()  # Disable browser-based features
+    no_cleanup = auto()  # Skip cleanup steps
+    verbose = auto()  # Enable verbose output
+    include_dunder = auto()  # Include dunder (__) methods/attributes
+    DEFAULT = auto()  # Default mode
