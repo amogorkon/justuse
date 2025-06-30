@@ -1,2 +1,2 @@
 def test_function():
-    return "Test function executed successfully foobar!!"
+    return "Test function executed successfully!"
