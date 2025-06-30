@@ -1,0 +1,40 @@
+{
+  "JU1234": {
+    "type": "JustUseError",
+    "message": "Test error message",
+    "severity": "fatal",
+    "namespace": "JUSTUSE_TEST",
+    "description": "Used for testing the error system.",
+    "recovery_actions": [
+      {"type": "noop", "description": "No action"}
+    ]
+  },
+  "JU2001": {
+    "type": "UnexpectedHash",
+    "message": "The hash of the imported module did not match the expected value.",
+    "severity": "error",
+    "namespace": "JUSTUSE_SECURITY",
+    "description": "Raised when a module hash does not match the expected value.",
+    "recovery_actions": [
+      {"type": "check_hash", "description": "Verify the integrity of the module and reinstall if necessary."}
+    ]
+  },
+  "JU3001": {
+    "type": "InstallationError",
+    "message": "An error occurred during package installation.",
+    "severity": "error",
+    "namespace": "JUSTUSE_INSTALL",
+    "description": "Raised when a package installation fails.",
+    "recovery_actions": [
+      {"type": "retry_install", "description": "Try reinstalling the package or check your network connection."}
+    ]
+  },
+  "JU1000": {
+    "type": "JustUseError",
+    "message": "A general JustUse error occurred.",
+    "severity": "error",
+    "namespace": "JUSTUSE",
+    "description": "Base error for JustUse.",
+    "recovery_actions": []
+  }
+}
