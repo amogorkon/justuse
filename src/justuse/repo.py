@@ -15,7 +15,6 @@ from pydantic import BaseModel, ConfigDict
 from .classes import ProxyModule
 from .config import home
 from .exceptions import RepoPathNotFoundError
-from .modutils import _build_mod
 
 
 class Repo(ABC):
