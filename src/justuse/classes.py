@@ -6,8 +6,6 @@ import time
 import traceback
 from types import ModuleType
 
-from icontract import require
-
 from .modutils import _build_mod, _modules_are_compatible
 
 
@@ -70,8 +68,8 @@ class ModuleReloader:
         loop = asyncio.get_running_loop()
         loop.create_task(self.run_async())
 
-    @require(lambda self: self._thread is None or self._thread.is_alive())
     def start_threaded(self):
+        assert self._thread is None or self._thread.is_alive()
         self._stopped = False
         atexit.register(self.stop)
         self._thread = threading.Thread(
