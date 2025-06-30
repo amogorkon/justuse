@@ -3,6 +3,7 @@ Constants, enums, and flags for justuse.
 """
 
 import hashlib
+import inspect
 from enum import Enum, Flag, auto
 
 
@@ -25,3 +26,10 @@ class Modes(Flag):
     verbose = auto()  # Enable verbose output
     include_dunder = auto()  # Include dunder (__) methods/attributes
     DEFAULT = auto()  # Default mode
+
+
+class ALL(Enum):
+    methods = inspect.ismethod
+    properties = inspect.isdatadescriptor
+    functions = inspect.isfunction
+    classes = inspect.isclass
