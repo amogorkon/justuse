@@ -3,37 +3,38 @@ import contextlib
 import inspect
 import re
 import sys
-from collections import namedtuple
+from collections import defaultdict, deque, namedtuple
 from collections.abc import Callable, Iterable, Sized
 from functools import wraps
 from logging import getLogger
 from pathlib import Path
 from time import perf_counter_ns
 from types import ModuleType
-from typing import Any, DefaultDict, Deque, Optional, Union
+from typing import Any, Deque
+from weakref import WeakKeyDictionary
 
-import config
-from beartype import beartype
-
+from . import config
 from .messages import _web_aspectized_dry_run, _web_tinny_profiler
+from .utils import assumption
 
 log = getLogger(__name__)
 
-# TODO: use an extra WeakKeyDict as watchdog for object deletions and trigger cleanup in these here
-_applied_decorators: DefaultDict[tuple[object, str], Deque[Callable]] = DefaultDict(
-    Deque
+
+# Use WeakKeyDictionary to avoid memory leaks: when the object is deleted, its entry is removed.
+_applied_decorators: "WeakKeyDictionary[object, dict[str, Deque[Callable]]]" = (
+    WeakKeyDictionary()
 )
 "to see which decorators are applied, in which order"
-_aspectized_functions: DefaultDict[tuple[object, str], Deque[Callable]] = DefaultDict(
-    Deque
+_aspectized_functions: "WeakKeyDictionary[object, dict[str, Deque[Callable]]]" = (
+    WeakKeyDictionary()
 )
 "the actually decorated functions to undo aspectizing"
 
 
 def show_aspects():
     """Open a browser to properly display all the things that have been aspectized thus far."""
-    print("decorators:", _applied_decorators)
-    print("functions:", _aspectized_functions)
+    print("decorators:", {k: v for k, v in _applied_decorators.items()})
+    print("functions:", {k: v for k, v in _aspectized_functions.items()})
     # _web_aspectized(_applied_decorators, _aspectized_functions)
 
 
@@ -59,15 +60,15 @@ def really_callable(thing):
 
 
 def apply_aspect(
-    thing: Union[object, Iterable[object]],
+    thing: object | Iterable[object],
     decorator: Callable,
     /,
     *,
     check: Callable = is_callable,
     dry_run: bool = False,
     pattern: str = "",
-    excluded_names: Optional[set[str]] = None,
-    excluded_types: Optional[set[type]] = None,
+    excluded_names: set[str] | None = None,
+    excluded_types: set[type] | None = None,
     file=None,
 ) -> None:
     """Apply the aspect as a side-effect, no copy is created."""
@@ -88,7 +89,7 @@ def apply_aspect(
         decorator: Callable,
         /,
         *,
-        qualname_lst: Optional[list] = None,
+        qualname_lst: list[str] | None = None,
         mod_name: str,
     ) -> Iterable[HIT]:
         name = getattr(thing, "__name__", str(thing))
@@ -147,8 +148,8 @@ def apply_aspect(
                 msg = str(exc)
                 if file:
                     print(msg, file=file)
-            assert isinstance(name, str) and len(name) > 0
-            assert isinstance(mod_name, str) and mod_name != ""
+            assert assumption(name, str) and len(name) > 0
+            assert assumption(mod_name, str) and mod_name != ""
 
             hits.append(
                 HIT(
@@ -197,11 +198,20 @@ def apply_aspect(
             )
 
 
-@beartype
 def _wrap(*, thing: Any, obj: Any, decorator: Callable, name: str) -> Any:
     wrapped = decorator(obj)
-    _applied_decorators[(thing, name)].append(decorator)
-    _aspectized_functions[(thing, name)].append(obj)
+    # Use WeakKeyDictionary to store per-object dicts of name -> deque
+    if thing not in _applied_decorators:
+        _applied_decorators[thing] = {}
+    if name not in _applied_decorators[thing]:
+        _applied_decorators[thing][name] = deque()
+    _applied_decorators[thing][name].append(decorator)
+
+    if thing not in _aspectized_functions:
+        _aspectized_functions[thing] = {}
+    if name not in _aspectized_functions[thing]:
+        _aspectized_functions[thing][name] = deque()
+    _aspectized_functions[thing][name].append(obj)
 
     # This will fail with TypeError on built-in/extension types.
     # We handle exceptions outside, let's not betray ourselves.
@@ -217,20 +227,23 @@ def apply(*, thing, decorator, name):
     return wrapped
 
 
-@beartype
 def _unwrap(*, thing: Any, name: str):
     try:
-        original = _aspectized_functions[(thing, name)].pop()
-    except IndexError:
-        del _aspectized_functions[(thing, name)]
+        original = _aspectized_functions[thing][name].pop()
+        if not _aspectized_functions[thing][name]:
+            del _aspectized_functions[thing][name]
+        if not _aspectized_functions[thing]:
+            del _aspectized_functions[thing]
+    except (KeyError, IndexError):
         original = getattr(thing, name)
 
-    try:
-        _applied_decorators[(thing, name)].pop()
-    except IndexError:
-        del _applied_decorators[(thing, name)]
+    with contextlib.suppress(KeyError, IndexError):
+        _applied_decorators[thing][name].pop()
+        if not _applied_decorators[thing][name]:
+            del _applied_decorators[thing][name]
+        if not _applied_decorators[thing]:
+            del _applied_decorators[thing]
     setattr(thing, name, original)
-
     return original
 
 
@@ -322,9 +335,7 @@ def woody_logger(thing: Callable) -> Callable:
                     sep="\n",
                 )
                 return res
-            if isinstance(
-                res, (Iterable)
-            ):  # TODO: Iterable? Iterator? Generator? Ahhhh!
+            if isinstance(res, (Iterable)):
                 print(
                     f"-> {describe(thing)} (in {after - before} ns ({round((after - before) / 10**9, 5)} sec) -> {describe(res)}",
                     sep="\n",
@@ -340,7 +351,7 @@ def woody_logger(thing: Callable) -> Callable:
     return wrapper
 
 
-_timings: dict[int, Deque[int]] = DefaultDict(lambda: Deque(maxlen=10000))
+_timings: dict[int, Deque[int]] = defaultdict(lambda: deque(maxlen=10000))
 
 
 def tinny_profiler(func: callable) -> callable:
