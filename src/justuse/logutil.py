@@ -1,14 +1,19 @@
 import io
 import logging
-import os
 import sys
 import time
 import traceback
-from logging import Formatter, PercentStyle, StreamHandler, StrFormatStyle, StringTemplateStyle
-from typing import NamedTuple, Deque
 from collections.abc import Callable
+from logging import (
+    Formatter,
+    PercentStyle,
+    StreamHandler,
+    StrFormatStyle,
+    StringTemplateStyle,
+)
+from typing import NamedTuple
 
-import use
+from .config import config
 
 BASIC_FORMAT: str = "%(levelname)s:%(name)s:%(message)s"
 
@@ -95,7 +100,9 @@ class ConsoleFormatter(Formatter):
         self.datefmt = "%Y-%m-%d"
         style = "$"
         fmt = _STYLES[style][1]
-        super(ConsoleFormatter, self).__init__(fmt=fmt, datefmt=self.datefmt, style=style, validate=True)
+        super(ConsoleFormatter, self).__init__(
+            fmt=fmt, datefmt=self.datefmt, style=style, validate=True
+        )
 
     def formatTime(self, record, datefmt=None):
         """
@@ -288,7 +295,7 @@ class ConsoleHandler(StreamHandler):
         return f"<{self.__class__.__name__}>"
 
 
-if use.config.debugging:
+if config.debugging:
     logging.root.setLevel(logging.DEBUG)
 handler = ConsoleHandler()
 logging.root.handlers.append(handler)
