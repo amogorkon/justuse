@@ -1,16 +1,8 @@
-from .utils import excel_style_datetime, home
-from .pydantics import git
-from .pydantics import Version
-"""
-Main classes that act as API for the user to interact with.
-
-Check the /docs/specs for details!
-"""
-
 import asyncio
 import atexit
 import contextlib
 import importlib
+import importlib.util
 import inspect
 import os
 import shutil
@@ -19,6 +11,7 @@ import sys
 import threading
 import time
 import traceback
+import warnings
 from datetime import datetime
 from functools import singledispatchmethod
 from logging import DEBUG, getLogger
@@ -29,13 +22,14 @@ from warnings import warn
 
 import requests
 from furl import furl as URL
-from icontract import require
 
-from . import sessionID
+from . import __version__, sessionID
 from .aspectizing import _applied_decorators
+from .buffet import buffet_table
 from .classes import ModuleReloader, ProxyModule
-from .constants import Modes
-from . import config
+from .config import config
+from .constants import Hash, Modes
+from .exceptions import AmbiguityWarning, NotReloadableWarning, VersionWarning
 from .hash_alphabet import JACK_as_num, is_JACK
 from .messages import KwargMessage, StrMessage, TupleMessage, UserMessage
 from .pimp import (
@@ -47,26 +41,13 @@ from .pimp import (
     _is_builtin,
     _parse_name,
     _real_path,
-    _get_pyc,
 )
+from .pydantics import Version
+from .repo import Repo
+from .utils import assumption, excel_style_datetime, home
 
-now = time.perf_counter_ns()
 counter_ = 0
-
-try:
-    from . import (
-        Hash,
-        Modes,
-        NotReloadableWarning,
-        VersionWarning,
-        __version__,
-        buffet_table,
-        config,
-        home,
-        sessionID,
-    )
-except ImportError:
-    pass
+now = time.perf_counter_ns()
 
 
 def timer():
@@ -77,29 +58,6 @@ def timer():
         f"Time to #{counter_} at L{cf.f_back.f_lineno}({Path(inspect.getframeinfo(cf).filename).name}) in {(time.perf_counter_ns() - now) / 1_000_000_000:.2f} s"
     )
     now = time.perf_counter_ns()
-
-
-timer()
-
-now = time.perf_counter_ns()
-counter_ = 0
-
-
-def timer():
-    global now, counter_
-    counter_ += 1
-    cf = inspect.currentframe()
-    print(
-        f"Time to #{counter_} at L{cf.f_back.f_lineno}({Path(inspect.getframeinfo(cf).filename).name}) in {(time.perf_counter_ns() - now) / 1_000_000_000:.2f} s"
-    )
-    now = time.perf_counter_ns()
-
-
-timer()
-
-
-
-
 
 
 log = getLogger(__name__)
@@ -110,7 +68,7 @@ log.info(
 # internal subpackage imports
 test_version: str = locals().get("test_version")
 
-_reloaders: dict["ProxyModule", "ModuleReloader"] = {}  # ProxyModule:Reloader
+_reloaders: dict[ProxyModule, ModuleReloader] = {}
 
 
 # sometimes all you need is a sledge hammer...
@@ -307,8 +265,6 @@ JOIN artifacts on installations.id = distribution_id
     def __call__(self, thing, /, *args, **kwargs):
         raise NotImplementedError(UserMessage.cant_use(thing))
 
-    @require(lambda hash_algo: hash_algo in Hash)
-    @require(lambda as_import: as_import.isidentifier())
     @__call__.register
     def _use_url(
         self,
@@ -319,76 +275,61 @@ JOIN artifacts on installations.id = distribution_id
         hash_value=None | int,
         initial_globals: dict[Any, Any] | None = None,
         import_as: str = None,
-        default=Modes.fastfail,
-        modes=0,
+        default=Modes.DEFAULT,
+        modes: Modes = Modes.DEFAULT,
     ) -> ProxyModule:
         """
         Import a module from a web source.
 
         >>> load = use(
-                use.URL("https://raw.githubusercontent.com/amogorkon/stay/master/src/stay/stay.py"), modes=use.recklessness
+                URL("https://raw.githubusercontent.com/amogorkon/stay/master/src/stay/stay.py"), modes=recklessness
                 , import_as="stay").Decoder()
         >>> for x in load("a: b"): x
         {'a': 'b'}
 
         Args:
-            url (URL): a web url, wrapped with use.URL()
+            url (URL): a web url, wrapped with URL()
             hash_algo (Hash, optional): Hash algo used to check. Defaults to Hash.sha256.
             hash_value (str, optional): Hash value used to pin the content. Defaults to None.
             initial_globals (Optional[dict[Any, Any]], optional): Any globals passed into the module. Defaults to None.
             import_as (str, optional): Valid identifier which should be used for "importing" -
                 means the module can be imported anywhere else using this name. Defaults to None.
-            default (Any, optional): Any value (like a different module) in case importing fails. Defaults to Modes.fastfail.
+            default (Any, optional): Any value (like a different module) in case importing fails. Defaults to Modes.DEFAULT.
             modes (int, optional):
-                * use.recklessness - to skip hash validation
+                * recklessness - to skip hash validation
 
 
         Raises:
             ImportError: If no default is given, return ImportError if the module cannot be imported
 
         Returns:
-            ProxyModule: the module wrapped with use.ProxyModule for convenience
+            ProxyModule: the module wrapped with ProxyModule for convenience
         """
+        assert assumption(initial_globals, None, dict)
+        assert hash_algo in Hash, f"Invalid hash algorithm: {hash_algo}"
+        assert import_as.isidentifier(), f"Invalid import alias: {import_as}"
         log.debug(f"use-url: {url}")
         if import_as:
             if (mod := _import_as(import_as)) is not None:
                 return mod
 
-        reckless = bool(modes & Modes.recklessness)
+        reckless = Modes.recklessness in modes
         name = url.path.segments[-1]
 
         # url, content, pyc - in reverse order of appearance
-        result = _get_pyc(url, hash_algo, hash_value)
-        if isinstance(result, Exception):
-            return _fail_or_default(result, default)
-
+        # Skipping _get_pyc logic as requested
         content, module_path = _get_content_from_url(
             url, self.registry, name, hash_algo, hash_value, reckless
         )
 
-        try:
-            mod = _build_mod(
-                mod_name=import_as or name,
-                code=content,
-                module_path=module_path,
-                initial_globals=initial_globals,
-            )
-        except KeyError:
-            raise
-        if exc := None:
-            return _fail_or_default(ImportError(exc), default)
-        mod = ProxyModule(mod)
-        return mod
+        result = _build_mod(
+            mod_name=import_as or name,
+            code=content,
+            initial_globals=initial_globals,
+            module_path=module_path,
+        )
 
-    @__call__.register
-    def _use_git(
-        self,
-        git_repo: git,
-        /,
-        *,
-        modes=0,
-    ) -> ProxyModule:
-        """Install git repo."""
+        return _finalize_result(result, import_as=import_as, default=default)
 
     @__call__.register
     def _use_path(
@@ -398,8 +339,8 @@ JOIN artifacts on installations.id = distribution_id
         *,
         initial_globals=None,
         import_as: str = None,
-        default=Modes.fastfail,
-        modes=0,
+        default=Modes.DEFAULT,
+        modes: Modes = Modes.DEFAULT,
     ) -> ProxyModule:
         """Import a module from a path.
 
@@ -409,7 +350,7 @@ JOIN artifacts on installations.id = distribution_id
                 path ([type]): must be a pathlib.Path
                 initial_globals ([type], optional): dict that should be globally available to the module before executing it. Defaults to None.
                 default ([type], optional): Return instead if an exception is encountered.
-                modes (int, optional): [description]. Defaults to 0; Acceptable mode for this variant: use.reloading.
+                modes (int, optional): [description]. Defaults to 0; Acceptable mode for this variant: reloading.
 
         Returns:
                 Optional[ModuleType]: The module if it was imported, otherwise whatever was specified as default.
@@ -418,7 +359,7 @@ JOIN artifacts on installations.id = distribution_id
         if import_as:
             assert import_as not in sys.modules
 
-        reloading = bool(Use.reloading & modes)
+        reloading = Modes.reloading in modes
 
         exc = None
         mod = None
@@ -507,8 +448,8 @@ JOIN artifacts on installations.id = distribution_id
         version: Version | str | None = None,
         hash_algo=Hash.sha256,
         hashes: str | list[str] | None = None,
-        default=Modes.fastfail,
-        modes: int = 0,
+        default=Modes.DEFAULT,
+        modes: Modes = Modes.DEFAULT,
         import_as: str = None,
     ) -> ProxyModule:
         """
@@ -521,7 +462,7 @@ JOIN artifacts on installations.id = distribution_id
             version (str or Version, optional): The version of the pkg to import. Defaults to None.
             hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
             hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
-            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
+            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to Modes.DEFAULT.
             modes (int, optional): Any combination of Use.modes . Defaults to 0.
 
         Raises:
@@ -531,7 +472,7 @@ JOIN artifacts on installations.id = distribution_id
             ProxyModule|Any: Module if successful, default as specified otherwise.
         """
         log.debug(f"use-kwargs: {pkg_name} {mod_name} {version} {hashes}")
-        return self._use_package(
+        result = self._use_package(
             name=f"{pkg_name}/{mod_name}",
             pkg_name=pkg_name,
             mod_name=mod_name,
@@ -543,6 +484,7 @@ JOIN artifacts on installations.id = distribution_id
             Message=KwargMessage,
             import_as=import_as,
         )
+        return _finalize_result(result, import_as=import_as, default=default)
 
     @__call__.register
     def _use_tuple(
@@ -553,8 +495,8 @@ JOIN artifacts on installations.id = distribution_id
         version: Version | str | None = None,
         hash_algo=Hash.sha256,
         hashes: str | list[str] | None = None,
-        default=Modes.fastfail,
-        modes: int = 0,
+        default=Modes.DEFAULT,
+        modes: Modes = Modes.DEFAULT,
         import_as: str = None,
     ) -> ProxyModule:
         """
@@ -567,7 +509,7 @@ JOIN artifacts on installations.id = distribution_id
             version (str or Version, optional): The version of the pkg to import. Defaults to None.
             hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
             hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
-            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to mode.fastfail.
+            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to Modes.DEFAULT.
             modes (int, optional): Any combination of Use.modes . Defaults to 0.
 
         Raises:
@@ -578,7 +520,7 @@ JOIN artifacts on installations.id = distribution_id
         """
         log.debug(f"use-tuple: {pkg_tuple} {version} {hashes}")
         pkg_name, mod_name = pkg_tuple
-        return self._use_package(
+        result = self._use_package(
             name=f"{pkg_name}/{mod_name}",
             pkg_name=pkg_name,
             mod_name=mod_name,
@@ -590,6 +532,7 @@ JOIN artifacts on installations.id = distribution_id
             Message=TupleMessage,
             import_as=import_as,
         )
+        return _finalize_result(result, import_as=import_as, default=default)
 
     @__call__.register
     def _use_str(
@@ -600,8 +543,8 @@ JOIN artifacts on installations.id = distribution_id
         version: Version | str | None = None,
         hash_algo=Hash.sha256,
         hashes: str | list[str] | None = None,
-        default=Modes.fastfail,
-        modes: int = 0,
+        default=Modes.DEFAULT,
+        modes: Modes = Modes.DEFAULT,
         import_as: str = None,
     ) -> ProxyModule:
         """
@@ -614,7 +557,7 @@ JOIN artifacts on installations.id = distribution_id
             version (str or Version, optional): The version of the pkg to import. Defaults to None.
             hash_algo (member of Use.Hash, optional): For future compatibility with more modern hashing algorithms. Defaults to Hash.sha256.
             hashes (str | [str]), optional): A single hash or list of hashes of the pkg to import. Defaults to None.
-            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to Modes.fastfail.
+            default (anything, optional): Whatever should be returned in case there's a problem with the import. Defaults to Modes.DEFAULT.
             modes (int, optional): Any combination of Use.modes . Defaults to 0.
 
         Raises:
@@ -625,7 +568,7 @@ JOIN artifacts on installations.id = distribution_id
             ProxyModule|Any: Module (wrapped in a ProxyModule) if successful, default as specified if the requested Module couldn't be imported for some reason.
         """
         pkg_name, mod_name = _parse_name(name)
-        return self._use_package(
+        result = self._use_package(
             name=name,
             pkg_name=pkg_name,
             mod_name=mod_name,
@@ -637,8 +580,8 @@ JOIN artifacts on installations.id = distribution_id
             Message=StrMessage,
             import_as=import_as,
         )
+        return _finalize_result(result, import_as=import_as, default=default)
 
-    @require(lambda hash_algo: hash_algo is not None)
     def _use_package(
         self,
         *,
@@ -649,21 +592,36 @@ JOIN artifacts on installations.id = distribution_id
         hashes: str | set[str] | None,
         default: Any,
         hash_algo: Hash,
-        modes: int = 0,
+        modes: Modes = Modes.DEFAULT,
         Message: type = UserMessage,
         import_as: str = None,
     ):
+        assert hash_algo is not None
         # preparing the yummy kwargs for the buffet...
-        auto_install = bool(Modes.auto_install & modes)
-        no_public_installation = bool(Modes.no_public_installation & modes)
-        fastfail = bool(Modes.fastfail & modes)
-        fatal_exceptions = bool(Modes.fatal_exceptions & modes)
-        no_browser = bool(Modes.no_browser & modes)
-        cleanup = not bool(Modes.no_cleanup & modes)
+        auto_install = Modes.auto_install in modes
+        no_public_installation = Modes.no_public_installation in modes
+        fastfail = Modes.failfast in modes
+        fatal_exceptions = Modes.fatal_exceptions in modes
+        no_browser = Modes.no_browser in modes
+        cleanup = Modes.no_cleanup not in modes
         hashes: set[int] = _hashes(hashes)
 
         if mod_name:
             mod_name = mod_name.replace("/", ".").replace("-", "_")
+
+        # Ambiguity detection: warn if both a local module and a package exist with the same name
+
+        local_module = importlib.util.find_spec(mod_name)
+        package_module = importlib.util.find_spec(pkg_name)
+        if (
+            local_module is not None
+            and package_module is not None
+            and local_module.origin != package_module.origin
+        ):
+            warnings.warn(
+                f"Ambiguity detected: both a local module and a package named '{mod_name}' exist. Local module: {local_module.origin}, Package: {package_module.origin}",
+                AmbiguityWarning,
+            )
 
         # let's see what we'll get from the buffet table
         case = (
