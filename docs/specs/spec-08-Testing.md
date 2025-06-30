@@ -1,3 +1,29 @@
+
+
+## Import Failure Behavior (IMPORTANT!)
+
+If `justuse` cannot import the desired module, it now raises a structured exception (`JustUseError` or a subclass) that includes detailed context and a list of suggested recovery actions. This exception is always raised on failure, regardless of mode. The error object provides:
+
+- A human-readable error message
+- Structured context (including the attempted import, version, and environment)
+- A list of `recovery_actions` (suggestions for how to resolve the failure)
+- RFC 7807-compatible JSON serialization for agent/automation use
+
+This approach ensures that failures are explicit and actionable, making it easier for both humans and automated systems to detect, handle, and recover from import problems. See the [Error Handling](spec-07-Error%20Handling.md) spec for more details and examples.
+
+To catch and handle these exceptions in your code, use a try/except block:
+
+```python
+from justuse import use, JustUseError
+try:
+    mod = use("some_module", version="1.2.3")
+except JustUseError as e:
+    print("Import failed:", e)
+    print("Recovery suggestions:", e.recovery_actions)
+```
+
+The previous behavior of returning `None` and printing JSON to stdout is no longer supported.
+
 # Testing
 
 ## 1. Testing Strategy

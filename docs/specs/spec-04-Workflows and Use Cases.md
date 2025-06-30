@@ -129,8 +129,8 @@ graph TD
 | Environment | Configuration | Use Case |
 |-------------|---------------|----------|
 | **Development** | `modes=reloading|auto_install, timeout=60` | Hot-reload, auto-install |
-| **Production** | `modes=fastfail, require_hashes=True, auto_install=False` | Strict, secure |
-| **CI/CD** | `modes=fastfail, timeout=5, auto_install=False` | Fast, reproducible |
+| **Production** | `modes=Modes.DEFAULT, require_hashes=True, auto_install=False` | Strict, secure |
+| **CI/CD** | `modes=Modes.DEFAULT, timeout=5, auto_install=False` | Fast, reproducible |
 | **Notebook** | `modes=reloading|auto_install` | Interactive, experimental |
 
 ### Collaborative Development
@@ -140,9 +140,14 @@ for pkg, ver in shared_deps.items():
     globals()[pkg] = use(pkg, version=ver, modes=auto_install)
 ```
 
+
 ### Security-Conscious
 ```python
-secure_pkg = use('cryptography', version='37.0.0', hash_algo=Hash.SHA256, hash_value='verified_hash', modes=fastfail)
+# Hash pinning (recommended)
+secure_pkg = use('cryptography', version='37.0.0', hash_algo=Hash.SHA256, hash_value='verified_hash')
+
+# Signature pinning (in-code public key or fingerprint)
+secure_pkg = use('cryptography', version='37.0.0', signature_key='ed25519:abcdef123456...', require_signature=True)
 ```
 
 ---
@@ -216,7 +221,7 @@ graph TD
 | Category | Features |
 |----------|----------|
 | **Core** | Unified import API (`use()`), inline version checking, hash pinning & verification (SHA256/BLAKE2s/JACK), auto-installation (PyPI, conda, C-extensions), multi-version support, hot auto-reloading, initial module globals, aspect-oriented programming (recursive decoration), default fallbacks, ProxyModule abstraction, registry & audit (SQLite), modes & flags (auto_install, fastfail, fatal_exceptions, no_browser, etc.), no-browser mode |
-| **Security** | HTTPS enforcement, audit logging, configurable security levels, no public installation mode, hash verification, signature compatibility (planned), isolation (planned), module-level variable guards (planned) |
+| **Security** | HTTPS enforcement, audit logging, configurable security levels, no public installation mode, hash verification, signature pinning (in-code keys/fingerprints), isolation (planned), module-level variable guards (planned) |
 | **Configuration** | Layered config: env vars, config file, runtime flags, per-import options; testing & debugging support |
 | **Error Handling** | Hierarchical error types, recovery strategies (fallbacks, isolated envs, registry rebuild, revert on reload failure), warning escalation |
 | **Observability** | Usage metrics, immutable audit logs, compliance support |
@@ -224,3 +229,26 @@ graph TD
 | **Planned/Advanced** | Plugin/slot architecture, visual dependency graph, P2P sourcing, on-site compilation (Cython), sub-interpreter isolation, signature verification, module-level guards |
 
 ---
+
+## Git-Based Imports
+
+### Usage Examples
+```python
+# Minimal GitHub import
+use(Repo.github("amogorkon/justuse", "docs/demo.py"))
+
+# Private GitHub repository (future)
+use(Repo.github("private-org/private-repo", "module.py", token=os.getenv("GITHUB_TOKEN")))
+
+# Monorepo support
+use(Repo.github("facebook/react", "index.js", subdir="packages/react"))
+
+# Branch-based import (dev mode only)
+use(Repo.gitlab("group/project", "module.py", ref="feature-branch"), modes=dev_mode)
+
+# Specific file version
+use(Repo.github("pallets/flask", "flask/app.py", ref="2.1.3"))
+
+# Direct link to file on GitHub
+url = Repo.github("amogorkon/justuse", "docs/demo.py").url  # -> https://github.com/amogorkon/justuse/blob/main/docs/demo.py
+```

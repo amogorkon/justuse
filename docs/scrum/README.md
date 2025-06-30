@@ -19,7 +19,7 @@ The core goals of this log are to:
 Each **Sprint** (which currently spans **one calendar week, Monday to Sunday**) will have its own dedicated Markdown file.
 
 * **Location:** All Scrum Log files are located in this directory: `/docs/scrum/`.
-* **Naming Convention:** Files are named `YYYY-WW.md`, where `YYYY` is the year and `WW` is the week number (e.g., `2025-26.md` for week 26 of 2025).
+* **Naming Convention:** Files are named `YYYY-WW.md`, where `YYYY` is the year and `0W` is the zero-padded week number (e.g., `2025-26.md` for week 26 of 2025).
 
 Inside each weekly log file, entries are organized by day:
 

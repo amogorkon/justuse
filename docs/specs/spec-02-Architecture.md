@@ -215,3 +215,22 @@ erDiagram
     hashes ||--o{ artifacts : "foreign key"
     artifacts ||--o{ distributions : "foreign key"
 ```
+
+## Git-Based Imports
+
+### Implementation Workflow
+```mermaid
+graph TD
+    U[use(Repo.github(...))] --> H[Git Handler]
+    H --> P[Construct Clone URL]
+    P --> C[Clone Repository]
+    C --> V[Verify Ref]
+    V -->|Valid| R[Resolve Path]
+    R --> H[Hash Verification]
+    H -->|Match| L[Load Module]
+    H -->|Mismatch| E[JU1003 Error]
+    V -->|Invalid| E2[JU4001 Error]
+    R -->|Missing| E3[JU4102 Error]
+```
+
+This workflow ensures a clean and Pythonic interface for VCS-based imports.

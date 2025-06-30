@@ -255,10 +255,16 @@ else:
 
 ### Error Context Enhancement
 
+As of the current version, `justuse` always raises a structured exception (`JustUseError` or a subclass) on import failure, never returning `None`. The exception includes detailed context and a list of recovery suggestions.
+
 ```python
-# Enhanced error reporting
+# Enhanced error reporting and recovery suggestions
+from justuse import use, JustUseError
 try:
     mod = use('package', version='1.0.0')
+except JustUseError as e:
+    print("Import failed:", e)
+    print("Recovery suggestions:", e.recovery_actions)
 except use.VersionMismatchError as e:
     print(f"""
     Version Conflict:
@@ -274,6 +280,37 @@ except use.VersionMismatchError as e:
 with use.debug_context(level='TRACE'):
     mod = use('complex_package')
     # Detailed tracing logged
+```
+
+
+## Error Handling for Git-Based Imports
+
+### Example Error Envelope
+```json
+{
+  "error_id": "JU4102",
+  "type": "RepoPathError",
+  "severity": "error",
+  "message": "Module path not found in repository",
+  "context": {
+    "platform": "github",
+    "repo": "amogorkon/justuse",
+    "path": "missing.py",
+    "ref": "unstable"
+  },
+  "recovery_actions": [
+    {
+      "type": "browse_repo",
+      "description": "Explore repository structure",
+      "url": "https://github.com/amogorkon/justuse/tree/unstable"
+    },
+    {
+      "type": "suggest_path",
+      "description": "Try alternative path",
+      "command": "Repo.github('amogorkon/justuse', 'docs/demo.py')"
+    }
+  ]
+}
 ```
 
 

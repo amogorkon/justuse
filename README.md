@@ -52,6 +52,31 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [ ] document everything!
 - [ ] test everything!
 
+
+## Import Failure Behavior (IMPORTANT!)
+
+If `justuse` cannot import the desired module, it now raises a structured exception (`JustUseError` or a subclass) that includes detailed context and a list of suggested recovery actions. This exception is always raised on failure, regardless of mode. The error object provides:
+
+- A human-readable error message
+- Structured context (including the attempted import, version, and environment)
+- A list of `recovery_actions` (suggestions for how to resolve the failure)
+- RFC 7807-compatible JSON serialization for agent/automation use
+
+This approach ensures that failures are explicit and actionable, making it easier for both humans and automated systems to detect, handle, and recover from import problems. See the [Error Handling](docs/specs/spec-07-Error%20Handling.md) and [Testing](docs/specs/spec-08-Testing.md) specs for more details and examples.
+
+If you want to catch and handle these exceptions, simply use a try/except block:
+
+```python
+from justuse import use, JustUseError
+try:
+    mod = use("some_module", version="1.2.3")
+except JustUseError as e:
+    print("Import failed:", e)
+    print("Recovery suggestions:", e.recovery_actions)
+```
+
+The old behavior of returning `None` and printing JSON to stdout is no longer supported.
+
 ## The Story
 Over the years, many times I've come across various situations where Python's import statement just didn't work the way I needed.
 There were projects where I felt that a central module from where to expand functionality would be the simplest, most elegant approach, but that would only work with simple modules and libs, not with functionality that required access to the main state of the application. In those situations the first thing to try would be "import B" in module A and "import A" in module B - a classical circular import, which comes with a lot of headaches and often results in overly convoluted code. All this could be simplified if it was possible to pass some module-level global variables to the about-to-be-imported module before its actual execution, but how the heck could that work with an import statement?
@@ -88,6 +113,13 @@ Here are a few tidbits on how to use() stuff to wet your appetite, for a more in
 Nope. SHA256 hashes normally are pretty long (64 characters per hexdigest) and we require them defined within regular python code. Additionally, if you want to support multiple platforms, you need to supply a hash for every platform - which can add up to huge blocks of visual noise. Since Python 3 supports unicode by default, why not use the whole range of printable characters to encode those hashes? It's easier said than done - turns out emojis don't work well across different systems and editors - however, it *is* feasible to merge the Japanese, ASCII, Chinese and Korean alphabets into a single, big one we call JACK - which can be used to reliably encode those hashes in merely 18 characters. Since humans aren't supposed to manually type those hashes but simply copy&paste them anyway, there is only the question how to get them if you only have hexdigests at hand for some reason. Simply do `hexdigest_as_JACK(H)` and you're ready to go. Of course we also support classical hexdigests as fallback.
 
 ## Beware of Magic!
-Inspired by the q package/module, use() is a subclass of ModuleType, which is a callable class that replaces the module on import, so that only 'import use' is needed to be able to call use() on things.
-
 Probably the most magical thing about use() is that it does not return the plain module you wanted but a *ProxyModule* instead which adds a layer of abstraction. This allows things like automatic and transparent reloading without any intervention needed on your part. ProxyModules also add operations on modules like aspectizing via `mod @ (check, pattern, decorator)` syntax, which would not be possible with the classical import machinery.
+
+# Versioning Scheme
+
+As of June 2025, JustUse adopts a CalVer versioning scheme: `YYYY.0W[.patchx/devx/rcx]`, where:
+- `YYYY` is the year
+- `0W` is the zero-padded ISO week number
+- Optional `.patchx`, `.devx`, `.rcx` for patches, dev, or release candidates
+
+For example, `2025.26` corresponds to week 26 of 2025. This mirrors the structure of our Scrum logs (see `/docs/scrum/README.md`).

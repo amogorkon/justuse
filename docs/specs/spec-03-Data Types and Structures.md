@@ -178,6 +178,10 @@ This is the schema of the registry database for reference.
 
     hashes {
       TEXT algo
+      TEXT value
+      INT artifact_id
+      TEXT signature_key  -- public key or fingerprint for signature pinning (optional)
+      TEXT signature      -- signature value (optional)
       INTEGER value
       INTEGER artifact_id
     }

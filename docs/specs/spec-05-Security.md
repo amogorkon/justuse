@@ -60,10 +60,10 @@ graph TB
 
 | Threat | Impact | Mitigation | Status |
 |--------|--------|------------|--------|
-| **Malicious Code Injection** | High | Hash verification + HTTPS | ✅ Implemented |
+| **Malicious Code Injection** | High | Hash verification + HTTPS (signature pinning planned) | ✅ Implemented (signature pinning: planned) |
 | **Dependency Confusion** | Medium | Version pinning + registry | ✅ Implemented |
 | **Man-in-Middle Attack** | High | Certificate validation | ✅ Implemented |
-| **Local File Tampering** | Medium | Optional hash checking | ⚠️ Configurable |
+| **Local File Tampering** | Medium | Optional hash checking (signature pinning planned) | ⚠️ Configurable |
 
 ### Security Configuration Levels
 
@@ -80,7 +80,7 @@ graph LR
     STANDARD --> S3[Audit logging]
 
     PARANOID --> P1[Hash verification for all]
-    PARANOID --> P2[Signature verification]
+    PARANOID --> P2[Signature verification (planned)]
     PARANOID --> P3[Static analysis]
     PARANOID --> P4[Sandboxed execution]
 ```
@@ -101,16 +101,19 @@ graph LR
 use.configure(
     require_hashes=True,      # Mandatory hash verification
     allow_http=False,         # HTTPS only
-    verify_signatures=True,   # GPG signature checking
+    verify_signatures=True,   # Signature checking (planned)
     audit_level='full'        # Complete audit trail
 )
 
 # Secure import patterns
-secure_mod = use('package',
-                version='1.0.0',
-                hash_algo=Hash.SHA256,
-                hash_value='verified_hash_here',
-                require_signature=True)
+
+# Example: Secure import with signature pinning (planned)
+# secure_mod = use('package',
+#                 version='1.0.0',
+#                 hash_algo=Hash.SHA256,
+#                 hash_value='verified_hash_here',
+#                 signature_key='ed25519:abcdef123456...',  # In-code public key or fingerprint
+#                 require_signature=True)
 
 # Security status check
 security_status = use.security.audit()
@@ -124,7 +127,7 @@ if security_status.risk_level > 'medium':
 | Category | Features |
 |----------|----------|
 | **Core** | Unified import API (`use()`), inline version checking, hash pinning & verification (SHA256/BLAKE2s/JACK), auto-installation (PyPI, conda, C-extensions), multi-version support, hot auto-reloading, initial module globals, aspect-oriented programming (recursive decoration), default fallbacks, ProxyModule abstraction, registry & audit (SQLite), modes & flags (auto_install, fastfail, fatal_exceptions, no_browser, etc.), no-browser mode |
-| **Security** | HTTPS enforcement, audit logging, configurable security levels, no public installation mode, hash verification, signature compatibility (planned), isolation (planned), module-level variable guards (planned) |
+| **Security** | HTTPS enforcement, audit logging, configurable security levels, no public installation mode, hash verification, signature pinning (planned), isolation (planned), module-level variable guards (planned) |
 | **Configuration** | Layered config: env vars, config file, runtime flags, per-import options; testing & debugging support |
 | **Error Handling** | Hierarchical error types, recovery strategies (fallbacks, isolated envs, registry rebuild, revert on reload failure), warning escalation |
 | **Observability** | Usage metrics, immutable audit logs, compliance support |
