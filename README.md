@@ -40,7 +40,7 @@ To install, enter `python -m pip install justuse` in a commandline, then you can
 - [x] have multiple versions of the same package installed and loaded in the same program without conflicts
 - [x] auto-install packages with C-extensions and other precompiled stuff
 - [x] no-hassle inline auto-installation of (almost) all conda packages
-- [ ] install packages directly from github with signature compatibility check for all callables
+- [x] install packages directly from github with signature compatibility check for all callables
 - [ ] attach birdseye debugger to a loaded module as a mode
 - [ ] try to pull packages from a P2P network before pulling from PyPI or conda directly
 - [ ] all justuse-code is compiled to a single, standalone .py file - just drop it into your own code without installation
@@ -90,6 +90,25 @@ On my journey I came across many blogposts, papers and presentation-notebooks wi
 I also remember how I had some code in a jupyter notebook that did 'import opencv' but I had not noted which actual version I had initially used. When I tried to run this notebook after a year again, it failed in a subtle way: the call signature of an opencv-function had slightly changed. It took quite a while to track down what my code was expecting and when this change occured until I figured out how to fix this issue. This could've been avoided or at least made a lot simpler if my imports were somehow annotated and checked in a pythonic way. After I complained about this in IRC, nedbat suggested an alternative functional way for imports with assignments: `mod = import("name", version)` which I found very alien and cumbersome at first sight - after all, we have an import statement for imports, and *there should be one and preferrably only one way to do it* - right?
 
 Well, those shortcomings of the import statement kept bugging me. And when I stumbled over the word 'use' as a name for whatever I was conceiving, I thought "what the heck, let's try it! - how hard could it be?!" Turns out, some challenges like actual, working hot-reloading are pretty hard! But by now use() can cover all the original usecases and there's even more to come!
+
+## GitHub Hot Reloading
+
+JustUse now supports hot reloading of remote modules from GitHub repositories. When you use `Repo.github(...)` to load a module, you can enable a background thread that automatically checks for new commits and reloads the module if changes are detected. This enables seamless development and testing with live updates from remote repositories.
+
+**Key benefits:**
+- No need to manually reload or restart your application to get the latest code from GitHub.
+- Handles edge cases such as missing proxies gracefully.
+- Designed for both development and production workflows.
+
+**Usage Example:**
+```python
+from justuse import Repo, use
+repo = Repo.github("amogorkon/justuse", "tests/.tests/test_module.py")
+mod = use(repo)
+repo.reload_threaded()  # Starts background hot reloading
+```
+
+See the [specs](docs/specs/spec-04-Workflows%20and%20Use%20Cases.md#github-hot-reloading) for more details.
 
 # Examples
 Here are a few tidbits on how to use() stuff to wet your appetite, for a more in-depth overview, check out our [Showcase](https://github.com/amogorkon/justuse/blob/unstable/docs/Showcase.ipynb)!
