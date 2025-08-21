@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import atexit
 import contextlib
@@ -22,6 +24,7 @@ from warnings import warn
 
 import requests
 from furl import furl as URL
+from zvic import constrain_this_module
 
 from . import __version__, sessionID
 from .aspectizing import _applied_decorators
@@ -45,6 +48,8 @@ from .pimp import (
 from .pydantics import Version
 from .repo import Repo
 from .utils import assumption, excel_style_datetime, home
+
+constrain_this_module()
 
 counter_ = 0
 now = time.perf_counter_ns()
@@ -305,7 +310,7 @@ JOIN artifacts on installations.id = distribution_id
         Returns:
             ProxyModule: the module wrapped with ProxyModule for convenience
         """
-        assert assumption(initial_globals, None, dict)
+        assert assumption(initial_globals, None | dict)
         assert hash_algo in Hash, f"Invalid hash algorithm: {hash_algo}"
         assert import_as.isidentifier(), f"Invalid import alias: {import_as}"
         log.debug(f"use-url: {url}")
@@ -656,7 +661,7 @@ JOIN artifacts on installations.id = distribution_id
 
         result = buffet_table(case, kwargs)
         assert result
-        assert assumption(result, Exception, ModuleType)
+        assert assumption(result, Exception | ModuleType)
 
         return _finalize_result(result, import_as=import_as, default=default)
 
@@ -673,6 +678,7 @@ JOIN artifacts on installations.id = distribution_id
     ) -> ProxyModule:
         """
         Import a module from a Repo object, supporting reloading via _reloaders.
+        If the repo is a GitHubRepo and baseline_commit is set, ensures the module is loaded at that commit.
         """
         assert assumption(repo, Repo)
         initial_globals = initial_globals or {}
@@ -681,6 +687,10 @@ JOIN artifacts on installations.id = distribution_id
 
         # initial mod
         repo.sync()
+        # If baseline_commit is set and repo is GitHubRepo, checkout that commit before loading
+        if hasattr(repo, "baseline_commit") and getattr(repo, "baseline_commit", None):
+            # Use GitPythonRepo to checkout the baseline commit
+            repo.git.git.checkout(repo.baseline_commit)
         mod = _finalize_result(
             result=repo.load_module(),
             import_as=import_as,
@@ -745,7 +755,7 @@ def _finalize_result[T](
         ProxyModule | Any: The imported module wrapped in a ProxyModule, or the default value.
     """
     initial_globals = initial_globals or {}
-    assert assumption(result, Exception, ModuleType)
+    assert assumption(result, Exception | ModuleType)
     if isinstance(result, Exception):
         if default is not Modes.DEFAULT:
             return default
