@@ -21,7 +21,7 @@ graph TD;
     B --> C["Path()"]
     B --> D["URL()"]
     B --> E[packages]
-    B --> F[Repo]
+    B --> F["Repo()"]
 ```
 
 ## Installation
