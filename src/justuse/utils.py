@@ -122,24 +122,29 @@ def apply(
     return sugar
 
 
-def assumption(obj: Any, *expected: type) -> bool:
-    """Check against multiple possible types.
-
+def assumption(obj: Any, expected: type) -> bool:
+    """
+    Check if obj is an instance of expected type or any type in a union.
     Usage:
         assert assumption(a, int)
-        assert assumption(b, str, float)
+        assert assumption(b, str | float)
     """
-    for exp in expected:
+    types = (
+        expected.__args__
+        if hasattr(expected, "__origin__")
+        and expected.__origin__ is type(None).__class__
+        else None
+    )
+    if types is None and hasattr(expected, "__args__"):
+        types = expected.__args__
+    if types is None:
+        types = (expected,)
+    for exp in types:
         if isinstance(obj, exp):
             return True
-    _raise_assert(obj, expected)  # type: ignore
-
-
-def _raise_assert(obj: Any, expected: tuple[type, ...]) -> bool:
-    if len(expected) == 1:  # type: ignore
-        msg = f"Expected {expected}, instead got {type(obj).__name__} (value: {obj})"
-    else:
-        msg = msg = (
-            f"Expected one of {expected}, instead got {type(obj).__name__} (value: {obj})"
-        )
+    msg = (
+        f"Expected {expected}, instead got {type(obj).__name__} (value: {obj})"
+        if len(types) == 1
+        else f"Expected one of {types}, instead got {type(obj).__name__} (value: {obj})"
+    )
     raise AssertionError(msg)
