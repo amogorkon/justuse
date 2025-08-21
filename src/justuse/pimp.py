@@ -717,7 +717,7 @@ def _install(
 ) -> RegistryEntry:
     """Take care of the installation."""
     assert assumption(pkg_name, str)
-    assert assumption(requested_version, (Version, type(None)))
+    assert assumption(requested_version, (Version | None))
     assert assumption(force_install, bool)
     assert assumption(artifact_path, Path)
     meta = archive_meta(artifact_path)
