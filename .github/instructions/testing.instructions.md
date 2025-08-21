@@ -27,7 +27,7 @@ This document outlines the testing strategy for the agent and the justuse projec
 - To run only unit tests: `pytest tests/unit`
 - To run TDD tests: `pytest tests/tdd_test.py`
 
-## What "do the tests" means
+## What "run the tests" means
 1. run the appropriate tests, usually the ones that are affected by the changes made, otherwise run all tests, with no warnings, stop after 3 fails.
 2. after running, always try to fix the simplest failure first. do not ask for approval for simple fixes. If multiple failures occur, address them one at a time, starting with the simplest. if you are sure, fix it without asking for input or approval unless you already attempted to fix the same issue once without success. never try to fix multiple issues at once. if you fail to fix an issue on your second attempt, try to fix the next issue in the list.
 3. back to 1 until all tests pass or you reach a point where you cannot fix any more failures.

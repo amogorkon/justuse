@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "justuse"
-version = "2025.26"
+version = "2025.34"
 description = "a pure-python alternative to import"
 readme = "README.md"
 authors = [
     { name = "Anselm Kiefner", email = "justuse-pypi@anselm.kiefner.de" },
 ]
-license = { file = "LICENSE" }
+license = "MIT"
 requires-python = ">=3.12"
 keywords = [
     "installing",
@@ -25,7 +25,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Natural Language :: English",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3 :: Only",
 ]
@@ -37,9 +36,11 @@ dependencies = [
     "pydantic>=2.8.2",
     "requests",
     "wheel",
-    "urllib3>=2.2.2", # previously pinned for security
-    "zipp>=3.19.1", # previously pinned for security
-    "GitPython>=3.1.30"
+    "urllib3>=2.2.2",
+    "zipp>=3.19.1",
+    "GitPython>=3.1.30",
+    "zvic>=2025.34",
+    "crosshair-tool>=0.0.95",
 ]
 
 [project.optional-dependencies]
@@ -53,5 +54,5 @@ test = [
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["use"]
+packages = ["justuse"]
 include-package-data = true
