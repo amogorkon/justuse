@@ -2,7 +2,6 @@ import asyncio
 import atexit
 import hashlib
 import threading
-import time
 import traceback
 from types import ModuleType
 
@@ -61,7 +60,7 @@ class ModuleReloader:
         self.pkg_name = pkg_name
         self.initial_globals = initial_globals
         self._condition = threading.RLock()
-        self._stopped = True
+        self._stop_event = threading.Event()
         self._thread = None
 
     def start_async(self):
@@ -70,16 +69,17 @@ class ModuleReloader:
 
     def start_threaded(self):
         assert self._thread is None or self._thread.is_alive()
-        self._stopped = False
+        self._stop_event.clear()
         atexit.register(self.stop)
         self._thread = threading.Thread(
             target=self.run_threaded, name=f"reloader__{self.name}"
         )
+        self._thread.daemon = True
         self._thread.start()
 
     async def run_async(self):
         last_filehash = None
-        while not self._stopped:
+        while not self._stop_event.is_set():
             with open(self.path, "rb") as file:
                 code = file.read()
             current_filehash = hashlib.blake2b(code).hexdigest()
@@ -97,11 +97,14 @@ class ModuleReloader:
                 except KeyError:
                     traceback.print_exc()
             last_filehash = current_filehash
-            await asyncio.sleep(1)
+            try:
+                await asyncio.wait_for(asyncio.sleep(1), timeout=1)
+            except asyncio.CancelledError:
+                break
 
     def run_threaded(self):
         last_filehash = None
-        while not self._stopped:
+        while not self._stop_event.is_set():
             with self._condition:
                 with open(self.path, "rb") as file:
                     code = file.read()
@@ -120,10 +123,10 @@ class ModuleReloader:
                     except KeyError:
                         traceback.print_exc()
                 last_filehash = current_filehash
-            time.sleep(1)
+            self._stop_event.wait(1)
 
     def stop(self):
-        self._stopped = True
+        self._stop_event.set()
 
     def __del__(self):
         self.stop()
