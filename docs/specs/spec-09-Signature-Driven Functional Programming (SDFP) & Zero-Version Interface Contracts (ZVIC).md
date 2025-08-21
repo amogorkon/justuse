@@ -2,7 +2,8 @@
 
 ## Overview
 
-JustUse introduces a modern runtime paradigm designed to optimize code reuse, compatibility, and reliability in distributed systems and microservices.
+JustUse introduces a modern runtime paradigm designed to optimize code reuse, compatibility, and reliability in distributed systems and microservices. ZVIC and SDFP are implemented and enforced via the external ZVIC library, for details check [ZVIC documentation](https://pypi.org/project/zvic/).
+
 
 **SDFP (Signature-Driven Functional Programming)** and **ZVIC (Zero-Version Interface Contracts)** work together to ensure hot-reloadable, semantically-compatible modules through structure, not versioning.
 
@@ -210,21 +211,11 @@ graph TD
 - **Migration Tooling:** e.g., `justuse migrate --positional-only my_module.py`
 - **CID Policy Registry:** Per-project policy for positional/keyword handling
 
-### Cross-language Consistency
-
-| Language     | Positional-only | Keyword-equivalent |
-|--------------|:---------------:|:------------------:|
-| Python       | ✅              | ✅                 |
-| Go           | ✅              | ❌                 |
-| TypeScript   | ❌              | ✅                 |
-
 ### Upgrade Path Diagram
+1. Baselining: Define a commit that establishes the initial ZVIC contract.
+2. Pull every commit since the baseline and evolve the ZVIC contract accordingly.
 
-```mermaid
-graph LR
-  A[Legacy Function] --> B[Add Positional-Only Marker /]
-  B --> C[Stable CID Interface]
-```
+Parameters can be evolved by adding new optional parameters, changing defaults and constraints, or by modifying already specified types, but not by changing names or removing parameters. We refuse to guess compatibility between adjacent types like int - float, str - bytes or np.uint8 - np.int32 and treat them as incompatible by default. If you want to allow such a change, you can easily make it explicit as a union in the signature like `int | float`. If you require behavioural compatibility of a type, ZVIC recommends using an abc or protocol (like the numeric tower) to define the interface instead of a concrete type.
 
 ### Summary Table
 
