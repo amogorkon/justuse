@@ -43,7 +43,7 @@ jobs:
       - name: Install package (editable) with crosshair extra
         run: |
           # Make the local package importable for tests and install optional crosshair tooling
-          python -m pip install -e
+          python -m pip install -e .
 
       - name: Run tests
         run: pytest -q
