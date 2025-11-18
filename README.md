@@ -24,6 +24,21 @@ graph TD;
     B --> F[git]
 ```
 
+
+---
+
+## Table of Contents
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Features](#features-claims--goals)
+- [Error Handling](#import-failure-behavior-important)
+- [Hot Reloading](#github-hot-reloading)
+- [Examples](#examples)
+- [Versioning Scheme](#versioning-scheme)
+- [Contributing](#contributing)
+- [License](#license)
+
+
 ## Installation
 To install, enter `python -m pip install justuse` in a commandline, then you can `import use` in your code and simply use() stuff. Check for examples below and our [Showcase](https://github.com/amogorkon/justuse/blob/unstable/docs/Showcase.ipynb)!
 

@@ -11,6 +11,7 @@ from .repo import Repo
 auto_install = Modes.auto_install
 no_cleanup = Modes.no_cleanup
 reloading = Modes.reloading
+testing = Modes.testing
 
 use = ProxyModule(Use())
 
@@ -22,6 +23,7 @@ __all__ = [
     "auto_install",
     "no_cleanup",
     "reloading",
+    "testing",
     "ProxyModule",
     "use",
     "Path",

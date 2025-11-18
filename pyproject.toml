@@ -41,6 +41,7 @@ dependencies = [
     "GitPython>=3.1.30",
     "zvic>=2025.34",
     "crosshair-tool>=0.0.95",
+    "pypeduct>=0.1",
 ]
 
 [project.optional-dependencies]

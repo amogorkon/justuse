@@ -5,18 +5,18 @@ import sys
 import threading
 from abc import ABC, abstractmethod
 from importlib.util import module_from_spec, spec_from_file_location
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from time import sleep
 from types import ModuleType
 
 from git import Repo as GitPythonRepo
 from pydantic import BaseModel, ConfigDict
+from zvic import SignatureIncompatible, is_compatible
 
 from .classes import ProxyModule
 from .config import home
 from .exceptions import RepoPathNotFoundError
 from .modutils import _build_mod
-from pathlib import PurePosixPath
 
 
 class Repo(ABC):
@@ -156,14 +156,31 @@ class GitHubRepo(Repo, BaseModel):
 
     @property
     def git(self):
-        return GitPythonRepo(self.local_path)
+        try:
+            return GitPythonRepo(self.local_path)
+        except Exception:
+            # Not a git repo - that's okay for local packages
+            return None
 
     @property
     def origin(self):
-        return self.git.remotes.origin
+        git_repo = self.git
+        if git_repo is None:
+            return None
+        try:
+            return git_repo.remotes.origin
+        except Exception:
+            return None
 
     def sync(self):
-        self.origin.fetch()
+        """Fetch latest changes from remote. Safe to call even if not a git repo."""
+        try:
+            origin = self.origin
+            if origin is not None:
+                origin.fetch()
+        except Exception:
+            # Not a git repo or no remote - that's fine
+            pass
 
     def _git(self) -> GitPythonRepo:
         return GitPythonRepo(self.local_path)
@@ -191,9 +208,7 @@ class GitHubRepo(Repo, BaseModel):
             raise ImportError(f"Could not read {file_path} at {commit_hash}: {e}")
         code_bytes = content.encode("utf-8")
         # create a stable module name derived from repo and commit
-        mod_name = (
-            f"{self.repo_name.replace('/', '_')}_{commit_hash[:7]}_{PurePosixPath(file_path).stem}"
-        )
+        mod_name = f"{self.repo_name.replace('/', '_')}_{commit_hash[:7]}_{PurePosixPath(file_path).stem}"
         # module_path param is used for diagnostics in _build_mod
         module_path = Path(self.local_path) / file_path
         return _build_mod(
@@ -203,7 +218,9 @@ class GitHubRepo(Repo, BaseModel):
             module_path=module_path,
         )
 
-    def _check_compatibility_between_commits(self, old_commit: str, new_commit: str) -> tuple[bool, dict]:
+    def _check_compatibility_between_commits(
+        self, old_commit: str, new_commit: str
+    ) -> tuple[bool, dict]:
         """Check all changed .py files between old_commit and new_commit for compatibility.
 
         Returns (True, {}) on success or (False, details) on failure.
@@ -214,47 +231,57 @@ class GitHubRepo(Repo, BaseModel):
             return True, {}
         for fpath in changed:
             try:
-                pre_mod = self._module_from_commit(old_commit, fpath)
+                a = self._module_from_commit(old_commit, fpath)
             except Exception as e:
                 details["errors"].append({"file": fpath, "error": str(e)})
                 return False, details
             try:
-                post_mod = self._module_from_commit(new_commit, fpath)
+                b = self._module_from_commit(new_commit, fpath)
             except Exception as e:
                 details["errors"].append({"file": fpath, "error": str(e)})
                 return False, details
-            # use external zvic timed compatibility check (safer: runs in subprocess)
             try:
-                # Use zvic's compatibility check; timeout is handled inside the zvic project
-                try:
-                    from zvic import compatibility as zvic_compat
-
-                    zvic_compat.is_compatible(pre_mod, post_mod)
-                    ok = True
-                    det = {}
-                except Exception:
-                    # If external zvic raised SignatureIncompatible (or other), translate to False
-                    # but preserve details where possible
-                    try:
-                        # If it raised a SignatureIncompatible, capture message
-                        raise
-                    except Exception as e:
-                        ok = False
-                        det = {"error": str(e)}
+                # Use zvic's compatibility check. SignatureIncompatible means
+                # the modules are incompatible; other exceptions are treated
+                # as errors in the check itself and returned in `details["errors"]`.
+                is_compatible(a, b)
+            except SignatureIncompatible as e:
+                details["incompatible"].append({
+                    "file": fpath,
+                    "details": {"error": str(e)},
+                })
+                return False, details
             except Exception as e:
                 details["errors"].append({"file": fpath, "error": str(e)})
-                return False, details
-            if not ok:
-                details["incompatible"].append({"file": fpath, "details": det})
                 return False, details
         return True, {}
+
+    def check_compatibility(
+        self, old_commit: str, new_commit: str
+    ) -> tuple[bool, dict]:
+        """Public wrapper for compatibility checking between two commits.
+
+        This method builds modules from the two commits for every changed .py file
+        and delegates to the project's compatibility oracle (the external
+        `zvic` package). The `zvic` compatibility implementation enforces
+        its own internal timeout/safety guards, so callers can rely on this
+        method to return in bounded time for common cases.
+
+        Returns the same (bool, details) tuple as `_check_compatibility_between_commits`.
+        """
+        return self._check_compatibility_between_commits(old_commit, new_commit)
 
     def load_module(self) -> ModuleType | Exception:
         """
         Returns the module at self.path from the local repo clone.
         """
         mod_path = self.local_path / self.path
-        mod_name = str(mod_path).replace("/", ".").replace("\\", ".").rstrip(".py")
+        
+        # Python 3.14 fix: Create proper module name from path relative to repo root
+        # Instead of using absolute path, use the relative path from self.path
+        # This allows relative imports to work properly
+        mod_name = self.path.replace("/", ".").replace("\\", ".").rstrip(".py")
+        
         if not mod_path.exists():
             agent_diagnostics = {
                 "cwd": os.getcwd(),
@@ -270,10 +297,20 @@ class GitHubRepo(Repo, BaseModel):
                 ref=self.ref,
                 agent_diagnostics=agent_diagnostics,
             )
+        
+        # Add local_path to sys.path so relative imports work
+        if str(self.local_path) not in sys.path:
+            sys.path.insert(0, str(self.local_path))
+            
         spec = spec_from_file_location(mod_name, mod_path)
         if spec is None or spec.loader is None:
             return ImportError(f"Could not load spec for {mod_name} at {mod_path}")
         mod = module_from_spec(spec)
+        
+        # Set __package__ for relative imports
+        if "." in mod_name:
+            mod.__package__ = ".".join(mod_name.split(".")[:-1])
+            
         spec.loader.exec_module(mod)
         return mod
 

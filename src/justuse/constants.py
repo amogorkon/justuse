@@ -25,6 +25,7 @@ class Modes(Flag):
     no_cleanup = auto()  # Skip cleanup steps
     verbose = auto()  # Enable verbose output
     include_dunder = auto()  # Include dunder (__) methods/attributes
+    testing = auto()  # Enable test mode (disable caching, allow cleanup)
     DEFAULT = auto()  # Default mode
 
 

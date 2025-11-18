@@ -17,6 +17,7 @@ class ProxyModule(ModuleType):
         if name in (
             "_ProxyModule__implementation",
             "_ProxyModule__condition",
+            "_ProxyModule__cleanup",
             "",
             "__class__",
             "__metaclass__",
@@ -35,6 +36,14 @@ class ProxyModule(ModuleType):
             return
         with self.__condition:
             setattr(self.__implementation, name, value)
+
+    def _ProxyModule__cleanup(self):
+        """Clean up the proxied module implementation. Used in test mode."""
+        with self.__condition:
+            # Clear the implementation's dict to release references
+            if hasattr(self.__implementation, "__dict__"):
+                self.__implementation.__dict__.clear()
+            self.__implementation = None
 
     def __rmatmul__(self, *args, **kwargs):
         return ProxyModule.__matmul__(self, *args, **kwargs)

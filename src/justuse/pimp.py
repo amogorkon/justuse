@@ -1058,20 +1058,27 @@ def _real_path(
         # we can actually see from where we've been called.
         frame = inspect.currentframe()
 
-        while True:
-            if frame.f_code == landmark:
-                break
-            else:
-                frame = frame.f_back
+        # Python 3.14 compatibility: landmark might be None if __code__ is unavailable
+        if landmark is not None:
+            while True:
+                if frame is None:
+                    break
+                if frame.f_code == landmark:
+                    break
+                else:
+                    frame = frame.f_back
         # a few more steps..
         # BUG: somehow this doesn't work anymore - aspectizing is broken!
         # for _ in _applied_decorators[landmark]:
         #    frame = frame.f_back
         try:
             # frame is in __call__ (or rather methdispatch), we need to step two frames back
-            source_dir = Path(frame.f_back.f_back.f_code.co_filename).resolve().parent
+            if frame is not None:
+                source_dir = Path(frame.f_back.f_back.f_code.co_filename).resolve().parent
+            else:
+                source_dir = Path.cwd()
         # we are being called from a shell like thonny, so we have to assume cwd
-        except OSError:
+        except (OSError, AttributeError):
             source_dir = Path.cwd()
 
     if source_dir is None:

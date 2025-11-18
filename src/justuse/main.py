@@ -79,7 +79,9 @@ _reloaders: dict[ProxyModule, ModuleReloader] = {}
 # sometimes all you need is a sledge hammer...
 def _release_locks():
     for _ in range(2):
-        [lock.unlock() for lock in threading._shutdown_locks]
+        # Python 3.14 compatibility: _shutdown_locks no longer exists
+        if hasattr(threading, "_shutdown_locks"):
+            [lock.unlock() for lock in threading._shutdown_locks]
         [reloader.stop() for reloader in _reloaders.values()]
     log.info(
         f"↑↑↑ JUSTUSE SESSION {excel_style_datetime(datetime.now())} ID:{sessionID} ↑↑↑"
@@ -104,6 +106,12 @@ class Use(ModuleType):
         if config.debugging:
             log.setLevel(DEBUG)
 
+        # Test mode support
+        self.test_mode = False
+        "When True, disables module caching for easier testing"
+        self._module_cache = {}
+        "Cache for loaded modules, clearable in test mode"
+
         if config.version_warning:
             try:
                 timer()
@@ -125,6 +133,83 @@ class Use(ModuleType):
                 log.error(
                     traceback.format_exc()
                 )  # we really don't need to bug the user about this (either pypi is down or internet is broken)
+
+    def unload_module(self, module_name: str):
+        """
+        Unload a module from sys.modules and internal cache.
+
+        This is primarily useful in test scenarios where you need to reload
+        a module multiple times (e.g., SQLAlchemy models with declarative_base).
+
+        Args:
+            module_name: The full module name (e.g., 'plex_com.db.models')
+
+        Example:
+            >>> from justuse import use
+            >>> use.test_mode = True
+            >>> models = use("plex_com.db.models")
+            >>> # ... run test ...
+            >>> use.unload_module("plex_com.db.models")  # Clean up for next test
+        """
+        # Remove from sys.modules
+        if module_name in sys.modules:
+            mod = sys.modules[module_name]
+            # If it's a ProxyModule, clean up its implementation
+            if isinstance(mod, ProxyModule):
+                with contextlib.suppress(Exception):
+                    mod._ProxyModule__cleanup()
+            del sys.modules[module_name]
+            log.debug(f"Unloaded {module_name} from sys.modules")
+
+        # Remove from internal cache
+        if module_name in self._module_cache:
+            del self._module_cache[module_name]
+            log.debug(f"Removed {module_name} from internal cache")
+
+        # Also remove any parent package references if this is a submodule
+        parts = module_name.split(".")
+        for i in range(len(parts)):
+            parent = ".".join(parts[: i + 1])
+            if parent in sys.modules and parent != module_name:
+                # Don't remove parent packages entirely, but clear their reference to the child
+                parent_mod = sys.modules[parent]
+                child_name = parts[i] if i < len(parts) - 1 else parts[-1]
+                if hasattr(parent_mod, child_name):
+                    try:
+                        delattr(parent_mod, child_name)
+                        log.debug(f"Removed {child_name} from parent {parent}")
+                    except (AttributeError, TypeError):
+                        pass
+
+    def reset_cache(self):
+        """
+        Clear all cached modules and optionally reset sys.modules.
+
+        This is useful between test suites when you want a completely clean slate.
+        Note: This does NOT unload modules from sys.modules by default as that could
+        break imports. Use unload_module() for specific modules.
+
+        Example:
+            >>> from justuse import use
+            >>> use.test_mode = True
+            >>> # ... run multiple tests ...
+            >>> use.reset_cache()  # Clean slate for next test suite
+        """
+        self._module_cache.clear()
+        log.debug("Cleared internal module cache")
+
+        # If in test mode, also clean up ProxyModules in sys.modules
+        if self.test_mode:
+            to_remove = []
+            for name, mod in sys.modules.items():
+                if isinstance(mod, ProxyModule):
+                    to_remove.append(name)
+
+            for name in to_remove:
+                with contextlib.suppress(Exception):
+                    sys.modules[name]._ProxyModule__cleanup()
+                del sys.modules[name]
+                log.debug(f"Cleaned up ProxyModule {name} from sys.modules")
 
     def clean_slate(self):
         shutil.rmtree(config.venv, ignore_errors=True)
@@ -376,10 +461,18 @@ JOIN artifacts on installations.id = distribution_id
             )
 
         try:
+            # Python 3.14 compatibility: method.__code__ might not exist on singledispatch
+            # Try to get landmark, but make it optional if it doesn't exist
+            try:
+                landmark_func = Use.__call__.registry[type(path)]
+                landmark = getattr(landmark_func, "__code__", None)
+            except (KeyError, AttributeError):
+                landmark = None
+
             name, mod_name, pkg_name, path = _real_path(
                 path=path,
                 _applied_decorators=_applied_decorators,
-                landmark=Use.__call__.__code__,
+                landmark=landmark,
             )
         except (NotImplementedError, ImportError):
             exc = traceback.format_exc()
